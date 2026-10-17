@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.12"
+version: "0.3.13"
 port: 8096
 folderAccess:
   - id: umbrel-downloads
@@ -54,8 +54,10 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  You can now save an episode on your device and watch it with no signal —
-  press the download arrow beside any episode and it is kept at 1080p, with a
-  Downloads page to see what is saved, how much space it uses and to remove it
-  again. Everything else is unchanged: downloads still live in Umbrel's
-  Downloads folder and every byte keeps seeding.
+  Casting is now a button at the top of the app, beside the search bar. Tap it
+  once to pick your TV, and from then on any show you tap plays on the TV until
+  you press it again to stop. Your profile no longer asks you to sign in when
+  you are already signed in, and it now lets you change your name, password and
+  picture — pick from twelve little-creature avatars. Everything else is
+  unchanged: downloads still live in Umbrel's Downloads folder and every byte
+  keeps seeding.
