@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.10"
+version: "0.3.11"
 port: 8096
 folderAccess:
   - id: umbrel-downloads
@@ -54,9 +54,9 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Downloads now land in Umbrel's Downloads folder, next to everything else
-  you keep, and nothing already downloaded is touched. A season is never
-  fetched whole any more: Flix takes the episode you press play on and starts
-  the next one once you are 60% through this one, because every byte has to be
-  seeded for 130 hours or to 1:1. Removal refuses outright when the torrent
-  engine cannot be read, so seeding cannot be cut short by a failed lookup.
+  A thumbs up or down on any show teaches Flix what you like, and the home
+  screen stops pushing shows you have already finished. A Settings page keeps
+  your choices in one place, the app opens with a short intro instead of a
+  blank screen, and a show that is still downloading starts playing far
+  sooner. Downloads stay in Umbrel's Downloads folder and every byte keeps
+  seeding.

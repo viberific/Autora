@@ -16,7 +16,7 @@ services:
     # Built by viberific/Flix's own workflow from the repo's package.json
     # version. Bump this tag (and `version` above) only once that tag exists
     # in the registry, or an update will fail with "manifest unknown".
-    image: ghcr.io/viberific/flix:0.3.10
+    image: ghcr.io/viberific/flix:0.3.11
     restart: unless-stopped
     # The torrent peer port. Flix keeps qBittorrent on 6881 (QB_LISTEN_PORT)
     # so it never changes between restarts, and this publishes it so a port
