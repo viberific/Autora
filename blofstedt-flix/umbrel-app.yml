@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.13"
+version: "0.3.14"
 port: 8096
 folderAccess:
   - id: umbrel-downloads
@@ -54,10 +54,10 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Casting is now a button at the top of the app, beside the search bar. Tap it
-  once to pick your TV, and from then on any show you tap plays on the TV until
-  you press it again to stop. Your profile no longer asks you to sign in when
-  you are already signed in, and it now lets you change your name, password and
-  picture — pick from twelve little-creature avatars. Everything else is
-  unchanged: downloads still live in Umbrel's Downloads folder and every byte
-  keeps seeding.
+  Casting works again. 0.3.13 shipped the cast button without the code behind
+  it, so tapping it did nothing and the TV never showed the show. The whole cast
+  layer is rebuilt: tap the cast button at the top of the app once to pick your
+  TV, and from then on any show you tap plays on the TV until you press it again
+  to stop. Progress is reported from the TV, so the next episode still lines up
+  once you are past 60%. Everything else is unchanged: downloads still live in
+  Umbrel's Downloads folder and every byte keeps seeding.
