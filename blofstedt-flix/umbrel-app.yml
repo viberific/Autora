@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.11"
+version: "0.3.12"
 port: 8096
 folderAccess:
   - id: umbrel-downloads
@@ -54,9 +54,8 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  A thumbs up or down on any show teaches Flix what you like, and the home
-  screen stops pushing shows you have already finished. A Settings page keeps
-  your choices in one place, the app opens with a short intro instead of a
-  blank screen, and a show that is still downloading starts playing far
-  sooner. Downloads stay in Umbrel's Downloads folder and every byte keeps
-  seeding.
+  You can now save an episode on your device and watch it with no signal —
+  press the download arrow beside any episode and it is kept at 1080p, with a
+  Downloads page to see what is saved, how much space it uses and to remove it
+  again. Everything else is unchanged: downloads still live in Umbrel's
+  Downloads folder and every byte keeps seeding.
