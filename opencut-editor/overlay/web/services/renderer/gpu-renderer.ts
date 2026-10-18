@@ -31,9 +31,12 @@ const remember = (none: boolean) => {
 	}
 };
 
+/* No navigator.gpu (a browser or machine without WebGPU): nothing to wait for, the CPU path starts at once, silently. */
+const hasWebGpu = (): boolean => typeof navigator !== "undefined" && "gpu" in navigator;
+
 export function initializeGpuRenderer(): Promise<void> {
 	if (!initPromise) {
-		const wait = remembered() ? 0 : GPU_WAIT_MS;
+		const wait = remembered() || !hasWebGpu() ? 0 : GPU_WAIT_MS;
 		const late = new Promise<void>((resolve) =>
 			setTimeout(() => {
 				if (!gpuAvailable && wait) {

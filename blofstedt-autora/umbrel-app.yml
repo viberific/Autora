@@ -188,5 +188,7 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  Autora's own page in the Mind now shows Autora's logo beside its name, as every other agent's does. The headings across the Mind
-  pages (Autora's, each agent's, and the memory lists) now share one size and spacing instead of mixing styles.
+  Video and Photo no longer nag on a machine with no graphics card: the "open OpenCut in Chrome" banner and Photo's "Switched to
+  CPU rendering" window are gone, and both editors go straight to the CPU. Video also uses much less memory on a small server:
+  imported clips are streamed to disk instead of being held whole in RAM (the cause of the crashes on a low-power box), and
+  oversized exports are refused up front.
