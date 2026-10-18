@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.28"
+version: "0.3.29"
 port: 8096
 folderAccess:
   - id: umbrel-downloads
@@ -54,13 +54,9 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  A television gets a layout that fits its screen: the page is laid out at a
-  desktop width and the panel scales that to its own size, so the interface is
-  no longer a phone layout stretched across a 65-inch set. The search bar can be
-  reached and typed into with a remote again, the TV player has a seek bar with
-  frame previews, a black screen instead of a grey one while an episode loads,
-  and a player that cannot hang. Phones get a proper adaptive launcher icon and
-  a page that clears the camera cutout. This build also carries everything since
-  0.3.21: casting from a phone, downloads to watch offline, per-service rows on
-  the home screen, and the home-network address. Install flix-0.3.28.apk from the
-  GitHub release for the TV app's icon.
+  Casting an episode that has finished downloading now hands the television a
+  single file it can seek anywhere in, instead of a playlist that is still being
+  written as it plays. The whole timeline is there from the start, so scrubbing
+  forward past what has been read no longer stops or jumps back, and the cast
+  starts sooner. An episode that is still downloading keeps the old playlist
+  path as a fallback, so nothing that worked before stops working.
