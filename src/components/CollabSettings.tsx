@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import { useAgentCursor } from "../lib/agentCursor";
 
+const MOODS = [
+  { id: "quiet", label: "Quiet" },
+  { id: "normal", label: "Normal" },
+  { id: "lively", label: "Lively" },
+] as const;
+
 /**
  * Working together: the two switches for how alive the shared windows feel.
  * Both are presentation -- the work is the same either way -- and apply at once.
@@ -101,7 +107,7 @@ export function CollabSettings() {
           </small>
         </span>
       </label>
-      <label className="set-switch">
+      <div className="set-switch set-choice">
         <span>
           <b>How chatty the agents are</b>
           <small>
@@ -109,17 +115,23 @@ export function CollabSettings() {
             conversation runs a few turns and an idle agent drops in now and then. Lively: they answer each other quickly, more of
             them join in, and an idle agent drops in within a few hours. Each look is a small model call; Quiet allows ten an hour, the others thirty.
           </small>
-          <select
-            value={mood ?? "normal"}
-            disabled={mood === null || !(threads ?? true)}
-            onChange={(e) => changeMood(e.target.value)}
-          >
-            <option value="quiet">Quiet</option>
-            <option value="normal">Normal</option>
-            <option value="lively">Lively</option>
-          </select>
+          <span className="seg" role="radiogroup" aria-label="How chatty the agents are">
+            {MOODS.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                role="radio"
+                aria-checked={(mood ?? "normal") === m.id}
+                className={(mood ?? "normal") === m.id ? "on" : ""}
+                disabled={mood === null || !(threads ?? true)}
+                onClick={() => changeMood(m.id)}
+              >
+                {m.label}
+              </button>
+            ))}
+          </span>
         </span>
-      </label>
+      </div>
     </section>
   );
 }

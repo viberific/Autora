@@ -9,7 +9,7 @@ import { KnowledgeWeb } from "../KnowledgeWeb";
 import { MemoryPeek } from "../MemoryCell";
 import { MindViewButton } from "../MindViewButton";
 import { IconBrain, IconPlus, IconTrash } from "../Icons";
-import { AgentProfile } from "../AgentProfile";
+import { AgentProfile, PersonalityCard } from "../AgentProfile";
 import { fetchAgents, type Agent } from "../../lib/organization";
 import { sure } from "../../lib/sure";
 import { every } from "../../lib/poll";
@@ -74,6 +74,7 @@ export function MindPage({
     return () => { live = false; stop(); };
   }, []);
   const team = agents.filter((a) => !a.builtin);
+  const lead = agents.find((a) => a.builtin) ?? null;
   const who = whose ? team.find((a) => a.id === whose) ?? null : null;
   const [error, setError] = useState<string | null>(null);
   const [tidied, setTidied] = useState<TidyReport | null>(null);
@@ -241,7 +242,12 @@ export function MindPage({
   return (
     <div className="mind-page">
       {mapOn ? (
-        <KnowledgeWeb embedded recent={recent} onBuckets={() => setView("buckets")} />
+        <KnowledgeWeb
+          embedded
+          recent={who ? [] : recent}
+          agent={who ? { id: who.id, name: who.name } : undefined}
+          onBuckets={() => setView("buckets")}
+        />
       ) : (
       <div className="page-scroll">
         <div className="page-inner">
@@ -256,7 +262,7 @@ export function MindPage({
             </div>
           )}
           {who ? (
-            <AgentProfile agent={who} agents={agents} />
+            <AgentProfile agent={who} agents={agents} onMap={showMap ? () => setView("map") : undefined} />
           ) : (
           <>
           <div className="page-toolbar">
@@ -274,6 +280,12 @@ export function MindPage({
           </div>
 
           {data && !data.enabled && <p className="set-warn">Memory is off on this server.</p>}
+
+          {lead?.traits && (
+            <section className="set-card" aria-label="Autora's personality">
+              <PersonalityCard agent={lead} />
+            </section>
+          )}
 
           {data && (
             <label className="mind-learning">

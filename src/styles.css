@@ -4696,6 +4696,8 @@ button.stat-card:hover { border-color: var(--accent-line); transform: translateY
 /* As pages, these screens already have their name in the header above; their
    own bar keeps only its controls, and goes when it has none. */
 .sched.is-embedded .sched-top .brand, .kweb.is-embedded .kweb-brand { display: none; }
+/* An agent's map in the Mind says whose it is: the page's own title is just "Mind". */
+.kweb.is-embedded.is-agent .kweb-brand { display: flex; }
 .sched.is-embedded .sched-top {
   height: auto; min-height: 0; padding: 12px 22px; background: none; border-bottom: 0;
 }
@@ -6947,6 +6949,10 @@ button.app-url:hover { border-color: var(--border-strong); color: var(--text); }
 .set-switch input { margin-top: 3px; accent-color: var(--accent-light); }
 .set-switch b { display: block; font-weight: 600; font-size: var(--fs-base); }
 .set-switch small { display: block; color: var(--text-3); font-size: var(--fs-sm); margin-top: 2px; }
+/* A setting with a few choices rather than on/off: the same row, the choices as the app's segmented control under it. */
+.set-choice { cursor: default; }
+.set-choice .seg { margin-top: 8px; }
+.seg button:disabled { cursor: default; opacity: 0.5; }
 /* A checkbox with a line of explanation under it, inside a card (the automation, quiet-hours and voice cards). */
 .opt-check { display: flex; gap: 9px; align-items: flex-start; margin: 7px 0; font-size: var(--fs-sm); line-height: 1.5; }
 .opt-check.is-gap { margin: 14px 0 0; }
@@ -8051,8 +8057,8 @@ body.is-resizing iframe { pointer-events: none; }
 }
 
 /* An agent's personality: a five-point shape that grows toward its corners. Drawn, never edited. */
-.agent-shape-wrap { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-.agent-shape-wrap .jf-hint { flex: 1 1 220px; min-width: 0; margin: 0; }
+.agent-shape-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.agent-shape-wrap .jf-hint { max-width: 560px; margin: 0; text-align: center; }
 .agent-shape { flex: 0 0 auto; width: 288px; max-width: 100%; height: auto; }
 .agent-shape-ring { fill: none; stroke: var(--border); stroke-width: 1; }
 .agent-shape-axis { stroke: var(--border); stroke-width: 1; }

@@ -6,6 +6,7 @@ import {
 import type { MemoryMark } from "../lib/derive";
 import { IconBrain, IconMark, IconX } from "./Icons";
 import { MindViewButton } from "./MindViewButton";
+import { fetchMind, forgetMemory } from "../lib/organization";
 
 /**
  * Everything the agent knows, as a graph you can argue with.
@@ -37,7 +38,10 @@ export function KnowledgeWeb({
   recent = [],
   embedded = false,
   onBuckets,
+  agent,
 }: {
+  /** Another agent's own mind instead of Autora's: read from its graph, and only forgetting is offered. */
+  agent?: { id: string; name: string };
   onClose?: () => void;
   /** Embedded in the Mind page: the way back to its buckets, drawn as an icon in the map's corner. */
   onBuckets?: () => void;
@@ -59,10 +63,15 @@ export function KnowledgeWeb({
   const [skillBody, setSkillBody] = useState("");
   const [skillTags, setSkillTags] = useState("skill, automation");
 
+  const agentId = agent?.id;
   const load = useCallback(() => {
-    fetchKnowledge().then(setData).catch(() => setData(null));
-  }, []);
+    const read = agentId
+      ? fetchMind(agentId).then((d): Knowledge => ({ records: d.records ?? [], links: d.links ?? [], enabled: true }))
+      : fetchKnowledge();
+    read.then(setData).catch(() => setData(null));
+  }, [agentId]);
   useEffect(load, [load]);
+  useEffect(() => setSelected(null), [agentId]);
 
   const createSkill = async () => {
     if (!skillTitle.trim()) return;
@@ -101,11 +110,11 @@ export function KnowledgeWeb({
   const record = selected && data ? data.records.find((r) => r.id === selected) : null;
 
   return (
-    <div className={`kweb ${embedded ? "is-embedded" : ""}`} role={embedded ? undefined : "dialog"} aria-label="Memory">
+    <div className={`kweb ${embedded ? "is-embedded" : ""} ${agent ? "is-agent" : ""}`} role={embedded ? undefined : "dialog"} aria-label="Memory">
       <header className="kweb-top">
         <div className="kweb-brand">
           <span className="kweb-badge"><IconBrain size={14} /></span>
-          {initialKind === "skill" ? "Skills" : "Memory"}
+          {agent ? `${agent.name}'s memory` : initialKind === "skill" ? "Skills" : "Memory"}
           {data && <span className="web-count">{data.records.length}</span>}
         </div>
         <input
@@ -134,13 +143,13 @@ export function KnowledgeWeb({
           ))}
         </div>
         <div className="spacer" />
-        <button
+        {!agent && <button
           className="web-tag skills-tag kweb-add"
           onClick={() => setShowNewSkill(true)}
           title="Register new skill into memory"
         >
           + Add skill
-        </button>
+        </button>}
         {onClose && !embedded && (
           <button className="web-toggle kweb-close" onClick={onClose} aria-label="Close memory">
             <IconX size={15} />
@@ -225,7 +234,9 @@ export function KnowledgeWeb({
             <p>
               {query
                 ? "No record matches that search."
-                : "After a session finishes, what was worth keeping appears here."}
+                : agent
+                  ? `What ${agent.name} learns on its jobs, and what Autora hands it, appears here.`
+                  : "After a session finishes, what was worth keeping appears here."}
             </p>
           </div>
         ) : (
@@ -287,7 +298,7 @@ export function KnowledgeWeb({
             </dl>
 
             <div className="kd-actions">
-              <button
+              {!agent && <button
                 className={`btn ${record.pinned ? "primary" : ""}`}
                 onClick={async () => {
                   await patchRecord(record.id, { pinned: !record.pinned });
@@ -295,11 +306,11 @@ export function KnowledgeWeb({
                 }}
               >
                 {record.pinned ? "Pinned — always loaded" : "Pin to every session"}
-              </button>
+              </button>}
               <button
                 className="btn danger"
                 onClick={async () => {
-                  await deleteRecord(record.id);
+                  await (agent ? forgetMemory(agent.id, record.id) : deleteRecord(record.id));
                   setSelected(null);
                   load();
                 }}

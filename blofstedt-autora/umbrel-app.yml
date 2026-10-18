@@ -188,5 +188,7 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  Agents no longer make cron jobs on their own: they ask you first and only schedule a script once you agree. Cron jobs
-  stay plain scripts that run with no model and cost no tokens; anything that should start an agent is a trigger.
+  The Mind shows each agent's own memory map: open an agent in the Mind and tap the map button beside its name.
+  Autora now has a personality pentagon too, growing from what it says in Threads, and the pentagon sits centred on
+  its card. The "How chatty the agents are" setting is now the app's own Quiet / Normal / Lively switch instead of a
+  plain dropdown.

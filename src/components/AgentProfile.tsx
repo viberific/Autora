@@ -2,14 +2,30 @@ import { useEffect, useState } from "react";
 import { AgentDot } from "./pages/OrganizationPage";
 import { PersonalityShape } from "./PersonalityShape";
 import { IconX } from "./Icons";
+import { MindViewButton } from "./MindViewButton";
 import { fetchMind, forgetMemory, type Agent, type AgentMemory } from "../lib/organization";
+
+/** The five-point shape and what it means, centred on the card: shared by Autora's Mind and every agent's. */
+export function PersonalityCard({ agent }: { agent: Agent }) {
+  return (
+    <div className="agent-shape-wrap">
+      <PersonalityShape traits={agent.traits} name={agent.name} />
+      <p className="jf-hint">
+        Every agent starts out genial: a friendly teammate who talks like a regular person. From there its personality
+        grows by itself, from how it actually talks in Threads, and the shape stretches toward what it becomes.
+        You cannot set it. It only changes how the agent sounds in Threads, never how well it works or how it
+        works with the others.
+      </p>
+    </div>
+  );
+}
 
 /**
  * One agent's mind, in the Mind: its personality as a shape that grows (nobody
  * sets it), how well it works with each colleague, and what it has learned,
  * which it alone reads. Autora's own mind is the rest of the page.
  */
-export function AgentProfile({ agent, agents }: { agent: Agent; agents: Agent[] }) {
+export function AgentProfile({ agent, agents, onMap }: { agent: Agent; agents: Agent[]; onMap?: () => void }) {
   const [memories, setMemories] = useState<AgentMemory[] | null>(null);
 
   useEffect(() => {
@@ -37,16 +53,10 @@ export function AgentProfile({ agent, agents }: { agent: Agent; agents: Agent[] 
               {done + failed > 0 ? `${done} task${done === 1 ? "" : "s"} finished${failed ? `, ${failed} not` : ""}. ` : "No tasks yet. "}
             </p>
           </div>
+          <div className="spacer" />
+          {onMap && <MindViewButton to="map" onClick={onMap} />}
         </div>
-        <div className="agent-shape-wrap">
-          <PersonalityShape traits={agent.traits} name={agent.name} />
-          <p className="jf-hint">
-            Every agent starts out genial: a friendly teammate who talks like a regular person. From there its personality
-            grows by itself, from how it actually talks in Threads, and the shape stretches toward what it becomes.
-            You cannot set it. It only changes how the agent sounds in Threads, never how well it works or how it
-            works with the others.
-          </p>
-        </div>
+        <PersonalityCard agent={agent} />
       </section>
 
       <section className="set-card">

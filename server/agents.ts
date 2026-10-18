@@ -134,16 +134,17 @@ function load(): Agent[] {
   // Agents made before they had a look get one now, and keep it.
   let gave = false;
   for (const a of roster) {
-    if (a.id === LEAD_ID) { delete a.look; a.social = 1; continue; }
-    if (typeof a.social !== "number") { a.social = temper(); gave = true; }
     /* Personalities used to be drawn from the role and edited by hand. Now nobody sets one: an agent made that way
-       begins again, genial, and develops from here. Its bonds and its record of tasks are its own and stay. */
+       begins again, genial, and develops from here. Its bonds and its record of tasks are its own and stay. The lead
+       has one too, grown the same way from what it says in Threads. */
     if (a.character !== 2 || !readTraits(a.traits)) {
       delete (a as { personality?: unknown }).personality;
       a.traits = bornTraits();
       a.character = 2;
       gave = true;
     }
+    if (a.id === LEAD_ID) { delete a.look; a.social = 1; continue; }
+    if (typeof a.social !== "number") { a.social = temper(); gave = true; }
     const ok = a.look && SIDES.includes(a.look.sides) && Number.isFinite(a.look.hue);
     if (ok) continue;
     a.look = pickLook(roster.flatMap((o) => (o.look && o !== a ? [o.look] : [])));
@@ -503,12 +504,12 @@ export function recordCollab(aId: string, bId: string, ok: boolean, weight: numb
 
 /**
  * An agent said something in Threads: its personality grows a little toward how it sounded. The agent's own words are
- * the only thing that moves it. Not the lead, which keeps no personality, and it does not stamp the agent as changed
- * (it happens on every message, and the person's page re-reads on a change).
+ * the only thing that moves it, the lead's as much as any other's. It does not stamp the agent as changed (it happens
+ * on every message, and the person's page re-reads on a change).
  */
 export function developFromTalk(id: string, text: string, kind: "post" | "comment"): void {
   const a = getAgent(id);
-  if (!a || a.builtin || !a.traits) return;
+  if (!a || !a.traits) return;
   a.traits = developed(a.traits, text, kind);
   persist();
 }
