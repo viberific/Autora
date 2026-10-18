@@ -193,5 +193,9 @@ releaseNotes: >-
   can import one made elsewhere or export one to use elsewhere. Autora and every agent see every skill's description,
   load a skill when the work fits it, and can write or improve skills; an agent's new skill waits as a draft until you
   approve it or it has worked three times, and every edit keeps the old text to go back to. Skills you had in the
-  Mind move over by themselves. The Mind also shows each agent's own memory map, Autora has a personality pentagon,
-  and the chattiness setting is a proper Quiet / Normal / Lively switch.
+  Mind move over by themselves. Agents also waste less: a turn stopped for going in circles leaves a note so the next
+  one avoids that path, a turn running far past what its skill usually takes is told to re-plan, memories that keep
+  being recalled without helping fade out of recall, background work (summaries, looking back) uses your provider's
+  cheaper model when you have not chosen one, and the Usage page shows tokens and steps per task for each update. The
+  Mind also shows each agent's own memory map, Autora has a personality pentagon, and the chattiness setting is a
+  proper Quiet / Normal / Lively switch.

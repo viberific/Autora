@@ -516,7 +516,7 @@ export function MindPage({
                           <IconTrash size={14} />
                         </button>
                         <div className="spacer" />
-                        {(r.doubted ?? 0) > 0 && (
+                        {((r.doubted ?? 0) > 0 || (r.missed ?? 0) >= 5) && (
                           <button
                             className="btn ghost"
                             title="A turn found this wrong. Say it still holds, and it is trusted again."
@@ -547,6 +547,11 @@ export function MindPage({
                         {(r.doubted ?? 0) > 0 && (
                           <span className="mind-flag is-doubted" title="A turn that used this found it wrong. It is recalled with a warning, and ranked lower, until it is checked or edited.">
                             found wrong
+                          </span>
+                        )}
+                        {(r.missed ?? 0) >= 5 && !r.pinned && (
+                          <span className="mind-flag is-doubted" title="Recalled into turns where it played no part. It ranks lower, and after 15 such turns it is only found by searching. Say it still holds, edit it, or pin it to keep it in play.">
+                            {(r.missed ?? 0) >= 15 ? "no longer recalled" : "rarely helps"}
                           </span>
                         )}
                         {r.uses > 0 && <span className="mind-flag" title="Times recalled into a turn, and times a turn that used it went well">used {r.uses}×{r.worked ? `, worked ${r.worked}×` : ""}</span>}

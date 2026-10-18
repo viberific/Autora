@@ -165,4 +165,18 @@ test("the stall setting is clamped", () => {
   assert.equal(mergeLoop({ ...LOOP_DEFAULTS }, { stallAfter: 9999 }).stallAfter, 200);
 });
 
+test("a stop the loop watch makes is written up as a dead end: what was asked, why, and what went round", () => {
+  const watch = new LoopWatch();
+  assert.equal(watch.deadEnd("anything", "Stopped: x"), null, "nothing repeated, nothing to warn against");
+  for (let i = 0; i < 4; i++) watch.record("browser_click", { ref: 12 }, true, "no change");
+  watch.record("browser_read", {}, true, "page");
+  const lesson = watch.deadEnd("Book the 9am slot on the clinic site", "Stopped: the agent ran browser_click 4 times");
+  assert.ok(lesson);
+  assert.equal(lesson!.title, "Dead end: Book the 9am slot on the clinic site");
+  assert.match(lesson!.body, /went round in circles and was stopped \(the agent ran browser_click 4 times\)/);
+  assert.match(lesson!.body, /browser_click.*\(x4\)/);
+  assert.doesNotMatch(lesson!.body, /browser_read/, "a call made once is not the circle");
+  assert.ok(lesson!.tags.includes("dead-end"));
+});
+
 console.log(`\nloop watch: ${passed} passed`);

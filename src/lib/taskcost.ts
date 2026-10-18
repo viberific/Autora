@@ -27,8 +27,22 @@ export interface TaskCell {
   unjudged: number;
   perGood: number | null;
   goodRate: number | null;
+  /** Tokens and rounds of tool calls an average task took (rounds null until counted). */
+  avgTokens?: number | null;
+  avgRounds?: number | null;
   versions: string[];
 }
+
+/** One build of Autora against the others: the person's own tasks on it, and what an average one took. */
+export interface BuildPace {
+  version: string;
+  tasks: number;
+  avgTokens: number | null;
+  avgRounds: number | null;
+}
+
+/** 41200 as "41k", 900 as "900". */
+export const tokensText = (n: number) => (n >= 10_000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
 
 export interface TaskRow {
   id: string;
@@ -57,6 +71,8 @@ export interface TaskSummary {
   current: string;
   cells: TaskCell[];
   recent: TaskRow[];
+  /** Each build's pace, oldest first; absent from a server before this was counted. */
+  builds?: BuildPace[];
 }
 
 /** What to print in the "per good result" column, and why when there is no figure. */

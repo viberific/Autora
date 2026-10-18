@@ -28,6 +28,8 @@ export type MemoryRecord = {
   source?: string | null;
   fetched?: number | null;
   version?: string;
+  /** Times it was recalled and did not help, since it last did (server/memory.ts): from 5 it ranks lower, from 15 it is not recalled by itself. */
+  missed?: number;
 };
 
 export type MemoryLink = { src: string; dst: string; rel: string };

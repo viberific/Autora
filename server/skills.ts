@@ -38,6 +38,8 @@ interface Sidecar {
   uses: number;
   worked: number;
   failed: number;
+  /** Rounds of tool calls the turns that used it and went well took, newest last: what "usually" means for it. */
+  steps: number[];
   /** Earlier SKILL.md texts, newest first, with who replaced them. */
   versions: { at: number; by: string; text: string }[];
 }
@@ -78,6 +80,7 @@ const FILE_MAX = 1_000_000;
 const TOTAL_MAX = 5_000_000;
 const FILES_MAX = 100;
 const VERSIONS_KEPT = 5;
+const STEPS_KEPT = 9;
 /** A draft an agent wrote goes live after this many turns that used it went well. */
 export const LIVE_AFTER = 3;
 /** The catalogue in every turn stays about this long; past it, the least used are named only. */
@@ -265,6 +268,7 @@ function readSidecar(dir: string): Sidecar {
     uses: Number(raw.uses) || 0,
     worked: Number(raw.worked) || 0,
     failed: Number(raw.failed) || 0,
+    steps: Array.isArray(raw.steps) ? raw.steps.filter((n) => Number.isFinite(n) && n > 0).slice(-STEPS_KEPT) : [],
     versions: Array.isArray(raw.versions) ? raw.versions.slice(0, VERSIONS_KEPT) : [],
   };
 }
@@ -450,19 +454,56 @@ export function noteSkillUsed(name: string): void {
  * live once it has worked `LIVE_AFTER` times; a failure is counted, not punished,
  * since a turn fails for many reasons.
  */
-export function noteSkillOutcome(names: string[], ok: boolean): { name: string; live: boolean }[] {
+export function noteSkillOutcome(names: string[], ok: boolean, rounds = 0): { name: string; live: boolean }[] {
   const out: { name: string; live: boolean }[] = [];
   for (const name of new Set(names)) {
     try {
       let live = false;
       update(name, (s) => {
         if (ok) s.worked += 1; else s.failed += 1;
+        if (ok && rounds > 0) s.steps = [...s.steps, rounds].slice(-STEPS_KEPT);
         if (ok && s.status === "draft" && s.worked >= LIVE_AFTER) { s.status = "live"; live = true; }
       });
       out.push({ name, live });
     } catch { /* gone meanwhile */ }
   }
   return out;
+}
+
+/**
+ * How many rounds of tool calls a turn using this skill usually takes: the median
+ * of the ones that went well, once there are two. What a turn running far past it
+ * is told (see `overBudget`).
+ */
+export function typicalSteps(name: string): number | null {
+  const s = getSkill(name);
+  if (!s) return null;
+  const steps = [...readSidecar(s.dir).steps].sort((a, b) => a - b);
+  if (steps.length < 2) return null;
+  const mid = Math.floor(steps.length / 2);
+  return steps.length % 2 ? steps[mid] : Math.round((steps[mid - 1] + steps[mid]) / 2);
+}
+
+/**
+ * A soft budget for a turn that follows skills: past twice what they usually take
+ * (and never under a floor, since a short skill can meet a slow site), the note
+ * the agent reads once, to re-plan or say what is in the way. Null within budget.
+ */
+export function overBudget(names: Iterable<string>, rounds: number, floor = 8): string | null {
+  let budget = 0;
+  const usual: string[] = [];
+  for (const name of new Set(names)) {
+    const typical = typicalSteps(name);
+    if (typical === null) continue;
+    budget = Math.max(budget, typical * 2);
+    usual.push(`${name} about ${typical}`);
+  }
+  if (!usual.length || rounds <= Math.max(floor, budget)) return null;
+  return (
+    `[Step budget] This turn has taken ${rounds} rounds; the skill${usual.length === 1 ? "" : "s"} it follows usually take${usual.length === 1 ? "s" : ""} ` +
+    `${usual.join(", ")}. Something is different this time. Before the next call, say what is in the way and whether the ` +
+    "skill's steps still fit; change course, or stop and tell the person. If the skill was wrong, fix it afterwards with skill action=write."
+  );
 }
 
 /**
@@ -514,8 +555,10 @@ export function skillForUse(name: string): { ok: true; text: string; skill: Skil
   const files = s.files.length
     ? `\n\nFiles in this skill (folder ${s.dir}): ${s.files.join(", ")}. Read one with skill action=read; run a script from that folder with the terminal.`
     : "";
+  const typical = typicalSteps(s.name);
+  const pace = typical !== null ? `\n\n(Turns that used this skill and went well took about ${typical} rounds of tool calls.)` : "";
   const draft = s.status === "draft" ? "\n\n(This is a draft another agent wrote and the person has not approved yet: follow it, and fix it with skill action=write if it proves wrong.)" : "";
-  return { ok: true, skill: s, text: `Skill ${s.name}: ${s.description}\n\n${s.body}${files}${draft}` };
+  return { ok: true, skill: s, text: `Skill ${s.name}: ${s.description}\n\n${s.body}${files}${pace}${draft}` };
 }
 
 // ------------------------------------------------------- import and export --

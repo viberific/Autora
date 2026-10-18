@@ -7,7 +7,7 @@ import express, { type Request, type Response } from "express";
 import { captureConsole, log, setLogRedactor, type LogLevel } from "./server/logs";
 import { WebSocketServer, WebSocket } from "ws";
 import {
-  PROVIDERS, contextWindow, costParts, isPriced, } from "./server/providers";
+  PROVIDERS, cheaperSibling, contextWindow, costParts, isPriced, } from "./server/providers";
 import {
   flushState, recordUsage,
   reachFor, resolveProvider, save, state, stateDir, stateFilePath, type Resolved,
@@ -70,7 +70,7 @@ import { ShareGate, SHARE_IDLE_MS, SHARE_MIN_CALLS, SHARE_SYSTEM, listFinished, 
 import { isSmallTalk } from "./server/quick";
 import { agentBrief, developFromTalk, findAgent, getAgent, handoffTargets, LEAD_ID, listAgents, mentionedAgents, producedWork, recordCollab, recordWork, withoutHandover } from "./server/agents";
 import { agentMind, clusters, remember, teach } from "./server/agentmind";
-import { moveSkillsOutOf, noteSkillOutcome } from "./server/skills";
+import { moveSkillsOutOf, noteSkillOutcome, overBudget } from "./server/skills";
 import {
   LifeGate, MAX_AGENT_RUN, applyVotes, MAX_WONDERS, PACE, isNamed, perHourFor, URGE_AT, addresseeOf, allowed as lifeAllowed, reactDelayMs, replyChance, answered, goneQuiet, knownText, lastActivity, quietFrom, unseenBy,
   lifePrompt, lifeSystem, parseChoice, personWaiting, pickAgent, reactionOf, replyPrompt, reviewPrompt, reviewersOf, somethingNew, toTheRoom, trailingAgentRun, urgeOf,
@@ -3603,15 +3603,16 @@ async function backgroundCall(sessionId: string, system: string, prompt: string,
   if (!active.provider || active.problem) throw new Error(active.problem ?? "No model is connected.");
   /* Unwatched work -- folding old turns, learning, remarks -- runs on the
      Background role's model when Settings names one, then talk mode's fast model,
-     then the chosen model; AUTORA_COMPACTION_MODEL overrides them all. */
-  const target = backgroundTarget(active, process.env.AUTORA_COMPACTION_MODEL);
-  const model = target.model;
+     then a cheaper model of the same provider when its price list has one, then
+     the chosen model; AUTORA_COMPACTION_MODEL overrides them all. */
+  const cheaper = cheaperSibling(active.provider, active.model);
+  let target = backgroundTarget(active, process.env.AUTORA_COMPACTION_MODEL, cheaper);
   const ask = (tokens: number) => streamChat({
     provider: target.provider,
-    model,
+    model: target.model,
     key: target.key,
     baseUrl: target.baseUrl,
-    endpoint: endpointPinFor(target.provider, model),
+    endpoint: endpointPinFor(target.provider, target.model),
     system,
     messages: [{ role: "user", text: prompt }],
     temperature,
@@ -3622,7 +3623,15 @@ async function backgroundCall(sessionId: string, system: string, prompt: string,
        hung request would silence the whole forum until a restart. */
     signal: AbortSignal.timeout(BACKGROUND_CALL_MS),
   }, () => undefined);
-  let turn = await ask(maxTokens);
+  let turn: Awaited<ReturnType<typeof ask>>;
+  try {
+    turn = await ask(maxTokens);
+  } catch (err) {
+    /* The cheaper model was picked here, not by the person: one the key cannot reach is no reason for the work to fail. */
+    if (!cheaper || target.model !== cheaper) throw err;
+    target = mainTarget(active);
+    turn = await ask(maxTokens);
+  }
   /* A model that thinks whatever it is told (GLM through some gateways) spends a small budget
      on thinking and answers with nothing. Once more with room for both -- only for work that
      must have an answer (the compaction summary): Threads and reflection may answer with
@@ -3632,6 +3641,7 @@ async function backgroundCall(sessionId: string, system: string, prompt: string,
     turn = await ask(maxTokens * 4);
     turn.usage = { ...turn.usage, input: turn.usage.input + first.input, output: turn.usage.output + first.output };
   }
+  const model = target.model;
   recordUsage({
     ts: Math.floor(Date.now() / 1000),
     session: sessionId,
@@ -3660,7 +3670,7 @@ function noteSkillsUsed(session: Session, startSeq: number, result: TurnResult):
     .filter(Boolean);
   if (!used.length) return;
   const ok = !result.stopped && !result.error && !result.looped && result.ok !== false;
-  for (const { name, live } of noteSkillOutcome(used, ok)) {
+  for (const { name, live } of noteSkillOutcome(used, ok, result.rounds ?? 0)) {
     if (live) emitEvent(session, "system.log", "system", { message: `The skill ${name} has worked often enough to go live.` });
   }
 }
@@ -3721,6 +3731,8 @@ async function reflect(session: Session, request: string, startSeq: number, prev
     const change = mind.reinforce(id);
     if (change) changes.push({ id, title: mind.get(id)?.title ?? id, change });
   }
+  /* Recalled and neither helpful nor misleading: it rode along for nothing (see MemoryGraph.missed). */
+  mind.missed(recalled.map((m) => m.id).filter((id) => !found.helped.includes(id) && !found.misled.includes(id)));
   for (const id of found.misled) {
     const record = mind.get(id);
     if (!record) continue;
@@ -3815,6 +3827,8 @@ export interface TurnResult {
   recalled: string[];
   /** The loop watch ended it: the agent was going round in circles. */
   looped?: boolean;
+  /** Rounds of tool calls it took. */
+  rounds?: number;
 }
 
 /** Messages sent while a turn ran, to be told to it at its next step. */
@@ -4043,7 +4057,7 @@ function beginTurn(session: Session, text: string, attachments: AttachmentRef[] 
   /* Registered inside the task, so the look back after the turn is billed to it too. */
   void withTask(taskId, () => done
     .then(async (result) => {
-      closeTask(taskId, result.stopped ? "stopped" : result.error || result.looped ? "failed" : "finished", Date.now() - began);
+      closeTask(taskId, result.stopped ? "stopped" : result.error || result.looped ? "failed" : "finished", Date.now() - began, result.rounds);
       /* The turn changed code: save a version of the folder to go back to. */
       if (codeTouched.delete(session.id)) {
         void snapshotFolder(terminalDir(), text.slice(0, 120)).then((saved) => {
@@ -4240,6 +4254,10 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
     let ranSomething = false;
     /* Why the loop watch ended the turn, when it did: the next turn is told. */
     let loopReason: string | null = null;
+    /* Rounds of tool calls, and the skills loaded: a turn far past what its skills usually take is told so, once. */
+    let rounds = 0;
+    const skillsFollowed = new Set<string>();
+    let budgetSaid = false;
     /* One per turn, and outside the retry loop on purpose: a retry only
        happens when nothing has been said yet, so the sieve is empty, and
        a fresh one per attempt would be the same object with more steps. */
@@ -5091,6 +5109,8 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
       /* Failures that say the same thing however the arguments were varied,
          which the exact-call counts in the loop watch never add up. */
       const errors = new ErrorBudget(3, 6, session.incognito ? {} : loadBudget(session.id));
+      /* Whether this turn's stop has already been written down as a dead end (by the error budget). */
+      let deadEndKept = false;
       let loopStop: string | null = null;
       /** Run a call's result past the loop watch before the model reads it. */
       const watched = (name: string, args: unknown, ok: boolean, raw: string, shown: string) => {
@@ -5120,6 +5140,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
            confirmed or dropped by the same use-and-doubt the others are. */
         if (budget.stop && !session.incognito) {
           const lesson = errors.deadEnd(name, stripAnsi(raw));
+          deadEndKept = lesson !== null;
           if (lesson) {
             const { record, action } = mind.write({
               ...lesson, kind: "fact", status: "provisional",
@@ -5912,6 +5933,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
               if (spec.name !== "tool_manual") shown = `${fitted}\n\n[Autora: the manual for this window, once -- read it before the next step]\n${manualText(manual)}`;
             }
             reply(outcome.ok, watched(spec.name, use.args, outcome.ok, outcome.summary, shown), outcome.images);
+            if (outcome.ok && spec.name === "skill" && use.args?.action === "use") skillsFollowed.add(String(use.args?.name ?? "").trim());
           }
           if (loopStop) break;
         }
@@ -5926,10 +5948,13 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
           }
         }
         const checkpoint = watch.endRound();
+        rounds += 1;
         if (checkpoint?.startsWith("[Stall]")) escalation.signal("several rounds changed nothing");
         if (!loopStop) loopStop = watch.stallStop();
         const last = replies[replies.length - 1];
         if (checkpoint && last) last.result += `\n\n${checkpoint}`;
+        const pace = !budgetSaid && skillsFollowed.size ? overBudget(skillsFollowed, rounds) : null;
+        if (pace && last) { budgetSaid = true; last.result += `\n\n${pace}`; }
         /* An item was finished this round and code changed since the check last
            ran: the check runs now, while the change is fresh, instead of at the
            end when a failure has to be traced back through everything. */
@@ -5999,6 +6024,15 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
         if (loopStop) {
           emitEvent(session, "system.log", "system", { message: loopStop });
           loopReason = loopStop;
+          /* A stop the loop watch made teaches as much as one the error budget made: kept as a provisional memory,
+             so the next chat on the same work is warned off the path that went round in circles. */
+          const lesson = !deadEndKept && !session.incognito ? watch.deadEnd(text, loopStop) : null;
+          if (lesson) {
+            const { record, action } = mind.write({
+              ...lesson, kind: "fact", status: "provisional", source_session: session.id, source_seq: session.seqCounter,
+            });
+            emitEvent(session, "memory.write", "agent", { id: record.id, title: record.title, kind: record.kind, action });
+          }
           break;
         }
       }
@@ -6067,6 +6101,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
     );
     closed = true;
     result.looped = loopReason !== null;
+    result.rounds = rounds;
     result.ranSomething = ranSomething;
     result.stopped = Boolean(running.get(session.id)?.stopped);
     result.ok = connected && !result.error && !result.stopped;

@@ -172,6 +172,20 @@ await test("skills leave the Mind: old skill memories become skills, and the Min
   assert.match((refused as { error: string }).error, /skill tool/);
 });
 
+await test("a skill learns how many steps it usually takes, and a turn far past that is told once", () => {
+  skills.writeSkillParts({ name: "pace-check", description: "A skill to test how its usual pace is learned.", body: "Do the first thing, then the second, then check it." }, { kind: "person" });
+  assert.equal(skills.typicalSteps("pace-check"), null, "nothing to go on yet");
+  assert.equal(skills.overBudget(["pace-check"], 50), null, "no budget without a history");
+  skills.noteSkillOutcome(["pace-check"], true, 4);
+  skills.noteSkillOutcome(["pace-check"], true, 6);
+  skills.noteSkillOutcome(["pace-check"], false, 40);
+  assert.equal(skills.typicalSteps("pace-check"), 5, "the median of the turns that went well");
+  assert.equal(skills.overBudget(["pace-check"], 10), null, "under the floor of eight, whatever twice the usual is");
+  assert.match(skills.overBudget(["pace-check"], 11) ?? "", /\[Step budget\] This turn has taken 11 rounds; the skill it follows usually takes pace-check about 5/);
+  const use = skills.skillForUse("pace-check");
+  assert.ok(use.ok && /took about 5 rounds/.test(use.text));
+});
+
 await test("the Skills page's routes: list, open, check as typed, create, rename, approve, roll back, export, import", async () => {
   const express = (await import("express")).default;
   const { skillRoutes } = await import("../server/routes/skills");

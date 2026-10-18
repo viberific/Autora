@@ -79,14 +79,16 @@ export function targetName(t: Pick<Target, "provider" | "model">, main: string, 
 /**
  * The model for unwatched work: the environment's override (a model of the
  * main provider), then the background role, then talk mode's fast model, then
- * the main model -- the last two being the rule before roles existed.
+ * a cheaper model of the main provider's when one is priced, then the main model.
  */
-export function backgroundTarget(r: RoleModels, override?: string): Target {
+export function backgroundTarget(r: RoleModels, override?: string, cheaper?: string | null): Target {
   const main = mainTarget(r);
   const forced = (override || "").trim();
   if (forced) return { ...main, model: forced };
   if (r.background?.model) return r.background;
-  return r.fastModel ? { ...main, model: r.fastModel } : main;
+  if (r.fastModel) return { ...main, model: r.fastModel };
+  /* Nothing named: a cheaper model of the same provider when the price list has one (providers.ts cheaperSibling). */
+  return cheaper ? { ...main, model: cheaper } : main;
 }
 
 /**

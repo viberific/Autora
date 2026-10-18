@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { IconCheck, IconCoin, IconRepeat, IconX } from "./Icons";
 import { money } from "./Billing";
-import { groupByKind, modelLabel, perGoodText, verdictText, type Mark, type TaskRow, type TaskSummary } from "../lib/taskcost";
+import { groupByKind, modelLabel, perGoodText, tokensText, verdictText, type Mark, type TaskRow, type TaskSummary } from "../lib/taskcost";
 
 const when = (ts: number) =>
   new Date(ts * 1000).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -85,6 +85,19 @@ export function TaskCosts() {
         mark it, your project check says so, or it ends in an error. Unjudged tasks are left out.
       </p>
 
+      {(summary.builds?.length ?? 0) > 1 && (
+        <p className="jf-hint task-pace" title="Your own tasks only (not schedules or watchers), on every model: whether an update made the work cheaper.">
+          An average task by build:{" "}
+          {summary.builds!.slice(-4).map((b, i) => (
+            <span key={b.version}>
+              {i > 0 ? " · " : ""}
+              {b.version} {b.avgTokens !== null ? `${tokensText(b.avgTokens)} tokens` : "—"}
+              {b.avgRounds !== null ? `, ${b.avgRounds} rounds` : ""}
+            </span>
+          ))}
+        </p>
+      )}
+
       <div className="seg task-scope" role="group" aria-label="Which builds">
         <button className={thisBuild ? "" : "on"} aria-pressed={!thisBuild} onClick={() => setThisBuild(false)}>
           Every build
@@ -113,6 +126,8 @@ export function TaskCosts() {
                     {cell.judged > 0 ? ` · ${cell.good} good, ${cell.poor} poor` : ""}
                     {cell.unjudged > 0 ? ` · ${cell.unjudged} not judged` : ""}
                     {cell.avgCost !== null ? ` · ${money(cell.avgCost)} each` : ""}
+                    {cell.avgTokens ? ` · ${tokensText(cell.avgTokens)} tokens` : ""}
+                    {cell.avgRounds !== null && cell.avgRounds !== undefined ? `, ${cell.avgRounds} rounds` : ""}
                     {mixed ? ` · builds ${cell.versions[0]}–${cell.versions[cell.versions.length - 1]}` : ""}
                   </span>
                   <em className={`task-figure ${figure.value === "price" ? "" : "is-none"}`}>

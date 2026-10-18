@@ -239,6 +239,32 @@ export class LoopWatch {
     );
   }
 
+  /**
+   * What a stop taught, as a memory the next chat on the same work is told: what
+   * was asked, why it was stopped, and the calls that went round. The error
+   * budget writes its own for a stop it made (ErrorBudget.deadEnd); this is for
+   * the rest -- a repeated call, a stall, a call refused over and over. Null when
+   * nothing was repeated, since then there is no path to warn against.
+   */
+  deadEnd(request: string, reason: string): { title: string; body: string; tags: string[] } | null {
+    const repeated = [...this.calls.values()]
+      .filter((c) => c.count >= 2)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5)
+      .map((c) => `${c.label} (x${c.count})`);
+    if (!repeated.length) return null;
+    const asked = request.replace(/\s+/g, " ").trim();
+    const topic = asked.length > 70 ? `${asked.slice(0, 67)}...` : asked;
+    return {
+      title: `Dead end: ${topic}`.slice(0, 200),
+      body:
+        `Working on "${asked.slice(0, 300)}", the turn went round in circles and was stopped (${reason.replace(/^Stopped: /, "").slice(0, 200)}). ` +
+        `What was repeated without getting anywhere: ${repeated.join("; ")}. Do not start this way again: find the cause first, ` +
+        "try another route, or ask the person.",
+      tags: ["dead-end", ...new Set([...this.calls.values()].map((c) => c.label.split(/[\s(]/)[0]).slice(0, 3))],
+    };
+  }
+
   /** One round of calls is done. Every so often, a checkpoint. */
   endRound(): string | null {
     this.rounds += 1;
