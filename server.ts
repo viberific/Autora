@@ -98,7 +98,8 @@ import {
   appendEvent, countsFor, countsOf, deleteSession, ephemeralId, flushStore,
   loadSessionEvents,
   loadSessionIndex, readDoc, saveDoc, saveMeta, saveSession, } from "./server/store";
-import { LiveBrowser, VIEWPORT, addressFor, probeBrowser, type PageRead } from "./server/browser";
+import { LiveBrowser, VIEWPORT, addressFor, probeBrowser, sweepLeftoverBrowsers, type PageRead } from "./server/browser";
+import { processPressure } from "./server/processes";
 import { } from "./server/captcha";
 import { inQuiet, quietBriefing } from "./server/quiet";
 import {
@@ -7317,6 +7318,19 @@ async function startServer() {
   });
 
   scheduler.start();
+  /* A chromium left behind by an earlier run of this server in the same
+     container is unreachable and its children only wait to be orphaned: stop
+     it before it can become a zombie. */
+  const swept = sweepLeftoverBrowsers();
+  if (swept) log("info", "processes", `stopped ${swept} browser(s) left over from an earlier run`);
+  /* Once a minute, the container's process budget, said out loud only when it
+     is nearly gone. With room to work this is two small file reads; the walk
+     of /proc that counts zombies happens only under pressure. */
+  const pressureTimer = setInterval(() => {
+    const note = processPressure();
+    if (note) log("warn", "processes", note);
+  }, 60_000);
+  pressureTimer.unref?.();
   /* Half a minute: long enough that a job finishing between two looks is
      still well inside the age a wake is worth making for, short enough that
      a report does not sit behind an idle machine. */

@@ -19,6 +19,19 @@ services:
     # on-failure takes as "leave it down", and the app then refuses every
     # connection until somebody restarts it by hand.
     restart: unless-stopped
+    # A real init as PID 1 (Docker's docker-init, a tini build), in front of
+    # `node dist/server.cjs`.
+    #
+    # Without it node itself is PID 1, and node does not wait() on children it
+    # did not spawn: every process reparented to it -- the members of a killed
+    # terminal command's process group, a chromium renderer whose browser exits
+    # first -- stays a zombie for the life of the container. On 2026-10-18 the
+    # box had 8972 of them against a limit of 9124 and every fork-based tool
+    # failed with "Resource temporarily unavailable". An init reaps them as
+    # they exit, which is the only thing that can: a zombie cannot be killed,
+    # only collected by its parent. It also forwards SIGTERM to node, so a stop
+    # reaches the server's own shutdown instead of waiting for the kill.
+    init: true
     # Keep the app from taking the whole box: 3 GiB of memory and no swap
     # (memswap_limit equal to mem_limit), on a box with 8 GiB of which about
     # half is already in use. Past the cap the container is stopped and

@@ -189,6 +189,7 @@ import { gameAvailable, gameBriefing, runGameTool } from "./gamedesk";
 import { cadAvailable, cadBriefing, runCadTool } from "./caddesk";
 import { photoSPECS } from "./specs/photo";
 import { photoAvailable, photoBriefing, runPhotoTool } from "./photodesk";
+import { killTree, processPressure } from "./processes";
 
 // ------------------------------------------------------------- the registry --
 
@@ -858,6 +859,11 @@ function runCommand(
     }
 
     const shell = candidates[candidateIdx];
+    /* Measured before the fork, so that a failure to fork is reported as the
+       container being out of processes rather than as the tool's own fault --
+       `timeout: fork: Resource temporarily unavailable` read as "the phone is
+       offline" for hours on 2026-10-18. */
+    const starved = processPressure();
     return new Promise<ToolOutcome>((resolve) => {
       let child: any;
       let timer: any = null;
@@ -875,13 +881,9 @@ function runCommand(
 
       const killGroup = () => {
         if (!child?.pid) return;
-        try {
-          process.kill(-child.pid, "SIGKILL");
-        } catch {
-          try {
-            child.kill("SIGKILL");
-          } catch {}
-        }
+        // The group and everything under it: a member that moved to its own
+        // parent would otherwise be reparented to PID 1 and zombieized.
+        killTree(child.pid);
       };
 
       try {
@@ -948,6 +950,9 @@ function runCommand(
           // Fallback to next shell candidate
           return resolve(tryShell(candidateIdx + 1));
         }
+        if (starved && (err.code === "EAGAIN" || err.code === "ENOMEM")) {
+          return resolve({ ok: false, summary: starved });
+        }
         resolve({ ok: false, summary: `Could not run that: ${redactForModel(err?.message ?? err)}` });
       });
 
@@ -961,6 +966,12 @@ function runCommand(
            chunk arrived, and the omission marker between them is our own
            words. Redacting again walked the same text a third time. */
         const body = collected.trim();
+        /* A command that could not fork says so in its own output --
+           `timeout: fork: Resource temporarily unavailable` -- which reads
+           like the device's fault. When the container is genuinely out of
+           processes, say that instead of letting the tool take the blame. */
+        const starving = Boolean(starved) && /Resource temporarily unavailable|cannot fork|fork: /i.test(body);
+        const pressure = starving ? `\n\n${starved}` : "";
         const note =
           killedBy === "timeout"
             ? `\n\n[killed after ${timeoutSeconds}s -- it had not finished]`
@@ -971,11 +982,11 @@ function runCommand(
                 : "";
 
         resolve({
-          ok: killedBy === null && exit === 0,
+          ok: killedBy === null && exit === 0 && !starving,
           exitCode: exit,
           summary:
             `Exit code ${exit}${killedBy === "timeout" ? " (timed out)" : ""}\n\n` +
-            (body || "(no output)") +
+            (body ? body + pressure : starving ? `${starved}` : "(no output)") +
             note,
           preview: body.split("\n").slice(-1)[0]?.slice(0, 120) || `exit ${exit}`,
         });

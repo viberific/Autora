@@ -23,6 +23,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import type { Browser, BrowserContext, Page, Route } from "playwright-core";
 import { probeBrowser, systemBrowser } from "./browser";
+import { browserRoots, settleTree } from "./processes";
 
 const ORIGIN = "https://pdf.autora.invalid";
 const IDLE_CLOSE_MS = 60_000;
@@ -351,6 +352,17 @@ html, body { margin: 0; background: #fff; }
 let browser: Promise<Browser> | null = null;
 let idleTimer: NodeJS.Timeout | null = null;
 let busy = 0;
+/** The chromium behind `browser`, recorded at launch so closing it can take
+    the whole tree rather than the top of it. See server/processes.ts. */
+let tree: number[] = [];
+
+/** Wait for the browser's tree to go by itself, then kill what is left, so no
+    child is reparented to PID 1 to become a zombie. */
+function retireTree() {
+  const pids = tree;
+  tree = [];
+  for (const pid of pids) void settleTree(pid);
+}
 
 async function launch(): Promise<Browser> {
   if (idleTimer) clearTimeout(idleTimer);
@@ -358,15 +370,23 @@ async function launch(): Promise<Browser> {
   browser ??= (async () => {
     const { chromium } = await import("playwright-core");
     const executablePath = systemBrowser();
-    const launched = await chromium.launch({
-      headless: true,
-      ...(executablePath ? { executablePath } : {}),
-      args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--renderer-process-limit=1", "--js-flags=--max-old-space-size=256"],
-    });
-    launched.on("disconnected", () => { browser = null; });
+    const before = new Set(browserRoots());
+    let launched: Browser;
+    try {
+      launched = await chromium.launch({
+        headless: true,
+        ...(executablePath ? { executablePath } : {}),
+        args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--renderer-process-limit=1", "--js-flags=--max-old-space-size=256"],
+      });
+    } finally {
+      const born = browserRoots().filter((pid) => !before.has(pid));
+      if (born.length) tree = born;
+    }
+    launched.on("disconnected", () => { browser = null; retireTree(); });
     return launched;
   })().catch((err) => {
     browser = null;
+    retireTree();
     throw err;
   });
   return browser;
@@ -378,7 +398,7 @@ function release() {
   idleTimer = setTimeout(() => {
     const closing = browser;
     browser = null;
-    void closing?.then((b) => b.close()).catch(() => undefined);
+    void closing?.then((b) => b.close()).catch(() => undefined).finally(retireTree);
   }, IDLE_CLOSE_MS);
   idleTimer.unref?.();
 }

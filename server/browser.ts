@@ -43,6 +43,7 @@ import type { BrowserCookie } from "./cookies";
 import { humanClick, humanMove, humanPath, humanType, pointIn, wander, type Point } from "./human";
 import { DEFAULT_CAPTCHA, findChallenge, findPageCheckbox, solveChallenge, type CaptchaSettings, type SolveReport } from "./captcha";
 import { thoughtFromAction } from "../src/lib/thought";
+import { browserRoots, settleTree, sweepBrowsers } from "./processes";
 
 /* Playwright's types are not imported: the package is optional, and a type
    import would make the server half fail to compile wherever it is not
@@ -1775,6 +1776,12 @@ function clearStaleLock(dir: string) {
  */
 let shared: { context: BrowserContext; users: number } | null = null;
 let launching: Promise<BrowserContext> | null = null;
+/** The chromium processes behind `shared`, recorded at launch so that closing
+    it takes the whole tree. A browser is twenty-odd processes and the DevTools
+    close only stops the top one; the rest are reparented to PID 1, which is
+    the node server and reaps nothing, so they used to stay as zombies for the
+    life of the container. See server/processes.ts. */
+let browserTree: number[] = [];
 /** Pages some session has taken, so the tab Chrome opens with is handed out
     once rather than to everyone. */
 const claimed = new WeakSet<object>();
@@ -1815,17 +1822,30 @@ async function launchShared(): Promise<BrowserContext> {
       ],
     });
   clearStaleLock(dir);
+  /* Whatever chromium this launch started, successful or not: a launch that
+     throws halfway through can still leave a browser behind, and that one
+     holds the profile lock and every one of its children is an orphan. */
+  const launchTracked = async () => {
+    const before = new Set(browserRoots());
+    try {
+      return await launch();
+    } finally {
+      const born = browserRoots().filter((pid) => !before.has(pid));
+      if (born.length) browserTree = born;
+    }
+  };
   let context: BrowserContext;
   try {
-    context = await launch();
+    context = await launchTracked();
   } catch (err) {
     // Once more after clearing again: a browser that was still shutting down
     // a moment ago may have released the profile by now.
     await new Promise((resolve) => setTimeout(resolve, 500));
     clearStaleLock(dir);
     try {
-      context = await launch();
+      context = await launchTracked();
     } catch {
+      retireTree();
       throw new Error(`The browser would not start: ${firstLine(err)}`);
     }
   }
@@ -1852,8 +1872,32 @@ async function launchShared(): Promise<BrowserContext> {
   }
   context.on("close", () => {
     if (shared?.context === context) shared = null;
+    retireTree();
   });
   return context;
+}
+
+/** Take down the tree behind the browser that has just been closed: wait a
+    moment for it to exit by itself, then kill what is left, so nothing is
+    reparented to PID 1 to become a zombie nobody can clear. */
+function retireTree() {
+  const tree = browserTree;
+  browserTree = [];
+  for (const pid of tree) void settleTree(pid);
+}
+
+/** A browser left running by an earlier run of this server in the same
+    container is unreachable -- it holds the profile lock and nothing can close
+    it -- and every child of it is waiting to be orphaned. Called once at
+    startup. */
+export function sweepLeftoverBrowsers(): number {
+  let dir = "";
+  try {
+    dir = profileDir();
+  } catch {
+    // No profile configured yet: nothing to match on.
+  }
+  return sweepBrowsers([dir].filter(Boolean));
 }
 
 /** Playwright's launch errors carry the whole command line and browser log;
@@ -1891,6 +1935,9 @@ async function releaseContext(context: BrowserContext, cookiesSaved = false) {
   shared = null;
   if (!cookiesSaved) await saveCookies(context);
   await context.close().catch(() => undefined);
+  // The close event handles the happy path; this is for a close that threw
+  // and so never fired one.
+  if (browserTree.length) retireTree();
 }
 
 /** Whether letting go of `context` would stop the browser. */

@@ -23,6 +23,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Browser, Page } from "playwright-core";
 import { probeBrowser, systemBrowser } from "./browser";
+import { browserRoots, settleTree } from "./processes";
 import { DEFAULT_PALETTE, usesThree, widgetDocument } from "../src/lib/widget";
 
 // ------------------------------------------------------------- Three.js --
@@ -72,6 +73,15 @@ const MOVED = 0.015;
 let browser: Promise<Browser> | null = null;
 let idleTimer: NodeJS.Timeout | null = null;
 let checking = 0;
+/** The chromium behind `browser`, recorded at launch so closing it can take
+    the whole tree. See server/processes.ts. */
+let tree: number[] = [];
+
+function retireTree() {
+  const pids = tree;
+  tree = [];
+  for (const pid of pids) void settleTree(pid);
+}
 
 async function checker(): Promise<Browser> {
   if (idleTimer) clearTimeout(idleTimer);
@@ -79,24 +89,32 @@ async function checker(): Promise<Browser> {
   browser ??= (async () => {
     const { chromium } = await import("playwright-core");
     const executablePath = systemBrowser();
-    const launched = await chromium.launch({
-      headless: true,
-      ...(executablePath ? { executablePath } : {}),
-      args: [
-        "--no-sandbox",
-        "--disable-dev-shm-usage",
-        "--renderer-process-limit=1",
-        // WebGL with no GPU: SwiftShader draws it on the CPU, which is slow
-        // but real, so a 3D widget is checked rather than waved through.
-        "--use-angle=swiftshader",
-        "--enable-unsafe-swiftshader",
-        "--ignore-gpu-blocklist",
-      ],
-    });
-    launched.on("disconnected", () => { browser = null; });
+    const before = new Set(browserRoots());
+    let launched: Browser;
+    try {
+      launched = await chromium.launch({
+        headless: true,
+        ...(executablePath ? { executablePath } : {}),
+        args: [
+          "--no-sandbox",
+          "--disable-dev-shm-usage",
+          "--renderer-process-limit=1",
+          // WebGL with no GPU: SwiftShader draws it on the CPU, which is slow
+          // but real, so a 3D widget is checked rather than waved through.
+          "--use-angle=swiftshader",
+          "--enable-unsafe-swiftshader",
+          "--ignore-gpu-blocklist",
+        ],
+      });
+    } finally {
+      const born = browserRoots().filter((pid) => !before.has(pid));
+      if (born.length) tree = born;
+    }
+    launched.on("disconnected", () => { browser = null; retireTree(); });
     return launched;
   })().catch((err) => {
     browser = null;
+    retireTree();
     throw err;
   });
   return browser;
@@ -108,7 +126,7 @@ function releaseChecker() {
   idleTimer = setTimeout(() => {
     const closing = browser;
     browser = null;
-    void closing?.then((b) => b.close()).catch(() => undefined);
+    void closing?.then((b) => b.close()).catch(() => undefined).finally(retireTree);
   }, IDLE_CLOSE_MS);
   idleTimer.unref?.();
 }
