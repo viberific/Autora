@@ -174,7 +174,8 @@ const VIDEO = [
 const STUDIO = [
   "- Autora Music (tools studio_open, studio_look, studio_song, studio_track, studio_clip, studio_notes, studio_make, studio_play, " +
     "studio_export): a small studio in the Music tab. A song has a tempo (30-300), a key and scale, tracks with an instrument " +
-    "(keys, synth, bass, pluck, pad, lead, or kit for drums) and a mixer (volume, pan, reverb, mute, solo), and clips on those tracks " +
+    "(keys, synth, bass, pluck, pad, lead, or kit for drums) and a mixer (volume, pan, reverb, and a three-band EQ: eq_low " +
+    "under 120 Hz, eq_mid around 1 kHz, eq_high over 4 kHz, each -15 to +15 dB), and clips on those tracks " +
     "holding notes ({pitch, start, length, vel}, times in beats from the clip's start; bar 1 is the first bar). The person has a " +
     "piano roll, an arrangement and a mixer and edits the same song. studio_look first (it also says which clip they have open, so " +
     "\"this clip\" means something), then change. You cannot hear the music: studio_look and its observations are how you check, and " +

@@ -46,7 +46,18 @@ export interface Track {
   solo: boolean;
   /** How much goes to the reverb, 0 to 1. */
   reverb: number;
+  /** Three-band EQ in decibels: low shelf at 120 Hz, bell at 1 kHz, high shelf at 4 kHz. */
+  eq: Eq;
   clips: Clip[];
+}
+
+export interface Eq {
+  /** dB of low shelf under 120 Hz. */
+  low: number;
+  /** dB of bell around 1 kHz. */
+  mid: number;
+  /** dB of high shelf over 4 kHz. */
+  high: number;
 }
 
 export type ScaleName =
@@ -107,6 +118,16 @@ const TRACK_COLORS = ["#7c8cff", "#34d399", "#fb7185", "#fbbf24", "#38bdf8", "#c
 
 export const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 const num = (v: unknown, fallback: number) => (typeof v === "number" && Number.isFinite(v) ? v : fallback);
+
+/** Three EQ bands from a saved song, each held between -15 and +15 dB; anything missing is flat. */
+export function parseEq(v: unknown): Eq {
+  const o = v && typeof v === "object" ? (v as Record<string, unknown>) : {};
+  return {
+    low: clamp(num(o.low, 0), -15, 15),
+    mid: clamp(num(o.mid, 0), -15, 15),
+    high: clamp(num(o.high, 0), -15, 15),
+  };
+}
 /** Beats are kept to a 1/96 grid, which holds triplets and sixteenths without drift. */
 export const tidy = (beats: number) => Math.round(beats * 96) / 96;
 
@@ -616,6 +637,7 @@ export function newTrack(project: Project, instrument: InstrumentId, name?: stri
     mute: false,
     solo: false,
     reverb: instrument === "pad" ? 0.4 : instrument === "kit" || instrument === "bass" ? 0.05 : 0.2,
+    eq: { low: 0, mid: 0, high: 0 },
     clips: [],
   };
 }
@@ -673,6 +695,7 @@ export function normalizeProject(raw: unknown): Project | null {
       mute: t.mute === true,
       solo: t.solo === true,
       reverb: clamp(num(t.reverb, 0.15), 0, 1),
+      eq: parseEq(t.eq),
       clips: [],
     };
     const clipIds = new Set<string>();
@@ -799,7 +822,8 @@ export function describeProject(p: Project, opts: { clip?: string; focus?: { tra
   const soloed = p.tracks.some((t) => t.solo);
   for (const t of p.tracks) {
     const flags = [t.mute ? "muted" : "", t.solo ? "solo" : "", soloed && !t.solo ? "silent (another track is solo)" : ""].filter(Boolean).join(", ");
-    lines.push(`Track ${t.id} "${t.name}" (${instrumentOf(t.instrument).name}): volume ${Math.round(t.volume * 100)}, pan ${fmt(t.pan)}, reverb ${Math.round(t.reverb * 100)}${flags ? `, ${flags}` : ""}`);
+    const eq = t.eq.low || t.eq.mid || t.eq.high ? `, eq low ${t.eq.low} dB mid ${t.eq.mid} dB high ${t.eq.high} dB` : "";
+    lines.push(`Track ${t.id} "${t.name}" (${instrumentOf(t.instrument).name}): volume ${Math.round(t.volume * 100)}, pan ${fmt(t.pan)}, reverb ${Math.round(t.reverb * 100)}${eq}${flags ? `, ${flags}` : ""}`);
     if (t.clips.length === 0) lines.push("    no clips");
     for (const c of t.clips) {
       const notes = c.notes.length;

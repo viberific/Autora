@@ -426,6 +426,10 @@ function edit(name: string, p: Project, args: Record<string, any>, focus: Focus)
           const v = numberOr(args[key]);
           if (v !== null) { t[key] = clamp(v, lo, hi); done.push(`${key} ${fmt(t[key])}`); }
         }
+        for (const [key, band] of [["eq_low", "low"], ["eq_mid", "mid"], ["eq_high", "high"]] as const) {
+          const v = numberOr(args[key]);
+          if (v !== null) { t.eq[band] = clamp(v, -15, 15); done.push(`${band} ${t.eq[band] > 0 ? "+" : ""}${t.eq[band]} dB`); }
+        }
         if (typeof args.mute === "boolean") { t.mute = args.mute; done.push(t.mute ? "muted" : "unmuted"); }
         if (typeof args.solo === "boolean") { t.solo = args.solo; done.push(t.solo ? "solo" : "not solo"); }
         if (typeof args.color === "string" && /^#[0-9a-fA-F]{6}$/.test(args.color)) { t.color = args.color; done.push(`colour ${args.color}`); }
@@ -444,7 +448,7 @@ function edit(name: string, p: Project, args: Record<string, any>, focus: Focus)
         case "set": {
           const t = needTrack(p, args.track);
           const done = settable(t);
-          if (!done.length) refuse("Nothing to change: pass name, instrument, volume, pan, reverb, mute, solo or color.");
+          if (!done.length) refuse("Nothing to change: pass name, instrument, volume, pan, reverb, eq_low, eq_mid, eq_high, mute, solo or color.");
           return { text: `${t.name}: ${done.join(", ")}.`, preview: `${t.name} ${done[0]}` };
         }
         case "duplicate": {

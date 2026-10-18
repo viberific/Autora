@@ -83,7 +83,8 @@ export const studioSPECS: ToolSpec[] = [
       "- add: a new track. instrument (keys, synth, bass, pluck, pad, lead, kit = drums); optional name, and any of " +
       "the mixer settings below.\n" +
       "- set: change a track (`track` is its id or name): name, instrument, volume (0-1.2, 0.75 is normal), pan (-1 " +
-      "left to 1 right), reverb (0-1), mute, solo, color (#rrggbb).\n" +
+      "left to 1 right), reverb (0-1), eq_low / eq_mid / eq_high (-15 to +15 dB, the three bands: a shelf under " +
+      "120 Hz, a bell at 1 kHz, a shelf over 4 kHz), mute, solo, color (#rrggbb).\n" +
       "- duplicate: copy a track with its clips.  clear: remove its clips, keep the track.  remove: delete it.\n" +
       "To balance a mix, set volumes and pans here; keep drums and bass centred.",
     parameters: {
@@ -96,6 +97,9 @@ export const studioSPECS: ToolSpec[] = [
         volume: { type: "number" },
         pan: { type: "number" },
         reverb: { type: "number" },
+        eq_low: { type: "number" },
+        eq_mid: { type: "number" },
+        eq_high: { type: "number" },
         mute: { type: "boolean" },
         solo: { type: "boolean" },
         color: { type: "string" },

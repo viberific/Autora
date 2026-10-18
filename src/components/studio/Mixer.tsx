@@ -24,6 +24,14 @@ export function Mixer({ project, edit, sendPrompt }: { project: Project; edit: E
                 onChange={(e) => edit((p) => { const x = p.tracks.find((y) => y.id === t.id); if (x) x.reverb = Number(e.target.value) / 100; }, `rev-${t.id}`)} />
               <em>{Math.round(t.reverb * 100)}</em>
             </label>
+            {([["low", "Low"], ["mid", "Mid"], ["high", "High"]] as const).map(([band, label]) => (
+              <label key={band} className="st-knob">EQ {label}
+                <input type="range" min={-15} max={15} value={t.eq[band]} aria-label={`${t.name} eq ${band}`}
+                  onChange={(e) => edit((p) => { const x = p.tracks.find((y) => y.id === t.id); if (x) x.eq[band] = Number(e.target.value); }, `eq-${band}-${t.id}`)}
+                  onDoubleClick={() => edit((p) => { const x = p.tracks.find((y) => y.id === t.id); if (x) x.eq[band] = 0; })} />
+                <em>{t.eq[band] > 0 ? `+${t.eq[band]}` : t.eq[band]}</em>
+              </label>
+            ))}
             <div className="st-fader-wrap">
               <input className="st-fader" type="range" min={0} max={120} value={Math.round(t.volume * 100)} aria-label={`${t.name} volume`}
                 onChange={(e) => edit((p) => { const x = p.tracks.find((y) => y.id === t.id); if (x) x.volume = Number(e.target.value) / 100; }, `vol-${t.id}`)}

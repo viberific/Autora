@@ -30,8 +30,11 @@ function noise(ctx: Ctx): AudioBuffer {
   return buf;
 }
 
-/** A reverb tail: noise that fades, a little darker as it goes. */
-function impulse(ctx: Ctx, seconds = 2.2): AudioBuffer {
+/**
+ * A reverb tail: noise that fades, a little darker as it goes. Kept short (1.1 s) and damped, because a
+ * long bright noise tail smears the whole song into a hiss bed instead of putting the sound in a room.
+ */
+function impulse(ctx: Ctx, seconds = 1.1): AudioBuffer {
   const len = Math.floor(ctx.sampleRate * seconds);
   const buf = ctx.createBuffer(2, len, ctx.sampleRate);
   let seed = 9187;
@@ -41,9 +44,9 @@ function impulse(ctx: Ctx, seconds = 2.2): AudioBuffer {
     for (let i = 0; i < len; i++) {
       seed = (seed * 1664525 + 1013904223) >>> 0;
       const white = seed / 2147483648 - 1;
-      const fade = Math.pow(1 - i / len, 2.6);
-      last += (white - last) * (0.55 - 0.4 * (i / len));
-      data[i] = last * fade * 1.6;
+      const fade = Math.pow(1 - i / len, 3.2);
+      last += (white - last) * (0.5 - 0.42 * (i / len));
+      data[i] = last * fade * 1.2;
     }
   }
   return buf;
@@ -271,6 +274,9 @@ function playNote(ctx: Ctx, out: AudioNode, instrument: InstrumentId, pitch: num
 
 interface Strip {
   input: GainNode;
+  low: BiquadFilterNode;
+  mid: BiquadFilterNode;
+  high: BiquadFilterNode;
   volume: GainNode;
   pan: StereoPannerNode;
   send: GainNode;
@@ -287,21 +293,27 @@ interface Rig {
 /** The mixer for a song: a strip per track into a master that is kept from clipping, and a reverb they share. */
 function buildRig(ctx: Ctx, project: Project): Rig {
   const master = ctx.createGain();
+  // A real limiter: it does nothing at all below -1.5 dBFS and stops peaks dead just above it. A compressor
+  // kicking in at -10 dB pulls the whole mix down and flattens the beat, which is what used to wreck exports.
   const limiter = ctx.createDynamicsCompressor();
-  limiter.threshold.value = -10;
-  limiter.knee.value = 8;
-  limiter.ratio.value = 12;
-  limiter.attack.value = 0.003;
-  limiter.release.value = 0.2;
+  limiter.threshold.value = -1.5;
+  limiter.knee.value = 0;
+  limiter.ratio.value = 20;
+  limiter.attack.value = 0.002;
+  limiter.release.value = 0.1;
   const meter = ctx.createAnalyser();
   meter.fftSize = 1024;
+  // A trim after the limiter so an inter-sample peak cannot land on 0 dBFS and clip in the file.
+  const trim = ctx.createGain();
+  trim.gain.value = 0.85;
   master.connect(limiter);
-  limiter.connect(meter);
+  limiter.connect(trim);
+  trim.connect(meter);
   meter.connect(ctx.destination);
   const reverb = ctx.createConvolver();
   reverb.buffer = impulse(ctx);
   const wet = ctx.createGain();
-  wet.gain.value = 0.7;
+  wet.gain.value = 0.22;
   reverb.connect(wet);
   wet.connect(master);
   const rig: Rig = { ctx, strips: new Map(), master, meter, reverb };
@@ -313,15 +325,29 @@ function buildRig(ctx: Ctx, project: Project): Rig {
 function addStrip(rig: Rig, t: Track): Strip {
   const { ctx } = rig;
   const input = ctx.createGain();
+  // Three bands a strip: a shelf under 120 Hz, a bell at 1 kHz, a shelf over 4 kHz.
+  const low = ctx.createBiquadFilter();
+  low.type = "lowshelf";
+  low.frequency.value = 120;
+  const mid = ctx.createBiquadFilter();
+  mid.type = "peaking";
+  mid.frequency.value = 1000;
+  mid.Q.value = 0.9;
+  const high = ctx.createBiquadFilter();
+  high.type = "highshelf";
+  high.frequency.value = 4000;
   const volume = ctx.createGain();
   const pan = ctx.createStereoPanner();
   const send = ctx.createGain();
-  input.connect(volume);
+  input.connect(low);
+  low.connect(mid);
+  mid.connect(high);
+  high.connect(volume);
   volume.connect(pan);
   pan.connect(rig.master);
   volume.connect(send);
   send.connect(rig.reverb);
-  const strip = { input, volume, pan, send };
+  const strip = { input, low, mid, high, volume, pan, send };
   rig.strips.set(t.id, strip);
   return strip;
 }
@@ -334,12 +360,18 @@ function mix(rig: Rig, project: Project): void {
     const strip = rig.strips.get(t.id) ?? addStrip(rig, t);
     const audible = !t.mute && (!soloed || t.solo);
     strip.volume.gain.setTargetAtTime(audible ? Math.pow(t.volume, 1.6) * 1.1 : 0, now, 0.015);
+    strip.low.gain.setTargetAtTime(t.eq.low, now, 0.02);
+    strip.mid.gain.setTargetAtTime(t.eq.mid, now, 0.02);
+    strip.high.gain.setTargetAtTime(t.eq.high, now, 0.02);
     strip.pan.pan.setTargetAtTime(t.pan, now, 0.015);
     strip.send.gain.setTargetAtTime(t.reverb * 0.8, now, 0.03);
   }
   for (const [id, strip] of rig.strips) {
     if (!project.tracks.some((t) => t.id === id)) {
       strip.input.disconnect();
+      strip.low.disconnect();
+      strip.mid.disconnect();
+      strip.high.disconnect();
       strip.volume.disconnect();
       strip.pan.disconnect();
       strip.send.disconnect();
