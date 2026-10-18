@@ -140,7 +140,13 @@ export function checkText(kind: string, title: string, body: string): string | n
 
 type EntryVerdict = { ok: true; entry: Entry; notes: string[] } | { ok: false; error: string };
 
-const KINDS = new Set(["fact", "preference", "procedure", "skill", "reference"]);
+const KINDS = new Set(["fact", "preference", "procedure", "reference"]);
+
+/** Skills left the Mind for a library of their own (server/skills.ts): what a write of one is told instead. */
+export const SKILL_NOT_MEMORY =
+  "Skills are not memories any more: a way of doing a kind of work is a skill, written with the skill tool (action write: " +
+  "a name, a description of what it does and when to use it, and the instructions). What belongs here is a note on when " +
+  "to reach for a skill, written as a procedure (\"Invoices: use the invoice-from-timesheet skill when billing hours\").";
 
 const titled = (subject: string, title: string) => {
   const s = subject.trim();
@@ -158,6 +164,7 @@ export function checkEntry(input: EntryInput): EntryVerdict {
   const title = squash(input.title, 200);
   const body = String(input.body ?? "").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
   if (!title || !body) return { ok: false, error: "A memory needs both a title and a body." };
+  if (String(input.kind) === "skill") return { ok: false, error: SKILL_NOT_MEMORY };
   const kind = (KINDS.has(String(input.kind)) ? String(input.kind) : "fact") as Entry["kind"];
   const wrong = checkText(kind, title, body);
   if (wrong) return { ok: false, error: wrong };

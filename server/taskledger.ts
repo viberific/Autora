@@ -151,6 +151,8 @@ interface TaskRecord {
   /** Some call's token counts are our own arithmetic. */
   estimated: boolean;
   ms: number | null;
+  /** Rounds of tool calls the turn took; absent on tasks recorded before this was counted. */
+  rounds?: number;
   outcome: Outcome;
   /** The person's project check, the last time it ran this turn. */
   check: "passed" | "failed" | null;
@@ -276,11 +278,12 @@ export function noteCheck(ok: boolean) {
 }
 
 /** The turn is over. What it cost goes on arriving until the look back is done. */
-export function closeTask(id: string | null, outcome: Exclude<Outcome, "running">, ms: number) {
+export function closeTask(id: string | null, outcome: Exclude<Outcome, "running">, ms: number, rounds?: number) {
   const rec = id ? byId.get(id) : null;
   if (!rec || rec.outcome !== "running") return;
   rec.outcome = outcome;
   rec.ms = Math.max(0, Math.round(ms));
+  if (typeof rounds === "number" && rounds >= 0) rec.rounds = rounds;
   save();
 }
 
@@ -339,6 +342,10 @@ interface Cell {
       MIN_JUDGED judged tasks, or with no good result yet. */
   perGood: number | null;
   goodRate: number | null;
+  /** Tokens (in and out, everything billed to it) and rounds of tool calls an average task took: what a change to the
+      harness should bring down. Rounds are null until tasks that counted them exist. */
+  avgTokens: number | null;
+  avgRounds: number | null;
   /** The builds the tasks ran on, oldest first. More than one means the cell
       mixes harnesses. */
   versions: string[];
@@ -380,7 +387,7 @@ export function taskSummary(opts: { version?: string | null } = {}) {
   const versions = [...new Set(all.map((r) => r.version))].sort(versionOrder);
   const use = opts.version ? all.filter((r) => r.version === opts.version) : all;
 
-  const cells = new Map<string, Cell & { _judgedSpend: number; _v: Set<string> }>();
+  const cells = new Map<string, Cell & { _judgedSpend: number; _v: Set<string>; _tokens: number; _rounds: number; _counted: number }>();
   for (const rec of use) {
     const by = workedBy(rec);
     const key = `${rec.provider}\u0000${by.planner ?? ""}\u0000${by.model}\u0000${rec.kind}`;
@@ -390,12 +397,15 @@ export function taskSummary(opts: { version?: string | null } = {}) {
         provider: rec.provider, label: providerSpec(rec.provider)?.label ?? rec.provider,
         model: by.model, planner: by.planner, kind: rec.kind, kindLabel: KIND_LABEL[rec.kind],
         tasks: 0, unpriced: 0, spend: 0, avgCost: null, judged: 0, good: 0, poor: 0, unjudged: 0,
-        perGood: null, goodRate: null, versions: [], _judgedSpend: 0, _v: new Set(),
+        perGood: null, goodRate: null, avgTokens: null, avgRounds: null, versions: [], _judgedSpend: 0, _v: new Set(),
+        _tokens: 0, _rounds: 0, _counted: 0,
       };
       cells.set(key, cell);
     }
     cell.tasks += 1;
     cell._v.add(rec.version);
+    cell._tokens += rec.input + rec.output;
+    if (typeof rec.rounds === "number") { cell._rounds += rec.rounds; cell._counted += 1; }
     if (!rec.priced) { cell.unpriced += 1; continue; }
     cell.spend += rec.cost;
     const said = verdictOf(rec);
@@ -405,10 +415,12 @@ export function taskSummary(opts: { version?: string | null } = {}) {
     if (said.verdict === "good") cell.good += 1; else cell.poor += 1;
   }
 
-  const out: Cell[] = [...cells.values()].map(({ _judgedSpend, _v, ...cell }) => {
+  const out: Cell[] = [...cells.values()].map(({ _judgedSpend, _v, _tokens, _rounds, _counted, ...cell }) => {
     const priced = cell.tasks - cell.unpriced;
     return {
       ...cell,
+      avgTokens: cell.tasks > 0 ? Math.round(_tokens / cell.tasks) : null,
+      avgRounds: _counted > 0 ? Math.round((_rounds / _counted) * 10) / 10 : null,
       avgCost: priced > 0 ? cell.spend / priced : null,
       perGood: cell.judged >= MIN_JUDGED && cell.good > 0 ? _judgedSpend / cell.good : null,
       goodRate: cell.judged > 0 ? cell.good / cell.judged : null,
@@ -426,9 +438,23 @@ export function taskSummary(opts: { version?: string | null } = {}) {
     };
   });
 
+  /* Each build against the others, over every task (not only the chosen build): whether a change to the harness made
+     the work cheaper in tokens and rounds, the person's own turns only, since a schedule repeats one prompt. */
+  const builds = versions.map((version) => {
+    const own = all.filter((r) => r.version === version && !r.automated);
+    const counted = own.filter((r) => typeof r.rounds === "number");
+    return {
+      version,
+      tasks: own.length,
+      avgTokens: own.length ? Math.round(own.reduce((n, r) => n + r.input + r.output, 0) / own.length) : null,
+      avgRounds: counted.length ? Math.round((counted.reduce((n, r) => n + (r.rounds ?? 0), 0) / counted.length) * 10) / 10 : null,
+    };
+  }).filter((b) => b.tasks > 0);
+
   return {
     currency: "USD",
     minJudged: MIN_JUDGED,
+    builds,
     tasks: use.length,
     versions,
     version: opts.version ?? null,

@@ -62,6 +62,10 @@ export interface MemoryRecord {
       that was wrong -- but it ranks lower, and says so when it is recalled,
       until it is checked, rewritten or works again. */
   doubted?: number;
+  /** Times it was recalled into a turn that was looked back on and it did not help, since it last did. A memory that
+      keeps riding along without helping costs tokens every time and crowds out one that would: it ranks lower, and
+      past `QUIET_AFTER` it is no longer recalled by itself (searching still finds it, and it shows in the Mind). */
+  missed?: number;
 }
 
 export interface MemoryLink {
@@ -82,6 +86,10 @@ const CONFIRM_AFTER = 2;
 /** A confirmed procedure that has worked this many times is marked proven,
     which ranks it higher whenever it matches. It is not pinned: see reinforce. */
 const PROMOTE_AFTER = 3;
+/** Recalled this many times without helping, a memory ranks lower... */
+export const DIM_AFTER = 5;
+/** ...and this many, it is not recalled by itself any more (pinned ones aside). */
+export const QUIET_AFTER = 15;
 /** Unconfirmed, unused memories older than this are dropped by consolidate. */
 const STALE_PROVISIONAL_S = 30 * 24 * 3600;
 /** A memory nobody has confirmed in this long speaks up about it. */
@@ -330,6 +338,9 @@ export class MemoryGraph {
         if (r.tags.includes("proven")) score *= 1.2;
         if (r.status === "provisional") score *= 0.8;
         if (r.doubted) score *= 0.7 ** Math.min(r.doubted, 3);
+        const missed = r.missed ?? 0;
+        if (missed >= QUIET_AFTER && !r.pinned) continue;
+        if (missed >= DIM_AFTER) score *= 0.6;
         scored.push({ record: r, score, reason: `matched ${hit.slice(0, 4).join(", ")}` });
       }
     }
@@ -627,6 +638,7 @@ export class MemoryGraph {
       r.body = patch.body.trim();
       // Rewritten, it is a different claim from the one that was doubted.
       r.doubted = 0;
+      r.missed = 0;
     }
     if (MEMORY_KINDS.includes(patch.kind as MemoryKind)) r.kind = patch.kind as MemoryKind;
     if (Array.isArray(patch.tags)) {
@@ -703,6 +715,7 @@ export class MemoryGraph {
     r.status = "confirmed";
     r.checked = now();
     r.doubted = 0;
+    r.missed = 0;
     r.tags = r.tags.filter((t) => t !== "learned" && t !== "unconfirmed");
     if (r.replaces) {
       const old = this.get(r.replaces);
@@ -739,6 +752,7 @@ export class MemoryGraph {
     r.checked = now();
     r.updated = now();
     r.doubted = 0;
+    r.missed = 0;
     if (save) this.changed();
     return r;
   }
@@ -761,6 +775,23 @@ export class MemoryGraph {
   }
 
   /**
+   * Recalled into a turn that was looked back on, and it played no part: neither
+   * helped nor misled. Counted against it, so a memory that rides along on every
+   * turn without earning its place ranks lower and, in time, goes quiet. Pinned
+   * ones are the person's choice and are not counted.
+   */
+  missed(ids: string[]): void {
+    let changed = false;
+    for (const id of ids) {
+      const r = this.get(id);
+      if (!r || r.pinned || r.superseded_by) continue;
+      r.missed = (r.missed ?? 0) + 1;
+      changed = true;
+    }
+    if (changed) this.changed();
+  }
+
+  /**
    * A turn that used this memory went well.
    *
    * Enough of those confirm a provisional memory without anyone having to,
@@ -775,6 +806,7 @@ export class MemoryGraph {
     if (!r || r.superseded_by) return null;
     r.worked = (r.worked ?? 0) + 1;
     r.doubted = 0;
+    r.missed = 0;
     let change: "confirmed" | "promoted" | null = null;
     if (r.status === "provisional" && r.worked >= CONFIRM_AFTER) {
       this.confirm(r.id, false);

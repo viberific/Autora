@@ -65,6 +65,7 @@ const StorePage = lazyPage(() => import("./components/pages/StorePage"), "StoreP
 const NotebooksPage = lazyPage(() => import("./components/pages/NotebooksPage"), "NotebooksPage");
 const ToolsPage = lazyPage(() => import("./components/pages/ToolsPage"), "ToolsPage");
 const MindPage = lazyPage(() => import("./components/pages/MindPage"), "MindPage");
+const SkillsPage = lazyPage(() => import("./components/pages/SkillsPage"), "SkillsPage");
 const Settings = lazyPage(() => import("./components/Settings"), "Settings");
 const Schedule = lazyPage(() => import("./components/Schedule"), "Schedule");
 const Triggers = lazyPage(() => import("./components/Triggers"), "Triggers");
@@ -232,8 +233,8 @@ export function App() {
   const [topSlot, setTopSlot] = useState<HTMLElement | null>(null);
   const [page, setPage] = useState<PageId>(() => {
     const asked = new URLSearchParams(location.search).get("page");
-    // Memory and Skills were folded into the Mind; old links still land there.
-    if (asked === "memory" || asked === "skills") return "mind";
+    // Memory was folded into the Mind; old links still land there. Skills have a page of their own again.
+    if (asked === "memory") return "mind";
     // API Keys is a section of Config now.
     if (asked === "keys") return "config";
     // Status and Logs are sections of System now.
@@ -256,13 +257,8 @@ export function App() {
     const tab = params.get("tab");
     return isSystemTab(tab) ? tab : "status";
   });
-  /** Which of the Mind's buckets to open on: Skills for a ?page=skills link. */
-  const [mindBucket, setMindBucket] = useState<{ kind: Bucket; id?: string; auto?: boolean }>(
-    () => new URLSearchParams(location.search).get("page") === "skills"
-      ? { kind: "skill" }
-      // Nobody asked for Preferences: the page picks a bucket with something in it.
-      : { kind: "preference", auto: true },
-  );
+  /** Which of the Mind's buckets to open on. Nobody asked for Preferences: the page picks a bucket with something in it. */
+  const [mindBucket, setMindBucket] = useState<{ kind: Bucket; id?: string; auto?: boolean }>({ kind: "preference", auto: true });
   const [drawerOpen, setDrawerOpen] = useState(false);
   /* The phone's menu slides out the way it slid in: it stays mounted for the length of that animation after it is
      closed, then goes. */
@@ -2029,6 +2025,7 @@ export function App() {
             {page === "mind" && (
               <MindPage jump={mindBucket} recent={view.memories} />
             )}
+            {page === "skills" && <SkillsPage topSlot={topSlot} />}
             </Suspense>
           </div>
         )}

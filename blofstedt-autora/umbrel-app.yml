@@ -188,5 +188,14 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  Agents no longer make cron jobs on their own: they ask you first and only schedule a script once you agree. Cron jobs
-  stay plain scripts that run with no model and cost no tokens; anything that should start an agent is a trigger.
+  Skills are real skills now and have their own page in the menu. Each one is a folder with a SKILL.md in the open
+  Agent Skills format (a name, a description of when to use it, the instructions, and any scripts beside it), so you
+  can import one made elsewhere or export one to use elsewhere. Autora and every agent see every skill's description,
+  load a skill when the work fits it, and can write or improve skills; an agent's new skill waits as a draft until you
+  approve it or it has worked three times, and every edit keeps the old text to go back to. Skills you had in the
+  Mind move over by themselves. Agents also waste less: a turn stopped for going in circles leaves a note so the next
+  one avoids that path, a turn running far past what its skill usually takes is told to re-plan, memories that keep
+  being recalled without helping fade out of recall, background work (summaries, looking back) uses your provider's
+  cheaper model when you have not chosen one, and the Usage page shows tokens and steps per task for each update. The
+  Mind also shows each agent's own memory map, Autora has a personality pentagon, and the chattiness setting is a
+  proper Quiet / Normal / Lively switch.

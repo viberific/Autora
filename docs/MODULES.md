@@ -749,7 +749,46 @@ Spectra's fetched renderer is most of what is on disk.
   candor, boldness) start genial and move a little with every message the agent writes in Threads (`developed`, driven from the
   `onThreadActivity` listener in `server.ts` through `developFromTalk`). It is told to the agent only when it speaks in Threads
   (`threadsVoice`), never in a task's brief, so it cannot touch the work or cooperation (`tests/organization.test.ts` checks the
-  brief). Agents saved with the old personalities begin again once (`character: 2`), keeping their bonds and record.
+  brief). Agents saved with the old personalities begin again once (`character: 2`), keeping their bonds and record. The lead
+  has a shape too, grown the same way from what it posts, and shown on Autora's own Mind.
+- **Tokens and rounds per task.** `closeTask` takes the turn's rounds of tool calls; `taskSummary` gives each cell's average
+  tokens and rounds, and `builds` (each build's average over the person's own tasks, schedules left out) so an update can be seen
+  to have made the work cheaper. Shown on the Usage page above the per-model figures.
+
+## Skills: a library of SKILL.md folders, outside the Mind
+
+- **What a skill is** (`server/skills.ts`). A folder `<state>/skills/<name>/` with a `SKILL.md` in the open Agent Skills format:
+  YAML front matter (`name` = the folder's name, lowercase and hyphens, at most 64; `description`, what it does and when to use it,
+  20 to 1024 characters; optional `license`, `compatibility`, `metadata`, `allowed-tools`) and the instructions under it, with
+  scripts, references and assets beside it. `parseSkillMd` holds a text to that and says what to change; the front matter reader
+  is deliberately small (scalars, quoted values, `|`/`>` blocks, one nested mapping or list) and refuses anything richer rather
+  than reading it wrong. Autora's bookkeeping -- status, author, uses, worked/failed, the steps good turns took, the last five
+  texts an edit replaced -- is `.autora.json` beside SKILL.md, so the skill itself stays plain and exports as it is.
+- **How the agent uses them.** `catalogue()` puts every usable skill's name and description in the briefing (`SKILLS_GUIDE`,
+  about 8k characters at most, the rest by name); the `skill` tool (`specs/skills.ts`, `runSkill` in `tools.ts`) loads one
+  (`use`), reads a file of it (`read`), searches (`list`) and writes or improves one (`write`). Its folder is on disk for the
+  terminal to run its scripts. One library is shared by Autora and every agent; there is no per-agent assignment, since the
+  descriptions are what picks one. What the Mind holds about a skill is a note on when to reach for it (a procedure).
+- **Trust.** The person's skills are live. An agent's new skill is a draft (offered, marked as such) until the person approves it
+  on the Skills page or it has worked `LIVE_AFTER` (3) times: `noteSkillsUsed` in `server.ts` counts each turn that loaded a skill
+  by how it ended. An edit keeps the text it replaced (`revertSkill`). Secrets are refused in SKILL.md and in text files.
+- **Pace.** Good turns record how many rounds they took; `skillForUse` tells the agent the usual, and `overBudget` adds one
+  `[Step budget]` note to a turn running past twice it (never under eight rounds).
+- **Out of the Mind.** `memory_write`/`memory_update` refuse kind `skill` (`SKILL_NOT_MEMORY`); on start `moveSkillsOutOf` turns any
+  skill memory, Autora's or an agent's, into a skill (live if it was confirmed, else a draft) and forgets the memory.
+- **The page** (`src/components/pages/SkillsPage.tsx`, `src/lib/skills.ts`, `server/routes/skills.ts`): drafts to approve, the
+  library, an editor that checks SKILL.md as it is typed (`/api/skills-check`), files, versions, export (`.zip` of the folder)
+  and import (a `.zip` of one or more skill folders).
+
+## Memory that earns its place
+
+- **Dead ends.** A turn the error budget stops writes `ErrorBudget.deadEnd`; one the loop watch stops (a repeated call, a stall)
+  writes `LoopWatch.deadEnd`: what was asked, why it stopped and the calls that went round, as a provisional fact.
+- **Riding along.** The look back counts every recalled memory that neither helped nor misled (`MemoryGraph.missed`). From
+  `DIM_AFTER` (5) it ranks lower, from `QUIET_AFTER` (15) it is not recalled by itself (search still finds it); helping once, the
+  person's "Still true" or an edit sets it back to nought, and pinned ones are never counted. The Mind flags both.
+- **Background model.** With no Background role or fast model named, unwatched work runs on `cheaperSibling` (the provider's
+  priced default, when it costs at most half the main model); a call that fails on it is made again on the main model.
 
 ## The agent's cursor and the few words beside it
 

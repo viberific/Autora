@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { AgentLook } from "./agentlook";
+import type { MemoryLink, MemoryRecord } from "./memory";
 
 /** The organization (agents) and Threads as the client sees them: see server/agents.ts and server/threads.ts. */
 
@@ -148,7 +149,7 @@ export const fetchAgentModels = () => call<AgentModels>("/api/agents-models");
 
 export type AgentMemory = { id: string; text: string; kind: string; from: string; at: number; used: number };
 export const fetchMind = (id: string) =>
-  call<{ main: boolean; memories: AgentMemory[] }>(`/api/agents/${id}/mind`);
+  call<{ main: boolean; memories: AgentMemory[]; records: MemoryRecord[]; links: MemoryLink[] }>(`/api/agents/${id}/mind`);
 export const forgetMemory = (id: string, memory: string) =>
   call<{ ok: true }>(`/api/agents/${id}/mind/${memory}`, { method: "DELETE" });
 export const deleteAgent = (id: string) => call<{ ok: true }>(`/api/agents/${id}`, { method: "DELETE" });

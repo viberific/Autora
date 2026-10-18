@@ -197,6 +197,15 @@ export const IconBrain = ({ size = 16, className }: Props) => (
   </svg>
 );
 
+/** A skill: a page of instructions with a spark on it -- a way of doing something, kept to be used again. */
+export const IconSkill = ({ size = 16, className }: Props) => (
+  <svg {...base(size)} className={className}>
+    <path d="M6 3.5h8l4 4V20a.5.5 0 0 1-.5.5h-11A.5.5 0 0 1 6 20z" />
+    <path d="M14 3.5V7.5h4" />
+    <path d="m12.6 10-2.6 4h3l-1.2 3.6" />
+  </svg>
+);
+
 export const IconRepeat = ({ size = 16, className }: Props) => (
   <svg {...base(size)} className={className}>
     <path d="M4 9a5 5 0 0 1 5-5h9" />

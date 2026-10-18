@@ -79,9 +79,10 @@ export function organizationRoutes(app: Express, onPerson: () => void = () => un
   app.get("/api/agents/:id/mind", (req: Request, res: Response) => {
     const agent = getAgent(req.params.id);
     if (!agent) return res.status(404).json({ error: "No such agent" });
-    if (agent.builtin) return res.json({ main: true, memories: [] });
-    agentMind(agent.id);
-    res.json({ main: false, memories: notesOf(agent.id).reverse().map((n) => ({ id: n.id, text: n.text, kind: n.kind, from: n.from, at: n.at, used: n.used })) });
+    if (agent.builtin) return res.json({ main: true, memories: [], records: [], links: [] });
+    const graph = agentMind(agent.id);
+    /* The graph itself as well, for the agent's own map: the same shape as /api/memory. */
+    res.json({ main: false, records: graph.records, links: graph.links, memories: notesOf(agent.id).reverse().map((n) => ({ id: n.id, text: n.text, kind: n.kind, from: n.from, at: n.at, used: n.used })) });
   });
 
   app.delete("/api/agents/:id/mind/:memory", (req: Request, res: Response) => {

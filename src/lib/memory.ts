@@ -28,6 +28,8 @@ export type MemoryRecord = {
   source?: string | null;
   fetched?: number | null;
   version?: string;
+  /** Times it was recalled and did not help, since it last did (server/memory.ts): from 5 it ranks lower, from 15 it is not recalled by itself. */
+  missed?: number;
 };
 
 export type MemoryLink = { src: string; dst: string; rel: string };
@@ -57,7 +59,6 @@ export const BUCKETS: { kind: Bucket; label: string; blurb: string }[] = [
   { kind: "preference", label: "Preferences", blurb: "How you like things done." },
   { kind: "procedure", label: "Procedures", blurb: "Steps it follows for a recurring job." },
   { kind: "fact", label: "Facts", blurb: "What is true about your setup." },
-  { kind: "skill", label: "Skills", blurb: "Things it knows how to do." },
   { kind: "reference", label: "References", blurb: "What a product's own documentation says, with where and when it was read." },
 ];
 

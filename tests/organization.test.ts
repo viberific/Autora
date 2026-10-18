@@ -104,9 +104,9 @@ await test("an agent develops from how it talks in Threads: the shape moves, slo
   for (let i = 0; i < 20; i++) org.developFromTalk(x.id, "lol 😂 haha joke", "comment");
   assert.ok(org.getAgent(x.id)!.traits!.humor > before);
   assert.equal(org.getAgent(x.id)!.updated, stamped, "the page re-reads on a change; this is not one");
-  const lead2 = JSON.stringify(org.getAgent(org.LEAD_ID)!.traits ?? null);
-  org.developFromTalk(org.LEAD_ID, "lol 😂", "comment");
-  assert.equal(JSON.stringify(org.getAgent(org.LEAD_ID)!.traits ?? null), lead2, "the lead keeps none");
+  const leadHumor = org.getAgent(org.LEAD_ID)!.traits!.humor;
+  for (let i = 0; i < 20; i++) org.developFromTalk(org.LEAD_ID, "lol 😂 haha joke", "comment");
+  assert.ok(org.getAgent(org.LEAD_ID)!.traits!.humor > leadHumor, "the lead has a shape too, and grows the same way");
   org.deleteAgent(x.id);
 });
 

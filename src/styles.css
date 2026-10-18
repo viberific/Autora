@@ -2523,27 +2523,6 @@ label + .jf-hint { margin-top: -5px; }
 
 /* What each node colour means, across the top of the map. */
 
-.skills-tag {
-  background: rgba(var(--glow-rgb),  0.18);
-  border: 1px solid rgba(var(--glow-light-rgb),  0.38);
-  color: var(--glow-text);
-  border-radius: var(--r-pill);
-  padding: 3px 10px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  backdrop-filter: blur(8px);
-  cursor: pointer;
-  transition: background var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
-}
-.skills-tag:hover {
-  background: rgba(var(--glow-rgb),  0.3);
-  border-color: var(--glow-light);
-  box-shadow: 0 0 10px rgba(var(--glow-light-rgb),  0.35);
-}
-
 @keyframes pulseSkills {
   0%, 100% { opacity: 0.6; transform: scale(0.9); }
   50% { opacity: 1; transform: scale(1.2); }
@@ -2814,89 +2793,6 @@ label + .jf-hint { margin-top: -5px; }
 .perm-actions .btn {
   flex: 1;
   justify-content: center;
-}
-
-/* ============================================================================
-   New Skill Dialog / Modal
-   ============================================================================ */
-.new-skill-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(var(--neural-0-rgb),  0.82);
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: var(--z-panel);
-  padding: 16px;
-}
-.new-skill-dialog {
-  background: rgb(var(--neural-1-rgb));
-  border: 1px solid rgba(var(--glow-rgb),  0.35);
-  border-radius: var(--r);
-  max-width: 500px;
-  width: 100%;
-  padding: 20px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.8), 0 0 30px rgba(var(--glow-deep-rgb),  0.25);
-  animation: rise var(--dur-2) var(--ease);
-}
-.new-skill-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 6px;
-}
-.new-skill-header h4 {
-  font-size: var(--fs-md);
-  font-weight: 650;
-  color: var(--glow-text);
-  margin: 0;
-}
-.new-skill-desc {
-  font-size: var(--fs-sm);
-  color: var(--text-3);
-  line-height: 1.5;
-  margin-bottom: 14px;
-}
-.new-skill-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.field-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.field-label {
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  color: var(--text);
-}
-.field-input {
-  background: var(--sink);
-  border: 1px solid rgba(var(--glow-rgb),  0.28);
-  border-radius: var(--r-xs);
-  padding: 8px 10px;
-  color: var(--text);
-  font-size: var(--fs-sm);
-  font-family: inherit;
-  transition: border-color var(--dur-1);
-}
-.field-input:focus {
-  outline: none;
-  border-color: var(--glow);
-  box-shadow: 0 0 0 2px rgba(var(--glow-rgb),  0.2);
-}
-.field-textarea {
-  resize: vertical;
-  min-height: 60px;
-}
-.new-skill-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 16px;
 }
 
 /* ============================================================================
@@ -4124,7 +4020,6 @@ input.shot-where[readonly] { cursor: default; }
 .kweb-search:focus { border-color: rgba(var(--glow-light-rgb),  0.7); }
 .kchip { border-color: rgba(var(--glow-rgb),  0.28); color: var(--glow-muted); }
 .kchip.on { background: rgba(var(--glow-deep-rgb),  0.22); border-color: rgba(var(--glow-rgb),  0.55); color: var(--glow-text); }
-.kweb-add { height: 31px; font-size: var(--fs-sm); }
 .kweb-close { position: static; }
 .kweb-close svg { transform: none; }
 
@@ -4696,6 +4591,8 @@ button.stat-card:hover { border-color: var(--accent-line); transform: translateY
 /* As pages, these screens already have their name in the header above; their
    own bar keeps only its controls, and goes when it has none. */
 .sched.is-embedded .sched-top .brand, .kweb.is-embedded .kweb-brand { display: none; }
+/* An agent's map in the Mind says whose it is: the page's own title is just "Mind". */
+.kweb.is-embedded.is-agent .kweb-brand { display: flex; }
 .sched.is-embedded .sched-top {
   height: auto; min-height: 0; padding: 12px 22px; background: none; border-bottom: 0;
 }
@@ -6947,6 +6844,10 @@ button.app-url:hover { border-color: var(--border-strong); color: var(--text); }
 .set-switch input { margin-top: 3px; accent-color: var(--accent-light); }
 .set-switch b { display: block; font-weight: 600; font-size: var(--fs-base); }
 .set-switch small { display: block; color: var(--text-3); font-size: var(--fs-sm); margin-top: 2px; }
+/* A setting with a few choices rather than on/off: the same row, the choices as the app's segmented control under it. */
+.set-choice { cursor: default; }
+.set-choice .seg { margin-top: 8px; }
+.seg button:disabled { cursor: default; opacity: 0.5; }
 /* A checkbox with a line of explanation under it, inside a card (the automation, quiet-hours and voice cards). */
 .opt-check { display: flex; gap: 9px; align-items: flex-start; margin: 7px 0; font-size: var(--fs-sm); line-height: 1.5; }
 .opt-check.is-gap { margin: 14px 0 0; }
@@ -8051,8 +7952,8 @@ body.is-resizing iframe { pointer-events: none; }
 }
 
 /* An agent's personality: a five-point shape that grows toward its corners. Drawn, never edited. */
-.agent-shape-wrap { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-.agent-shape-wrap .jf-hint { flex: 1 1 220px; min-width: 0; margin: 0; }
+.agent-shape-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.agent-shape-wrap .jf-hint { max-width: 560px; margin: 0; text-align: center; }
 .agent-shape { flex: 0 0 auto; width: 288px; max-width: 100%; height: auto; }
 .agent-shape-ring { fill: none; stroke: var(--border); stroke-width: 1; }
 .agent-shape-axis { stroke: var(--border); stroke-width: 1; }
@@ -8068,6 +7969,32 @@ body.is-resizing iframe { pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { .chime-now { animation: none; } }
 .chime-report > :first-child { margin-top: 0; }
 .chime-report > :last-child { margin-bottom: 0; }
+
+/* Skills: the library of SKILL.md folders, a row per skill and the editor for one. */
+.skill-list { display: flex; flex-direction: column; gap: 10px; }
+.skill-drafts { display: flex; flex-direction: column; gap: 10px; }
+.skill-drafts .skill-row { margin: 0; }
+.skill-row { display: flex; align-items: flex-start; gap: 12px; }
+.skill-row.is-broken { border-color: var(--warn); }
+.skill-row-main {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; text-align: left;
+  background: none; border: 0; padding: 0; color: inherit; font: inherit; cursor: pointer;
+}
+.skill-row-title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--accent); }
+.skill-row-title code { font-family: var(--mono); font-size: var(--fs-base); font-weight: 600; color: var(--text); }
+.skill-row-desc { font-size: var(--fs-sm); color: var(--text-2); overflow-wrap: anywhere; }
+.skill-row-meta { font-size: var(--fs-xs); color: var(--text-3); }
+.skill-row-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+.skill-editor { display: flex; flex-direction: column; gap: 10px; }
+.skill-editor-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.skill-editor-head h3 { margin: 0; }
+.skill-editor-head code { font-family: var(--mono); text-transform: none; letter-spacing: 0; font-size: var(--fs-md); color: var(--text); }
+.skill-editor-head a.btn { text-decoration: none; }
+.skill-md { font-family: var(--mono); font-size: var(--fs-sm); line-height: 1.55; min-height: 320px; resize: vertical; }
+.skill-ok { color: var(--live); margin: 0; }
+.skill-files, .skill-versions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.skill-file { flex: 1 1 100%; max-height: 320px; overflow: auto; }
+.skill-version { display: flex; align-items: center; gap: 8px; flex: 1 1 100%; font-size: var(--fs-sm); color: var(--text-2); }
 
 /* The Mind, one agent at a time: the chooser, and an agent's profile. */
 .mind-whose { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }

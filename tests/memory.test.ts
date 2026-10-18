@@ -328,4 +328,27 @@ test("two memories can be connected by judgement, and the link survives a relink
   assert.match(g.connect(skill.id, "mem-nope") ?? "", /no memory/);
 });
 
+test("a memory recalled again and again without helping ranks lower, then goes quiet, until it helps or is checked", () => {
+  const { g } = graph();
+  const idle = g.write({ title: "Jellyfin: where the logs are", body: "jellyfin logs live in /config/log inside the container." }).record;
+  const pinned = g.write({ title: "Jellyfin: scan schedule", body: "jellyfin library scan runs nightly at 3am." }).record;
+  g.update(pinned.id, { pinned: true });
+  const ask = "jellyfin library scan logs";
+  const scoreOf = () => g.recall(ask, 6, false).find((h) => h.record.id === idle.id)?.score ?? 0;
+  const before = scoreOf();
+  assert.ok(before > 0);
+  for (let i = 0; i < 5; i++) g.missed([idle.id, pinned.id]);
+  assert.ok(scoreOf() < before * 0.7, "dimmed");
+  assert.equal(g.get(pinned.id)!.missed ?? 0, 0, "a pinned one is the person's choice, not counted");
+  for (let i = 0; i < 10; i++) g.missed([idle.id]);
+  assert.equal(scoreOf(), 0, "quiet: not recalled by itself any more");
+  assert.ok(g.active().some((r) => r.id === idle.id), "still kept, and found by searching");
+  g.reinforce(idle.id);
+  assert.equal(g.get(idle.id)!.missed, 0);
+  assert.ok(scoreOf() > 0, "helping once brings it back");
+  for (let i = 0; i < 15; i++) g.missed([idle.id]);
+  g.confirm(idle.id);
+  assert.ok(scoreOf() > 0, "so does the person saying it still holds");
+});
+
 console.log(`${passed} passed`);

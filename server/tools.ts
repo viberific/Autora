@@ -27,7 +27,7 @@
 import type { TodoResult } from "./todos";
 import type { LedgerResult } from "./ledger";
 import type { RequirementResult } from "./requirements";
-import { checkEntry } from "./mindrules";
+import { SKILL_NOT_MEMORY, checkEntry } from "./mindrules";
 import { checkArgs } from "./argcheck";
 import { officeDir, runOfficeTool } from "./office";
 import type { Phase } from "./modes";
@@ -52,7 +52,7 @@ import { mergeTools, save, state, allSecrets, keyFor, secretFor, stateDir, redac
 import {
   STATUSES, checkoutFolder, findCheckout, listEntries, moveInto, recordFinding, setStatus, type Status,
 } from "./improvements";
-import { APP_GUIDE, BROWSING_GUIDE, MEMORY_GUIDE, OFFICE_GUIDE, TODO_GUIDE, VOICE_GUIDE, WINDOWS_GUIDE } from "./guides";
+import { APP_GUIDE, BROWSING_GUIDE, MEMORY_GUIDE, OFFICE_GUIDE, SKILLS_GUIDE, TODO_GUIDE, VOICE_GUIDE, WINDOWS_GUIDE } from "./guides";
 import { credentialsBriefing, fillPlaceholders, hasPlaceholder, identityEnv, redactCredentials } from "./credentials";
 import type { ChatImage } from "./llm";
 import { frameImage, latestFrame } from "./liveview";
@@ -179,6 +179,8 @@ import { personSPECS } from "./specs/person";
 import { voiceSPECS } from "./specs/voice";
 import { filesSPECS } from "./specs/files";
 import { memorySPECS } from "./specs/memory";
+import { skillsSPECS } from "./specs/skills";
+import { SkillError, catalogue, findSkills, readSkillFile, skillForUse, writeSkillParts, noteSkillUsed, type SkillAuthor } from "./skills";
 import { videoSPECS } from "./specs/video";
 import { studioSPECS } from "./specs/studio";
 import { cadSPECS } from "./specs/cad";
@@ -253,6 +255,7 @@ const TOOLS: ToolSpec[] = [
   ...gameSPECS,
   ...photoSPECS,
   ...memorySPECS,
+  ...skillsSPECS,
   ...videoSPECS,
   ...studioSPECS,
 ];
@@ -524,6 +527,8 @@ export function renderCall(spec: ToolSpec, args: Record<string, any>): string {
       return `agents run${args.agent ? ` "${args.agent}"` : ""}`;
     case "notebook_create":
       return `notebook create${args.title ? ` "${args.title}"` : ""}`;
+    case "skill":
+      return `skill ${args.action ?? ""}${args.name ? ` ${args.name}` : ""}${args.path ? ` (${args.path})` : ""}`;
     case "agents":
       return `agents ${args.action ?? ""}${args.agent ? ` "${args.agent}"` : ""}`;
     case "thread":
@@ -1483,6 +1488,63 @@ function welcomeToThreads(a: { id: string; name: string; role: string; when: str
       by: { kind: "agent", id: a.id, name: a.name },
     });
   } catch { /* a full forum does not stop a hire */ }
+}
+
+/** The skill library (server/skills.ts), as the agent uses it. Any agent may use or write any skill; who wrote what is kept. */
+function runSkill(args: Record<string, any>, ctx: ToolContext): ToolOutcome {
+  const action = String(args.action ?? "").trim();
+  const name = String(args.name ?? "").trim();
+  switch (action) {
+    case "list": {
+      const found = findSkills(String(args.query ?? ""), 15);
+      if (!found.length) return { ok: true, summary: args.query ? `No skill matches "${args.query}".` : "There are no skills yet." };
+      return {
+        ok: true,
+        summary: found.map((s) => `- ${s.name}${s.status === "draft" ? " (draft)" : ""}: ${s.description}`).join("\n"),
+        preview: `${found.length} skill${found.length === 1 ? "" : "s"}`,
+      };
+    }
+    case "use": {
+      if (!name) return { ok: false, summary: "use needs the skill's name." };
+      const got = skillForUse(name);
+      if (!got.ok) return { ok: false, summary: got.error };
+      if (!ctx.memory.incognito) noteSkillUsed(got.skill.name);
+      return { ok: true, summary: got.text, preview: got.skill.name };
+    }
+    case "read": {
+      if (!name || !args.path) return { ok: false, summary: "read needs the skill's name and a path inside it." };
+      const got = readSkillFile(name, String(args.path));
+      return got.ok ? { ok: true, summary: got.text, preview: `${name}/${args.path}` } : { ok: false, summary: got.error };
+    }
+    case "write": {
+      if (ctx.memory.incognito) return { ok: false, summary: "Nothing is kept from an incognito chat, skills included." };
+      if (!name) return { ok: false, summary: "write needs a name, a description and a body." };
+      const files: Record<string, string | null> = {};
+      if (args.files && typeof args.files === "object") {
+        for (const [p, v] of Object.entries(args.files as Record<string, unknown>)) files[p] = v === null || v === "" ? null : String(v);
+      }
+      const self = ctx.agents?.self;
+      const by: SkillAuthor = { kind: "agent", id: self?.id ?? LEAD_ID, name: self?.name ?? "Autora" };
+      try {
+        const { info, created } = writeSkillParts(
+          { name, description: String(args.description ?? ""), body: String(args.body ?? "") },
+          by, files, typeof args.rename === "string" && args.rename.trim() ? { rename: args.rename.trim() } : {},
+        );
+        return {
+          ok: true,
+          summary: created
+            ? `Wrote the skill ${info.name} as a draft: it is offered from now on, and goes live when the person approves it on the Skills page or once it has worked three times.`
+            : `Updated the skill ${info.name}; the text it replaced is kept as a version.`,
+          preview: info.name,
+        };
+      } catch (err) {
+        if (err instanceof SkillError) return { ok: false, summary: `Not written. ${err.message}` };
+        throw err;
+      }
+    }
+    default:
+      return { ok: false, summary: "skill needs an action: use, read, list or write." };
+  }
 }
 
 async function runAgents(args: Record<string, any>, ctx: ToolContext): Promise<ToolOutcome> {
@@ -3318,6 +3380,9 @@ async function runToolUnredacted(
       case "agents":
         return await runAgents(args, ctx);
 
+      case "skill":
+        return runSkill(args, ctx);
+
       case "improvements":
         return runImprovements(args, ctx);
 
@@ -3454,6 +3519,7 @@ async function runToolUnredacted(
       case "memory_update": {
         if (ctx.memory.incognito) return incognitoMemory();
         const id = String(args.id ?? "").trim();
+        if (args.kind === "skill") return { ok: false, summary: `Not changed. ${SKILL_NOT_MEMORY}` };
         if (!id) return { ok: false, summary: "No memory id was given." };
         const patch = {
           title: typeof args.title === "string" ? args.title : undefined,
@@ -3664,6 +3730,7 @@ export async function capabilityBriefing(): Promise<string> {
   const offLine = (what: string) =>
     `- ${what}: turned off by the person on the Tools page; its tools are not yours this turn. ` +
     "If the task needs it, say so and that it is switched on there.";
+  lines.push(SKILLS_GUIDE(catalogue()));
   lines.push(TODO_GUIDE, windows.app.enabled ? APP_GUIDE : offLine("The Creator window"));
 
   const mcp = mcpTools();

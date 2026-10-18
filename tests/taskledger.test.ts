@@ -245,4 +245,23 @@ await test("the books survive a restart, and a task cut off by one is not left r
   assert.ok(Math.abs(back.row.cost - 0.4) < 1e-9);
 });
 
+await test("tokens and rounds per task, by model and by build, so a change to the harness can be seen to help", async () => {
+  const run = async (version: string, rounds: number, automated = false) => {
+    const id = open({ version, model: "pace", automated });
+    await withTask(id, async () => { spend("s1", 0.01, { model: "pace", input: 1000, output: 200 }); });
+    closeTask(id, "finished", 1, rounds);
+  };
+  await run("9.0.0", 10);
+  await run("9.0.0", 6);
+  await run("9.1.0", 4);
+  await run("9.1.0", 40, true);
+  const sum = taskSummary();
+  const cell = sum.cells.find((c) => c.model === "pace")!;
+  assert.equal(cell.avgTokens, 1200);
+  assert.equal(cell.avgRounds, 15, "every task of the model, schedules included");
+  const builds = Object.fromEntries(sum.builds.map((b) => [b.version, b]));
+  assert.deepEqual(builds["9.0.0"], { version: "9.0.0", tasks: 2, avgTokens: 1200, avgRounds: 8 });
+  assert.equal(builds["9.1.0"].avgRounds, 4, "a schedule repeats one prompt and is left out of the comparison");
+});
+
 console.log(`\n${passed} passed`);

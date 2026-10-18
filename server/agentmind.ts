@@ -39,7 +39,7 @@ const clip = (v: unknown, n: number) => String(v ?? "").replace(/\u0000/g, "").r
 const docOf = (id: string) => `agentmind-${id.replace(/[^A-Za-z0-9_-]/g, "")}`;
 
 /** The kind of memory each sort of note is filed as. */
-const FILED: Record<NoteKind, MemoryKind> = { fact: "fact", lesson: "procedure", tip: "skill", colleague: "fact" };
+const FILED: Record<NoteKind, MemoryKind> = { fact: "fact", lesson: "procedure", tip: "procedure", colleague: "fact" };
 
 /**
  * The mind of agent `id`, loaded on first use. The notes an agent kept before

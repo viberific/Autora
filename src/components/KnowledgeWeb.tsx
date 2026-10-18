@@ -6,6 +6,7 @@ import {
 import type { MemoryMark } from "../lib/derive";
 import { IconBrain, IconMark, IconX } from "./Icons";
 import { MindViewButton } from "./MindViewButton";
+import { fetchMind, forgetMemory } from "../lib/organization";
 
 /**
  * Everything the agent knows, as a graph you can argue with.
@@ -29,7 +30,8 @@ type Node = {
   r: number;
 };
 
-const KINDS: MemoryRecord["kind"][] = ["preference", "procedure", "fact", "skill", "reference"];
+/* Skills are not memories (they have their own page): an old "skill" record is not drawn. */
+const KINDS: MemoryRecord["kind"][] = ["preference", "procedure", "fact", "reference"];
 
 export function KnowledgeWeb({
   onClose,
@@ -37,7 +39,10 @@ export function KnowledgeWeb({
   recent = [],
   embedded = false,
   onBuckets,
+  agent,
 }: {
+  /** Another agent's own mind instead of Autora's: read from its graph, and only forgetting is offered. */
+  agent?: { id: string; name: string };
   onClose?: () => void;
   /** Embedded in the Mind page: the way back to its buckets, drawn as an icon in the map's corner. */
   onBuckets?: () => void;
@@ -54,33 +59,16 @@ export function KnowledgeWeb({
   const [kinds, setKinds] = useState<Set<string>>(
     new Set(initialKind && initialKind !== "all" ? [initialKind] : KINDS)
   );
-  const [showNewSkill, setShowNewSkill] = useState(false);
-  const [skillTitle, setSkillTitle] = useState("");
-  const [skillBody, setSkillBody] = useState("");
-  const [skillTags, setSkillTags] = useState("skill, automation");
 
+  const agentId = agent?.id;
   const load = useCallback(() => {
-    fetchKnowledge().then(setData).catch(() => setData(null));
-  }, []);
+    const read = agentId
+      ? fetchMind(agentId).then((d): Knowledge => ({ records: d.records ?? [], links: d.links ?? [], enabled: true }))
+      : fetchKnowledge();
+    read.then(setData).catch(() => setData(null));
+  }, [agentId]);
   useEffect(load, [load]);
-
-  const createSkill = async () => {
-    if (!skillTitle.trim()) return;
-    await fetch("/api/memory", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: skillTitle.trim(),
-        body: skillBody.trim(),
-        kind: "skill",
-        tags: skillTags.split(",").map((s) => s.trim()).filter(Boolean),
-      }),
-    });
-    setSkillTitle("");
-    setSkillBody("");
-    setShowNewSkill(false);
-    load();
-  };
+  useEffect(() => setSelected(null), [agentId]);
 
   const filtered = useMemo(() => {
     if (!data) return null;
@@ -101,11 +89,11 @@ export function KnowledgeWeb({
   const record = selected && data ? data.records.find((r) => r.id === selected) : null;
 
   return (
-    <div className={`kweb ${embedded ? "is-embedded" : ""}`} role={embedded ? undefined : "dialog"} aria-label="Memory">
+    <div className={`kweb ${embedded ? "is-embedded" : ""} ${agent ? "is-agent" : ""}`} role={embedded ? undefined : "dialog"} aria-label="Memory">
       <header className="kweb-top">
         <div className="kweb-brand">
           <span className="kweb-badge"><IconBrain size={14} /></span>
-          {initialKind === "skill" ? "Skills" : "Memory"}
+          {agent ? `${agent.name}'s memory` : "Memory"}
           {data && <span className="web-count">{data.records.length}</span>}
         </div>
         <input
@@ -134,13 +122,6 @@ export function KnowledgeWeb({
           ))}
         </div>
         <div className="spacer" />
-        <button
-          className="web-tag skills-tag kweb-add"
-          onClick={() => setShowNewSkill(true)}
-          title="Register new skill into memory"
-        >
-          + Add skill
-        </button>
         {onClose && !embedded && (
           <button className="web-toggle kweb-close" onClick={onClose} aria-label="Close memory">
             <IconX size={15} />
@@ -150,68 +131,6 @@ export function KnowledgeWeb({
 
       <div className="kweb-body">
         {onBuckets && <MindViewButton to="buckets" onClick={onBuckets} />}
-        {showNewSkill && (
-          <div className="new-skill-backdrop" role="presentation" onClick={() => setShowNewSkill(false)}
-               onKeyDown={(e) => { if (e.key === "Escape") setShowNewSkill(false); }}>
-            <div className="new-skill-dialog" role="dialog" aria-modal="true" aria-label="Register a new skill" onClick={(e) => e.stopPropagation()}>
-              <div className="new-skill-header">
-                <h4>Register New Agent Skill</h4>
-                <button className="btn icon ghost sm" onClick={() => setShowNewSkill(false)} aria-label="Close">
-                  <IconX size={14} />
-                </button>
-              </div>
-              <p className="new-skill-desc">
-                Skills are stored directly in the neural memory graph with synaptic connections, allowing the agent to reference and execute them autonomously.
-              </p>
-              <div className="new-skill-form">
-                <label className="field-group">
-                  <span className="field-label">Skill Title</span>
-                  <input
-                    type="text"
-                    className="field-input"
-                    placeholder="e.g. Docker Container Diagnostics"
-                    value={skillTitle}
-                    onChange={(e) => setSkillTitle(e.target.value)}
-                  />
-                </label>
-                <label className="field-group">
-                  <span className="field-label">Operational Procedure & Guidance</span>
-                  <textarea
-                    rows={3}
-                    className="field-input field-textarea"
-                    placeholder="Explain execution steps, tools utilized, and verification criteria…"
-                    value={skillBody}
-                    onChange={(e) => setSkillBody(e.target.value)}
-                  />
-                </label>
-                <label className="field-group">
-                  <span className="field-label">Tags (comma-separated)</span>
-                  <input
-                    type="text"
-                    className="field-input"
-                    placeholder="e.g. skill, docker, diagnostics"
-                    value={skillTags}
-                    onChange={(e) => setSkillTags(e.target.value)}
-                  />
-                </label>
-              </div>
-              <div className="new-skill-actions">
-                <button className="btn ghost sm" onClick={() => setShowNewSkill(false)}>
-                  Cancel
-                </button>
-                <button
-                  className="btn primary sm"
-                  disabled={!skillTitle.trim()}
-                  onClick={createSkill}
-                  style={{ background: "var(--glow-deep)", color: "var(--on-accent)", borderColor: "var(--glow)" }}
-                >
-                  Save Skill to Memory
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {!data || !data.enabled ? (
           <div className="empty">
             <span className="empty-ring"><IconMark size={20} /></span>
@@ -225,7 +144,9 @@ export function KnowledgeWeb({
             <p>
               {query
                 ? "No record matches that search."
-                : "After a session finishes, what was worth keeping appears here."}
+                : agent
+                  ? `What ${agent.name} learns on its jobs, and what Autora hands it, appears here.`
+                  : "After a session finishes, what was worth keeping appears here."}
             </p>
           </div>
         ) : (
@@ -287,7 +208,7 @@ export function KnowledgeWeb({
             </dl>
 
             <div className="kd-actions">
-              <button
+              {!agent && <button
                 className={`btn ${record.pinned ? "primary" : ""}`}
                 onClick={async () => {
                   await patchRecord(record.id, { pinned: !record.pinned });
@@ -295,11 +216,11 @@ export function KnowledgeWeb({
                 }}
               >
                 {record.pinned ? "Pinned — always loaded" : "Pin to every session"}
-              </button>
+              </button>}
               <button
                 className="btn danger"
                 onClick={async () => {
-                  await deleteRecord(record.id);
+                  await (agent ? forgetMemory(agent.id, record.id) : deleteRecord(record.id));
                   setSelected(null);
                   load();
                 }}

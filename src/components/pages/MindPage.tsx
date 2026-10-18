@@ -9,7 +9,7 @@ import { KnowledgeWeb } from "../KnowledgeWeb";
 import { MemoryPeek } from "../MemoryCell";
 import { MindViewButton } from "../MindViewButton";
 import { IconBrain, IconPlus, IconTrash } from "../Icons";
-import { AgentProfile } from "../AgentProfile";
+import { AgentProfile, PersonalityCard } from "../AgentProfile";
 import { fetchAgents, type Agent } from "../../lib/organization";
 import { sure } from "../../lib/sure";
 import { every } from "../../lib/poll";
@@ -74,6 +74,7 @@ export function MindPage({
     return () => { live = false; stop(); };
   }, []);
   const team = agents.filter((a) => !a.builtin);
+  const lead = agents.find((a) => a.builtin) ?? null;
   const who = whose ? team.find((a) => a.id === whose) ?? null : null;
   const [error, setError] = useState<string | null>(null);
   const [tidied, setTidied] = useState<TidyReport | null>(null);
@@ -241,7 +242,12 @@ export function MindPage({
   return (
     <div className="mind-page">
       {mapOn ? (
-        <KnowledgeWeb embedded recent={recent} onBuckets={() => setView("buckets")} />
+        <KnowledgeWeb
+          embedded
+          recent={who ? [] : recent}
+          agent={who ? { id: who.id, name: who.name } : undefined}
+          onBuckets={() => setView("buckets")}
+        />
       ) : (
       <div className="page-scroll">
         <div className="page-inner">
@@ -256,7 +262,7 @@ export function MindPage({
             </div>
           )}
           {who ? (
-            <AgentProfile agent={who} agents={agents} />
+            <AgentProfile agent={who} agents={agents} onMap={showMap ? () => setView("map") : undefined} />
           ) : (
           <>
           <div className="page-toolbar">
@@ -274,6 +280,12 @@ export function MindPage({
           </div>
 
           {data && !data.enabled && <p className="set-warn">Memory is off on this server.</p>}
+
+          {lead?.traits && (
+            <section className="set-card" aria-label="Autora's personality">
+              <PersonalityCard agent={lead} />
+            </section>
+          )}
 
           {data && (
             <label className="mind-learning">
@@ -373,7 +385,7 @@ export function MindPage({
               <h3>Nothing remembered yet</h3>
               <p>
                 As Autora works, it notes what it learns — how you like things done, the steps
-                for a recurring job, facts about your setup, and skills it picks up. Each note
+                for a recurring job, facts about your setup, and when to reach for a skill. Each note
                 appears here for you to keep, edit or discard.
               </p>
               <button
@@ -504,7 +516,7 @@ export function MindPage({
                           <IconTrash size={14} />
                         </button>
                         <div className="spacer" />
-                        {(r.doubted ?? 0) > 0 && (
+                        {((r.doubted ?? 0) > 0 || (r.missed ?? 0) >= 5) && (
                           <button
                             className="btn ghost"
                             title="A turn found this wrong. Say it still holds, and it is trusted again."
@@ -535,6 +547,11 @@ export function MindPage({
                         {(r.doubted ?? 0) > 0 && (
                           <span className="mind-flag is-doubted" title="A turn that used this found it wrong. It is recalled with a warning, and ranked lower, until it is checked or edited.">
                             found wrong
+                          </span>
+                        )}
+                        {(r.missed ?? 0) >= 5 && !r.pinned && (
+                          <span className="mind-flag is-doubted" title="Recalled into turns where it played no part. It ranks lower, and after 15 such turns it is only found by searching. Say it still holds, edit it, or pin it to keep it in play.">
+                            {(r.missed ?? 0) >= 15 ? "no longer recalled" : "rarely helps"}
                           </span>
                         )}
                         {r.uses > 0 && <span className="mind-flag" title="Times recalled into a turn, and times a turn that used it went well">used {r.uses}×{r.worked ? `, worked ${r.worked}×` : ""}</span>}

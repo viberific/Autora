@@ -442,6 +442,21 @@ export function costParts(
   };
 }
 
+/**
+ * A cheaper model of the same provider for unwatched work (folding old turns, looking back after a turn) when the
+ * person has named none: the provider's own default, when it is priced and costs at most half what the main model
+ * does on a typical background call (mostly reading). Null when there is no such model -- the main model is then
+ * used, as before -- and never a guess: an unpriced model is never picked, nor one this provider does not list.
+ */
+export function cheaperSibling(providerId: string, mainModel: string): string | null {
+  const spec = providerSpec(providerId);
+  const pick = spec?.defaultModel;
+  if (!pick || pick === mainModel) return null;
+  if (!isPriced(providerId, pick) || !isPriced(providerId, mainModel)) return null;
+  const typical = (model: string) => costOf(providerId, model, 8_000, 800);
+  return typical(pick) * 2 <= typical(mainModel) ? pick : null;
+}
+
 export function isPriced(providerId: string, modelId: string): boolean {
   const spec = modelSpec(providerId, modelId);
   return Boolean(spec) && spec!.priced !== false;

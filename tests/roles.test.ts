@@ -84,6 +84,19 @@ await test("background work keeps its old rule unless told otherwise", () => {
   /* The environment's override is a model of the main provider. */
   assert.deepEqual(backgroundTarget(roles({ background: at("tiny", "openai") }), " env-model "), { ...main, model: "env-model" });
   assert.equal(model(backgroundTarget(roles({ background: at("tiny") }), "  ")), "tiny");
+  /* With nothing named, a cheaper model of the same provider when the price list has one; anything named still wins. */
+  assert.equal(model(backgroundTarget(roles(), undefined, "flash")), "flash");
+  assert.equal(model(backgroundTarget(roles({ fastModel: "fast" }), undefined, "flash")), "fast");
+  assert.equal(model(backgroundTarget(roles(), undefined, null)), "cheap");
+});
+
+await test("the cheaper sibling is the provider's priced default, only when it costs at most half the main model", async () => {
+  const { cheaperSibling } = await import("../server/providers");
+  assert.equal(cheaperSibling("anthropic", "claude-opus-4-1"), "claude-haiku-4-5");
+  assert.equal(cheaperSibling("anthropic", "claude-haiku-4-5"), null, "already the cheap one");
+  assert.equal(cheaperSibling("openai", "gpt-4o-mini"), null);
+  assert.equal(cheaperSibling("openai", "some-unlisted-model"), null, "never a guess against an unpriced model");
+  assert.equal(cheaperSibling("local", "llama3"), null);
 });
 
 await test("the context window counts every model that may answer, on its own provider", () => {
