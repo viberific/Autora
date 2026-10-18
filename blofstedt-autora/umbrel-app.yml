@@ -193,3 +193,5 @@ releaseNotes: >-
   imported clips are streamed to disk instead of being held whole in RAM (the cause of the crashes on a low-power box), and
   oversized exports are refused up front. The app's memory cap drops from 4 GiB (plus swap) to 3 GiB with no swap, the server's
   JavaScript heap is capped at 1 GiB, and the headless browsers it starts for PDFs and widgets are held to one renderer each.
+  Commands the agent runs in the shell (ffmpeg, builds, scripts) now run at low priority and are the first thing stopped when
+  memory runs short, so a heavy video job can no longer take the server down with it.
