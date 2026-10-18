@@ -191,4 +191,5 @@ releaseNotes: >-
   Video and Photo no longer nag on a machine with no graphics card: the "open OpenCut in Chrome" banner and Photo's "Switched to
   CPU rendering" window are gone, and both editors go straight to the CPU. Video also uses much less memory on a small server:
   imported clips are streamed to disk instead of being held whole in RAM (the cause of the crashes on a low-power box), and
-  oversized exports are refused up front.
+  oversized exports are refused up front. The app's memory cap drops from 4 GiB (plus swap) to 3 GiB with no swap, the server's
+  JavaScript heap is capped at 1 GiB, and the headless browsers it starts for PDFs and widgets are held to one renderer each.

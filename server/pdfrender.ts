@@ -361,7 +361,7 @@ async function launch(): Promise<Browser> {
     const launched = await chromium.launch({
       headless: true,
       ...(executablePath ? { executablePath } : {}),
-      args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+      args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--renderer-process-limit=1", "--js-flags=--max-old-space-size=256"],
     });
     launched.on("disconnected", () => { browser = null; });
     return launched;
