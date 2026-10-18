@@ -5333,10 +5333,14 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
            step's call goes out now, on the history as it stands. */
         context.maybeCompact(pinned, summarize, compacted);
 
-        /* Rebuilt only when something it depends on has changed: a tool the
-           agent wrote with tool_create, a family brought in, or the hand-over
-           that adds think_longer. Every round used to rebuild and re-filter
-           the whole list to get the same answer. */
+        /* Rebuilt when something it depends on may have changed: a tool the
+           agent wrote with tool_create, a family brought in, the hand-over
+           that adds think_longer. The event count is in the key, so in
+           practice that is every round, on purpose: what is offered also
+           follows windows opening and Settings, which no generation counts.
+           The list comes out in the registry's order, so an unchanged list is
+           byte-identical and the provider's cache holds (lastToolKey below
+           records the rounds where it did not). */
         const offeredKey = [
           session.events.length,
           customToolsGeneration(),

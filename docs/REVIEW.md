@@ -468,3 +468,32 @@ The four failures all need those engine builds:
   its engine is not built, the page is never drawn.
 
 Lint (`npm run lint`) and build pass clean.
+
+---
+
+# Follow-up, October 2026 (0.9.265): agent token efficiency
+
+Read-only pass over the turn loop for tokens the in-app agent spends without
+getting anything for them. Ids continue the scheme above (E = efficiency).
+
+**Status (0.9.266):** E1 done (`ContextEngine.messageLimit`). E2, E3 and E4 were
+wrong as first written, on a closer look at `historyFor`: tool calls and their
+results are not carried from one turn to the next, only the person's messages and
+the agent's words are. So the recap (E2) is the only record of earlier turns' calls,
+not a repeat; the prefix after the previous user message changes between turns
+anyway, so freezing the note (E3) would add tokens to every later turn to save a
+few; and the tool list (E4) is rebuilt every round on purpose (it follows open
+windows and Settings) in a fixed order, so it costs CPU, not cache. Its comment
+now says so. The table below is the original finding.
+
+| Id | Finding | Evidence | Fix | Effort |
+|---|---|---|---|---|
+| E1 | **Compaction fires on message count long before the window is full.** `maxMessages: 24` with `protectedRecent: 6` | `server/context.ts` `CONTEXT_CONFIG`, `maybeCompact` (`overCount`). A round is two messages (the assistant's calls, then one `tool` message with every reply, `server.ts` `context.append({ role: "tool", replies })`), so a fold starts after ~12 tool rounds and again every ~9 after that, on a 200k or 1M model as on a small one. Each fold is an extra summariser call, and it rewrites the anchored memory inside the system text (`systemFor`), so the cached prompt is lost from the system block onward and written again at cache-write price. The summary also loses detail the agent then re-reads. | Make the count trigger scale with the window (or apply only when the window is unknown / `default`), e.g. `maxMessages` ≈ 24 at 32k, off above 128k, leaving the token high-water mark to decide. Measure with `evals/` before and after. | S |
+| E2 | **The recap of past tool calls repeats what is still in the history.** | `pastToolCalls()` (`RECAP_CALLS = 30`) goes into every turn's console note, including calls whose messages are still in `context.active`. Up to 30 lines per turn that the model can already see. | List only calls folded away by compaction (seq at or below the fold's watermark), or skip the recap entirely while nothing has been folded. | S |
+| E3 | **Each new turn re-writes the previous turn's cache.** | `ContextEngine.messagesFor` appends the turn note to the *latest* user message at send time and never stores it. Next turn, the previous user message is sent without its note, so the cached prefix ends there and everything the agent did in the previous turn (often tens of thousands of tokens of tool output) is written to the cache again instead of read. | Freeze the note onto the message it was first sent with (keep it in `active`), and keep the per-turn note short (E2 helps); or move the note to its own trailing user block so earlier messages are byte-identical between turns. Check with the `cached` figure in the ledger. | M |
+| E4 | **The tool list is rebuilt every round although the code says otherwise.** | `offeredKey` in the loop includes `session.events.length`, which grows every round, so `offered()` runs every round. CPU only today, but if its order ever changes between rounds every round misses the tool-block cache. | Key it on a family-load generation counter instead of the event count. | S |
+
+What is already right and should stay: the system text is kept stable within a
+turn (per-turn facts go in the note, not `pinned`), the system block and the last
+message each carry a cache breakpoint, tool output over 3,000 tokens goes to the
+vault, and research runs in a worker whose reading never enters the main context.
