@@ -188,6 +188,16 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
+  Autora now clears the dead processes it was leaving behind. Every process reparented to the server -- a chromium renderer whose
+  browser exited first, the members of a killed terminal command's process group -- used to stay a zombie for the life of the
+  container, because node as PID 1 does not wait on children it did not spawn. On 18 October that reached 8,972 zombies against a
+  limit of 9,124, and at that point nothing that starts a process works: tools failed with "Resource temporarily unavailable"
+  and blamed the device instead of the container.
+  Three things stop it. The app service now runs with init: true, so docker-init is PID 1 and reaps whatever is reparented to it
+  (it also forwards SIGTERM to the server, so a stop reaches its own shutdown). Closing a browser, a PDF render or a widget
+  takes its whole process tree down deepest-first, letting each parent collect its children instead of manufacturing more
+  zombies. And at startup the server stops any browser left behind by an earlier run in the same container, while a once-a-minute
+  check reports the process budget only when it is nearly gone.
   Something you can hear in Autora Music: the master no longer squashes the song. The -10 dB, 12:1 compressor is now a
   peak-only limiter with a small output trim, so a busy track comes out at about -11.6 LUFS with true peaks at -1.1 dBTP
   instead of clipping into 0 dBFS. Reverb is shorter and damped instead of a 70% wet wash that smeared the whole mix, and
