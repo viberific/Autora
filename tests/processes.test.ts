@@ -141,9 +141,14 @@ await test("the shipping compose file puts a real init in front of node", () => 
      tidy-up of a leak that still fills the container. */
   const file = path.join(import.meta.dirname ?? path.dirname(new URL(import.meta.url).pathname), "..", "blofstedt-autora", "docker-compose.yml");
   const text = fs.readFileSync(file, "utf8");
-  const app = text.slice(text.indexOf("\n  app:"));
-  assert.ok(app.length > 0, "the compose file has no app service");
+  /* Keep the "  app:" line itself. Starting the slice at the newline before it
+     makes the split below match at position 0, which cut the service down to
+     the empty string and failed whatever the file said. */
+  const at = text.indexOf("\n  app:");
+  assert.ok(at >= 0, "the compose file has no app service");
+  const app = text.slice(at + 1);
   const service = app.split(/\n {2}\w+:/)[0] ?? app;
+  assert.ok(service.length > 0, "the app service is empty");
   assert.match(service, /^\s+init:\s*true\s*$/m, "the app service must carry init: true");
 });
 
