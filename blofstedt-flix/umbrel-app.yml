@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.21"
+version: "0.3.28"
 port: 8096
 folderAccess:
   - id: umbrel-downloads
@@ -54,11 +54,13 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Flix now answers on the home network as well as over Tailscale: open
-  http://10.0.0.247:8096 on any device on the same network and Flix serves it
-  directly, so a TV that cannot install Tailscale reaches Flix without it. The
-  Tailscale address is unchanged and still works exactly as before. Settings now
-  shows both addresses, so the one to type into a TV is on the page. This build
-  also carries the home-screen fix: the top show is always featured, Continue
-  Watching keeps its own row below it, and the hero buttons stay on one row on a
-  phone.
+  A television gets a layout that fits its screen: the page is laid out at a
+  desktop width and the panel scales that to its own size, so the interface is
+  no longer a phone layout stretched across a 65-inch set. The search bar can be
+  reached and typed into with a remote again, the TV player has a seek bar with
+  frame previews, a black screen instead of a grey one while an episode loads,
+  and a player that cannot hang. Phones get a proper adaptive launcher icon and
+  a page that clears the camera cutout. This build also carries everything since
+  0.3.21: casting from a phone, downloads to watch offline, per-service rows on
+  the home screen, and the home-network address. Install flix-0.3.28.apk from the
+  GitHub release for the TV app's icon.
