@@ -31,12 +31,13 @@ export const memorySPECS: ToolSpec[] = [
         },
         kind: {
           type: "string",
-          enum: ["fact", "preference", "procedure", "skill", "reference"],
+          enum: ["fact", "preference", "procedure", "reference"],
           description:
             "What sort of thing this is. Default fact. A procedure is how to do " +
             "something here that worked -- the steps, commands and gotchas. A reference is what a product's " +
             "OFFICIAL documentation or help says about how it works (where things are in an interface, what an " +
-            "API call is named): it needs subject and source.",
+            "API call is named): it needs subject and source. A way of doing a kind of work is not a memory but a skill " +
+            "(the skill tool); a note on when to reach for a skill is a procedure.",
         },
         subject: {
           type: "string",
@@ -75,7 +76,7 @@ export const memorySPECS: ToolSpec[] = [
         id: { type: "string", description: "The memory's id, e.g. mem-abc123." },
         title: { type: "string", description: "A new title, if it should change." },
         body: { type: "string", description: "The whole new body, replacing the old one." },
-        kind: { type: "string", enum: ["fact", "preference", "procedure", "skill", "reference"] },
+        kind: { type: "string", enum: ["fact", "preference", "procedure", "reference"] },
         subject: { type: "string", description: "What it is about, if that should change." },
         facet: { type: "string", enum: ["interface", "api", "docs", "workflow", "quirk"] },
         source: { type: "string", description: "For a reference: the page it was read from again. Stamps today as when it was read." },
@@ -90,7 +91,7 @@ export const memorySPECS: ToolSpec[] = [
     name: "memory_link",
     group: "memory",
     description:
-      "Connect two memories that belong together (a skill and the reference it uses), saying how in a word or two. " +
+      "Connect two memories that belong together (a procedure and the reference it uses), saying how in a word or two. " +
       "Kept and shown in the Mind. Not for merely alike ones: those are linked already.",
     parameters: {
       type: "object",

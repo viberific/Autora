@@ -93,10 +93,11 @@ export function memoryRoutes(app: Express, deps: { mind: MemoryGraph }) {
   app.post("/api/memory", (req: Request, res: Response) => {
     const title = (req.body?.title || "").trim();
     if (!title) return res.status(400).json({ error: "Title is required" });
+    if (req.body?.kind === "skill") return res.status(400).json({ error: "Skills live on the Skills page now, not in the Mind." });
     const { record } = mind.write({
       title,
       body: req.body?.body || "",
-      kind: MEMORY_KINDS.includes(req.body?.kind) ? req.body.kind : "skill",
+      kind: MEMORY_KINDS.includes(req.body?.kind) ? req.body.kind : "fact",
       tags: Array.isArray(req.body?.tags) ? req.body.tags : [],
       status: "confirmed",
       source_session: req.body?.source_session || null,
@@ -115,6 +116,7 @@ export function memoryRoutes(app: Express, deps: { mind: MemoryGraph }) {
   app.patch("/api/memory/:id", (req: Request, res: Response) => {
     const record = mind.get(req.params.id);
     if (!record) return res.status(404).json({ error: "Record not found" });
+    if (req.body.kind === "skill") return res.status(400).json({ error: "Skills live on the Skills page now, not in the Mind." });
     mind.update(record.id, {
       title: req.body.title,
       body: req.body.body,

@@ -385,7 +385,7 @@ export function MindPage({
               <h3>Nothing remembered yet</h3>
               <p>
                 As Autora works, it notes what it learns — how you like things done, the steps
-                for a recurring job, facts about your setup, and skills it picks up. Each note
+                for a recurring job, facts about your setup, and when to reach for a skill. Each note
                 appears here for you to keep, edit or discard.
               </p>
               <button

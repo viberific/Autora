@@ -70,6 +70,7 @@ import { ShareGate, SHARE_IDLE_MS, SHARE_MIN_CALLS, SHARE_SYSTEM, listFinished, 
 import { isSmallTalk } from "./server/quick";
 import { agentBrief, developFromTalk, findAgent, getAgent, handoffTargets, LEAD_ID, listAgents, mentionedAgents, producedWork, recordCollab, recordWork, withoutHandover } from "./server/agents";
 import { agentMind, clusters, remember, teach } from "./server/agentmind";
+import { moveSkillsOutOf, noteSkillOutcome } from "./server/skills";
 import {
   LifeGate, MAX_AGENT_RUN, applyVotes, MAX_WONDERS, PACE, isNamed, perHourFor, URGE_AT, addresseeOf, allowed as lifeAllowed, reactDelayMs, replyChance, answered, goneQuiet, knownText, lastActivity, quietFrom, unseenBy,
   lifePrompt, lifeSystem, parseChoice, personWaiting, pickAgent, reactionOf, replyPrompt, reviewPrompt, reviewersOf, somethingNew, toTheRoom, trailingAgentRun, urgeOf,
@@ -138,6 +139,7 @@ import { pdfHandRoutes } from "./server/pdfhand";
 import { officeHandRoutes } from "./server/officehand";
 import { staticDir } from "./server/staticfiles";
 import { memoryRoutes } from "./server/routes/memory";
+import { skillRoutes } from "./server/routes/skills";
 import { healthRoutes } from "./server/routes/health";
 import { taskRoutes } from "./server/routes/tasks";
 import { closeTask, noteCall, noteCheck, noteRound, openTask, withTask } from "./server/taskledger";
@@ -291,6 +293,14 @@ function saveMemory() {
 
 /** The graph's rules (recall, merging, confirming) over the arrays above. */
 const mind = new MemoryGraph(memoryRecords, memoryLinks, saveMemory);
+
+/* Skills left the Mind for a library of their own (server/skills.ts): any still filed as memories -- Autora's, or an
+   agent's in its own mind -- become real skills on start, and the memory goes. */
+{
+  const moved = moveSkillsOutOf(mind, { kind: "person" }) +
+    listAgents().filter((a) => a.id !== LEAD_ID).reduce((n, a) => n + moveSkillsOutOf(agentMind(a.id), { kind: "agent", id: a.id, name: a.name }), 0);
+  if (moved) console.log(`[skills] ${moved} skill${moved === 1 ? "" : "s"} moved out of the Mind into the Skills library`);
+}
 
 /**
  * The mind a chat works from. Autora, the base agent, is the main Mind; a chat
@@ -3639,6 +3649,23 @@ async function backgroundCall(sessionId: string, system: string, prompt: string,
 }
 
 /**
+ * The skills a turn loaded (skill action=use), counted as having worked or not by how the turn ended. A draft an agent
+ * wrote goes live after a few that went well (server/skills.ts); the thread says so when one does.
+ */
+function noteSkillsUsed(session: Session, startSeq: number, result: TurnResult): void {
+  if (session.incognito) return;
+  const used = session.events
+    .filter((e) => e.seq > startSeq && e.kind === "tool.call" && e.payload?.name === "skill" && e.payload?.args?.action === "use")
+    .map((e) => String(e.payload.args.name ?? "").trim())
+    .filter(Boolean);
+  if (!used.length) return;
+  const ok = !result.stopped && !result.error && !result.looped && result.ok !== false;
+  for (const { name, live } of noteSkillOutcome(used, ok)) {
+    if (live) emitEvent(session, "system.log", "system", { message: `The skill ${name} has worked often enough to go live.` });
+  }
+}
+
+/**
  * After a turn: what to keep, what helped, what was wrong. See
  * server/learning.ts. Runs in the background and never fails the turn.
  */
@@ -4027,6 +4054,7 @@ function beginTurn(session: Session, text: string, attachments: AttachmentRef[] 
          once, and again with the look back's own ideas when it has them. */
       const first = offerNextSteps(session, text, startSeq, result, opts, []);
       doneWhileAway(session, result, began, opts);
+      noteSkillsUsed(session, startSeq, result);
       /* A job or watcher runs the same prompt again and again; looking back at each run is one more model
          call per firing that teaches the same thing. The person's own turns are the ones worth learning from. */
       const ideas = opts.automated ? [] : await reflect(session, text, startSeq, previousReply, result);
@@ -6816,6 +6844,7 @@ async function startServer() {
   });
 
   memoryRoutes(app, { mind });
+  skillRoutes(app);
 
   const todaysLedger = () => {
     automationLedger = rollLedger(automationLedger, dayKey(Math.floor(Date.now() / 1000)));

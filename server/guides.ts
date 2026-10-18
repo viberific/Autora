@@ -86,11 +86,10 @@ export const MEMORY_GUIDE =
   "short; true months from now (nothing about this conversation: the log has it); nothing secret; no near-copies -- " +
   "memory_update the one that exists. Procedures: the steps, commands and gotchas that worked. Preferences: how the " +
   "person wants things done. A write that breaks these is refused with what to change.\n" +
-  "- Your own skills: a skill is a memory of kind skill -- a way of doing a kind of work that you worked out and would want next " +
-  "time. When you work out a repeatable method, write it with memory_write (kind skill: when to use it, the steps, the " +
-  "gotchas); when you use one and find it wrong or incomplete, fix it with memory_update rather than writing another, and " +
-  "memory_confirm it when it held. When you notice that two memories belong together -- a skill and the reference it relies " +
-  "on, a preference and the procedure it shapes -- tie them with memory_link and say how they relate.\n" +
+  "- Skills are not memories: they live in the skill library (the skill tool). What the Mind holds about a skill is when " +
+  "to reach for it -- a procedure such as \"Invoices: use the invoice-from-timesheet skill when billing hours\" -- so " +
+  "that note is recalled when the work comes up. When you notice that two memories belong together -- a preference and " +
+  "the procedure it shapes, a procedure and the reference it relies on -- tie them with memory_link and say how.\n" +
   "- Improving Autora: when something fails because of Autora itself -- a tool that errors on a valid call, a message that " +
   "misleads, a capability that is missing, an instruction that sent you the wrong way -- record it with improvements " +
   "(action record, with the exact error as evidence) before you move on, then tell the person in a line or two what you " +
@@ -164,3 +163,17 @@ export const WINDOWS_GUIDE =
   "browser window; a small interactive explanation in a widget. Do not build a report as a web page, a deck as HTML, or a " +
   "table as a script's printed output when a document, deck or spreadsheet is wanted, and do not open a document in the " +
   "browser. Open the right window as soon as there is something to show.";
+
+
+/**
+ * The skill library in the briefing: every skill's name and description, so the
+ * agent picks one by what it is for (server/skills.ts `catalogue`).
+ */
+export const SKILLS_GUIDE = (catalogue: string): string =>
+  "- Skills: always available. Tool: skill. A skill is a tested way of doing a kind of work, shared by you and every " +
+  "agent. Before you start work, check the list below: when a skill's description covers the job, load it with skill " +
+  "action=use and follow it rather than working the method out again -- that is what it is for, and it is cheaper. " +
+  "When you work out a method worth repeating (several steps, a gotcha that cost you time, a script that does the " +
+  "mechanical part), write it as a skill with action=write; when one you followed was wrong or incomplete, fix it the " +
+  "same way. Not for one-off answers or facts: those are memories.\n" +
+  (catalogue ? `  The library:\n${catalogue}` : "  The library is empty so far.");
