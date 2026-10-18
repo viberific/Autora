@@ -318,6 +318,21 @@ export class ContextEngine {
     return this.window?.tokens ?? this.config.maxContextTokens;
   }
 
+  /**
+   * The message count that starts a fold on its own, scaled with the window.
+   *
+   * A round of tool calls is two messages, so a flat 24 folded a long task
+   * every nine or ten rounds even on a model with a million tokens of room:
+   * a summariser call each time, the cached prompt lost from the system text
+   * on (the anchored memory lives there), and detail the agent then read
+   * again. The configured count holds at the assumed window and below; a
+   * bigger window lets the token high-water mark decide for longer.
+   */
+  get messageLimit(): number {
+    const scale = Math.max(1, this.limitTokens / DEFAULT_CONTEXT_TOKENS);
+    return Math.round(this.config.maxMessages * scale);
+  }
+
   /** Where that window came from. */
   get windowSource(): WindowSource {
     return this.window?.source ?? (CONTEXT_WINDOW_SETTING ? "setting" : "default");
@@ -748,7 +763,7 @@ export class ContextEngine {
     const system = this.systemFor(pinned);
     const tokens = estimateTokens(system, this.active);
     const overTokens = tokens >= this.limitTokens * this.config.highWaterPct;
-    const overCount = this.active.length > this.config.maxMessages;
+    const overCount = this.active.length > this.messageLimit;
     if (!overTokens && !overCount) return false;
 
     const end = this.safeEvictionBoundary();

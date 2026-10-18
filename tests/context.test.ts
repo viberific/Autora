@@ -387,4 +387,15 @@ test("a little old reading is left alone, since changing it would only break the
   assert.equal(engine.supersedeReads(true), 0);
 });
 
+test("the message count that starts a fold grows with the window, never below the configured one", () => {
+  const engine = new ContextEngine();
+  const base = engine.messageLimit;
+  engine.setWindow(DEFAULT_CONTEXT_TOKENS, "model");
+  assert.equal(engine.messageLimit, base);
+  engine.setWindow(32_000, "model");
+  assert.equal(engine.messageLimit, base, "a small window keeps the configured count");
+  engine.setWindow(1_000_000, "model");
+  assert.equal(engine.messageLimit, base * 10);
+});
+
 console.log(`\n${passed} passed`);

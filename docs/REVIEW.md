@@ -475,7 +475,16 @@ Lint (`npm run lint`) and build pass clean.
 
 Read-only pass over the turn loop for tokens the in-app agent spends without
 getting anything for them. Ids continue the scheme above (E = efficiency).
-Not acted on yet.
+
+**Status (0.9.266):** E1 done (`ContextEngine.messageLimit`). E2, E3 and E4 were
+wrong as first written, on a closer look at `historyFor`: tool calls and their
+results are not carried from one turn to the next, only the person's messages and
+the agent's words are. So the recap (E2) is the only record of earlier turns' calls,
+not a repeat; the prefix after the previous user message changes between turns
+anyway, so freezing the note (E3) would add tokens to every later turn to save a
+few; and the tool list (E4) is rebuilt every round on purpose (it follows open
+windows and Settings) in a fixed order, so it costs CPU, not cache. Its comment
+now says so. The table below is the original finding.
 
 | Id | Finding | Evidence | Fix | Effort |
 |---|---|---|---|---|
