@@ -188,8 +188,5 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  Long tasks cost fewer tokens on models with a large context window. Autora used to condense the conversation after
-  about ten tool steps whatever the model could hold, which meant an extra summarising call each time, losing the
-  cheaper cached prompt, and the agent re-reading what the summary had dropped. The step count that triggers this now
-  grows with the model's window: a 200k model condenses half as often, a 1M model a tenth as often, and it still
-  condenses whenever the conversation itself gets near the window. Small and local models behave as before.
+  Autora's own page in the Mind now shows Autora's logo beside its name, as every other agent's does. The headings across the Mind
+  pages (Autora's, each agent's, and the memory lists) now share one size and spacing instead of mixing styles.
