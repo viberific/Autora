@@ -148,8 +148,12 @@ export type AgentModels = {
 export const fetchAgentModels = () => call<AgentModels>("/api/agents-models");
 
 export type AgentMemory = { id: string; text: string; kind: string; from: string; at: number; used: number };
-export const fetchMind = (id: string) =>
-  call<{ main: boolean; memories: AgentMemory[]; records: MemoryRecord[]; links: MemoryLink[] }>(`/api/agents/${id}/mind`);
+/** How much of an agent's mind is live and how much is history: `records` holds both. */
+export type MindCounts = { total: number; active: number; retired: number };
+export const fetchMind = (id: string, activeOnly = false) =>
+  call<{ main: boolean; memories: AgentMemory[]; records: MemoryRecord[]; links: MemoryLink[]; counts?: MindCounts }>(
+    `/api/agents/${id}/mind${activeOnly ? "?active=1" : ""}`,
+  );
 export const forgetMemory = (id: string, memory: string) =>
   call<{ ok: true }>(`/api/agents/${id}/mind/${memory}`, { method: "DELETE" });
 export const deleteAgent = (id: string) => call<{ ok: true }>(`/api/agents/${id}`, { method: "DELETE" });

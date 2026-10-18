@@ -178,6 +178,34 @@ async function main() {
       assert.doesNotMatch(asked, /pineapple/, "and never from Autora's, though the task named the handshake");
       const after = (await app.api("GET", `/api/agents/${keeper}/mind`)).body;
       assert.ok(after.memories.some((m: any) => /never empty/.test(m.text)), "what it learned went into its own mind");
+      /* A retired record stays in the graph as history: the listing says which is which, and
+         ?active=1 leaves the history out, so a curator can count memory from the tool. */
+      app.decide = (req) => {
+        if (req.last.includes("Note the scissors")) return { tools: [{ name: "agents", args: { action: "run", agent: "Walrus Keeper", task: "Keep a note about the scissors." } }] };
+        if (req.last.includes("Keep a note about the scissors")) return { tools: [{ name: "memory_write", args: { title: "Where the scissors stay", body: "The scissors stay in the second drawer, never the sink.", kind: "fact", subject: "scissors" } }] };
+        return { text: "Noted." };
+      };
+      const scissors = await app.newSession("scissors", "build");
+      await app.turn(scissors, "Note the scissors");
+      const held2 = (await app.api("GET", `/api/agents/${keeper}/mind`)).body;
+      const ids = held2.records.filter((r: any) => !r.retired).map((r: any) => r.id);
+      assert.ok(ids.length >= 2, `the keeper holds two live records (${ids.length})`);
+      app.decide = (req) => {
+        /* The keeper's own task says the longer phrase, so that branch comes first: otherwise the
+           keeper would match the lead's words and start itself again instead of retiring anything. */
+        if (req.last.includes("Retire the older note in favour")) return { tools: [{ name: "memory_forget", args: { id: ids[0], replaced_by: ids[1] } }] };
+        if (req.last.includes("Retire the older note")) return { tools: [{ name: "agents", args: { action: "run", agent: "Walrus Keeper", task: "Retire the older note in favour of the newer one." } }] };
+        return { text: "Retired." };
+      };
+      const retire = await app.newSession("retire", "build");
+      await app.turn(retire, "Retire the older note");
+      const history = (await app.api("GET", `/api/agents/${keeper}/mind`)).body;
+      const live = (await app.api("GET", `/api/agents/${keeper}/mind?active=1`)).body;
+      assert.equal(history.records.find((r: any) => r.id === ids[0])?.retired, true, "the retired record is marked retired in the listing");
+      assert.ok(history.counts.retired >= 1 && history.counts.active < history.counts.total, "history is counted apart from memory");
+      assert.equal(history.memories.length, history.counts.active, "the memory list holds the active records only");
+      assert.ok(!live.records.some((r: any) => r.id === ids[0]), "?active=1 leaves the history out");
+      assert.equal(live.counts.active, live.records.length, "the list and its count agree");
       const main = (await app.api("GET", "/api/memory")).body;
       const mainText = JSON.stringify(main);
       assert.ok(!/never empty/.test(mainText), "and not into Autora's");

@@ -63,7 +63,11 @@ export function KnowledgeWeb({
   const agentId = agent?.id;
   const load = useCallback(() => {
     const read = agentId
-      ? fetchMind(agentId).then((d): Knowledge => ({ records: d.records ?? [], links: d.links ?? [], enabled: true }))
+      ? fetchMind(agentId, true).then((d): Knowledge => ({
+          records: d.records ?? [],
+          links: (d.links ?? []).filter((l) => (d.records ?? []).some((r) => r.id === l.src) && (d.records ?? []).some((r) => r.id === l.dst)),
+          enabled: true,
+        }))
       : fetchKnowledge();
     read.then(setData).catch(() => setData(null));
   }, [agentId]);

@@ -79,10 +79,24 @@ export function organizationRoutes(app: Express, onPerson: () => void = () => un
   app.get("/api/agents/:id/mind", (req: Request, res: Response) => {
     const agent = getAgent(req.params.id);
     if (!agent) return res.status(404).json({ error: "No such agent" });
-    if (agent.builtin) return res.json({ main: true, memories: [], records: [], links: [] });
+    if (agent.builtin) return res.json({ main: true, memories: [], records: [], links: [], counts: { total: 0, active: 0, retired: 0 } });
     const graph = agentMind(agent.id);
-    /* The graph itself as well, for the agent's own map: the same shape as /api/memory. */
-    res.json({ main: false, records: graph.records, links: graph.links, memories: notesOf(agent.id).reverse().map((n) => ({ id: n.id, text: n.text, kind: n.kind, from: n.from, at: n.at, used: n.used })) });
+    /* The graph itself as well, for the agent's own map: the same shape as /api/memory.
+       A graph keeps its history: a retired record is still in `records`, flagged `retired` and
+       carrying its `superseded_by`, and counted apart in `counts`, so the history cannot be read
+       as the live mind. `?active=1` leaves the history out altogether. */
+    const wanted = String(req.query.active ?? "").toLowerCase();
+    const activeOnly = wanted === "1" || wanted === "true" || wanted === "yes";
+    const all = graph.records;
+    const active = all.filter((r) => !r.superseded_by).length;
+    const records = (activeOnly ? all.filter((r) => !r.superseded_by) : all).map((r) => ({ ...r, retired: Boolean(r.superseded_by) }));
+    res.json({
+      main: false,
+      records,
+      links: graph.links,
+      counts: { total: all.length, active, retired: all.length - active },
+      memories: notesOf(agent.id).reverse().map((n) => ({ id: n.id, text: n.text, kind: n.kind, from: n.from, at: n.at, used: n.used })),
+    });
   });
 
   app.delete("/api/agents/:id/mind/:memory", (req: Request, res: Response) => {
