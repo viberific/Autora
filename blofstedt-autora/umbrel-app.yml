@@ -202,3 +202,6 @@ releaseNotes: >-
   section, a real melody, texture, humanising), its look-over flags a song that is only a loop, flat dynamics, no melody and a
   solo or mute left on, and the export says exactly which tracks went into the one mixed file and is told never to export
   track by track.
+  Autora Music has a melody helper: studio_make can now write a melody draft over the song's chords (a motif that returns as an
+  answer, mostly stepwise, chord tones on the strong beats, a cadence at each phrase end), with a shape, a density and a seed for
+  another draft. It is a starting point to keep, edit or discard.

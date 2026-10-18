@@ -24,9 +24,9 @@ import express, { type Express, type Request, type Response } from "express";
 import {
   addNotes, barBeat, BASS_STYLES, bassNotes, CHORD_STYLES, chordLabel, chordNotes, clamp, copyClip, describeProject, detectChord,
   DRUM_STYLES, drumNotes, findClip, findTrack, fitBars, humanize, INSTRUMENTS, instrumentOf, isDrumTrack, keyName, MAX_BARS, MAX_BPM,
-  MAX_CLIPS_PER_TRACK, MAX_TRACKS, MIN_BPM, newClip, newProject, newTrack, normalizeProject, notesIn, parseDrum, parseKey,
+  MAX_CLIPS_PER_TRACK, MAX_TRACKS, melodyNotes, MELODY_CONTOURS, MELODY_DENSITIES, MIN_BPM, newClip, newProject, newTrack, normalizeProject, notesIn, parseDrum, parseKey,
   parsePitch, parseProgression, quantize, review, songBeats, tidy, uid,
-  type BassStyle, type Chord, type ChordStyle, type Clip, type DrumStyle, type InstrumentId, type Note, type Project, type Track,
+  type BassStyle, type Chord, type ChordStyle, type Clip, type DrumStyle, type MelodyContour, type MelodyDensity, type InstrumentId, type Note, type Project, type Track,
 } from "../src/lib/studio/model";
 import { MAX_ARTIFACT_BYTES, keepCopy, saveArtifact } from "./artifacts";
 import { stepWords, studioSteps } from "../src/lib/studio/handsteps";
@@ -610,7 +610,7 @@ function edit(name: string, p: Project, args: Record<string, any>, focus: Focus)
 
     case "studio_make": {
       const kind = String(args.kind ?? "");
-      if (!["chords", "bass", "drums"].includes(kind)) refuse("kind is chords, bass or drums.");
+      if (!["chords", "bass", "drums", "melody"].includes(kind)) refuse("kind is chords, bass, drums or melody.");
       const bpb = p.beatsPerBar;
       // The clip to rewrite, or the track the new one goes on.
       const existing = args.clip !== undefined ? needClip(p, args.clip) : null;
@@ -619,16 +619,16 @@ function edit(name: string, p: Project, args: Record<string, any>, focus: Focus)
         track = findTrack(p, args.track);
         if (!track && typeof args.track === "string" && args.track.trim()) {
           if (p.tracks.length >= MAX_TRACKS) refuse(`A song holds ${MAX_TRACKS} tracks.`);
-          track = newTrack(p, kind === "drums" ? "kit" : kind === "bass" ? "bass" : "keys", args.track.trim().slice(0, 40));
+          track = newTrack(p, kind === "drums" ? "kit" : kind === "bass" ? "bass" : kind === "melody" ? "lead" : "keys", args.track.trim().slice(0, 40));
           p.tracks.push(track);
         }
       }
       if (!track) {
-        const wanted = (t: Track) => (kind === "drums" ? isDrumTrack(t) : kind === "bass" ? t.instrument === "bass" : !isDrumTrack(t) && t.instrument !== "bass" && t.instrument !== "lead");
+        const wanted = (t: Track) => (kind === "drums" ? isDrumTrack(t) : kind === "bass" ? t.instrument === "bass" : kind === "melody" ? t.instrument === "lead" : !isDrumTrack(t) && t.instrument !== "bass" && t.instrument !== "lead");
         track = p.tracks.find(wanted) ?? null;
         if (!track) {
           if (p.tracks.length >= MAX_TRACKS) refuse(`A song holds ${MAX_TRACKS} tracks.`);
-          track = newTrack(p, kind === "drums" ? "kit" : kind === "bass" ? "bass" : "keys");
+          track = newTrack(p, kind === "drums" ? "kit" : kind === "bass" ? "bass" : kind === "melody" ? "lead" : "keys");
           p.tracks.push(track);
         }
       }
@@ -637,6 +637,7 @@ function edit(name: string, p: Project, args: Record<string, any>, focus: Focus)
       const each = clamp(numberOr(args.beats_each) ?? bpb, 0.5, 64);
       let notes: Array<Omit<Note, "id">>;
       let label: string;
+      let melodyLabel = "";
       let length: number;
       let heard = "";
       if (kind === "drums") {
@@ -652,10 +653,10 @@ function edit(name: string, p: Project, args: Record<string, any>, focus: Focus)
           const parsed = parseProgression(args.progression, p.key);
           if ("error" in parsed) return refuse(parsed.error);
           chords = parsed;
-        } else if (kind === "bass") {
+        } else if (kind === "bass" || kind === "melody") {
           const count = Math.max(1, Math.round(((numberOr(args.bars) ?? 4) * bpb) / each));
           chords = chordsHeard(p, at, count, each);
-          if (chords.length === 0) refuse("Say which chords: `progression` (\"Am F C G\"), or make the chords first and the bass will follow them.");
+          if (chords.length === 0) refuse("Say which chords: `progression` (\"Am F C G\"), or make the chords first and the bass or melody will follow them.");
           heard = " (read from the chords already in the song)";
         } else {
           return refuse("progression is required (chord names like \"Am F C G\", or numerals like \"vi IV I V\").");
@@ -668,11 +669,18 @@ function edit(name: string, p: Project, args: Record<string, any>, focus: Focus)
         if (kind === "chords") {
           if (!(CHORD_STYLES as readonly string[]).includes(style)) refuse(`chord style is one of: ${CHORD_STYLES.join(", ")}.`);
           notes = chordNotes(cycled, { style: style as ChordStyle, octave: numberOr(args.octave) ?? 3, beatsEach: each, spread: args.spread === true });
+        } else if (kind === "melody") {
+          const contour = String(args.contour ?? "arch");
+          const density = String(args.density ?? "medium");
+          if (!(MELODY_CONTOURS as readonly string[]).includes(contour)) refuse(`contour is one of: ${MELODY_CONTOURS.join(", ")}.`);
+          if (!(MELODY_DENSITIES as readonly string[]).includes(density)) refuse(`density is one of: ${MELODY_DENSITIES.join(", ")}.`);
+          notes = melodyNotes(cycled, { key: p.key, contour: contour as MelodyContour, density: density as MelodyDensity, octave: numberOr(args.octave) ?? 5, beatsEach: each, motifBars: numberOr(args.motif_bars) ?? 2, seed: numberOr(args.seed) ?? 11 });
+          melodyLabel = `Melody: ${contour}, ${density}`;
         } else {
           if (!(BASS_STYLES as readonly string[]).includes(style)) refuse(`bass style is one of: ${BASS_STYLES.join(", ")}.`);
           notes = bassNotes(cycled, { style: style as BassStyle, octave: numberOr(args.octave) ?? 2, beatsEach: each });
         }
-        label = `${kind === "chords" ? "Chords" : "Bass"}: ${chords.map(chordLabel).join(" ")}`;
+        label = kind === "melody" ? melodyLabel : `${kind === "chords" ? "Chords" : "Bass"}: ${chords.map(chordLabel).join(" ")}`;
         heard = `${heard} Chords: ${cycled.map(chordLabel).join(" ")}.`;
       }
       let clip: Clip;

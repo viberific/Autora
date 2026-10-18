@@ -347,6 +347,128 @@ export function chordNotes(chords: Chord[], opts: { style?: ChordStyle; octave?:
   return out;
 }
 
+export const MELODY_CONTOURS = ["arch", "rising", "falling", "wave", "flat"] as const;
+export type MelodyContour = (typeof MELODY_CONTOURS)[number];
+export const MELODY_DENSITIES = ["sparse", "medium", "busy"] as const;
+export type MelodyDensity = (typeof MELODY_DENSITIES)[number];
+
+/** One bar's rhythm, as [start, length] in beats of a 4-beat bar. */
+const RHYTHMS: Record<MelodyDensity, Array<Array<[number, number]>>> = {
+  sparse: [
+    [[0, 1.5], [2, 1]],
+    [[0, 2], [2.5, 1]],
+    [[0.5, 1], [2, 2]],
+    [[0, 1], [1.5, 1.5]],
+  ],
+  medium: [
+    [[0, 1], [1, 0.5], [1.5, 0.5], [2, 1], [3, 0.5], [3.5, 0.5]],
+    [[0, 0.5], [0.5, 0.5], [1, 1], [2, 1.5], [3.5, 0.5]],
+    [[0, 1.5], [1.5, 0.5], [2, 1], [3, 1]],
+    [[0.5, 0.5], [1, 1], [2, 0.5], [2.5, 0.5], [3, 1]],
+  ],
+  busy: [
+    [[0, 0.5], [0.5, 0.5], [1, 0.5], [1.5, 0.5], [2, 0.5], [2.5, 0.5], [3, 0.5], [3.5, 0.5]],
+    [[0, 0.25], [0.25, 0.25], [0.5, 0.5], [1, 0.5], [1.5, 0.5], [2, 1], [3, 0.5], [3.5, 0.5]],
+    [[0, 0.75], [0.75, 0.25], [1, 0.5], [1.5, 0.5], [2, 0.5], [2.5, 0.25], [2.75, 0.25], [3, 1]],
+  ],
+};
+
+/**
+ * A tune over `chords` (one per `beatsEach`), in the song's key: a draft for the person to keep, change or throw away.
+ * It is built the way a simple tune is: a motif of `motifBars` bars whose rhythm and shape come back (the answer) in the
+ * next `motifBars`, notes that move mostly by step with the odd leap (and a step back after one), chord tones on the
+ * strong beats, a phrase shape (`contour`) over each phrase, a cadence on a chord tone at the end of every phrase and the
+ * key's tonic at the very end. The same `seed` gives the same tune; another seed gives another draft.
+ */
+export function melodyNotes(
+  chords: Chord[],
+  opts: { key: Project["key"]; contour?: MelodyContour; density?: MelodyDensity; octave?: number; beatsEach?: number; beatsPerBar?: number; motifBars?: number; seed?: number; vel?: number },
+): Sketch {
+  const each = opts.beatsEach ?? opts.beatsPerBar ?? 4;
+  const contour = opts.contour ?? "arch";
+  const density = opts.density ?? "medium";
+  const rand = rng(opts.seed ?? 11);
+  const base = ((opts.octave ?? 5) + 1) * 12;
+  const vel = opts.vel ?? 0.8;
+  const motifBars = clamp(Math.round(opts.motifBars ?? 2), 1, 4);
+  const phraseLen = motifBars * 2;
+  // The pitches of the key within a bit over an octave and a half: where the tune lives.
+  const ladder: number[] = [];
+  for (let p = base - 2; p <= base + 19; p++) if (inKey(opts.key, p)) ladder.push(p);
+  const mid = Math.floor(ladder.length / 2);
+  const tone = (i: number, c: Chord) => c.intervals.some((x) => (((ladder[i]! - c.root - x) % 12) + 12) % 12 === 0);
+  const nearTone = (i: number, c: Chord, toward: number): number => {
+    let best = clamp(i, 0, ladder.length - 1);
+    let bestCost = Infinity;
+    for (let j = 0; j < ladder.length; j++) {
+      if (!tone(j, c)) continue;
+      const cost = Math.abs(j - i) + (Math.sign(j - i) === Math.sign(toward - i) ? 0 : 0.25);
+      if (cost < bestCost) { best = j; bestCost = cost; }
+    }
+    return best;
+  };
+  const shape = (f: number) => (contour === "arch" ? Math.sin(Math.PI * f) : contour === "rising" ? f : contour === "falling" ? 1 - f : contour === "wave" ? Math.sin(2 * Math.PI * f) : 0.5) - 0.5;
+  const rhythms = RHYTHMS[density];
+  const bars = chords.length;
+  const out: Sketch = [];
+  const rhythmOf: Array<Array<[number, number]>> = [];
+  const stepsOf: number[][] = [];
+  let idx = nearTone(mid, chords[0]!, mid);
+  let last = 0;
+  for (let i = 0; i < bars; i++) {
+    const chord = chords[i]!;
+    const inPhrase = i % phraseLen;
+    const answer = inPhrase >= motifBars && i - motifBars >= 0;
+    const closing = inPhrase === phraseLen - 1;
+    const final = i === bars - 1;
+    // The answer repeats the motif's rhythm and shape; the bar that closes a phrase is its own, and holds its last note.
+    let rhythm = answer && !closing ? rhythmOf[i - motifBars]! : rhythms[Math.floor(rand() * rhythms.length)]!;
+    rhythm = rhythm.filter(([t]) => t < each).map(([t, l]) => [t, Math.min(l, each - t)] as [number, number]);
+    if (rhythm.length === 0) rhythm = [[0, each]];
+    rhythmOf[i] = rhythm;
+    const target = mid + shape((inPhrase + 0.5) / phraseLen) * ladder.length * 0.5;
+    const steps: number[] = [];
+    const source = answer && !closing ? stepsOf[i - motifBars] : undefined;
+    rhythm.forEach(([t, length], n) => {
+      const last_ = n === rhythm.length - 1;
+      const strong = t === 0 || (t % 2 === 0 && length >= 1);
+      if (n === 0) {
+        idx = nearTone(source ? idx + (source[0] ?? 0) : idx, chord, target);
+        steps.push(0);
+      } else if (source && n < source.length) {
+        idx = clamp(idx + source[n]!, 0, ladder.length - 1);
+        steps.push(source[n]!);
+      } else {
+        const r = rand();
+        const toward = Math.sign(target - idx) || (rand() < 0.5 ? 1 : -1);
+        const dir = last >= 2 ? -Math.sign(last) : last <= -2 ? 1 : rand() < 0.65 ? toward : -toward;
+        const s = r < 0.15 ? 0 : r < 0.82 ? dir : dir * (rand() < 0.75 ? 2 : 3);
+        idx = clamp(idx + s, 0, ladder.length - 1);
+        steps.push(s);
+        last = s;
+      }
+      if (strong && n > 0 && !tone(idx, chord) && rand() < 0.75) idx = nearTone(idx, chord, target);
+      const at = t;
+      let len = Math.round((length - (length >= 1 ? 0.1 : 0.05)) * 16) / 16;
+      if (last_ && (closing || final)) {
+        // The cadence: a chord tone, or the tonic to end the whole tune, held to the end of the bar.
+        if (final) {
+          let best = -1;
+          for (let j = 0; j < ladder.length; j++) if ((((ladder[j]! - opts.key.root) % 12) + 12) % 12 === 0 && (best < 0 || Math.abs(j - idx) < Math.abs(best - idx))) best = j;
+          if (best >= 0) idx = best;
+        } else {
+          idx = nearTone(idx, chord, mid);
+        }
+        len = Math.round((each - at - 0.1) * 16) / 16;
+      }
+      const accent = strong ? 1 : 0.8;
+      out.push({ pitch: ladder[idx]!, start: tidy(i * each + at), length: tidy(Math.max(0.1, len)), vel: clamp(vel * accent * (0.94 + rand() * 0.12), 0.05, 1) });
+    });
+    stepsOf[i] = steps;
+  }
+  return out;
+}
+
 export const BASS_STYLES = ["root", "octaves", "eighths", "walking", "syncopated"] as const;
 export type BassStyle = (typeof BASS_STYLES)[number];
 

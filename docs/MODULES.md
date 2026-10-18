@@ -416,7 +416,7 @@ Spectra's fetched renderer is most of what is on disk.
   open in the editor) is posted to the server so "this clip" means something to the agent (`studio_look`, the turn note). The
   agent cannot hear: `studio_look` adds `review()` observations (empty clips, notes outside the key, no bass, volumes far apart).
   Per the core principle the agent writes *scaffolding* (`studio_make`: chords, a bass that follows them, drums) and fixes technique
-  (quantize, levels, transpose); a melody is written only when asked, and `studio_open new` refuses to throw away a song with notes
+  (quantize, levels, transpose); a melody is written only when asked (then `studio_make kind: melody`, `melodyNotes` in `model.ts`: a seeded, in-key draft, so the same seed is the same tune and another seed another draft; the person edits it), and `studio_open new` refuses to throw away a song with notes
   without `replace: true`. Traps: the playhead (`--ph`) and the meter (`--lvl`) are painted straight onto the window from a
   `requestAnimationFrame` loop, so nothing re-renders for them; never animate a clip's `background` (Chromium interpolates
   `color-mix` against a translucent token through colours off the palette: the flash is an overlay); a browser holds sound back
