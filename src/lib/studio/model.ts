@@ -729,5 +729,18 @@ export function review(p: Project): string[] {
   if (!bass && used.length >= 3) out.push("There is no bass.");
   const empty = p.bars - Math.ceil(contentEnd(p) / p.beatsPerBar);
   if (empty >= 2) out.push(`The last ${empty} bars are empty.`);
+  // What makes a song sound unfinished, and what makes an export come out wrong.
+  const soloed = p.tracks.filter((t) => t.solo);
+  if (soloed.length) out.push(`${soloed.map((t) => t.name).join(", ")} ${soloed.length === 1 ? "is" : "are"} soloed: only ${soloed.length === 1 ? "that track is" : "those tracks are"} heard and exported. Turn solo off (studio_track set, solo false) before exporting the song.`);
+  const muted = used.filter((t) => t.mute);
+  if (muted.length) out.push(`${muted.map((t) => t.name).join(", ")} ${muted.length === 1 ? "is" : "are"} muted, so left out of playback and of the export.`);
+  const bars = Math.ceil(contentEnd(p) / p.beatsPerBar);
+  if (bars > 0 && bars < 16) out.push(`The song is ${bars} bars (about ${Math.round((bars * p.beatsPerBar * 60) / p.bpm)} seconds): a loop more than a song. Songs usually run 32 bars or more, in sections (intro, verse, chorus, verse, chorus, outro) where parts come in and drop out.`);
+  if (used.length >= 2 && !used.some((t) => ["lead", "pluck", "synth", "keys"].includes(t.instrument) && t.clips.some((c) => c.notes.length) && !t.name.toLowerCase().includes("chord"))) out.push("There is no melody or lead line yet, only backing.");
+  const flat = used.filter((t) => {
+    const v = t.clips.flatMap((c) => c.notes.map((n) => n.vel));
+    return v.length >= 8 && Math.max(...v) - Math.min(...v) < 0.05;
+  });
+  if (flat.length) out.push(`${flat.map((t) => t.name).join(", ")}: every note is equally hard, which sounds mechanical. Vary vel (accents on the strong beats, softer in between) or use humanize.`);
   return out;
 }

@@ -198,3 +198,7 @@ releaseNotes: >-
   The agent's video exports now default to medium quality at no more than 720p (ask for more, or maxHeight 0 for full size), so
   a small machine in the browser no longer holds a 4K frame and its encoder. Idle chats give their memory back after 5 minutes
   instead of 15, including the copy of the working folder.
+  Autora Music is easier for an agent to use well: its manual now walks through making a whole song (sections, backing per
+  section, a real melody, texture, humanising), its look-over flags a song that is only a loop, flat dynamics, no melody and a
+  solo or mute left on, and the export says exactly which tracks went into the one mixed file and is told never to export
+  track by track.

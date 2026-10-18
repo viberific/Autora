@@ -762,10 +762,15 @@ export async function runStudioTool(session: string, name: string, args: Record<
       case "studio_export": {
         if (songBeats(e.project) <= 0 || !e.project.tracks.some((t) => t.clips.some((c) => c.notes.length))) return { ok: false, summary: "There is nothing to export yet: the song has no notes." };
         const base = (typeof args.name === "string" && args.name.trim() ? args.name.trim() : e.project.name).replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "-").replace(/\.wav$/i, "").slice(0, 80) || "song";
+        // What the file will hold: the window bounces what is audible, so a solo or a mute left on shapes the export.
+        const audible = e.project.tracks.filter((t) => t.clips.some((c) => c.notes.length));
+        const soloed = audible.filter((t) => t.solo);
+        const heard = soloed.length ? soloed : audible.filter((t) => !t.mute);
+        if (!heard.length) return { ok: false, summary: "Every track with notes is muted, so the export would be silent. Unmute them with studio_track set, mute false." };
         const out = (await command(session, "export", { name: base }, 5 * 60_000)) as { artifact?: string; name?: string; size?: number; mime?: string } | null;
         if (!out?.artifact) return { ok: false, summary: "The window could not render the song." };
         hooks.showFile?.({ id: out.artifact, name: out.name ?? `${base}.wav`, mime: out.mime ?? "audio/wav", size: out.size ?? 0 });
-        return { ok: true, summary: `Exported ${out.name ?? `${base}.wav`} (${Math.round((out.size ?? 0) / 1024)} KB) as artifact ${out.artifact}; the person can play and download it from the thread.`, preview: out.name ?? base };
+        return { ok: true, summary: `Exported ${out.name ?? `${base}.wav`} (${Math.round((out.size ?? 0) / 1024)} KB) as artifact ${out.artifact}; the person can play and download it from the thread. It is the one mixed file of the whole song, with ${heard.map((t) => t.name).join(", ")}${soloed.length ? ` (the only soloed tracks: turn solo off and export again if the whole song was meant)` : audible.length > heard.length ? `; left out because muted: ${audible.filter((t) => t.mute).map((t) => t.name).join(", ")}` : ""}. Do not export track by track.`, preview: out.name ?? base };
       }
 
       default:

@@ -184,8 +184,10 @@ export const studioSPECS: ToolSpec[] = [
       "fill every fourth bar, `feel` 0-0.5 for looseness.\n" +
       "`bar` is where the clip goes (default 1), `bars` how long (chords and bass default to the progression's length, " +
       "repeating it to fill `bars`; drums default 4). Pass `clip` to rewrite an existing clip instead of adding one. " +
-      "These are the scaffolding; the melody and the choices are the person's. Offer options (\"want it moodier or " +
-      "brighter?\") instead of deciding for them when it is a matter of taste.",
+      "These are the scaffolding. Call it once per section of the song (a quieter drum style in the intro, a fuller " +
+      "one with `fill` in the chorus, a new progression for the chorus) so the song changes as it goes. When the person " +
+      "is writing their own tune, the melody and the choices are theirs: offer options (\"want it moodier or brighter?\") " +
+      "instead of deciding; when they ask you to make the song, make all of it.",
     parameters: {
       type: "object",
       properties: {
@@ -229,8 +231,10 @@ export const studioSPECS: ToolSpec[] = [
     group: "files",
     risky: true,
     description:
-      "Bounce the song to a stereo WAV file (16-bit, 44.1 kHz) and put it in the thread to play and download. Only " +
-      "when the person asks for a file. The window does the rendering, so it opens if it is not.",
+      "Bounce the WHOLE song, every track mixed together, to ONE stereo WAV file (16-bit, 44.1 kHz) and put it in the " +
+      "thread to play and download. Call it once, when the song is finished and the person asks for a file; never once per " +
+      "instrument. It leaves out muted tracks and, if any track is soloed, everything but the soloed ones, so check " +
+      "studio_look for solo/mute first. The window does the rendering, so it opens if it is not.",
     parameters: {
       type: "object",
       properties: { name: { type: "string", description: "File name, without the extension. Default: the song's name." } },

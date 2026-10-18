@@ -543,6 +543,20 @@ await test("play, stop and export are commands to the open window, answered by i
   assert.equal(art.size, wav.length);
 });
 
+await test("a solo or mute left on is called out, in studio_look and before an export", async () => {
+  await run("studio_open", { new: "Solo", replace: true });
+  await run("studio_make", { kind: "drums", style: "rock", track: "Drums" });
+  await run("studio_make", { kind: "bass", progression: "Am F C G", track: "Bass" });
+  await run("studio_track", { action: "set", track: "Bass", solo: true });
+  const look = (await run("studio_look")).summary;
+  assert.match(look, /Bass is soloed/);
+  assert.match(look, /a loop more than a song/);
+  await run("studio_track", { action: "set", track: "Bass", solo: false });
+  await run("studio_track", { action: "set", track: "Drums", mute: true });
+  await run("studio_track", { action: "set", track: "Bass", mute: true });
+  assert.match((await run("studio_export")).summary, /silent/);
+});
+
 await test("an empty song has nothing to export; a closed window rejects what is waiting on it", async () => {
   await run("studio_open", { new: "Silence", replace: true });
   assert.match((await run("studio_export")).summary, /nothing to export/);
