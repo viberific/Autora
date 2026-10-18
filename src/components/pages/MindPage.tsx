@@ -9,6 +9,7 @@ import { KnowledgeWeb } from "../KnowledgeWeb";
 import { MemoryPeek } from "../MemoryCell";
 import { MindViewButton } from "../MindViewButton";
 import { IconBrain, IconPlus, IconTrash } from "../Icons";
+import { AutoraMark } from "../AutoraMark";
 import { AgentProfile, PersonalityCard } from "../AgentProfile";
 import { fetchAgents, type Agent } from "../../lib/organization";
 import { sure } from "../../lib/sure";
@@ -281,11 +282,18 @@ export function MindPage({
 
           {data && !data.enabled && <p className="set-warn">Memory is off on this server.</p>}
 
-          {lead?.traits && (
-            <section className="set-card" aria-label="Autora's personality">
-              <PersonalityCard agent={lead} />
-            </section>
-          )}
+          <section className="set-card" aria-label="Autora's personality">
+            <div className="agent-profile-head">
+              <span className="agent-mark" style={{ width: 40, height: 40 }} aria-hidden="true">
+                <AutoraMark size={46} state="rest" />
+              </span>
+              <div>
+                <h3>Autora</h3>
+                <p className="jf-hint">The lead agent. What it remembers is below.</p>
+              </div>
+            </div>
+            {lead?.traits && <PersonalityCard agent={lead} />}
+          </section>
 
           {data && (
             <label className="mind-learning">
