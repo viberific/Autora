@@ -36,8 +36,7 @@ export const memorySPECS: ToolSpec[] = [
             "What sort of thing this is. Default fact. A procedure is how to do " +
             "something here that worked -- the steps, commands and gotchas. A reference is what a product's " +
             "OFFICIAL documentation or help says about how it works (where things are in an interface, what an " +
-            "API call is named): it needs subject and source. A way of doing a kind of work is not a memory but a skill " +
-            "(the skill tool); a note on when to reach for a skill is a procedure.",
+            "API call is named): it needs subject and source. Ways of working are skills (the skill tool), not memories.",
         },
         subject: {
           type: "string",

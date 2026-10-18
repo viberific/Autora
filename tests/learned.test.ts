@@ -101,7 +101,10 @@ async function main() {
     // written a beat after the turn ends, not with it.
     await app.turn(s, "one line, so this session has a log");
     const log = sessionLog(app.home, s);
-    for (let i = 0; i < 40 && !fs.existsSync(log); i += 1) await sleep(100);
+    /* The file is there from the moment the chat is made; the turn's own lines arrive in a batch a moment later. Seeding
+       before they land gave the seeded event the turn's numbers, and the turn was read back over it. */
+    const written = () => fs.existsSync(log) && fs.readFileSync(log, "utf8").includes('"turn.agent.done"');
+    for (let i = 0; i < 80 && !written(); i += 1) await sleep(100);
     seedLearned(app.home, s, { id: learned.body.id, revises: old.body.id });
     await app.restart();
     assert.ok(

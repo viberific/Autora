@@ -80,7 +80,7 @@ await test("a skill is a folder on disk with SKILL.md and its files beside it", 
 
 await test("the agent sees each skill's name and description every turn, and loads the rest only when it picks one", async () => {
   const brief = await capabilityBriefing();
-  assert.match(brief, /- Skills: always available\. Tool: skill\./);
+  assert.match(brief, /- Skills: tool skill, shared with every agent\./);
   assert.match(brief, /invoice-from-timesheet: Turns a timesheet CSV into an invoice PDF/);
   assert.doesNotMatch(brief, /Run scripts\/total\.sh/, "the instructions are not in the briefing");
   const use = await runTool(findTool("skill")!, { action: "use", name: "invoice-from-timesheet" }, ctx());

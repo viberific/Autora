@@ -23,7 +23,9 @@ const { withoutUnloaded } = await import("../server/toolload");
 // Raised to 48_200 (2026-10-16): main stood at exactly 48,000; artifact_list and artifact_save now say that files live in
 // one folder per project (the composer's Artifacts button attaches project folders), +66 chars after trimming both.
 // Raised again, to 48_700 (2026-10-16): memory_link, the tool that connects two memories (~420 chars with its schema).
-const SCHEMA_BUDGET_CHARS = 48_700;
+// Raised again, to 50_000 (2026-10-18): the skill tool (~1,100 chars, kept short: when to use it is in the briefing), always
+// offered because a skill is how work is done without working the method out again.
+const SCHEMA_BUDGET_CHARS = 50_000;
 // Raised from 17,500 for the windows overview (server/handbook.ts): the manuals themselves are not in the briefing, they arrive with a window's first call.
 // Raised again, to 22_000: on CI the browser, memory and voice groups are all available, and their guides are in the briefing (20,871 chars there before Autora Photo's line, about 18,000 on a machine without a browser).
 // Raised again, to 24_000: the tool bars add each window's bar and All-tools grid to the guides; CI measured 23,354 chars, about 21,500 on a machine without a browser.
@@ -31,7 +33,9 @@ const SCHEMA_BUDGET_CHARS = 48_700;
 // Raised again, to 26_000 (2026-10-16): the overview's "Saving and files" (Save, project folders, Load in every window, the
 // composer's Artifacts button) and the scripts-only schedule line, both trimmed; CI measured 26,473 before the trim, about
 // 25,700 after (24,151 on a machine without a browser).
-const BRIEFING_BUDGET_CHARS = 26_000;
+// Raised again, to 26_600 (2026-10-18): the skill library's line and the list of skills (empty here; each skill adds its name
+// and description, which is the point: the instructions stay out until one is used). +506 chars on a machine without a browser.
+const BRIEFING_BUDGET_CHARS = 26_600;
 
 console.log("tool budget");
 
