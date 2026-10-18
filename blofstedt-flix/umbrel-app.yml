@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.19"
+version: "0.3.20"
 port: 8096
 folderAccess:
   - id: umbrel-downloads
@@ -54,10 +54,11 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Children get their own way in: an account marked as a child signs in by
-  tapping its name alone, with no password to remember. Packs that are finished
-  can now be labelled Leaving soon, so the household can see what is about to
-  go, and a whole pack can be downloaded one episode at a time instead of
-  flooding the queue. The notice about reported playback problems no longer
-  sits over every page -- it is listed in Settings, under Torrents, with the
-  reports themselves, and each can be marked resolved there.
+  The phone is now the TV's remote: while casting, the phone's player drives
+  what plays on the screen, and seeking in a show Flix had to re-encode now
+  works on demand instead of waiting for the whole file. The Android app
+  installs its own updates from the latest GitHub release, so it no longer has
+  to be sideloaded by hand. The home screen always features the top show, with
+  Continue Watching as its own row below, and the hero buttons stay on one row
+  on a phone. The player opens fitted on phones, has a logo intro that fades
+  onto the live picture, and keeps retrying true fullscreen until it takes.
