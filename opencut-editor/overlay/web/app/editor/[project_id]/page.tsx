@@ -45,7 +45,6 @@ export default function Editor() {
 		<MobileGate>
 			<EditorProvider projectId={projectId}>
 				<div className={`bg-background has-rail ${phone ? "is-phone" : "is-desk"} flex h-screen w-screen flex-col overflow-hidden`}>
-					<DegradedRendererBanner />
 					{!phone && <EditorHeader />}
 					<div className="min-h-0 min-w-0 flex-1">
 						{phone ? <PhoneLayout sheet={sheet} /> : <EditorLayout />}

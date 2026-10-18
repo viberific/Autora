@@ -273,7 +273,8 @@ export const videoSPECS: ToolSpec[] = [
       type: "object",
       properties: {
         format: { type: "string", enum: ["mp4", "webm"], description: "Default mp4." },
-        quality: { type: "string", enum: ["low", "medium", "high", "very_high"], description: "Default high." },
+        quality: { type: "string", enum: ["low", "medium", "high", "very_high"], description: "Default medium." },
+        maxHeight: { type: "number", description: "Draw the video no taller than this many pixels. Default 720, which suits a small machine; 0 keeps the project's full size (1080, 4K) and needs a strong one." },
         audio: { type: "boolean", description: "Include the sound. Default true." },
       },
     },
