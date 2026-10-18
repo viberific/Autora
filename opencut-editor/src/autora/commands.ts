@@ -200,9 +200,11 @@ async function run(name: string, args: Record<string, unknown>): Promise<unknown
 
     case "export": {
       const format = args.format === "webm" ? "webm" : "mp4";
-      const quality = args.quality === "low" || args.quality === "medium" || args.quality === "very_high" ? args.quality : "high";
+      // Medium and 720p unless asked otherwise: the editor runs in whatever browser the person has, often on a small machine.
+      const quality = args.quality === "low" || args.quality === "high" || args.quality === "very_high" ? args.quality : "medium";
+      const maxHeight = typeof args.maxHeight === "number" && args.maxHeight >= 0 ? args.maxHeight : 720;
       await editor.project.saveCurrentProject();
-      const result = await editor.project.export({ options: { format, quality, includeAudio: args.audio !== false } });
+      const result = await editor.project.export({ options: { format, quality, includeAudio: args.audio !== false, ...(maxHeight > 0 ? { maxHeight } : {}) } });
       editor.project.clearExportState();
       if (!result.success || !result.buffer) throw new Error(result.error ?? "The export did not finish");
       const project = editor.project.getActive();

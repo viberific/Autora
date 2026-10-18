@@ -85,6 +85,10 @@ function overlay() {
   const ui = path.join(src, "crates/ui-egui/src");
   patch(path.join(ui, "widgets.rs"), "                if r.clicked() {\n                    hit = Some(b.role);\n                }\n", "                if r.clicked() {\n                    hit = Some(b.role);\n                }\n                if b.role == ButtonRole::Default {\n                    ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new(\"autora-dialog-ok\"), r.rect));\n                }\n");
   patch(path.join(ui, "dialogs.rs"), "            Some(true) => {\n                let _ = confirm(app, d.id);\n            }", "            Some(true) => {\n                let said = confirm(app, d.id).err();\n                ctx.data_mut(|m| m.insert_temp(egui::Id::new(\"autora-dialog-result\"), said));\n            }");
+  // No graphics card (a small server's browser draws WebGL in software): straight to the CPU renderer, with no "Switched to
+  // CPU rendering" dialog and no GPU canvas on a software adapter, which is slower than the CPU compositor.
+  patch(path.join(ui, "gpu_status.rs"), "    let Some(reason) = app.ui.gpu_fallback_notice.clone() else { return };\n", "    if app.ui.gpu_fallback_notice.take().is_some() {\n        return;\n    }\n    let Some(reason) = app.ui.gpu_fallback_notice.clone() else { return };\n");
+  patch(webrs, "                        && !force_cpu\n", "                        && !force_cpu\n                        && rs.adapter.get_info().device_type != eframe::wgpu::DeviceType::Cpu\n");
 }
 
 try {

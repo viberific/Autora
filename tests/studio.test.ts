@@ -543,6 +543,38 @@ await test("play, stop and export are commands to the open window, answered by i
   assert.equal(art.size, wav.length);
 });
 
+await test("studio_make melody writes an in-key tune over the chords, the same for a seed, different for another", async () => {
+  await run("studio_open", { new: "Tune", replace: true, key: "A minor" });
+  await run("studio_make", { kind: "chords", progression: "Am F C G", bars: 8, track: "Chords" });
+  const a = await run("studio_make", { kind: "melody", seed: 3, density: "medium", contour: "arch", track: "Lead" });
+  assert.ok(a.ok, a.summary);
+  assert.match(a.summary, /Lead \(Lead\)/);
+  const clipId = /clip (\w+)/.exec(a.summary)![1]!;
+  const notesOf = async () => (await run("studio_look", { clip: clipId })).summary;
+  const plain = async () => (await notesOf()).replace(/\bn[0-9a-z]+\b/g, "#");
+  const first = await plain();
+  await run("studio_make", { kind: "melody", clip: clipId, seed: 3 });
+  assert.equal(await plain(), first);
+  await run("studio_make", { kind: "melody", clip: clipId, seed: 99 });
+  assert.notEqual(await plain(), first);
+  assert.doesNotMatch((await run("studio_look")).summary, /outside A minor/);
+  assert.match((await run("studio_make", { kind: "melody", contour: "zigzag" })).summary, /contour is one of/);
+});
+
+await test("a solo or mute left on is called out, in studio_look and before an export", async () => {
+  await run("studio_open", { new: "Solo", replace: true });
+  await run("studio_make", { kind: "drums", style: "rock", track: "Drums" });
+  await run("studio_make", { kind: "bass", progression: "Am F C G", track: "Bass" });
+  await run("studio_track", { action: "set", track: "Bass", solo: true });
+  const look = (await run("studio_look")).summary;
+  assert.match(look, /Bass is soloed/);
+  assert.match(look, /a loop more than a song/);
+  await run("studio_track", { action: "set", track: "Bass", solo: false });
+  await run("studio_track", { action: "set", track: "Drums", mute: true });
+  await run("studio_track", { action: "set", track: "Bass", mute: true });
+  assert.match((await run("studio_export")).summary, /silent/);
+});
+
 await test("an empty song has nothing to export; a closed window rejects what is waiting on it", async () => {
   await run("studio_open", { new: "Silence", replace: true });
   assert.match((await run("studio_export")).summary, /nothing to export/);

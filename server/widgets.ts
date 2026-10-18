@@ -85,6 +85,7 @@ async function checker(): Promise<Browser> {
       args: [
         "--no-sandbox",
         "--disable-dev-shm-usage",
+        "--renderer-process-limit=1",
         // WebGL with no GPU: SwiftShader draws it on the CPU, which is slow
         // but real, so a 3D widget is checked rather than waved through.
         "--use-angle=swiftshader",

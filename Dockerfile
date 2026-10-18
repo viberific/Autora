@@ -211,7 +211,9 @@ ENV NODE_ENV=production \
     AUTORA_HOME=/data \
     # Where the browser is. Set explicitly rather than left to the search:
     # a wrong guess here is a feature that silently does nothing.
-    AUTORA_BROWSER_PATH=/usr/bin/chromium-browser
+    AUTORA_BROWSER_PATH=/usr/bin/chromium-browser \
+    # The server's JS heap stops growing at 1 GiB and collects instead: the box is small and shared.
+    NODE_OPTIONS=--max-old-space-size=1024
 
 COPY --from=builder /build/node_modules node_modules/
 COPY --from=builder /build/dist dist/

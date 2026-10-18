@@ -528,13 +528,16 @@ function scheduleEphemeralDrop(id: string) {
  * open, no turn is running in and nothing has touched for a while gives it
  * back; the next use reads it again.
  */
-const LOG_IDLE_MS = 15 * 60 * 1000;
+const LOG_IDLE_MS = 5 * 60 * 1000;
 function unloadIdleLogs(): void {
   const now = Date.now();
   for (const s of sessions.values()) {
-    if (!s.unloadEvents || s.incognito || s.busy) continue;
-    if ((sessionSockets.get(s.id)?.size ?? 0) > 0 || turnsInFlight.has(s.id) || running.has(s.id)) continue;
+    if (s.busy || turnsInFlight.has(s.id) || running.has(s.id)) continue;
     if (now - (s.counts.lastTs || s.createdAt) * 1000 < LOG_IDLE_MS) continue;
+    /* The watched copy of the working folder (up to 16 MB of file text) is remade by workspaceFor when the chat next runs
+       code, so an idle chat gives it back, tab open or not -- unless a version of its code is still to be saved. */
+    if (!codeTouched.has(s.id)) workspaces.delete(s.id);
+    if (!s.unloadEvents || s.incognito || (sessionSockets.get(s.id)?.size ?? 0) > 0) continue;
     s.unloadEvents();
   }
 }
@@ -7377,7 +7380,7 @@ async function startServer() {
    exactly the one that would have hit that. */
 housekeeping();
 const housekeepingTimer = setInterval(housekeeping, SWEEP_EVERY_MS);
-setInterval(unloadIdleLogs, 5 * 60 * 1000).unref();
+setInterval(unloadIdleLogs, 2 * 60 * 1000).unref();
 housekeepingTimer.unref?.();
 
 /* What it notices: a first look just after start -- cheap, and nothing said

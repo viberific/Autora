@@ -174,7 +174,7 @@ export const studioSPECS: ToolSpec[] = [
     group: "files",
     risky: true,
     description:
-      "Lay down a backing part in one step: chords, a bass line that follows them, or a drum beat. It makes a clip " +
+      "Lay down a part in one step: chords, a bass line that follows them, a drum beat, or a melody over the chords. It makes a clip " +
       "(on `track`, which it creates with the right instrument if you name none that exists) and fills it. `kind`:\n" +
       "- chords: `progression` as chord names (\"Am F C G\", \"Cmaj7 G/B Am7\") or numerals in the song's key " +
       "(\"vi IV I V\", \"i VI III VII\"), one chord per bar unless `beats_each` says otherwise. `style`: block, arpeggio, " +
@@ -182,14 +182,22 @@ export const studioSPECS: ToolSpec[] = [
       "- bass: the same `progression`; `style`: root, octaves, eighths, walking, syncopated. `octave` default 2.\n" +
       "- drums: `style`: four_on_floor, rock, boom_bap, trap, half_time, breakbeat, shuffle; `swing` 0-0.5, `fill` for a " +
       "fill every fourth bar, `feel` 0-0.5 for looseness.\n" +
+      "- melody: a tune over the same `progression` (or over the chords already in the song, when you give none), in the song's " +
+      "key, on a lead track: a motif of `motif_bars` bars (default 2) that comes back as an answer, mostly stepwise with the odd " +
+      "leap, chord tones on the strong beats, a cadence at the end of each phrase and the tonic at the very end. `contour`: arch, " +
+      "rising, falling, wave, flat. `density`: sparse, medium, busy. `octave` default 5. `seed`: the same seed gives the same tune, " +
+      "another gives another draft -- make two or three and keep the best, or use one as a draft to edit with studio_notes. " +
+      "It is a draft, not the last word: look at it, change notes, then ask the person.\n" +
       "`bar` is where the clip goes (default 1), `bars` how long (chords and bass default to the progression's length, " +
       "repeating it to fill `bars`; drums default 4). Pass `clip` to rewrite an existing clip instead of adding one. " +
-      "These are the scaffolding; the melody and the choices are the person's. Offer options (\"want it moodier or " +
-      "brighter?\") instead of deciding for them when it is a matter of taste.",
+      "These are the scaffolding. Call it once per section of the song (a quieter drum style in the intro, a fuller " +
+      "one with `fill` in the chorus, a new progression for the chorus) so the song changes as it goes. When the person " +
+      "is writing their own tune, the melody and the choices are theirs: offer options (\"want it moodier or brighter?\") " +
+      "instead of deciding; when they ask you to make the song, make all of it.",
     parameters: {
       type: "object",
       properties: {
-        kind: { type: "string", enum: ["chords", "bass", "drums"] },
+        kind: { type: "string", enum: ["chords", "bass", "drums", "melody"] },
         track: { type: "string", description: "A track id or name; made if there is no such track." },
         clip: { type: "string", description: "An existing clip to rewrite." },
         progression: { type: "string" },
@@ -202,6 +210,10 @@ export const studioSPECS: ToolSpec[] = [
         swing: { type: "number" },
         fill: { type: "boolean" },
         feel: { type: "number" },
+        contour: { type: "string", enum: ["arch", "rising", "falling", "wave", "flat"], description: "melody: the shape of each phrase. Default arch." },
+        density: { type: "string", enum: ["sparse", "medium", "busy"], description: "melody: how many notes. Default medium." },
+        motif_bars: { type: "integer", description: "melody: bars in the opening idea that then comes back (1-4, default 2)." },
+        seed: { type: "integer", description: "melody: a different number gives a different tune; the same gives the same." },
         name: { type: "string" },
       },
       required: ["kind"],
@@ -229,8 +241,10 @@ export const studioSPECS: ToolSpec[] = [
     group: "files",
     risky: true,
     description:
-      "Bounce the song to a stereo WAV file (16-bit, 44.1 kHz) and put it in the thread to play and download. Only " +
-      "when the person asks for a file. The window does the rendering, so it opens if it is not.",
+      "Bounce the WHOLE song, every track mixed together, to ONE stereo WAV file (16-bit, 44.1 kHz) and put it in the " +
+      "thread to play and download. Call it once, when the song is finished and the person asks for a file; never once per " +
+      "instrument. It leaves out muted tracks and, if any track is soloed, everything but the soloed ones, so check " +
+      "studio_look for solo/mute first. The window does the rendering, so it opens if it is not.",
     parameters: {
       type: "object",
       properties: { name: { type: "string", description: "File name, without the extension. Default: the song's name." } },

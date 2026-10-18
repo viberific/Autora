@@ -19,16 +19,15 @@ services:
     # on-failure takes as "leave it down", and the app then refuses every
     # connection until somebody restarts it by hand.
     restart: unless-stopped
-    # Keep the app from taking the whole box: 4 GiB of memory and 4 GiB of
-    # swap (memswap_limit is the total of the two). On 2026-10-15 the app
-    # peaked at 4.6 GB on a 7.7 GB box and the host wedged; this cap was
-    # applied to the running container by hand, and is set here so it comes
-    # back by itself on every install, update and recreate. Compose writes
-    # these straight to Docker's HostConfig Memory/MemorySwap (verified with
-    # `docker compose config`); umbreld copies every service key except
-    # app_proxy into docker-compose.umbreld.yml.
-    mem_limit: 4g
-    memswap_limit: 8g
+    # Keep the app from taking the whole box: 3 GiB of memory and no swap
+    # (memswap_limit equal to mem_limit), on a box with 8 GiB of which about
+    # half is already in use. Past the cap the container is stopped and
+    # restarted (restart: unless-stopped) instead of the host swapping itself
+    # to a standstill, as it did on 2026-10-15 when the app peaked at 4.6 GB.
+    # umbreld copies every service key except app_proxy into
+    # docker-compose.umbreld.yml.
+    mem_limit: 3g
+    memswap_limit: 3g
     # The https listener, published directly rather than through app_proxy,
     # because the proxy speaks http to the backend and the browser needs the
     # certificate to be the one it is talking to.

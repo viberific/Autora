@@ -21,9 +21,6 @@ import { MobileGate } from "@/components/editor/mobile-gate";
 import { VideoRail, type Sheet } from "../../../../autora/rail";
 import { useEffect, useMemo, useState } from "react";
 import { useEditor } from "@/editor/use-editor";
-import { Cancel01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { Button } from "@/components/ui/button";
 import { ChangelogNotification } from "@/changelog/components/changelog-notification";
 import {
 	createPreviewOverlayControl,
@@ -48,7 +45,6 @@ export default function Editor() {
 		<MobileGate>
 			<EditorProvider projectId={projectId}>
 				<div className={`bg-background has-rail ${phone ? "is-phone" : "is-desk"} flex h-screen w-screen flex-col overflow-hidden`}>
-					<DegradedRendererBanner />
 					{!phone && <EditorHeader />}
 					<div className="min-h-0 min-w-0 flex-1">
 						{phone ? <PhoneLayout sheet={sheet} /> : <EditorLayout />}
@@ -61,27 +57,6 @@ export default function Editor() {
 				</div>
 			</EditorProvider>
 		</MobileGate>
-	);
-}
-
-function DegradedRendererBanner() {
-	const isDegraded = useEditor((e) => e.renderer.isDegraded);
-	const [dismissed, setDismissed] = useState(false);
-	if (!isDegraded || dismissed) return null;
-
-	return (
-		<div className="bg-accent border-b h-9 flex items-center justify-center gap-2 text-xs text-muted-foreground">
-			<span>For the best experience, open OpenCut in Chrome.</span>
-			<Button
-				variant="text"
-				size="icon"
-				className="p-0 w-auto [&_svg]:size-3.5"
-				onClick={() => setDismissed(true)}
-				aria-label="Dismiss"
-			>
-				<HugeiconsIcon icon={Cancel01Icon} />
-			</Button>
-		</div>
 	);
 }
 

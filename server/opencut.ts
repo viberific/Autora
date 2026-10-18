@@ -34,8 +34,8 @@ import { staticDir } from "./staticfiles";
 
 const STORE = () => path.join(stateDir(), "opencut");
 /** Projects and media are large; a video is larger. */
-const MAX_FILE = 4 * 1024 * 1024 * 1024;
-const MAX_JSON = 64 * 1024 * 1024;
+const MAX_FILE = 2 * 1024 * 1024 * 1024;
+const MAX_JSON = 16 * 1024 * 1024;
 
 const safeKey = (key: unknown): string | null =>
   typeof key === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/.test(key) ? key : null;
@@ -287,7 +287,7 @@ export function opencutRoutes(app: Express, opts: OpencutOptions): void {
   pushed = opts.push;
 
   const text = express.text({ type: () => true, limit: MAX_JSON });
-  const raw = express.raw({ type: () => true, limit: MAX_FILE });
+  const raw = express.raw({ type: () => true, limit: MAX_ARTIFACT_BYTES });
   const known = (req: Request, res: Response): string | null => {
     const session = String(req.query.session ?? "");
     if (!session || !opts.exists(session)) {
@@ -308,10 +308,12 @@ export function opencutRoutes(app: Express, opts: OpencutOptions): void {
     }
   });
 
-  app.put("/api/opencut/file", raw, (req: Request, res: Response) => {
+  /* Streamed to disk, never held whole: a clip is hundreds of MB, and on a small box buffering it (what express.raw does)
+     is what ran the server out of memory. */
+  app.put("/api/opencut/file", (req: Request, res: Response) => {
     const ns = safeNs(req.query.ns);
     const key = safeKey(req.query.key);
-    if (!ns || !key || !ns.startsWith("files/") || ns.includes("*") || !Buffer.isBuffer(req.body)) {
+    if (!ns || !key || !ns.startsWith("files/") || ns.includes("*")) {
       return res.status(400).json({ error: { message: "bad file" } });
     }
     const meta: FileMeta = {
@@ -319,14 +321,40 @@ export function opencutRoutes(app: Express, opts: OpencutOptions): void {
       type: String(req.query.type ?? "").slice(0, 100),
       lastModified: Number(req.query.modified) || Date.now(),
     };
-    try {
-      const dir = nsDir(ns);
-      writeAtomic(path.join(dir, `${key}.bin`), req.body);
-      writeAtomic(path.join(dir, `${key}.meta.json`), JSON.stringify(meta));
-      res.json({ ok: true });
-    } catch (err: any) {
-      res.status(500).json({ error: { message: String(err?.message ?? err) } });
-    }
+    const dir = nsDir(ns);
+    const dest = path.join(dir, `${key}.bin`);
+    const tmp = `${dest}.${crypto.randomBytes(4).toString("hex")}.tmp`;
+    let size = 0;
+    let failed = false;
+    const fail = (status: number, message: string) => {
+      if (failed) return;
+      failed = true;
+      out.destroy();
+      fs.rmSync(tmp, { force: true });
+      if (!res.headersSent) res.status(status).json({ error: { message } });
+    };
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const out = fs.createWriteStream(tmp, { mode: 0o600 });
+    req.on("data", (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > MAX_FILE) {
+        req.unpipe(out);
+        fail(413, "That file is too large to keep.");
+      }
+    });
+    req.on("error", (err) => fail(500, String(err.message)));
+    out.on("error", (err) => fail(500, String(err.message)));
+    out.on("finish", () => {
+      if (failed) return;
+      try {
+        fs.renameSync(tmp, dest);
+        writeAtomic(path.join(dir, `${key}.meta.json`), JSON.stringify(meta));
+        res.json({ ok: true });
+      } catch (err: any) {
+        fail(500, String(err?.message ?? err));
+      }
+    });
+    req.pipe(out);
   });
 
   app.get("/api/opencut/file", (req: Request, res: Response) => {
@@ -712,8 +740,8 @@ export async function runVideoTool(name: string, args: Record<string, any>, ctx:
 
       case "video_export": {
         const format = args.format === "webm" ? "webm" : "mp4";
-        const quality = ["low", "medium", "high", "very_high"].includes(String(args.quality)) ? String(args.quality) : "high";
-        const out = (await command(ctx.session, "export", { format, quality, audio: args.audio !== false }, 30 * 60_000)) as { file: string; artifact: string; bytes: number };
+        const quality = ["low", "medium", "high", "very_high"].includes(String(args.quality)) ? String(args.quality) : "medium";
+        const out = (await command(ctx.session, "export", { format, quality, audio: args.audio !== false, ...(typeof args.maxHeight === "number" ? { maxHeight: args.maxHeight } : {}) }, 30 * 60_000)) as { file: string; artifact: string; bytes: number };
         const art = getArtifact(out.artifact);
         if (art) ctx.showFile?.({ id: art.id, name: art.name, mime: art.mime, size: art.size });
         return { ok: true, summary: `Exported ${out.file} (${Math.round(out.bytes / 1024 / 1024 * 10) / 10} MB) as artifact ${out.artifact}; the person can open and download it from the thread.`, preview: `exported ${out.file}` };

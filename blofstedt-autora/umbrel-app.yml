@@ -188,5 +188,20 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  Autora's own page in the Mind now shows Autora's logo beside its name, as every other agent's does. The headings across the Mind
-  pages (Autora's, each agent's, and the memory lists) now share one size and spacing instead of mixing styles.
+  Video and Photo no longer nag on a machine with no graphics card: the "open OpenCut in Chrome" banner and Photo's "Switched to
+  CPU rendering" window are gone, and both editors go straight to the CPU. Video also uses much less memory on a small server:
+  imported clips are streamed to disk instead of being held whole in RAM (the cause of the crashes on a low-power box), and
+  oversized exports are refused up front. The app's memory cap drops from 4 GiB (plus swap) to 3 GiB with no swap, the server's
+  JavaScript heap is capped at 1 GiB, and the headless browsers it starts for PDFs and widgets are held to one renderer each.
+  Commands the agent runs in the shell (ffmpeg, builds, scripts) now run at low priority and are the first thing stopped when
+  memory runs short, so a heavy video job can no longer take the server down with it.
+  The agent's video exports now default to medium quality at no more than 720p (ask for more, or maxHeight 0 for full size), so
+  a small machine in the browser no longer holds a 4K frame and its encoder. Idle chats give their memory back after 5 minutes
+  instead of 15, including the copy of the working folder.
+  Autora Music is easier for an agent to use well: its manual now walks through making a whole song (sections, backing per
+  section, a real melody, texture, humanising), its look-over flags a song that is only a loop, flat dynamics, no melody and a
+  solo or mute left on, and the export says exactly which tracks went into the one mixed file and is told never to export
+  track by track.
+  Autora Music has a melody helper: studio_make can now write a melody draft over the song's chords (a motif that returns as an
+  answer, mostly stepwise, chord tones on the strong beats, a cadence at each phrase end), with a shape, a density and a seed for
+  another draft. It is a starting point to keep, edit or discard.

@@ -885,7 +885,7 @@ function runCommand(
       };
 
       try {
-        child = spawn(shell, ["-lc", command], {
+        child = spawn(shell, ["-lc", lowPriority(command)], {
           cwd: workingDir,
           detached: true,
           env: {
@@ -3908,4 +3908,12 @@ export async function captchaWatch(
     if (steady < CAPTCHA_STEADY_POLLS) return null;
     return now.passed ? "CAPTCHA passed — carrying on" : "Verification cleared — carrying on";
   };
+}
+
+/* What the agent runs (ffmpeg on a clip, a build, a script) must never be the thing that takes the server down. On Linux
+   the command asks to be the first the kernel kills when memory runs out (oom_score_adj is only ever raised, which needs no
+   privilege) and to yield the CPU to the server (nice). Children inherit both. A shell that cannot do either runs it as is. */
+export function lowPriority(command: string): string {
+  if (process.platform !== "linux") return command;
+  return `echo 700 > /proc/self/oom_score_adj 2>/dev/null; renice -n 10 -p $$ >/dev/null 2>&1; ${command}`;
 }
