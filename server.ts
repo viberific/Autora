@@ -68,7 +68,7 @@ import { notebookRoutes } from "./server/routes/notebooks";
 import { organizationRoutes } from "./server/routes/organization";
 import { ShareGate, SHARE_IDLE_MS, SHARE_MIN_CALLS, SHARE_SYSTEM, listFinished, parseShare, shareBody, shareNote, sharePrompt } from "./server/threadshare";
 import { isSmallTalk } from "./server/quick";
-import { agentBrief, developFromTalk, findAgent, getAgent, handoffTargets, LEAD_ID, listAgents, mentionedAgents, producedWork, recordCollab, recordWork, withoutHandover } from "./server/agents";
+import { agentBrief, developFromTalk, findAgent, getAgent, LEAD_ID, listAgents, mentionedAgents, recordCollab, recordWork, withoutHandover } from "./server/agents";
 import { agentMind, clusters, remember, teach } from "./server/agentmind";
 import { moveSkillsOutOf, noteSkillOutcome, overBudget } from "./server/skills";
 import {
@@ -3084,10 +3084,6 @@ async function runAgentTask(
       clearInterval(watching);
       signal?.removeEventListener("abort", stop);
     });
-    const handedOn = handoffTargets(agent, result.reply, producedWork(
-      child.events.filter((e) => e.kind === "tool.call").map((e) => ({ name: String(e.payload?.name ?? ""), args: e.payload?.args })),
-      readOnlyCommand,
-    ));
     const said = (withoutHandover(result.reply) || result.error || "(it said nothing)").trim();
     /* It reports in the chat that called it, in its own name and mark: the agent joins the conversation rather than
        working out of sight and having Autora paraphrase it. */
@@ -3102,11 +3098,6 @@ async function runAgentTask(
     if (!result.ok) ok = false;
     reports.push(`${agent.name} (${child.id})${result.ok ? "" : " did not finish"}:\n${said}`);
     if (!result.ok || result.stopped) return;
-    /* Only those the work left something for (agentBrief asks the agent; handoffTargets decides): a ping, a question
-       or a plan does not start a QA pass. */
-    for (const next of handedOn) {
-      await go(next.id, `Continue from ${agent.name}'s report.\n\nThe original task: ${work}\n\n${agent.name}'s report:\n${said}`, [...chain, agent.id]);
-    }
   };
   const start = findAgent(ref);
   if (!start) return { ok: false, summary: `There is no agent "${ref}". Use agents list to see who there is.` };

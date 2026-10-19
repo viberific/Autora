@@ -1053,8 +1053,9 @@ work matches an agent's "call it when", it starts that agent with the `agents`
 tool and lets it run to the end. A run is a session of its own with its own
 log, but it is not one of your chats -- it reports into the conversation that
 called it, the agent announcing itself when it starts and reporting back when
-it finishes. When an agent has a "then hands to" list, those agents follow in
-order, each given the one before's result. Such runs are kept out of the
+it finishes. Nothing follows on by itself: a report comes back to the lead and
+the work stops there, so every agent after the first is a decision made run by
+run rather than a chain nobody asked for. Such runs are kept out of the
 session list entirely: they are the agent's work, not your chats.
 
 You can call one yourself: type **@** in the message box and the Organization

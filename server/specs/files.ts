@@ -164,12 +164,12 @@ export const filesSPECS: ToolSpec[] = [
     description:
       "The organization: the agents on the Organization page, each with its own task, who it reports to and which " +
       "agents follow it. You run it. Actions: list (the whole map, with when to call each); run (agent, task: start " +
-      "that agent on a task in a chat of its own and wait for its report -- when it has a 'then hands to' list, those " +
-      "agents follow in order, each given the report before, but only if the work left something for them); domains (where your own Mind clusters by subject, to decide who to hire); teach (agent, query, move: hand the memories that match query to that agent's own mind, moving them out of yours unless move is false); note (text, and kind fact, lesson, tip or colleague: keep one " +
+      "that agent on a task in a chat of its own and wait for its report. There are no automatic hand-offs: a report " +
+      "comes back to you and the work stops there, so you decide run by run whether the next agent earns its cost); domains (where your own Mind clusters by subject, to decide who to hire); teach (agent, query, move: hand the memories that match query to that agent's own mind, moving them out of yours unless move is false); note (text, and kind fact, lesson, tip or colleague: keep one " +
       "sentence in your own mind -- what you learned, what works, what a colleague is good at -- so it is in front of you " +
       "next time; agent defaults to you); hire (name: a human first name nobody has, role: its job title, instructions, when; optionally " +
-      "reports_to and next -- a new agent for a kind of work that keeps coming up); edit (agent, then any of name, role, " +
-      "instructions, when, reports_to, next, enabled); merge (agent, into: two that overlap become one); remove " +
+      "reports_to -- a new agent for a kind of work that keeps coming up); edit (agent, then any of name, role, " +
+      "instructions, when, reports_to, enabled); merge (agent, into: two that overlap become one); remove " +
       "(agent); move (agent, reports_to and/or position: its boss, and its place among that boss's agents). Call an " +
       "agent when its 'call it when' fits the job and it would do the part better than you; for anything you can do in " +
       "a step or two, do it yourself. Prefer edit or merge to hire. An agent cannot be started from inside a chain " +

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AutoraMark } from "../AutoraMark";
-import { IconArrowDown, IconArrowUp, IconBot, IconChevron, IconOrg, IconPlus, IconTrash, IconX } from "../Icons";
+import { IconBot, IconChevron, IconOrg, IconPlus, IconTrash, IconX } from "../Icons";
 import {
   createAgent, deleteAgent, fetchAgentModels, fetchAgents, hueOf, underneath, updateAgent, useLook,
   type Agent, type AgentModel, type AgentModels, type AgentPatch,
@@ -32,7 +32,7 @@ export function AgentDot({ id, name, size = 28 }: { id: string; name: string; si
   );
 }
 
-const BLANK = { name: "", role: "", instructions: "", when: "", reportsTo: "", next: [] as string[] };
+const BLANK = { name: "", role: "", instructions: "", when: "", reportsTo: "" };
 
 /**
  * The organization: every agent and where it fits. The map shows who reports
@@ -138,14 +138,6 @@ export function OrganizationPage({ topSlot }: { topSlot?: HTMLElement | null }) 
               <b>{a.name}</b>
               <span className="org-role">{a.role || (a.builtin ? "Lead" : "No role yet")}</span>
               {!a.enabled && <span className="org-role">Switched off</span>}
-              {a.next.length > 0 && (
-                <span className="org-next" title="Hands its result to, in order">
-                  then{" "}
-                  {a.next.map((n, i) => (
-                    <span key={n} className="org-chip">{i > 0 ? "→ " : ""}{byId.get(n)?.name ?? "?"}</span>
-                  ))}
-                </span>
-              )}
             </span>
           </button>
           {kids.length > 0 && (
@@ -254,7 +246,7 @@ function AgentEditor({
   onDeleted: () => void;
 }) {
   const [form, setForm] = useState(() => agent
-    ? { name: agent.name, role: agent.role, instructions: agent.instructions, when: agent.when, reportsTo: agent.reportsTo ?? "", next: agent.next }
+    ? { name: agent.name, role: agent.role, instructions: agent.instructions, when: agent.when, reportsTo: agent.reportsTo ?? "" }
     : { ...BLANK, reportsTo: agents.find((a) => a.builtin)?.id ?? "" });
   const [enabled, setEnabled] = useState(agent?.enabled ?? true);
   /* Its own model: undefined while untouched (nothing is sent), null for the main model. */
@@ -270,7 +262,6 @@ function AgentEditor({
     return () => { alive = false; };
   }, [agent?.builtin]);
   const own = model === undefined ? agent?.model ?? null : model;
-  const [adding, setAdding] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -280,23 +271,13 @@ function AgentEditor({
   };
 
   const blocked = agent ? underneath(agents, agent.id).add(agent.id) : new Set<string>();
-  const others = agents.filter((a) => a.id !== agent?.id);
-  const name = (id: string) => agents.find((a) => a.id === id)?.name ?? id;
-
-  const move = (i: number, by: -1 | 1) => {
-    const next = [...form.next];
-    const j = i + by;
-    if (j < 0 || j >= next.length) return;
-    [next[i], next[j]] = [next[j], next[i]];
-    set("next", next);
-  };
 
   const save = async () => {
     if (agent && !form.name.trim()) return; // a new agent left unnamed is given a name
     setBusy(true);
     setError(null);
     const body: AgentPatch = {
-      name: form.name, role: form.role, instructions: form.instructions, when: form.when, next: form.next,
+      name: form.name, role: form.role, instructions: form.instructions, when: form.when,
       ...(agent?.builtin ? {} : { reportsTo: form.reportsTo || null, enabled }),
       ...(model !== undefined && !agent?.builtin ? { model } : {}),
     };
@@ -356,33 +337,6 @@ function AgentEditor({
           </select>
         </label>
       )}
-
-      <div className="org-field">
-        Then hands its result to, in order
-        {form.next.length === 0 && <span className="jf-hint">No one — it reports back and stops.</span>}
-        <ol className="org-seq">
-          {form.next.map((id, i) => (
-            <li key={id}>
-              <AgentDot id={id} name={name(id)} size={20} />
-              <span>{name(id)}</span>
-              <div className="spacer" />
-              <button type="button" className="rail-icon-btn" onClick={() => move(i, -1)} disabled={i === 0} aria-label={`Move ${name(id)} earlier`}><IconArrowUp size={12} /></button>
-              <button type="button" className="rail-icon-btn" onClick={() => move(i, 1)} disabled={i === form.next.length - 1} aria-label={`Move ${name(id)} later`}><IconArrowDown size={12} /></button>
-              <button type="button" className="rail-icon-btn" onClick={() => set("next", form.next.filter((n) => n !== id))} aria-label={`Stop handing to ${name(id)}`}><IconX size={12} /></button>
-            </li>
-          ))}
-        </ol>
-        {others.some((a) => !form.next.includes(a.id)) && (
-          <select
-            value={adding}
-            aria-label="Add an agent to the sequence"
-            onChange={(e) => { if (e.target.value) set("next", [...form.next, e.target.value]); setAdding(""); }}
-          >
-            <option value="">Add an agent to the sequence…</option>
-            {others.filter((a) => !form.next.includes(a.id)).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-          </select>
-        )}
-      </div>
 
       {!agent?.builtin && catalog?.provider && (() => {
         const offered = catalog.providers;

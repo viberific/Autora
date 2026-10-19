@@ -40,8 +40,8 @@ await test("the organization starts as the lead alone, and the lead cannot be re
 });
 
 const research = org.createAgent({ name: "Researcher", role: "Finds sources", when: "a claim needs checking", instructions: "Cite everything." });
-const editor = org.createAgent({ name: "Editor", role: "Tightens prose", reportsTo: research.id, next: [] });
-const books = org.createAgent({ name: "Bookkeeper", next: "Researcher, Editor" });
+const editor = org.createAgent({ name: "Editor", role: "Tightens prose", reportsTo: research.id });
+const books = org.createAgent({ name: "Bookkeeper" });
 
 await test("every agent is born genial, whatever its job, and nobody can set its personality", () => {
   const { bornTraits } = character;
@@ -68,7 +68,7 @@ await test("every agent is born genial, whatever its job, and nobody can set its
 });
 
 await test("personality never reaches the brief for a task, so it cannot touch the work or how agents cooperate", () => {
-  const a = org.createAgent({ name: "Ana2", role: "Researcher", next: [] });
+  const a = org.createAgent({ name: "Ana2", role: "Researcher" });
   const b = org.createAgent({ name: "Ben2", role: "Editor" });
   for (let i = 0; i < 40; i++) org.recordCollab(a.id, b.id, true, 6);
   for (let i = 0; i < 30; i++) org.developFromTalk(a.id, "Haha, that is funny! 😂😂 Why though? Thanks!", "comment");
@@ -147,43 +147,19 @@ await test("agents saved with the old personalities begin again genial, once, an
   org.deleteAgent(old.id); org.deleteAgent(colleague.id);
 });
 
-await test("a follow-on agent starts only when the work left something for it", () => {
+await test("no agent starts another: a report comes back and the work stops there", () => {
   const writer = org.createAgent({ name: "Sabrina2", role: "Engineer", when: "code is needed" });
-  const qa = org.createAgent({ name: "Reggie", role: "QA Engineer", when: "after code has been written or changed" });
-  const docs = org.createAgent({ name: "Dana", role: "Writer", when: "after a change that needs documenting" });
-  org.updateAgent(writer.id, { next: [qa.id, docs.id] });
+  const qa = org.createAgent({ name: "Reggie2", role: "QA Engineer", when: "after code has been written or changed" });
+  // An old install could still have a pathway on disk: nothing can set one, and nothing acts on one.
+  org.updateAgent(writer.id, { next: [qa.id] } as unknown as Record<string, unknown>);
   const w = org.getAgent(writer.id)!;
-  const ids = (list: { id: string }[]) => list.map((x) => x.id);
+  assert.equal((w as unknown as { next?: unknown }).next, undefined, "there is no pathway on the agent");
   const brief = org.agentBrief(w, "Add a retry", []);
-  assert.match(brief, /but only if your work left something for them to do/);
-  assert.match(brief, /Reggie \(called when after code has been written or changed\)/);
-  assert.match(brief, /Do not hand over when you only answered a question, ran a check or a test, made a plan/);
-  assert.match(brief, /Hand over to: Reggie, Dana/);
-  // The agent that did the work decides, on the last line of its report.
-  assert.deepEqual(ids(org.handoffTargets(w, "Ping received.\n\nHand over to: nobody", true)), [], "nobody, even though it made something");
-  assert.deepEqual(ids(org.handoffTargets(w, "Done.\nHand over to: Reggie", false)), [qa.id], "it names one, even if it made nothing itself");
-  assert.deepEqual(ids(org.handoffTargets(w, "Done.\n**Hand over to:** Reggie and Dana.", true)), [qa.id, docs.id], "in the order they come in the list");
-  assert.deepEqual(ids(org.handoffTargets(w, "Done.\nhand over to: dana, reggie", true)), [qa.id, docs.id], "case, order and commas do not matter");
-  assert.deepEqual(ids(org.handoffTargets(w, "Done.\nHand over to: Someone Else", true)), [], "a name that is not on its list starts nobody");
-  assert.deepEqual(ids(org.handoffTargets(w, "Done.\nHand over to: Reggie\nOn reflection:\nHand over to: nobody", true)), [], "the last line stands");
-  // With no line at all it comes down to whether anything was made.
-  assert.deepEqual(ids(org.handoffTargets(w, "Ping received. Nothing to change.", false)), [], "a test ping starts no QA");
-  assert.deepEqual(ids(org.handoffTargets(w, "Added the retry.", true)), [qa.id, docs.id], "something was made: both follow, as they always did");
-  org.updateAgent(qa.id, { enabled: false });
-  assert.deepEqual(ids(org.handoffTargets(w, "Added the retry.", true)), [docs.id], "a switched-off agent never");
-  // The line is for Autora, not for the person or the next agent.
-  assert.equal(org.withoutHandover("Added the retry.\n\nHand over to: Reggie"), "Added the retry.");
-  assert.equal(org.withoutHandover("Hand over to: nobody"), "");
-  assert.equal(org.withoutHandover("Handing over the keys is the next step."), "Handing over the keys is the next step.", "ordinary prose is left alone");
-  // What counts as having made something.
-  const reads = (c: string) => /^(ls|cat|git status)\b/.test(c);
-  assert.equal(org.producedWork([{ name: "terminal", args: { command: "ls -la" } }, { name: "read_file" }, { name: "code_search" }, { name: "agents" }], reads), false, "looking is not making");
-  assert.equal(org.producedWork([{ name: "terminal", args: { command: "npm test" } }], reads), true, "a command that is not read-only might");
-  assert.equal(org.producedWork([{ name: "edit_file" }], reads), true);
-  assert.equal(org.producedWork([{ name: "office_edit" }], reads), true);
-  assert.equal(org.producedWork([{ name: "office_read" }, { name: "pdf_read" }, { name: "memory_write" }], reads), false);
-  assert.equal(org.producedWork([], reads), false, "a pure conversation made nothing");
-  for (const x of [writer, qa, docs]) org.deleteAgent(x.id);
+  assert.doesNotMatch(brief, /Hand over to|hands to|take your report forward/i, "and nothing in its brief asks it to pass the work on");
+  assert.match(org.orgBriefing(), /no automatic hand-offs/, "the lead is told so outright");
+  assert.equal(typeof (org as unknown as Record<string, unknown>).handoffTargets, "undefined", "nothing works out a successor");
+  assert.equal(typeof (org as unknown as Record<string, unknown>).producedWork, "undefined");
+  org.deleteAgent(writer.id); org.deleteAgent(qa.id);
 });
 
 await test("agents get along better the more work between them goes well, and worse when it does not", () => {
@@ -259,24 +235,16 @@ await test("the map is a tree: no one reports to themselves or to someone beneat
   assert.deepEqual(names(tree), ["Autora", "Researcher", "Editor", "Bookkeeper"]);
 });
 
-await test("hand-offs keep their order, by id or name, and never include the agent itself or a stranger", () => {
-  assert.deepEqual(books.next, [research.id, editor.id]);
-  org.updateAgent(books.id, { next: [editor.id, research.id, editor.id, books.id] });
-  assert.deepEqual(org.getAgent(books.id)!.next, [editor.id, research.id]);
-  assert.throws(() => org.updateAgent(books.id, { next: ["Nobody"] }), /no agent "Nobody"/);
-});
-
-await test("removing an agent moves its reports up and drops it from every sequence", () => {
+await test("removing an agent moves its reports up", () => {
   assert.equal(org.deleteAgent(research.id), true);
   assert.equal(org.getAgent(editor.id)!.reportsTo, org.LEAD_ID);
-  assert.deepEqual(org.getAgent(books.id)!.next, [editor.id]);
   assert.equal(org.deleteAgent(research.id), false);
 });
 
-await test("the lead is told the map, and an agent is told its task, where it came from and who follows", () => {
-  org.updateAgent(editor.id, { when: "a draft needs tightening", next: [books.id] });
+await test("the lead is told the map, and an agent is told its task and where it came from", () => {
+  org.updateAgent(editor.id, { when: "a draft needs tightening" });
   const briefing = org.orgBriefing();
-  assert.match(briefing, /Editor \(agent_[0-9a-f]+\), Tightens prose\. Reports to Autora\. Call it when: a draft needs tightening Then hands to: Bookkeeper/);
+  assert.match(briefing, /Editor \(agent_[0-9a-f]+\), Tightens prose\. Reports to Autora\. Call it when: a draft needs tightening/);
   org.updateAgent(books.id, { enabled: false });
   assert.match(org.orgBriefing(), /Bookkeeper.*\[switched off\]/);
   // It routes the work rather than doing it: matching work goes to the agent
@@ -289,7 +257,7 @@ await test("the lead is told the map, and an agent is told its task, where it ca
   assert.match(brief, /You are Editor, the Tightens prose/);
   assert.match(brief, /handed to you by Autora/);
   assert.match(brief, /Tighten chapter 2/);
-  assert.doesNotMatch(brief, /will take your report forward/, "a switched-off agent is not promised a report");
+  assert.doesNotMatch(brief, /take your report forward/, "no agent is promised a report of its own");
 });
 
 const me = { kind: "agent" as const, id: editor.id, name: "Editor" };

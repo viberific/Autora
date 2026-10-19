@@ -1,13 +1,13 @@
 /**
- * The organization: the agents there are, what each is for, who it reports to
- * and which agent it hands work to next.
+ * The organization: the agents there are, what each is for and who it reports to.
  *
  * Autora starts with one agent, the lead, which is whatever answers in the
  * chat. The person adds others on the Organization page (a researcher, an
- * editor, a bookkeeper), each with its own task, a line on when it should be
- * called, and the agents that follow it in a sequence. The lead is told this
- * map every turn and can start any of them with the agents tool, so who does
- * what, and who comes after whom, is written down once rather than guessed.
+ * editor, a bookkeeper), each with its own task and a line on when it should be
+ * called. The lead is told this map every turn and starts one with the agents
+ * tool when a job calls for it. There is no pathway between agents: the agent
+ * does its own task and its report comes back, so a chain nobody asked for
+ * cannot run up a bill on a simple errand.
  *
  * Stored as `agents.json`. Pure apart from that: the tool that runs an agent
  * lives with the turn loop in server.ts.
@@ -29,8 +29,6 @@ interface Agent {
   when: string;
   /** The agent it reports to; null for the head of the organization. */
   reportsTo: string | null;
-  /** Agents it hands its result to, in order. */
-  next: string[];
   enabled: boolean;
   /** Its own shape (corners) and colour (hue, degrees) wherever the app draws
       it. Drawn at random when it is made, and never the same as another's. */
@@ -99,7 +97,6 @@ const MAX_NAME = 60;
 const MAX_ROLE = 80;
 const MAX_TEXT = 8000;
 const MAX_WHEN = 1000;
-const MAX_NEXT = 12;
 
 const DOC = "agents";
 let roster: Agent[] | null = null;
@@ -112,7 +109,7 @@ const clip = (v: unknown, max: number) => String(v ?? "").replace(/\u0000/g, "")
 function lead(): Agent {
   const now = Date.now();
   return {
-    id: LEAD_ID, name: "Autora", role: "Lead", builtin: true, enabled: true, reportsTo: null, next: [],
+    id: LEAD_ID, name: "Autora", role: "Lead", builtin: true, enabled: true, reportsTo: null,
     instructions: "", when: "Everything, unless another agent is a better fit for the part of the job.",
     created: now, updated: now,
   };
@@ -125,11 +122,14 @@ function load(): Agent[] {
     ? raw.filter((a): a is Agent => !!a && typeof a === "object" && typeof (a as Agent).id === "string" && typeof (a as Agent).name === "string")
     : [];
   if (!list.some((a) => a.id === LEAD_ID)) list.unshift(lead());
+  // Agents saved before pathways were removed still carry a "next" list; it is
+  // dropped here so the page and the lead never see one that no longer runs.
+  for (const a of list as (Agent & { next?: unknown })[]) if ("next" in a) delete a.next;
   roster = list.map((a) => ({
     ...a,
     role: a.role ?? "", instructions: a.instructions ?? "", when: a.when ?? "",
     reportsTo: a.id === LEAD_ID ? null : (a.reportsTo ?? LEAD_ID),
-    next: Array.isArray(a.next) ? a.next : [], enabled: a.enabled !== false,
+    enabled: a.enabled !== false,
   }));
   // Agents made before they had a look get one now, and keep it.
   let gave = false;
@@ -204,20 +204,9 @@ function sanePlace(id: string, reportsTo: unknown): string {
   return to;
 }
 
-function saneNext(id: string, raw: unknown): string[] {
-  const refs = Array.isArray(raw) ? raw : typeof raw === "string" && raw.trim() ? raw.split(",") : [];
-  const out: string[] = [];
-  for (const ref of refs) {
-    const found = findAgent(ref);
-    if (!found) throw new AgentError(`There is no agent "${String(ref).trim()}" to hand work to.`);
-    if (found.id !== id && !out.includes(found.id)) out.push(found.id);
-  }
-  return out.slice(0, MAX_NEXT);
-}
-
 export function createAgent(input: {
   name: unknown; role?: unknown; instructions?: unknown; when?: unknown;
-  reportsTo?: unknown; next?: unknown; enabled?: unknown; model?: unknown;
+  reportsTo?: unknown; enabled?: unknown; model?: unknown;
 }): Agent {
   const name = clip(input.name, MAX_NAME);
   if (!name) throw new AgentError("An agent needs a name.");
@@ -228,7 +217,7 @@ export function createAgent(input: {
   const agent: Agent = {
     id, name, role: clip(input.role, MAX_ROLE), instructions: clip(input.instructions, MAX_TEXT),
     when: clip(input.when, MAX_WHEN), reportsTo: sanePlace(id, input.reportsTo),
-    next: [], enabled: input.enabled !== false, created: now, updated: now,
+    enabled: input.enabled !== false, created: now, updated: now,
     look: pickLook(load().flatMap((o) => (o.look ? [o.look] : []))), social: temper(),
     bonds: {}, tasks: { done: 0, failed: 0 },
   };
@@ -238,14 +227,13 @@ export function createAgent(input: {
   agent.traits = bornTraits();
   agent.character = 2;
   load().push(agent);
-  agent.next = saneNext(id, input.next);
   persist();
   return agent;
 }
 
 export function updateAgent(id: string, patch: {
   name?: unknown; role?: unknown; instructions?: unknown; when?: unknown;
-  reportsTo?: unknown; next?: unknown; enabled?: unknown; model?: unknown;
+  reportsTo?: unknown; enabled?: unknown; model?: unknown;
 }): Agent {
   const agent = getAgent(id);
   if (!agent) throw new AgentError(`There is no agent "${id}".`);
@@ -260,7 +248,6 @@ export function updateAgent(id: string, patch: {
   if (patch.instructions !== undefined) agent.instructions = clip(patch.instructions, MAX_TEXT);
   if (patch.when !== undefined) agent.when = clip(patch.when, MAX_WHEN);
   if (patch.reportsTo !== undefined && !agent.builtin) agent.reportsTo = sanePlace(id, patch.reportsTo);
-  if (patch.next !== undefined) agent.next = saneNext(id, patch.next);
   if (patch.enabled !== undefined && !agent.builtin) agent.enabled = Boolean(patch.enabled);
   /* The lead's model is Settings' own; a second place to set it would be a second truth. */
   if (patch.model !== undefined && !agent.builtin) {
@@ -271,7 +258,7 @@ export function updateAgent(id: string, patch: {
   return agent;
 }
 
-/** The agent goes; the ones that reported to it move up a level, and no one hands work to it any more. */
+/** The agent goes; the ones that reported to it move up a level. */
 export function deleteAgent(id: string): boolean {
   const agent = getAgent(id);
   if (!agent) return false;
@@ -279,7 +266,6 @@ export function deleteAgent(id: string): boolean {
   const list = load();
   for (const a of list) {
     if (a.reportsTo === id) a.reportsTo = agent.reportsTo ?? LEAD_ID;
-    a.next = a.next.filter((n) => n !== id);
     if (a.bonds) delete a.bonds[id];
   }
   list.splice(list.indexOf(agent), 1);
@@ -309,9 +295,7 @@ export function mergeAgents(fromRef: unknown, intoRef: unknown): Agent {
   const list = load();
   for (const a of list) {
     if (a.reportsTo === from.id) a.reportsTo = a.id === into.id ? (from.reportsTo ?? LEAD_ID) : into.id;
-    a.next = [...new Set(a.next.map((n) => (n === from.id ? into.id : n)))].filter((n) => n !== a.id);
   }
-  into.next = [...new Set([...into.next, ...from.next])].filter((n) => n !== into.id && n !== from.id).slice(0, MAX_NEXT);
   for (const a of list) {
     if (!a.bonds || a.bonds[from.id] === undefined) continue;
     if (a.id !== into.id) a.bonds[into.id] = Math.max(a.bonds[into.id] ?? 0, a.bonds[from.id]);
@@ -368,13 +352,12 @@ const nameOf = (id: string) => getAgent(id)?.name ?? id;
 
 /** One agent in a line, for the tool's list and the briefing. */
 export function agentLine(a: Agent): string {
-  const next = a.next.length ? ` Then hands to: ${a.next.map(nameOf).join(", ")}.` : "";
   const boss = a.reportsTo ? ` Reports to ${nameOf(a.reportsTo)}.` : "";
   const knows = knowsAbout(a.id);
   /* The model it builds with, so the lead can send work where it is cheapest or strongest. */
   const runs = a.model ? ` Builds on ${a.model.model}.` : "";
   return `- ${a.name} (${a.id})${a.role ? `, ${a.role}` : ""}${a.enabled ? "" : " [switched off]"}.${boss}${runs}` +
-    `${a.when ? ` Call it when: ${a.when}` : ""}${knows ? ` Its own mind holds ${knows}.` : ""}${next}`;
+    `${a.when ? ` Call it when: ${a.when}` : ""}${knows ? ` Its own mind holds ${knows}.` : ""}`;
 }
 
 /** The lead may shape the organization itself, as a manager does. */
@@ -396,11 +379,17 @@ export function orgBriefing(): string {
   return [
     "Your organization (the Organization page): agents the person set up, each with its own task. Start one with the agents",
     "tool (action run, agent, task) when its 'call it when' fits the job, and let it run to the end before you rely on its",
-    "answer. When it has a 'then hands to' list, those agents follow it in that order, each given the one before's result.",
+    "answer. There are no automatic hand-offs any more: an agent's report comes back to you and the work stops there,",
+    "so you decide, run by run, whether the next agent earns its cost -- a chain nobody asked for is how a simple errand",
+    "gets expensive.",
     "Your job is to run it, not to do it: work out which agent each part of the job belongs to, start that agent, and",
     "check what came back before you report. When a piece of work matches an agent's 'call it when', that agent does it",
     "-- do not do it yourself as well. Only what no agent covers is your own work. Say which agent each part went to,",
     "and whether the work is finished, when you report.",
+    "The person wants to see that you weighed it: the first message of every turn opens with one short clause on the",
+    "agents you are not using, and why -- \"Not calling Sabrina: a one-line answer\" -- and when you do start one, say",
+    "which and why there. A few words, once, at the start of that first message, never a paragraph and never repeated",
+    "later in the turn.",
     ...others.map(agentLine),
   ].join("\n");
 }
@@ -410,7 +399,6 @@ export function orgBriefing(): string {
  * that have already handed work down to it, so it knows where the task came from.
  */
 export function agentBrief(agent: Agent, task: string, chain: string[]): string {
-  const next = agent.next.map(getAgent).filter((a): a is Agent => !!a && a.enabled);
   return [
     `You are ${agent.name}${agent.role ? `, the ${agent.role}` : ""}, an agent in the person's organization.`,
     agent.instructions ? `Your instructions:\n${agent.instructions}` : "",
@@ -418,12 +406,6 @@ export function agentBrief(agent: Agent, task: string, chain: string[]): string 
     `Your task:\n${task}`,
     "Finish the task and end with a short report: what you did, what you found, what is left. Your reply is passed on as it is.",
     "Anything that changes over time (versions, prices, rules, laws, standards) is checked against the official source before you rely on it, and your report says which source.",
-    next.length
-      ? `After you, ${next.map((a) => `${a.name}${a.when ? ` (called when ${a.when.replace(/[.\s]+$/, "")})` : a.role ? ` (${a.role})` : ""}`).join(", then ")} can take your report forward -- ` +
-        "but only if your work left something for them to do. Do not hand over when you only answered a question, ran a check or a test, made a plan, " +
-        "or changed nothing. When you do, write the report so they can start from it. " +
-        `End your report with one last line: "Hand over to: ${next.map((a) => a.name).join(", ")}" naming only those it fits, or "Hand over to: nobody".`
-      : "",
     "Threads (the thread tool) is not where this task is reported: while you are doing a task someone handed you, you may read it " +
     "(list, read) and no more -- posting, commenting and liking are refused in a session doing given work, because the report goes back where " +
     "the work came from. When you learn something worth " +
@@ -431,35 +413,7 @@ export function agentBrief(agent: Agent, task: string, chain: string[]): string 
   ].filter(Boolean).join("\n\n");
 }
 
-/** Tools that make or change something, whatever they are called on: a task that ran none of them left nothing for a follow-on agent. */
-const MAKES = /^(?:edit_file|image_generate|artifact_save|notebook_create|tool_create|office_(?:create|edit|convert|pdf)|pdf_(?:edit|compose|pages|replace_text|redact|compress)|video_(?:edit|import|style|export|project)|studio_(?:song|track|clip|notes|make|export)|game_(?:edit|import|template)|photo_(?:edit|export)|cad_.+)$/;
-
-/**
- * Whether a task made or changed anything, from the calls it made. A command counts unless it only reads
- * (`readOnly` says which); the tools that write count by name. What it did not do is as telling as what it did:
- * a test ping, a question answered, a plan, a look around.
- */
-export function producedWork(calls: readonly { name: string; args?: Record<string, any> }[], readOnly: (command: string) => boolean): boolean {
-  return calls.some((c) => (c.name === "terminal" ? !readOnly(String(c.args?.command ?? "")) : MAKES.test(c.name)));
-}
-
 const HANDOVER = /^[ \t>*_-]*hand[ -]?(?:over|off)[ -]to:?[*_ ]*(.*)$/gim;
-
-/**
- * Who goes on after this agent, of those it could hand to. The agent that did the work decides, on the last line of
- * its report ("Hand over to: Reggie", or "Hand over to: nobody"): it knows what it made, and each colleague's `when`
- * is in its brief. Without that line -- an older agent, a model that forgot -- the follow-on agents go on only if the
- * task made or changed something, so a test ping or a question never starts a QA pass.
- */
-export function handoffTargets(agent: Agent, reply: string, made: boolean): Agent[] {
-  const candidates = agent.next.map(getAgent).filter((a): a is Agent => !!a && a.enabled);
-  const line = [...reply.matchAll(HANDOVER)].pop();
-  if (!line) return made ? candidates : [];
-  const said = line[1].replace(/[*_`.]/g, "").trim().toLowerCase();
-  if (!said || /^(?:nobody|no one|none|n\/a|nothing)\b/.test(said)) return [];
-  const names = said.split(/,|;|->|\band\b|\bthen\b/).map((n) => n.trim()).filter(Boolean);
-  return candidates.filter((c) => names.some((n) => n === c.name.toLowerCase() || n === c.id));
-}
 
 /** The report without its hand-over line: that line is for Autora, not for the person or the next agent to read. */
 export function withoutHandover(reply: string): string {

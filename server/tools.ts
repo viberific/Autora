@@ -1444,12 +1444,11 @@ function runImprovements(args: Record<string, any>, ctx: ToolContext): ToolOutco
 /** The lead shaping the organization: hire, edit, merge, remove, move. */
 function shapeOrganization(action: string, args: Record<string, any>, ctx: ToolContext): ToolOutcome {
   const agent = String(args.agent ?? "").trim();
-  const next = args.next ?? args.hands_to;
   try {
     if (action === "hire") {
       const made = createAgent({
         name: String(args.name ?? "").trim() || freshName(), role: args.role, instructions: args.instructions, when: args.when,
-        reportsTo: args.reports_to, next,
+        reportsTo: args.reports_to,
       });
       welcomeToThreads(made);
       const knowledge = String(args.knowledge ?? "").trim();
@@ -1468,8 +1467,7 @@ function shapeOrganization(action: string, args: Record<string, any>, ctx: ToolC
       for (const [from, to] of [["name", "name"], ["role", "role"], ["instructions", "instructions"], ["when", "when"], ["reports_to", "reportsTo"], ["enabled", "enabled"]]) {
         if (args[from] !== undefined) patch[to] = args[from];
       }
-      if (next !== undefined) patch.next = next;
-      if (!Object.keys(patch).length) return { ok: false, summary: "Nothing to change: give name, role, instructions, when, reports_to, next or enabled." };
+      if (!Object.keys(patch).length) return { ok: false, summary: "Nothing to change: give name, role, instructions, when, reports_to or enabled." };
       const now = updateAgent(found.id, patch);
       return { ok: true, summary: `Updated ${now.name}. ${agentLine(now)}`, preview: `edited ${now.name}` };
     }

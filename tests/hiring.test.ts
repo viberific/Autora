@@ -76,7 +76,7 @@ await test("the lead hires, edits, moves, merges and removes through the agents 
   assert.match(checker.when, /fact needs checking/);
   assert.equal(org.findAgent("Writer")!.reportsTo, checker.id);
   assert.equal(checker.reportsTo, org.LEAD_ID, "it takes the merged agent's place");
-  assert.ok(!checker.next.includes(checker.id));
+  assert.equal((checker as unknown as { next?: unknown }).next, undefined, "no pathways survive a merge");
 
   assert.equal((await call({ action: "merge", agent: "Checker", into: "Checker" })).ok, false);
   assert.equal((await call({ action: "merge", agent: "Autora", into: "Checker" })).ok, false, "the lead is not merged away");

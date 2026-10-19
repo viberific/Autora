@@ -11,7 +11,6 @@ export type Agent = {
   instructions: string;
   when: string;
   reportsTo: string | null;
-  next: string[];
   enabled: boolean;
   builtin?: boolean;
   /** The model it builds with and the provider it was chosen for; absent for the main model. */
@@ -41,7 +40,7 @@ export const TRAITS: { key: TraitName; label: string }[] = [
   { key: "initiative", label: "Boldness" },
 ];
 
-export type AgentPatch = Partial<Pick<Agent, "name" | "role" | "instructions" | "when" | "reportsTo" | "next" | "enabled">> & {
+export type AgentPatch = Partial<Pick<Agent, "name" | "role" | "instructions" | "when" | "reportsTo" | "enabled">> & {
   /** null for the main model. */
   model?: AgentModel | null;
 };

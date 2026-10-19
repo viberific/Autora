@@ -1,6 +1,6 @@
 /**
  * The Organization and Threads in a whole Autora: the lead is told the map,
- * starts an agent that hands its report to the next, and the forum routes work
+ * starts an agent whose report comes back rather than starting the next, and the forum routes work
  * the way the page uses them.
  *
  *   npx tsx tests/e2e-agents.test.ts
@@ -23,7 +23,7 @@ async function main() {
       const made = await app.api("POST", "/api/agents", { name: "Bookkeeper", role: "Keeps the numbers", when: "after an edit changes a figure" });
       assert.equal(made.status, 200, JSON.stringify(made.body));
       books = made.body.agent.id;
-      const e = await app.api("POST", "/api/agents", { name: "Editor", role: "Tightens prose", when: "a draft needs tightening", instructions: "Cut by a fifth.", next: [books] });
+      const e = await app.api("POST", "/api/agents", { name: "Editor", role: "Tightens prose", when: "a draft needs tightening", instructions: "Cut by a fifth." });
       assert.equal(e.status, 200, JSON.stringify(e.body));
       editor = e.body.agent.id;
       assert.equal((await app.api("PATCH", `/api/agents/${editor}`, { reportsTo: editor })).status, 400);
@@ -47,91 +47,46 @@ async function main() {
       assert.equal((await app.api("DELETE", "/api/agents/agent_autora")).status, 400);
     });
 
-    await test("the lead is told the map, starts the Editor, and the Editor's report goes on to the Bookkeeper", async () => {
+    await test("the lead starts the Editor, and the Editor's report comes back instead of starting the Bookkeeper", async () => {
       app.seen.length = 0;
+      let bookkeeperStarted = false;
       app.decide = (req) => {
-        if (req.last.includes("Continue from Editor")) return { text: "Books updated: figures match." };
-        if (req.last.includes("You are Editor")) return { text: "Tightened: cut 20%.\n\nHand over to: Bookkeeper" };
-        if (req.last.includes("Books updated")) return { text: "Both agents finished." };
+        if (req.last.includes("Continue from Editor")) { bookkeeperStarted = true; return { text: "Books updated: figures match." }; }
+        if (req.last.includes("You are Editor")) return { text: "Tightened: cut 20%.\\n\\nHand over to: Bookkeeper" };
+        if (req.last.includes("Tightened: cut 20%")) return { text: "Not calling the Bookkeeper: an old report asked for it and nothing follows on any more." };
         if (req.last.includes("Review chapter 2")) return { tools: [{ name: "agents", args: { action: "run", agent: "Editor", task: "Tighten chapter 2" } }] };
         return { text: "ok" };
       };
       const s = await app.newSession("org", "build");
-      const ev = await app.turn(s, "Review chapter 2");
-      assert.match(app.seen[0].system, /Your organization/);
-      assert.match(app.seen[0].system, /Editor \(agent_[0-9a-f]+\), Tightens prose\. Reports to Autora\. Call it when: a draft needs tightening Then hands to: Bookkeeper/);
-      assert.ok(app.seen[0].tools.includes("agents") && app.seen[0].tools.includes("thread"));
-      assert.ok(ev.some((e) => e.kind === "tool.result" && e.payload.ok === true));
-      const back = app.seen.find((r) => r.last.includes("Books updated: figures match") && r.last.includes("---"))!;
-      assert.ok(back, "the lead was handed both reports back");
-      assert.match(back.last, /Editor \(session-[^)]+\):\nTightened: cut 20%/);
-      assert.match(back.last, /Bookkeeper \(session-[^)]+\):\nBooks updated: figures match/);
-      /* An agent operating works IN THIS CHAT (the person's rule). Its run is a session of its own
-         so it has its own log, but it is not one of the person's chats: GET /api/sessions leaves out
-         anything whose origin is not "person", and the Sessions page's Runs button asks for them
-         again with ?all=1. */
-      const runs = (await app.api("GET", "/api/sessions?all=1")).body as { id: string; title: string; origin: string }[];
-      const editorRun = runs.find((x) => x.title.startsWith("Editor: Tighten chapter 2"))!;
-      assert.ok(editorRun, "the Editor's run is there when the runs are asked for");
-      assert.equal(editorRun.origin, "agent");
-      assert.ok(runs.some((x) => x.title.startsWith("Bookkeeper: Continue from Editor")), "and the Bookkeeper's run follows in another");
-      const sessions = (await app.api("GET", "/api/sessions")).body as { id: string; title: string }[];
-      assert.ok(!sessions.some((x) => x.title.startsWith("Editor: Tighten chapter 2")), "the Editor's run is not one of the person's chats");
-      assert.ok(!sessions.some((x) => x.title.startsWith("Bookkeeper: Continue from")), "nor is the Bookkeeper's");
-      /* Both agents spoke up in the chat that called them: agent.chime when the run starts and
-         agent.back when it reports -- the two events ChimeCell draws as the agent's own mark.
-         Both carry the run's session id, which is what the page pairs them by. */
-      const chime = ev.find((e) => e.kind === "agent.chime" && e.payload.name === "Editor")!;
-      assert.ok(chime, "the Editor announced itself in this chat");
-      assert.equal(chime.payload.id, editorRun.id, "the chime names the run it belongs to");
-      assert.equal(chime.payload.text, "On it: Tighten chapter 2");
-      const editorBack = ev.find((e) => e.kind === "agent.back" && e.payload.id === chime.payload.id)!;
-      assert.ok(editorBack, "and reported back into this chat");
-      assert.equal(editorBack.payload.ok, true);
-      assert.match(editorBack.payload.reply, /Tightened: cut 20%/);
-      const booksChime = ev.find((e) => e.kind === "agent.chime" && e.payload.name === "Bookkeeper")!;
-      assert.ok(booksChime, "the Bookkeeper announced itself here too");
-      const booksBack = ev.find((e) => e.kind === "agent.back" && e.payload.id === booksChime.payload.id)!;
-      assert.ok(booksBack, "and reported here too");
-      assert.match(booksBack.payload.reply, /Books updated: figures match/);
-      const handed = app.seen.find((r) => r.last.includes("Continue from Editor"))!;
-      assert.match(handed.last, /Tightened: cut 20%/, "the Bookkeeper was given the Editor's report");
-      assert.match(handed.last, /handed to you by Autora -> Editor/);
+      await app.turn(s, "Review chapter 2");
       app.decide = null;
+      assert.equal(bookkeeperStarted, false, "even an old 'Hand over to' line in a report starts nobody");
     });
 
     /* The person's screenshot: "@Sabrina this is just a test" and a QA agent started behind her, with nothing to check. */
-    const handoff = async (editorSays: (req: { last: string; system: string }) => { text?: string; tools?: { name: string; args?: Record<string, unknown> }[] }, ask: string) => {
-      app.seen.length = 0;
-      let bookkeeperStarted = false;
-      app.decide = (req) => {
-        if (/You check one action/.test(req.system)) return { text: '{"destructive": false, "requested": true}' };
-        if (req.last.includes("Continue from Editor")) { bookkeeperStarted = true; return { text: "Books updated." }; }
-        if (req.last.includes("You are Editor")) return editorSays(req);
-        if (req.last.includes(ask)) return { tools: [{ name: "agents", args: { action: "run", agent: "Editor", task: ask } }] };
-        return { text: "Done." };
+    await test("no report of any kind starts another agent", async () => {
+      const run = async (editorSays: (req: { last: string; system: string }) => { text?: string; tools?: { name: string; args?: Record<string, unknown> }[] }, ask: string) => {
+        app.seen.length = 0;
+        let bookkeeperStarted = false;
+        app.decide = (req) => {
+          if (/You check one action/.test(req.system)) return { text: '{"destructive": false, "requested": true}' };
+          if (req.last.includes("Continue from Editor")) { bookkeeperStarted = true; return { text: "Books updated." }; }
+          if (req.last.includes("You are Editor")) return editorSays(req);
+          if (req.last.includes(ask)) return { tools: [{ name: "agents", args: { action: "run", agent: "Editor", task: ask } }] };
+          return { text: "Done." };
+        };
+        const s = await app.newSession("handoff", "build");
+        await app.turn(s, ask, 60_000);
+        app.decide = null;
+        return bookkeeperStarted;
       };
-      const s = await app.newSession("handoff", "build");
-      await app.turn(s, ask, 60_000);
-      app.decide = null;
-      return bookkeeperStarted;
-    };
-
-    await test("an agent that says nobody is next does not start the next one", async () => {
-      assert.equal(await handoff(() => ({ text: "Ping received. Nothing to change.\n\nHand over to: nobody" }), "Run a test ping please"), false);
-    });
-
-    await test("with no hand-over line, an agent that made nothing does not start the next one", async () => {
-      assert.equal(await handoff(() => ({ text: "Ping received. Nothing to change." }), "Just a test ping"), false);
-    });
-
-    await test("with no hand-over line, an agent that made something does", async () => {
+      assert.equal(await run(() => ({ text: "Ping received. Nothing to change.\n\nHand over to: Bookkeeper" }), "Run a test ping please"), false);
       let step = 0;
-      const started = await handoff(() => {
+      const madeSomething = await run(() => {
         step += 1;
         return step === 1 ? { tools: [{ name: "terminal", args: { command: "echo tightened > chapter2.txt" } }] } : { text: "Tightened chapter 2." };
       }, "Tighten the draft now");
-      assert.equal(started, true);
+      assert.equal(madeSomething, false, "not even after it wrote a file");
     });
 
     await test("a specialist works from its own mind and never sees Autora's; what it learns stays its own", async () => {
