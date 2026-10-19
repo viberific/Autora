@@ -188,14 +188,8 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  Turns cost less. The agent is now told to put every independent tool call in the same response instead of one per
-  round, never to sit in a sleep or a poll loop, never to retry a call that already failed, and to read the lines it
-  needs and make one small edit rather than rewriting a whole file. A terminal command that does nothing but wait more
-  than ten seconds is refused outright, with a line saying to start the work in the background or make a schedule -- in
-  this container a long sleep is killed before it ends anyway.
-  The tools that are only occasionally wanted are no longer sent with every message. The PDF editor, video editor, music
-  studio, office files, 3D, games, photos and widgets were already sets that could be loaded on demand; the browser's
-  page actions, voice and camera, research, the Creator window, custom tools and the MCP server list have joined them, and
-  each set is named in one line of the briefing so the agent knows it is there and can ask for it. What every message
-  carries before the conversation even starts went from 118,330 characters of tool schema to 34,632 -- about 21,000 tokens
-  down to 8,700 -- and the tool-text budget test still sits at 52,000, unchanged.
+  Presentations made with Autora Slides now open in Google Slides with all their text. Every text box used to be
+  written without the shape geometry a .pptx is meant to carry, and Google's importer read a box with none as an
+  empty one, so a deck arrived as a set of blank slides. A text box now declares itself a rectangle, and Autora's own
+  reader recognises one by being a text box rather than by having no geometry, so a deck it writes and reads back is
+  the same either way. Documents and spreadsheets are untouched.

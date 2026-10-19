@@ -1,0 +1,122 @@
+diff --git a/packages/pptx-engine/src/insert.ts b/packages/pptx-engine/src/insert.ts
+index e0c598f..d6e23df 100644
+--- a/packages/pptx-engine/src/insert.ts
++++ b/packages/pptx-engine/src/insert.ts
+@@ -181,9 +181,11 @@ export function buildSpXml(slide: Slide, opts: NewElementOptions): string {
+     flipH: opts.flipH === true,
+     flipV: opts.flipV === true,
+   })
+-  // Parser convention: has txBody and no prstGeom → 'text'; textbox omits prstGeom
++  // A text box is a rect with txBox="1": PowerPoint writes prstGeom rect on every text box,
++  // and Google Slides drops a <p:sp> whose spPr has none (text arrives empty or the shape is
++  // skipped outright). The parser keys 'text' off txBox as well, so this stays type 'text'.
+   const geom = isTextbox
+-    ? ''
++    ? '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>'
+     : `<a:prstGeom prst="${escapeXmlAttr(opts.kind)}">${buildAvLstXml(opts.adjustments)}</a:prstGeom>`
+   const fill = opts.fillColor ? `<a:solidFill>${srgbClrXml(opts.fillColor)}</a:solidFill>` : ''
+   const ln = opts.stroke
+diff --git a/packages/pptx-engine/src/parse.ts b/packages/pptx-engine/src/parse.ts
+index 4371863..d6183bb 100644
+--- a/packages/pptx-engine/src/parse.ts
++++ b/packages/pptx-engine/src/parse.ts
+@@ -560,14 +560,17 @@ function parseSpShape(
+     }
+   }
+ 
++  // <p:cNvSpPr txBox="1"> is Insert > Text Box: PowerPoint always gives it prstGeom rect, so the
++  // type must key off the flag, not off a missing geometry (that read real text boxes as shapes).
++  const txBox = nv?.['p:cNvSpPr']?.['@_txBox'] === '1'
+   const el: TextElement = {
+     id: uid('sp'),
+-    type: txBody && !presetGeometry && !customGeometry ? 'text' : 'shape',
++    type: txBody && (txBox || (!presetGeometry && !customGeometry)) ? 'text' : 'shape',
+     anchor,
+     transform,
+     // <p:ph> without a type (content placeholder) defaults to body per ECMA
+     placeholder: ph ? (phType ?? 'body') : undefined,
+-    ...(nv?.['p:cNvSpPr']?.['@_txBox'] === '1' ? { txBox: true } : {}),
++    ...(txBox ? { txBox: true } : {}),
+     name,
+     presetGeometry,
+     ...(adjust ? { adjust } : {}),
+diff --git a/packages/pptx-engine/src/types.ts b/packages/pptx-engine/src/types.ts
+index 2d434ad..b78b4a4 100644
+--- a/packages/pptx-engine/src/types.ts
++++ b/packages/pptx-engine/src/types.ts
+@@ -533,7 +533,7 @@ export interface Scene3D {
+ 
+ export interface TextElement extends ElementBase {
+   type: 'text' | 'shape'
+-  /** Shape's preset geometry (rect/ellipse/roundRect/…); absent for text */
++  /** Shape's preset geometry (rect/ellipse/roundRect/…). Text boxes carry 'rect' (as PowerPoint writes them) or nothing when geometryless. */
+   presetGeometry?: string
+   /** Preset geometry adjust values <a:avLst>: e.g. roundRect's adj (1/1000 %, 50000 = pill) */
+   adjust?: Record<string, number>
+diff --git a/packages/pptx-engine/tests/geometryless-shape.test.ts b/packages/pptx-engine/tests/geometryless-shape.test.ts
+index 5a6399b..1fd064d 100644
+--- a/packages/pptx-engine/tests/geometryless-shape.test.ts
++++ b/packages/pptx-engine/tests/geometryless-shape.test.ts
+@@ -7,8 +7,8 @@ const slideWith = (body: string) =>
+   '<?xml version="1.0"?><p:sld xmlns:p="p" xmlns:a="a" xmlns:r="r"><p:cSld>' +
+   `<p:spTree><p:nvGrpSpPr/><p:grpSpPr/>${body}</p:spTree></p:cSld></p:sld>`
+ 
+-const sp = (nvPr: string, geom: string) =>
+-  `<p:sp><p:nvSpPr><p:cNvPr id="2" name="S"/><p:cNvSpPr/>${nvPr}</p:nvSpPr>` +
++const sp = (nvPr: string, geom: string, cNvSpPr = '<p:cNvSpPr/>') =>
++  `<p:sp><p:nvSpPr><p:cNvPr id="2" name="S"/>${cNvSpPr}${nvPr}</p:nvSpPr>` +
+   `<p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="100" cy="100"/></a:xfrm>${geom}` +
+   '<a:solidFill><a:srgbClr val="1F497D"/></a:solidFill></p:spPr>' +
+   '<p:txBody><a:bodyPr/><a:p><a:endParaRPr/></a:p></p:txBody></p:sp>'
+@@ -28,3 +28,19 @@ describe('noGeometry flag', () => {
+     expect(first(sp('<p:nvPr><p:ph type="body" idx="1"/></p:nvPr>', '')).noGeometry).toBeUndefined()
+   })
+ })
++
++describe('txBox typing', () => {
++  const RECT = '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>'
++  it('types a txBox with prstGeom rect as text (PowerPoint Insert > Text Box)', () => {
++    const el = first(sp('<p:nvPr/>', RECT, '<p:cNvSpPr txBox="1"/>'))
++    expect(el.type).toBe('text')
++    expect(el.txBox).toBe(true)
++    expect(el.presetGeometry).toBe('rect')
++  })
++  it('still types a plain shape with prstGeom rect as a shape', () => {
++    expect(first(sp('<p:nvPr/>', RECT)).type).toBe('shape')
++  })
++  it('keeps flagging a txBox with no geometry at all', () => {
++    expect(first(sp('<p:nvPr/>', '', '<p:cNvSpPr txBox="1"/>')).noGeometry).toBe(true)
++  })
++})
+diff --git a/packages/pptx-engine/tests/insert.test.ts b/packages/pptx-engine/tests/insert.test.ts
+index cb69551..1b71a22 100644
+--- a/packages/pptx-engine/tests/insert.test.ts
++++ b/packages/pptx-engine/tests/insert.test.ts
+@@ -30,6 +30,9 @@ describe('add/delete element', () => {
+       paragraphs: [{ runs: [{ text: 'Newly inserted textbox', bold: true }] }],
+     })
+     expect(el.type).toBe('text')
++    // PowerPoint writes prstGeom rect on every text box, and Google Slides drops one without it
++    expect(el.anchor.originalXml).toContain('<p:cNvSpPr txBox="1"/>')
++    expect(el.anchor.originalXml).toContain('<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>')
+     expect(slide.elements.length).toBe(before + 1)
+ 
+     const reopened = await openPptx(await savePptx(opened))
+diff --git a/packages/pptx-render/tests/build-slide.test.ts b/packages/pptx-render/tests/build-slide.test.ts
+index 71605b0..d8531f0 100644
+--- a/packages/pptx-render/tests/build-slide.test.ts
++++ b/packages/pptx-render/tests/build-slide.test.ts
+@@ -1124,6 +1124,13 @@ describe('shapes without geometry', () => {
+     // editor-built text boxes carry no presetGeometry either and must keep their fill
+     expect(first(mk({})).fill).toEqual({ kind: 'solid', color: '#1F497D' })
+     expect(first(mk({ presetGeometry: 'rect' })).fill).toEqual({ kind: 'solid', color: '#1F497D' })
++    // a text box written the way PowerPoint writes one (txBox + prstGeom rect) still paints no
++    // rectangle: with no fill and no stroke in spPr it renders as text alone
++    const plain = first(
++      mk({ presetGeometry: 'rect', txBox: true, fill: undefined, stroke: undefined }),
++    )
++    expect(plain.fill).toEqual({ kind: 'none' })
++    expect(plain.stroke).toBeUndefined()
+   })
+ })
+ 
