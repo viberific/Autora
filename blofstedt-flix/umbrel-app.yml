@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.29"
+version: "0.3.30"
 port: 8096
 folderAccess:
   - id: umbrel-downloads
@@ -54,9 +54,15 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Casting an episode that has finished downloading now hands the television a
-  single file it can seek anywhere in, instead of a playlist that is still being
-  written as it plays. The whole timeline is there from the start, so scrubbing
-  forward past what has been read no longer stops or jumps back, and the cast
-  starts sooner. An episode that is still downloading keeps the old playlist
-  path as a fallback, so nothing that worked before stops working.
+  Moving around the television interface is now crisper: the remote keeps to the
+  row you are on, the focus ring lands on the tile it picks, and the page no
+  longer slides under the highlight on every press. Starting an episode no
+  longer shows a grey placeholder poster behind the logo while it loads, and the
+  light that traces the Flix mark now follows its rounded square edge instead of
+  circling it. A Next Episode card appears at the bottom right as soon as the
+  credits start, fills like Netflix and plays the next episode on its own, and
+  the following episode is prepared in the background so it starts almost at
+  once. Skip Intro now also works on episodes whose file carries no chapters,
+  using the intro you skipped last time on that show. Episodes unlock in order:
+  a small lock means watch the one before it first, and downloads are still
+  possible from any episode.
