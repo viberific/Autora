@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.34"
+version: "0.3.35"
 port: 8096
 folderAccess:
   - id: umbrel-downloads
@@ -54,15 +54,14 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Conversion is now cheap enough for this box. Measured here: one 1080p
-  conversion at the old setting (veryfast) ran 3.6x faster than real time on its
-  own, but only 2.0x each with two going at once, and a third left every stream
-  behind -- which is what a hitch was. The default profile is now economy
-  (superfast, CRF 22, 5 Mbit/s cap), 4.8x on its own, with Balanced and Best in
-  Settings > Playback. At most two conversions run at once; a third closes the
-  one nobody has touched. If a conversion ever falls below real time the box
-  steps itself down a rung and says so in its log. The container now also gets
-  the GPU (Quick Sync): Flix tests h264_qsv at startup and uses it when it
-  opens a session, which nearly empties the CPU, and falls back to the CPU on
-  its own if it cannot. Disney+ is no longer on the home screen; its shows stay
-  in the library, search and My List and still play.
+  The picture is better now that one television is the only screen. The default
+  conversion quality is Balanced again (veryfast, CRF 20, 6.5 Mbit/s cap), which
+  measured 3.6x faster than real time on this box -- comfortably ahead of the
+  player -- so it no longer has to trade detail for speed. Economy and Best are
+  still selectable in Settings > Playback. Only one conversion runs at a time,
+  matching the one screen, and the cap can no longer take a stream away: it only
+  closes a conversion nobody has touched for 90 seconds, so if a second device
+  ever connects it slows the first rather than stopping it. Everything stays at
+  1080p or below -- direct play, HDR passthrough, the live conversion and the
+  saved MP4 all refuse anything higher.
+
