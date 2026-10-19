@@ -1068,6 +1068,25 @@ export function App() {
     if (!arriving) flush();
   }, [liveOn, canSpeak, view.buckets, say, flush]);
 
+  /* The thumb under a reply. The server writes it into the chat's own log and
+     sends it back down the socket, so what is drawn here is the record rather
+     than a guess that a reload would contradict. */
+  const rateReply = useCallback(
+    async (turn: number, up: boolean | null, reason?: string) => {
+      if (!sessionId) return;
+      await fetch(`/api/sessions/${sessionId}/rating`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ turn, up, reason }),
+      }).catch(() => undefined);
+    },
+    [sessionId],
+  );
+  const ratingOf = useCallback(
+    (turn: number) => view.ratings.get(turn),
+    [view.ratings],
+  );
+
   // What the agent says with its speak tool plays as it arrives, live mode or
   // not: it was asked to say something, so it is heard, not handed over as a
   // file. Only fresh events -- opening an old session must not replay every
@@ -2055,6 +2074,8 @@ export function App() {
             onSuggest={suggestFromThread}
             onSpeakReply={canSpeak ? speakReply : undefined}
             speakingReply={readingReply}
+            onRateReply={rateReply}
+            ratingOf={ratingOf}
             driving={driving}
             browserHandedOver={browserHandedOver}
             onStop={stopFromThread}

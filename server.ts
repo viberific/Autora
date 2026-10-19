@@ -149,6 +149,7 @@ import { previewRoutes } from "./server/routes/preview";
 import { settingsRoutes } from "./server/routes/settings";
 import { proactiveRoutes } from "./server/routes/proactive";
 import { triggerRoutes } from "./server/routes/triggers";
+import { ratingRoutes } from "./server/rating";
 import { jobRoutes } from "./server/routes/jobs";
 import { keyRoutes } from "./server/routes/keys";
 import { dropOpencut, onOpencutChange, opencutRoutes, opencutState, serveOpencut, videoBriefing } from "./server/opencut";
@@ -675,6 +676,13 @@ function logEvent(session: Session, e: AutoraEvent) {
     case "usage.turn":
       at("debug", "provider", `${p.provider}/${p.model}: ${p.input_tokens ?? 0} in, ${p.output_tokens ?? 0} out`);
       break;
+    /* The person's thumb, so the Logs page shows it beside the turn it is
+       about rather than nowhere at all. */
+    case "turn.rating":
+      at(p.up === true ? "info" : "warn", "person",
+        p.up === true ? "thumbs up on the turn" : `thumbs down on the turn${p.reason ? `: "${short(p.reason, 200)}"` : " (no reason given)"}`);
+      break;
+    case "turn.rating.cleared": at("info", "person", "thumbs taken back"); break;
   }
 }
 
@@ -6924,6 +6932,8 @@ async function startServer() {
     gatherSignals, answeredOffers, saveProactive, noticer, createJob, webPush, appLink, notices,
     latestNotice: () => noticeSeq,
   });
+
+  ratingRoutes(app, { sessions, emitEvent });
 
   healthRoutes(app, { sweep });
   taskRoutes(app, { version: VERSION });

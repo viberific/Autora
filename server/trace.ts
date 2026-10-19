@@ -10,6 +10,8 @@
 export interface TraceEvent {
   kind: string;
   ts?: number;
+  /** The event's own number in the log, which is what a rating names. */
+  seq?: number;
   span?: string | null;
   payload: Record<string, any>;
 }
@@ -22,6 +24,11 @@ interface ToolTrace {
   held: number;
   totalMs: number;
   slowestMs: number;
+  /** Turns this tool was used in that the person said worked, and turns
+      where something they judged it for went wrong. The trace number says a
+      tool ran; this says whether the turn it ran in was any good. */
+  ratedUp: number;
+  ratedDown: number;
 }
 
 interface TurnTrace {
@@ -34,6 +41,8 @@ interface TurnTrace {
   stopped: boolean;
   reason: string | null;
   request: string;
+  /** The person's thumb on this turn, if they gave one. */
+  rating?: { up: boolean; reason?: string };
 }
 
 interface Trace {
@@ -54,6 +63,11 @@ interface Trace {
   recent: TurnTrace[];
   /** Times the loop watch or error budget ended a turn. */
   loopStops: number;
+  /** Turns the person said worked, and turns they said did not. A down-vote
+      with a reason is the one that says what to fix. */
+  ratingsUp: number;
+  ratingsDown: number;
+  ratingsWithReason: number;
   /** Tools brought in on demand, by set. */
   loaded: string[];
 }
@@ -70,9 +84,17 @@ export function buildTrace(events: readonly TraceEvent[], recentTurns = 8): Trac
 
   const tool = (name: string): ToolTrace => {
     let t = byTool.get(name);
-    if (!t) byTool.set(name, (t = { name, calls: 0, failures: 0, held: 0, totalMs: 0, slowestMs: 0 }));
+    if (!t) byTool.set(name, (t = { name, calls: 0, failures: 0, held: 0, totalMs: 0, slowestMs: 0, ratedUp: 0, ratedDown: 0 }));
     return t;
   };
+
+  /* Which turn each event's seq belongs to, and the tools each turn used, so a
+     thumb on a turn can be counted against what that turn ran. A log read from
+     disk carries seq; one handed in without it simply gets no per-tool
+     attribution, which is why the field is optional. */
+  const turnBySeq = new Map<number, TurnTrace>();
+  const toolsOfTurn = new Map<TurnTrace, Set<string>>();
+  let used: Set<string> = new Set();
 
   for (const e of events) {
     const p = e.payload ?? {};
@@ -80,6 +102,9 @@ export function buildTrace(events: readonly TraceEvent[], recentTurns = 8): Trac
       case "turn.user":
         cur = { rounds: 0, tools: 0, input: 0, output: 0, cached: 0, stopped: false, reason: null, request: String(p.shown ?? p.text ?? "").replace(/\s+/g, " ").trim().slice(0, 80) };
         turns.push(cur);
+        used = new Set();
+        toolsOfTurn.set(cur, used);
+        if (typeof e.seq === "number") turnBySeq.set(e.seq, cur);
         break;
       case "usage.turn": {
         const input = num(p.input_tokens), output = num(p.output_tokens), cached = num(p.cached_tokens);
@@ -98,6 +123,7 @@ export function buildTrace(events: readonly TraceEvent[], recentTurns = 8): Trac
         const name = String(p.name ?? "tool");
         if (e.span) names.set(e.span, name);
         tool(name).calls += 1;
+        used.add(name);
         if (cur) cur.tools += 1;
         break;
       }
@@ -115,6 +141,22 @@ export function buildTrace(events: readonly TraceEvent[], recentTurns = 8): Trac
         t.slowestMs = Math.max(t.slowestMs, ms);
         break;
       }
+      /* The person's thumb, filed under the seq of the turn's prompt. Last
+         word wins: a second thumb replaces the first, and a clear leaves the
+         turn unrated -- counting a clear as a down-vote would poison the one
+         number this exists to give. */
+      case "turn.rating": {
+        const turn = turnBySeq.get(Number(p.turn));
+        if (!turn) break;
+        const reason = typeof p.reason === "string" && p.reason ? p.reason : undefined;
+        turn.rating = reason ? { up: p.up === true, reason } : { up: p.up === true };
+        break;
+      }
+      case "turn.rating.cleared": {
+        const turn = turnBySeq.get(Number(p.turn));
+        if (turn) delete turn.rating;
+        break;
+      }
       case "tools.enable":
         if (typeof p.family === "string") loaded.add(p.family);
         break;
@@ -125,6 +167,25 @@ export function buildTrace(events: readonly TraceEvent[], recentTurns = 8): Trac
           if (cur.reason) total.loopStops += 1;
         }
         break;
+    }
+  }
+
+  /* The thumbs, counted where the other numbers are counted: totals for the
+     chat, and per tool for the turns that used it -- a tool that keeps turning
+     up in turns the person rejected is the one worth looking at. */
+  let ratingsUp = 0, ratingsDown = 0, ratingsWithReason = 0;
+  for (const turn of turns) {
+    if (!turn.rating) continue;
+    if (turn.rating.up) ratingsUp += 1;
+    else {
+      ratingsDown += 1;
+      if (turn.rating.reason) ratingsWithReason += 1;
+    }
+    for (const name of toolsOfTurn.get(turn) ?? []) {
+      const t = byTool.get(name);
+      if (!t) continue;
+      if (turn.rating.up) t.ratedUp += 1;
+      else t.ratedDown += 1;
     }
   }
 
@@ -141,6 +202,9 @@ export function buildTrace(events: readonly TraceEvent[], recentTurns = 8): Trac
     tools: [...byTool.values()].sort((a, b) => b.totalMs - a.totalMs || b.calls - a.calls),
     recent: turns.slice(-recentTurns),
     loopStops: total.loopStops,
+    ratingsUp,
+    ratingsDown,
+    ratingsWithReason,
     loaded: [...loaded],
   };
 }
@@ -157,12 +221,17 @@ export function traceText(t: Trace): string {
   if (t.cacheMisses > 0) {
     out.push(`${t.cacheMisses} call${t.cacheMisses === 1 ? "" : "s"} rewrote the cache mid-turn (${t.cacheMissesFromTools} with a change in the tool list).`);
   }
+  if (t.ratingsUp + t.ratingsDown > 0) {
+    out.push(`Rated: ${t.ratingsUp} up, ${t.ratingsDown} down` +
+      (t.ratingsDown > 0 ? ` (${t.ratingsWithReason} with a reason)` : "") + ".");
+  }
   if (t.loaded.length > 0) out.push(`Tool sets brought in: ${t.loaded.join(", ")}.`);
   if (t.tools.length > 0) {
     out.push("Tools, by time spent:");
     for (const x of t.tools.slice(0, 12)) {
       out.push(`- ${x.name}: ${x.calls} call${x.calls === 1 ? "" : "s"}, ${(x.totalMs / 1000).toFixed(1)}s (slowest ${(x.slowestMs / 1000).toFixed(1)}s)` +
-        `${x.failures ? `, ${x.failures} failed` : ""}${x.held ? `, ${x.held} held for the person` : ""}`);
+        `${x.failures ? `, ${x.failures} failed` : ""}${x.held ? `, ${x.held} held for the person` : ""}` +
+        `${x.ratedDown ? `, in ${x.ratedDown} turn${x.ratedDown === 1 ? "" : "s"} rated down` : ""}`);
     }
   }
   return out.join("\n");

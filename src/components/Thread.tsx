@@ -2,7 +2,7 @@ import { Suspense, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import type { Bucket, Cell, MemoryTouch, SpanState } from "../lib/derive";
 import { turnItems } from "../lib/steps";
 import { isPicture, sizeLabel, type Attachment } from "../lib/attachments";
-import { IconAlert, IconArrow, IconArrowDown, IconBrain, IconCheck, IconChevron, IconCopy, IconDownload, IconFile, IconNotebook, IconSpeaker, IconSpeakerOff, IconTerminal, IconUser, IconWrench } from "./Icons";
+import { IconAlert, IconArrow, IconArrowDown, IconBrain, IconCheck, IconChevron, IconCopy, IconDownload, IconFile, IconNotebook, IconSpeaker, IconSpeakerOff, IconTerminal, IconThumbDown, IconThumbUp, IconUser, IconWrench } from "./Icons";
 import { OPEN_NOTEBOOK } from "../lib/notebooks";
 import { copyText } from "../lib/clipboard";
 import { sameReply } from "../lib/voice";
@@ -428,6 +428,7 @@ export function Thread({
               open={tail?.open ?? false}
               phase={phase}
               active={false}
+              turnSeq={-1}
               onPermissionDecide={onPermissionDecide}
               {...work}
             />
@@ -519,6 +520,12 @@ type WorkState = {
   onOpenSettings?: () => void;
   /** Reads one reply out loud, in the voice the page already speaks with. */
   onSpeakReply?: (text: string) => void;
+  /** Puts the person's thumb on a turn (up, or null to take it back), with
+      the one line they typed when it was a thumb down. */
+  onRateReply?: (turn: number, up: boolean | null, reason?: string) => void;
+  /** What a turn is already rated, so a reload shows the thumb that is lit
+      rather than a fresh pair of grey ones. */
+  ratingOf?: (turn: number) => { up: boolean; reason?: string } | undefined;
   /** Which reply the voice is on, and whether it has been silenced -- so the
       speaker under it can be one button rather than a play button with a
       separate way to stop it. */
@@ -682,6 +689,7 @@ const TurnBucket = memo(function TurnBucket({
           docked={docked}
           open={bucket.open}
           phase={phase}
+          turnSeq={bucket.seq}
           onPermissionDecide={onPermissionDecide}
           {...work}
         />
@@ -737,6 +745,9 @@ type CellContext = {
   /** Which of the mark's two busy states suits what it is doing. */
   phase: MarkPhase;
   onPermissionDecide?: (requestId: string, approved: boolean, response?: string) => void;
+  /** The turn these cells belong to: the seq of its own `turn.user` event,
+      which is what a rating is filed under. -1 before any prompt. */
+  turnSeq: number;
 } & WorkState;
 
 /* ---------------------------------------------------------------- steps -- */
@@ -1005,6 +1016,7 @@ export const WorkFeed = memo(function WorkFeed({
             docked=""
             open={b.open}
             phase={phase}
+            turnSeq={b.seq}
             onPermissionDecide={onPermissionDecide}
             {...work}
           />
@@ -1032,7 +1044,10 @@ const CellView = memo(function CellView({
   onOpenSettings,
   onSpeakReply,
   speakingReply,
+  ratingOf,
+  onRateReply,
   showing,
+  turnSeq,
 }: {
   cell: Cell;
   sessionId: string;
@@ -1045,6 +1060,8 @@ const CellView = memo(function CellView({
   phase: MarkPhase;
   active: boolean;
   onPermissionDecide?: (requestId: string, approved: boolean, response?: string) => void;
+  /** Which turn this cell belongs to, for the thumb under a reply. */
+  turnSeq: number;
 } & WorkState) {
   const held = !stage && docked !== "" && docked.split("|").includes(cellKey(cell));
   switch (cell.kind) {
@@ -1060,6 +1077,9 @@ const CellView = memo(function CellView({
           onOpenSettings={cell.turn.setup ? onOpenSettings : undefined}
           onSpeak={onSpeakReply}
           speakingReply={speakingReply}
+          turn={turnSeq}
+          rating={ratingOf?.(turnSeq)}
+          onRate={onRateReply}
         />
       );
     case "terminal":
@@ -1087,6 +1107,7 @@ const CellView = memo(function CellView({
           docked={docked}
           showing={showing}
           phase={phase}
+          turnSeq={turnSeq}
           onPermissionDecide={onPermissionDecide}
           driving={driving}
           browserHandedOver={browserHandedOver}
@@ -1236,6 +1257,9 @@ const Reply = memo(function Reply({
   onOpenSettings,
   onSpeak,
   speakingReply,
+  turn,
+  rating,
+  onRate,
 }: {
   text: string;
   thinking?: string;
@@ -1248,6 +1272,13 @@ const Reply = memo(function Reply({
   /** This reply is the one the voice is on, and whether it has been silenced.
       Null while the voice is on some other reply or on none. */
   speakingReply?: { text: string; muted: boolean } | null;
+  /** The turn this reply answers, by the seq of its own prompt: what a thumb
+      is filed under. */
+  turn?: number;
+  /** The thumb already on this turn, if the person has given one. */
+  rating?: { up: boolean; reason?: string };
+  /** Give a thumb, replace the one there, or take it back with null. */
+  onRate?: (turn: number, up: boolean | null, reason?: string) => void;
   /** Still being written. The mark animates while this holds and plays its
       own ending when it drops, so the reply visibly lands rather than just
       stopping. */
@@ -1258,6 +1289,15 @@ const Reply = memo(function Reply({
 }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  /* A thumb down with nowhere to say what was wrong is a number with no
+     meaning, so it opens one line for a reason. The box stays open until it
+     is sent or dismissed; the vote itself is already recorded either way, so
+     closing it loses nothing. */
+  const [whyOpen, setWhyOpen] = useState(false);
+  const [why, setWhy] = useState("");
+  /** A thumb needs somewhere to land: a turn number, and a page that can
+      record it. */
+  const rateable = Boolean(onRate) && typeof turn === "number" && turn > 0;
   /* Whether the voice is on this reply, and whether it has been silenced. */
   const mine = speakingReply && sameReply(speakingReply.text, text) ? speakingReply : null;
   const spokenLabel = mine
@@ -1308,6 +1348,41 @@ const Reply = memo(function Reply({
             >
               {mine?.muted ? <IconSpeakerOff size={13} /> : <IconSpeaker size={13} />}
             </button>}
+            {/* The person's own word on whether the turn worked, beside Copy
+                and Speak. One per turn: the lit thumb pressed again takes it
+                back, the other one moves it. Hidden while the reply is still
+                being written, and on a turn there is nothing to file it
+                under. */}
+            {rateable && <button
+              type="button"
+              className={`msg-tool ${rating?.up === true ? "is-rated-up" : ""}`.trim()}
+              onClick={() => onRate!(turn!, rating?.up === true ? null : true)}
+              title={rating?.up === true ? "You said this reply worked (click to take it back)" : "This reply worked"}
+              aria-label={rating?.up === true ? "Take back the thumbs up" : "This reply worked"}
+              aria-pressed={rating?.up === true}
+            >
+              <IconThumbUp size={13} />
+            </button>}
+            {rateable && <button
+              type="button"
+              className={`msg-tool ${rating?.up === false ? "is-rated-down" : ""}`.trim()}
+              onClick={() => {
+                if (rating?.up === false) {
+                  setWhyOpen(false);
+                  onRate!(turn!, null);
+                  return;
+                }
+                onRate!(turn!, false);
+                setWhyOpen(true);
+              }}
+              title={rating?.up === false
+                ? (rating.reason ? `You said it did not work: ${rating.reason} (click to take it back)` : "You said this did not work (click to take it back)")
+                : "Something was wrong with this reply"}
+              aria-label={rating?.up === false ? "Take back the thumbs down" : "Something was wrong with this reply"}
+              aria-pressed={rating?.up === false}
+            >
+              <IconThumbDown size={13} />
+            </button>}
           </span>
         )}
         </div>
@@ -1336,6 +1411,31 @@ const Reply = memo(function Reply({
             only the reply the voice is actually on shows the second face, since
             pressing another reply's speaker stops this one: there is one
             voice. */}
+        {/* One line, only after a thumb down: what was wrong is the useful
+            half of the signal, and a box with no line in it is not worth
+            showing under every reply. */}
+        {text && !working && rateable && whyOpen && (
+          <form
+            className="msg-why"
+            onSubmit={(e) => {
+              e.preventDefault();
+              onRate!(turn!, false, why.trim() || undefined);
+              setWhyOpen(false);
+            }}
+          >
+            <input
+              className="msg-why-input"
+              value={why}
+              onChange={(e) => setWhy(e.target.value)}
+              placeholder="What was wrong? (optional)"
+              aria-label="What was wrong with this reply"
+              maxLength={280}
+              autoFocus
+              onKeyDown={(e) => { if (e.key === "Escape") setWhyOpen(false); }}
+            />
+            <button type="submit" className="btn msg-why-send">Send</button>
+          </form>
+        )}
         {onOpenSettings && (
           <button className="btn primary msg-action" onClick={onOpenSettings}>
             Open Settings <IconArrow size={13} />

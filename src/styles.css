@@ -633,6 +633,26 @@ body::before {
   .msg-tool { opacity: 0.8; width: 32px; height: 32px; }
 }
 
+/* The thumb the person gave: lit and up to full strength, like the speaker
+   while it reads. A down-vote is the only one that says anything about the
+   failure, so it keeps a slightly warmer tint than the accent. */
+.msg-tool.is-rated-up {
+  opacity: 1; color: var(--accent-2); border-color: var(--accent-line); background: var(--s1);
+}
+.msg-tool.is-rated-down {
+  opacity: 1; color: var(--danger, #e0703f); border-color: var(--border); background: var(--s1);
+}
+/* The one line for what was wrong. Under the reply, the width of a sentence,
+   and only after a thumb down -- it is a note to the file, not a form. */
+.msg-why { display: flex; gap: 6px; margin-top: 6px; max-width: 520px; }
+.msg-why-input {
+  flex: 1 1 auto; min-width: 0; padding: 5px 9px; font: inherit; font-size: 13px;
+  color: var(--text-1); background: var(--s1); border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+.msg-why-input:focus { outline: none; border-color: var(--accent-line); }
+.msg-why-send { flex: 0 0 auto; padding: 4px 10px; font-size: 12px; }
+
 .frame-wrap { position: relative; max-width: 100%; max-height: 100%; line-height: 0; }
 .frame {
   max-width: 100%; max-height: 100%; display: block;

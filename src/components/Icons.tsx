@@ -272,6 +272,21 @@ export const IconSpeaker = ({ size = 16, className }: Props) => (
   </svg>
 );
 
+/** A thumb, for the two buttons under a finished reply. */
+export const IconThumbUp = ({ size = 16, className }: Props) => (
+  <svg {...base(size)} className={className} aria-hidden="true">
+    <path d="M7 21V10l4.2-7a2 2 0 0 1 3.6 1.3V9h4.1a2 2 0 0 1 2 2.4l-1.5 7A2 2 0 0 1 17.4 20H7Z" />
+    <path d="M7 10H4a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h3" />
+  </svg>
+);
+
+export const IconThumbDown = ({ size = 16, className }: Props) => (
+  <svg {...base(size)} className={className} aria-hidden="true">
+    <path d="M17 3v11l-4.2 7a2 2 0 0 1-3.6-1.3V15H5.1a2 2 0 0 1-2-2.4l1.5-7A2 2 0 0 1 6.6 4H17Z" />
+    <path d="M17 14h3a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1h-3" />
+  </svg>
+);
+
 /** The same speaker with its sound taken out: what the button turns into
     while it is reading, so a press that means "stop" says so. */
 export const IconSpeakerOff = ({ size = 16, className }: Props) => (

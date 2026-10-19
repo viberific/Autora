@@ -365,6 +365,9 @@ export type Derived = {
   /** The question the turn is waiting on, if it is waiting on one. */
   asking: Ask | null;
   tokens: { in: number; out: number; cached: number };
+  /** What the person said about each rated turn, by the seq of its own
+      `turn.user` event. Absent means unrated. */
+  ratings: Map<number, { up: boolean; reason?: string }>;
   /** How full the model's context is, from the newest reading; null before
       the first model call. */
   context: ContextGauge | null;
@@ -451,6 +454,8 @@ export function derive(events: AutoraEvent[]): Derived {
   buckets.push(bucket);
 
   const memoryById = new Map<string, MemoryMark>();
+  /** turn seq -> what the person said about it. */
+  const ratings = new Map<number, { up: boolean; reason?: string }>();
   let openAgentTurn: TranscriptTurn | null = null;
   const approvals: Approval[] = [];
   const asks = new Map<string, Ask>();
@@ -553,6 +558,24 @@ export function derive(events: AutoraEvent[]): Derived {
 
   for (const e of events) {
     switch (e.kind) {
+      /* The person's thumb on a turn, and the taking back of one: last word
+         wins, and a clear leaves nothing -- so a reload shows what the last
+         click said, not a history of clicks. */
+      case Kind.TurnRating: {
+        const turn = Number(e.payload.turn);
+        if (Number.isInteger(turn) && turn > 0) {
+          const reason = typeof e.payload.reason === "string" && e.payload.reason ? e.payload.reason : undefined;
+          ratings.set(turn, reason ? { up: e.payload.up === true, reason } : { up: e.payload.up === true });
+        }
+        break;
+      }
+
+      case Kind.TurnRatingCleared: {
+        const turn = Number(e.payload.turn);
+        if (Number.isInteger(turn)) ratings.delete(turn);
+        break;
+      }
+
       case Kind.SessionStarted:
         title = e.payload.title || "";
         break;
@@ -1193,6 +1216,7 @@ export function derive(events: AutoraEvent[]): Derived {
 
   return {
     transcript,
+    ratings,
     // The leading bucket exists only to catch events that precede any prompt;
     // drop it when nothing landed there, which is the usual case.
     buckets: buckets.filter((b, index) => index > 0 || b.cells.length > 0),

@@ -107,5 +107,10 @@ export const Kind = {
   Log: "system.log",
   /** One model call's tokens and cost, and how full the context now is. */
   UsageTurn: "usage.turn",
+  /** The person's thumb on a turn: { turn, up, reason? }. A second one for
+      the same turn replaces the first. */
+  TurnRating: "turn.rating",
+  /** A thumb taken back -- not a down-vote, and counted as nothing. */
+  TurnRatingCleared: "turn.rating.cleared",
   Error: "system.error",
 } as const;
