@@ -209,15 +209,6 @@ export function browserRoots(): number[] {
   return out;
 }
 
-/** Kill the browsers in `pids` (and their trees). Returns how many leaders
-    were killed, which is what a caller checks when it expected to close one
-    browser and wants to know whether one was left behind. */
-export function killBrowsers(pids: Iterable<number>): number {
-  let n = 0;
-  for (const pid of pids) n += killTree(pid) > 0 ? 1 : 0;
-  return n;
-}
-
 /** A browser is a tree of twenty-odd processes and closing it through the
     DevTools protocol leaves its children to exit on their own, in their own
     time, into PID 1's arms. Give them a moment to go quietly and then take

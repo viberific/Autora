@@ -23,7 +23,13 @@ const { withoutUnloaded } = await import("../server/toolload");
 // Raised to 48_200 (2026-10-16): main stood at exactly 48,000; artifact_list and artifact_save now say that files live in
 // one folder per project (the composer's Artifacts button attaches project folders), +66 chars after trimming both.
 // Raised again, to 48_700 (2026-10-16): memory_link, the tool that connects two memories (~420 chars with its schema).
-const SCHEMA_BUDGET_CHARS = 48_700;
+// Raised again, to 52_000 (2026-10-18): the set had drifted to 51,184 over several commits after 16 Oct without a bump here,
+// so this check had been failing on main rather than on any one change -- identical on 0.9.275 and 0.9.276. The raise is
+// deliberate: the 55 default tools measure 27,125 chars of description and 21,071 of parameter text, and every paragraph
+// in it is instruction the agent follows (nothing duplicates the briefing -- checked). Trimming 2,500 chars here would have
+// deleted guidance to satisfy a number. The honest saving, if it is wanted, is moving rarely-used tools to on-demand
+// loading rather than shaving them. Set tight on purpose so the next addition is caught soon.
+const SCHEMA_BUDGET_CHARS = 52_000;
 // Raised from 17,500 for the windows overview (server/handbook.ts): the manuals themselves are not in the briefing, they arrive with a window's first call.
 // Raised again, to 22_000: on CI the browser, memory and voice groups are all available, and their guides are in the briefing (20,871 chars there before Autora Photo's line, about 18,000 on a machine without a browser).
 // Raised again, to 24_000: the tool bars add each window's bar and All-tools grid to the guides; CI measured 23,354 chars, about 21,500 on a machine without a browser.

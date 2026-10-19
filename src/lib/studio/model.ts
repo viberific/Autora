@@ -120,7 +120,7 @@ export const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.ma
 const num = (v: unknown, fallback: number) => (typeof v === "number" && Number.isFinite(v) ? v : fallback);
 
 /** Three EQ bands from a saved song, each held between -15 and +15 dB; anything missing is flat. */
-export function parseEq(v: unknown): Eq {
+function parseEq(v: unknown): Eq {
   const o = v && typeof v === "object" ? (v as Record<string, unknown>) : {};
   return {
     low: clamp(num(o.low, 0), -15, 15),

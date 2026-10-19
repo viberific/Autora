@@ -27,7 +27,7 @@ import path from "node:path";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { stateDir } from "./state";
 
-export type SkillStatus = "live" | "draft";
+type SkillStatus = "live" | "draft";
 export type SkillAuthor = { kind: "person" } | { kind: "agent"; id: string; name: string };
 
 interface Sidecar {
@@ -44,7 +44,7 @@ interface Sidecar {
   versions: { at: number; by: string; text: string }[];
 }
 
-export interface SkillInfo {
+interface SkillInfo {
   name: string;
   description: string;
   status: SkillStatus;
@@ -59,7 +59,7 @@ export interface SkillInfo {
   versions: number;
 }
 
-export interface Skill extends SkillInfo {
+interface Skill extends SkillInfo {
   /** The whole SKILL.md, front matter and all. */
   text: string;
   /** The instructions under the front matter. */
@@ -71,11 +71,11 @@ export interface Skill extends SkillInfo {
 }
 
 /** The format's own limits (agentskills.io), and Autora's for what it will hold. */
-export const NAME_MAX = 64;
-export const DESCRIPTION_MAX = 1024;
+const NAME_MAX = 64;
+const DESCRIPTION_MAX = 1024;
 const COMPATIBILITY_MAX = 500;
 /** A SKILL.md is read whole into a turn: past this it should be split into reference files. */
-export const SKILL_MD_MAX = 30_000;
+const SKILL_MD_MAX = 30_000;
 const FILE_MAX = 1_000_000;
 const TOTAL_MAX = 5_000_000;
 const FILES_MAX = 100;
@@ -98,7 +98,7 @@ export class SkillError extends Error {}
 // ------------------------------------------------------------ the format --
 
 /** What a name must be, or null when it is one. */
-export function nameProblem(name: string): string | null {
+function nameProblem(name: string): string | null {
   if (!name) return "A skill needs a name.";
   if (name.length > NAME_MAX) return `A skill's name is at most ${NAME_MAX} characters.`;
   if (!NAME_RE.test(name)) {
@@ -188,7 +188,7 @@ export function composeSkillMd(name: string, description: string, body: string, 
   return lines.join("\n");
 }
 
-export type Parsed = { ok: true; meta: Record<string, unknown>; name: string; description: string; body: string } | { ok: false; error: string };
+type Parsed = { ok: true; meta: Record<string, unknown>; name: string; description: string; body: string } | { ok: false; error: string };
 
 /**
  * A SKILL.md read and held to the format: front matter between `---` lines,
@@ -617,7 +617,7 @@ export function exportSkill(name: string): Uint8Array {
  * in as a draft. The memory is then let go by the caller, so a way of working
  * lives in one place.
  */
-export function skillFromMemory(
+function skillFromMemory(
   record: { title: string; body: string; tags: string[]; status?: string },
   by: SkillAuthor,
 ): SkillInfo | null {

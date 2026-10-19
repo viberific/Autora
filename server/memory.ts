@@ -87,9 +87,9 @@ const CONFIRM_AFTER = 2;
     which ranks it higher whenever it matches. It is not pinned: see reinforce. */
 const PROMOTE_AFTER = 3;
 /** Recalled this many times without helping, a memory ranks lower... */
-export const DIM_AFTER = 5;
+const DIM_AFTER = 5;
 /** ...and this many, it is not recalled by itself any more (pinned ones aside). */
-export const QUIET_AFTER = 15;
+const QUIET_AFTER = 15;
 /** Unconfirmed, unused memories older than this are dropped by consolidate. */
 const STALE_PROVISIONAL_S = 30 * 24 * 3600;
 /** A memory nobody has confirmed in this long speaks up about it. */

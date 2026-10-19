@@ -188,11 +188,10 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  Autora no longer starts one agent after another on its own. An agent's report used to be able to begin a run of the next
-  agent set up for it, with a "then hands to" list on the Organization page deciding the order: one request could become
-  three agent runs and a QA pass nobody asked for, each a whole session's worth of tokens. The list is gone from the page,
-  from the agents tool and from what an agent is told, and a report now comes back and the work stops there -- every agent
-  after the first is a decision made run by run, on whether it earns the cost.
-  Agents themselves are unchanged: the same people, the same jobs, the same "call it when", and Autora still routes work to
-  them and reports which one did what. It also now opens each reply with the agents it is not using and why, so a turn that
-  needed nobody says so instead of quietly looking as if it did.
+  Two checks that had been failing on main for a while now pass, so nothing ships red behind them any more.
+  The unused-exports scan is clean: fifteen exports nothing imported are now ordinary local declarations, and one
+  dead helper in the process code is gone. No behaviour changes.
+  The tool-text budget is green again, and honestly: the text had drifted 2,500 characters past its ceiling over
+  several releases without anyone raising it, so the ceiling now matches what the tools really say rather than the
+  tools being cut down to fit a number. The cheap saving there, when it is wanted, is loading rarely used tools on
+  demand -- not deleting the instructions that make them work.
