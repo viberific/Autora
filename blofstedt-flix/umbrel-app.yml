@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.35"
+version: "0.3.38"
 port: 8096
 folderAccess:
   - id: umbrel-downloads
@@ -54,14 +54,23 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  The picture is better now that one television is the only screen. The default
-  conversion quality is Balanced again (veryfast, CRF 20, 6.5 Mbit/s cap), which
-  measured 3.6x faster than real time on this box -- comfortably ahead of the
-  player -- so it no longer has to trade detail for speed. Economy and Best are
-  still selectable in Settings > Playback. Only one conversion runs at a time,
-  matching the one screen, and the cap can no longer take a stream away: it only
-  closes a conversion nobody has touched for 90 seconds, so if a second device
-  ever connects it slows the first rather than stopping it. Everything stays at
-  1080p or below -- direct play, HDR passthrough, the live conversion and the
-  saved MP4 all refuse anything higher.
+  Flix no longer downloads anything it would have to convert. A release whose
+  picture needs re-encoding is not a candidate at all, so the box never spends CPU
+  on a file it fetched itself: it takes the copy-playable release instead (a 720p
+  H.264 over a better-seeded 1080p HEVC), and 4K is never downloaded. The picker
+  is not the only gate -- a play, a season pack and the next-episode warm-up all
+  refuse one too.
+
+  The library follows the same rule: a show or film with nothing that plays
+  without converting is left out of the library, search and the home screen, so a
+  poster never leads to a dead end. Against this library that is 17 shows of 592.
+  Anything already on disk stays visible, and an episode with no playable release
+  is simply absent rather than a tile that fails.
+
+  A film or episode that still needs a conversion does not fail silently: the player
+  says so in plain words and lets you allow one conversion for that episode, and an
+  MKV that only needs its container changed plays as it always did.
+
+  Settings > Playback still has the switch: untick "Never convert the picture" and
+  conversions are allowed again, with the old preference for the sharpest release.
 
