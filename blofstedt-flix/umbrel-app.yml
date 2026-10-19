@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.38"
+version: "0.3.39"
 port: 8096
 folderAccess:
   - id: umbrel-downloads
@@ -70,6 +70,11 @@ releaseNotes: >-
   A film or episode that still needs a conversion does not fail silently: the player
   says so in plain words and lets you allow one conversion for that episode, and an
   MKV that only needs its container changed plays as it always did.
+
+  Updates download in a few seconds from now on. Every previous release re-fetched
+  the whole dependency layer (about 95 MB) because npm writes the install time into
+  every file it creates, so the layer never matched the one already on disk. That is
+  fixed: from this version on, an update fetches only what actually changed.
 
   Settings > Playback still has the switch: untick "Never convert the picture" and
   conversions are allowed again, with the old preference for the sharpest release.
