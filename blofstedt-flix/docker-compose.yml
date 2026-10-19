@@ -16,8 +16,15 @@ services:
     # Built by viberific/Flix's own workflow from the repo's package.json
     # version. Bump this tag (and `version` above) only once that tag exists
     # in the registry, or an update will fail with "manifest unknown".
-    image: ghcr.io/viberific/flix:undefined
+    image: ghcr.io/viberific/flix:0.3.34
     restart: unless-stopped
+    # The GPU, for Quick Sync. The N95 in this box has it, and without
+    # these two lines a container cannot see /dev/dri at all, so every
+    # conversion runs on its four CPU cores instead. With them, Flix
+    # probes h264_qsv at startup and converts on the GPU when it opens a
+    # session, falling back to x264 on its own if it cannot.
+    devices:
+      - /dev/dri:/dev/dri
     # The torrent peer port. Flix keeps qBittorrent on 6881 (QB_LISTEN_PORT)
     # so it never changes between restarts, and this publishes it so a port
     # forward on the router actually reaches it. TCP and UDP both: peers
