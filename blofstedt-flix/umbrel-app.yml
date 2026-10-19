@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.31"
+version: "0.3.32"
 port: 8096
 folderAccess:
   - id: umbrel-downloads
@@ -54,15 +54,15 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  The home screen now shows what is new on Disney+ in its own row, and that row
-  matches everything Disney puts out: Disney Channel, Disney Junior, National
-  Geographic and Hulu shows all count as Disney+. Netflix is no longer surfaced
-  on the home screen at all, since that is where you watch it anyway; its shows
-  stay in the library, search and My List and still play. A service with only a
-  handful of shows in the library now gets a short row of its own instead of no
-  row at all, so Showcase, Crave, Apple TV+ and Paramount+ appear as soon as
-  there is anything to show. Also in this version: crisper remote navigation,
-  no grey placeholder behind the loading logo, the loading light follows the
-  Flix mark's rounded edge, a Next Episode card at the credits that fills and
-  plays on its own, faster episode starts, Skip Intro without chapters, and
-  episodes that unlock in order.
+  Settings opens again: the page used to fail on its first line, so tapping
+  Settings did nothing at all. A television no longer shows an Install button or
+  a Cast button, because it is the screen you cast to and its app now updates
+  itself; Cast stays on the phone, where it is useful. Install is gone from the
+  account menu everywhere, since the Android/Google TV app and the browser's own
+  install prompt cover both cases. The Android and TV app can finally check for
+  updates by itself, so a new version of Flix reaches the TV without sideloading.
+  Also in this version: crisper remote navigation, no grey placeholder behind the
+  loading logo, the loading light follows the Flix mark's rounded edge, a Next
+  Episode card at the credits that fills and plays on its own, faster episode
+  starts, Skip Intro without chapters, episodes that unlock in order, and
+  Disney+ on the home screen with Netflix no longer surfaced.
