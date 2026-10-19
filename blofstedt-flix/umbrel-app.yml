@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.39"
+version: "0.3.43"
 port: 8096
 folderAccess:
   - id: umbrel-downloads
@@ -54,28 +54,20 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Flix no longer downloads anything it would have to convert. A release whose
-  picture needs re-encoding is not a candidate at all, so the box never spends CPU
-  on a file it fetched itself: it takes the copy-playable release instead (a 720p
-  H.264 over a better-seeded 1080p HEVC), and 4K is never downloaded. The picker
-  is not the only gate -- a play, a season pack and the next-episode warm-up all
-  refuse one too.
+  Seek previews no longer cost the box anything. When a download finishes, Flix
+  cuts one sheet of thumbnails from the film; scrubbing the bar shows a picture
+  straight from it instead of starting an ffmpeg for every hover. Scrubbing a
+  file that is still arriving behaves as it did.
 
-  The library follows the same rule: a show or film with nothing that plays
-  without converting is left out of the library, search and the home screen, so a
-  poster never leads to a dead end. Against this library that is 17 shows of 592.
-  Anything already on disk stays visible, and an episode with no playable release
-  is simply absent rather than a tile that fails.
+  The loading mark floats as one object now, so the tracer travels with it
+  instead of sliding across a still shape, and the loading screen is pure black
+  that fades in with the logo rather than a grey panel appearing first.
 
-  A film or episode that still needs a conversion does not fail silently: the player
-  says so in plain words and lets you allow one conversion for that episode, and an
-  MKV that only needs its container changed plays as it always did.
+  Skip intro is gone. It guessed where an intro was and put a button over the
+  first seconds of every episode, including cold opens that have no intro; the
+  player is cleaner without it.
 
-  Updates download in a few seconds from now on. Every previous release re-fetched
-  the whole dependency layer (about 95 MB) because npm writes the install time into
-  every file it creates, so the layer never matched the one already on disk. That is
-  fixed: from this version on, an update fetches only what actually changed.
-
-  Settings > Playback still has the switch: untick "Never convert the picture" and
-  conversions are allowed again, with the old preference for the sharpest release.
-
+  The TV's selection is a thinner stroke that wraps the poster and its title
+  together, so there is no seam between them. And a profile's PIN lockout is
+  written to disk: it used to live only in memory, so restarting Flix cleared a
+  lockout that was meant to still be running.
