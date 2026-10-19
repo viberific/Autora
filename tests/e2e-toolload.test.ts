@@ -6,7 +6,8 @@
 import assert from "node:assert/strict";
 import { startApp, type App } from "./e2e-harness";
 
-// The short list that grows as it is wanted is a switch now (every tool is a default tool): this file tests it.
+// The short list that grows as it is wanted is the default (AUTORA_ALL_TOOLS=1 turns every set back on, which the harness does
+// for the other e2e tests): this file tests the short one, and setting the old switch is what asks the harness for it.
 process.env.AUTORA_LAZY_TOOLS = "1";
 
 let passed = 0;

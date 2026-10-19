@@ -93,6 +93,74 @@ export function makesTimerOrWake(command: string, scheduled = false): string | n
   return null;
 }
 
+/* ---- waiting inside a turn ------------------------------------------------
+
+   A command whose whole job is to wait is the most expensive thing the terminal can be asked to do: it holds the turn
+   open for its length, prints nothing, and in this container a long sleep is OOM-killed anyway (the shell is a child of
+   a memory-capped server). Measured over 118 sessions, the terminal was called 5,148 times and a good share of the waste
+   was a bare `sleep 120` between two reads. A wait longer than ten seconds is refused; short ones, a backgrounded one
+   and one that is only part of a longer command are all left alone, so no build or test command is caught by it. */
+
+/** The most a command may wait inside one turn, in seconds. */
+export const WAIT_LIMIT_S = 10;
+
+/** A token as seconds: 30, 1.5, 2m, 1h. Null where it is not a plain duration (a variable, an expression). */
+function seconds(token: string): number | null {
+  const m = /^(\d+(?:\.\d+)?)([smhd]?)$/.exec(token);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return n * (m[2] === "m" ? 60 : m[2] === "h" ? 3600 : m[2] === "d" ? 86400 : 1);
+}
+
+/** How long this one segment waits, or null when it does anything but wait. */
+function waitOf(segment: string): number | null {
+  const tokens = words(segment).filter((x) => !PREFIXES.has(x) && !/^[A-Za-z_]+=/.test(x));
+  const first = (tokens[0] ?? "").replace(/^.*\//, "");
+  const rest = tokens.slice(1);
+  if (first === "timeout") {
+    /* timeout [-s SIG] [-k DUR] DURATION command: the wait is the inner sleep, never the command's own time limit. */
+    let args = rest;
+    while (args.length && args[0].startsWith("-")) {
+      const flag = args[0];
+      args = args.slice(/^-[sk]$/.test(flag) ? 2 : 1);
+    }
+    if (args.length < 2) return null;
+    const limit = seconds(args[0]);
+    const inner = waitOf(args.slice(1).join(" "));
+    if (limit === null || inner === null) return null;
+    return Math.min(limit, inner);
+  }
+  if (first !== "sleep") return null;
+  if (rest.length === 0) return 0;
+  let total = 0;
+  for (const t of rest) {
+    const s = seconds(t);
+    if (s === null) return null;
+    total += s;
+  }
+  return total;
+}
+
+/**
+ * How many seconds a command only waits for, or null when it does anything at all besides wait. Every segment has to be a
+ * wait, so `sleep 60 && curl ...` and `timeout 300 npm test` are ordinary commands; a backgrounded one (`sleep 60 &`)
+ * returns at once and is left to run_background, which is what a long job should use anyway.
+ */
+export function waitsInside(command: string): number | null {
+  const text = command.trim();
+  if (!text) return null;
+  if (/(^|[^&])&\s*$/.test(text)) return null;
+  const parts = segments(text);
+  if (parts.length === 0) return null;
+  let total = 0;
+  for (const part of parts) {
+    const t = waitOf(part);
+    if (t === null) return null;
+    total += t;
+  }
+  return total > WAIT_LIMIT_S ? Math.round(total) : null;
+}
+
 /** Where a recursive delete stops being a tidy-up. */
 const WHOLE = new Set([
   "/", "/*", "/.", "/*/", "~", "~/", "~/*", "$HOME", "${HOME}", "$HOME/",

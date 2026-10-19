@@ -152,6 +152,10 @@ export async function startApp(opts: { env?: Record<string, string> } = {}): Pro
         ...process.env,
         AUTORA_HOME: home, AUTORA_PORT: String(port), AUTORA_HOST: "127.0.0.1", AUTORA_TLS: "0",
         AUTORA_WORKDIR: home,
+        /* The e2e tests are about what a tool does, not about which sets are in the model's list: the whole set is on here,
+           and a test asks for the short list by setting AUTORA_LAZY_TOOLS=1 (tests/e2e-toolload.test.ts). The default a
+           person gets is the short one -- see server/toolload.ts and tests/toolbudget.test.ts. */
+        AUTORA_ALL_TOOLS: process.env.AUTORA_LAZY_TOOLS === "1" ? "0" : (process.env.AUTORA_ALL_TOOLS ?? "1"),
         // This sandbox's Chromium when it is here; elsewhere (CI) the server
         // finds the system's own. Naming a path that does not exist left the
         // server with no browser at all, so widgets went unchecked on CI.

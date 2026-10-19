@@ -2424,6 +2424,25 @@ async function systemInstructionFor(
      prose come from the same array, so they cannot drift. */
   lines.push("", await capabilityBriefing());
 
+  /* Where the money goes: a turn costs round trips and a fixed floor, not
+     the work done in it. 118 sessions measured 9,475 tool calls against 7,651
+     model requests, and a median request of 87,800 tokens in against 306 out,
+     because every round re-sends the briefing and every schema. These are the
+     rules that keep a turn from spending ten rounds on what takes two. */
+  lines.push(
+    "",
+    "Using tools economically. Batch every independent tool call into one",
+    "response; call them one at a time only when the next needs the last one's",
+    "result. Never sleep, time out or poll inside a turn: a long sleep is",
+    "OOM-killed here, so start slow work with run_background (or schedule, for",
+    "work that happens at a time) and read it next turn. Never retry a call",
+    "that already failed with the same arguments: change the approach. Run one",
+    "verification, in the background, not several overlapping ones. Read the",
+    "exact lines you need, then make one targeted edit -- never rewrite a whole",
+    "file to change part of it. Poll a long job at most once per turn, and stop",
+    "when two reads come back identical.",
+  );
+
   /* What the console will not do, said where the model reads it every turn.
      Without this a held call looks like a broken tool and the model tries it
      again; with it, being stopped reads as the console working. */
@@ -3922,9 +3941,11 @@ const manualGiven = (events: readonly { kind: string; payload?: Record<string, a
   events.some((e) => e.kind === "tool.manual" && e.payload?.id === id);
 
 /** Which specialist tool sets this chat has been given (see toolload.ts). */
-/* Every tool is a default tool: all of them are in the list on every call, and the handbook (server/handbook.ts) says how
-   each one works. AUTORA_LAZY_TOOLS=1 goes back to a short list that grows as it is wanted (the token-saving mode). */
-const allToolsOn = () => process.env.AUTORA_LAZY_TOOLS !== "1";
+/* The specialist sets are off the list by default: the words of a message, a call to one of their tools or tools_enable bring
+   them in, and what comes in is written in the log so it holds. Measured at 0.9.277: the whole set was 93 tools and 118,330
+   characters of schema on every call; the set that is always there is 37 tools and 34,632. AUTORA_ALL_TOOLS=1 puts every
+   one of them back (the e2e harness and tests/e2e-alltools.test.ts rely on it). */
+const allToolsOn = () => process.env.AUTORA_ALL_TOOLS === "1" || process.env.AUTORA_LAZY_TOOLS === "0";
 /* Connected servers' tools are separate from that: they are loaded as the job calls for them whatever the switch
    above says (one box had 192 of them, and sending every schema on every step cost more than all the built-in tools).
    AUTORA_ALL_MCP=1 puts them all back in the list. */
@@ -3951,7 +3972,7 @@ function loggedTools(session: Session): Set<string> {
       if (Array.isArray(e.payload?.tools)) for (const t of e.payload.tools) set.add(`mcpt:${t}`);
     } else if (e.kind === "tool.call") {
       const name = String(e.payload?.name ?? "");
-      for (const f of FAMILIES) if (f.match(name)) set.add(f.id);
+      for (const f of FAMILIES) if (f.match(name) || f.after?.(name)) set.add(f.id);
       if (mcpServerOf(name)) set.add(`mcpt:${name}`);
     }
   }

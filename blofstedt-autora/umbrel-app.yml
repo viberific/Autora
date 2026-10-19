@@ -188,10 +188,14 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  Two checks that had been failing on main for a while now pass, so nothing ships red behind them any more.
-  The unused-exports scan is clean: fifteen exports nothing imported are now ordinary local declarations, and one
-  dead helper in the process code is gone. No behaviour changes.
-  The tool-text budget is green again, and honestly: the text had drifted 2,500 characters past its ceiling over
-  several releases without anyone raising it, so the ceiling now matches what the tools really say rather than the
-  tools being cut down to fit a number. The cheap saving there, when it is wanted, is loading rarely used tools on
-  demand -- not deleting the instructions that make them work.
+  Turns cost less. The agent is now told to put every independent tool call in the same response instead of one per
+  round, never to sit in a sleep or a poll loop, never to retry a call that already failed, and to read the lines it
+  needs and make one small edit rather than rewriting a whole file. A terminal command that does nothing but wait more
+  than ten seconds is refused outright, with a line saying to start the work in the background or make a schedule -- in
+  this container a long sleep is killed before it ends anyway.
+  The tools that are only occasionally wanted are no longer sent with every message. The PDF editor, video editor, music
+  studio, office files, 3D, games, photos and widgets were already sets that could be loaded on demand; the browser's
+  page actions, voice and camera, research, the Creator window, custom tools and the MCP server list have joined them, and
+  each set is named in one line of the briefing so the agent knows it is there and can ask for it. What every message
+  carries before the conversation even starts went from 118,330 characters of tool schema to 34,632 -- about 21,000 tokens
+  down to 8,700 -- and the tool-text budget test still sits at 52,000, unchanged.

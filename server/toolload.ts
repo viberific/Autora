@@ -22,6 +22,8 @@ interface Family {
   match: (name: string) => boolean;
   /** Words from the person that bring it in. */
   words: RegExp;
+  /** A tool in another set that brings this one in once it is used (the page actions of a browser that has just been opened). */
+  after?: (name: string) => boolean;
 }
 
 export const FAMILIES: Family[] = [
@@ -75,8 +77,8 @@ export const FAMILIES: Family[] = [
   },
   {
     id: "mcp",
-    about: "find and connect tool servers (MCP) for another service",
-    match: (n) => n === "mcp_offer",
+    about: "find and connect tool servers (MCP) for another service, and see what is connected",
+    match: (n) => n === "mcp_offer" || n === "mcp_servers",
     words: /\bmcp\b|\bintegrations?\b|\bconnect (?:to |with )?(?:a |an |my )?(?:server|service|app)\b|\bconnector\b/i,
   },
   {
@@ -96,6 +98,42 @@ export const FAMILIES: Family[] = [
     about: "the agents set up on the Organization page (start one, in order), and Threads, where agents post and talk",
     match: (n) => n === "agents" || n === "agent_run" || n === "thread",
     words: /\borgani[sz]ation\b|\B@[a-z]|\bagents?\b.*\b(?:hand|trigger|run|ask|call|start)|\b(?:hand|pass) (?:it |this )?(?:off|on) to\b|\bthreads?\b.*\b(?:post|comment|like)|\bpost (?:on|to) threads\b/i,
+  },
+  /* The sets below the ones the words above bring in easily: each was called five times or fewer across 118 sessions
+     (9,515 tool calls measured from the session logs). They are on demand like every other set, and the index line in the
+     briefing names them, so nothing is unreachable. */
+  {
+    id: "browser",
+    about:
+      "work a page that is already open: fill a form, upload a file, press keys, scroll, tick a CAPTCHA, hand a sign-in to the person, take a screenshot, go back",
+    match: (n) => /^browser_(?:fill|upload|press|scroll|back|handoff|captcha|signin_import|screenshot)$/.test(n),
+    /* Opening or reading a page brings these in on its own: the step after browser_open is the one that clicks and fills. */
+    after: (n) => /^browser_(?:open|read|click|eval)$/.test(n),
+    words: /\bbrows|\bwebsite|\bweb ?page|\burl\b|https?:\/\/|\bsign ?in\b|\blog ?in\b|\bform\b|\bupload|\bscreenshot|captcha|cloudflare|\btabs?\b|\bclick\b/i,
+  },
+  {
+    id: "live",
+    about: "say something out loud in the console's voice, go quiet, and look through the person's camera",
+    match: (n) => n === "speak" || n === "voice_mute" || n === "camera_look",
+    words: /\bsay (?:it |that |this )?aloud|\bout loud\b|\bread (?:it|that|this) out\b|\bspeak\b|\bpronounce|\bvoice\b|\bmute\b|\bcamera\b|\blive view\b/i,
+  },
+  {
+    id: "custom",
+    about: "keep a script of your own as a tool, delete one, and read a window's manual",
+    match: (n) => n === "tool_create" || n === "tool_delete" || n === "tool_manual",
+    words: /\bcustom tool|\btool of my own|\bscript as a tool|\bmanual\b/i,
+  },
+  {
+    id: "research",
+    about: "hand a question to a separate research worker and get a short report back",
+    match: (n) => n === "research",
+    words: /\bresearch\b|\blook into\b|\bfind out\b|\binvestigat|\bdig into\b/i,
+  },
+  {
+    id: "creator",
+    about: "the Creator window: run a dev server or serve a folder, reload it, look at it, and use the page as a person would",
+    match: (n) => n === "app_preview",
+    words: /\bcreator\b|\bdev server\b|\bwebsite\b|\bweb ?app\b|\bapp window\b|\bpreview\b|\bprototype\b|\blanding page\b|\bhtml\b/i,
   },
 ];
 
@@ -213,7 +251,7 @@ export function loadedFromLog(events: readonly LoadEvent[]): Set<string> {
       if (Array.isArray(e.payload?.tools)) for (const t of e.payload.tools) out.add(`mcpt:${t}`);
     } else if (e.kind === "tool.call") {
       const name = String(e.payload?.name ?? "");
-      for (const f of FAMILIES) if (f.match(name)) out.add(f.id);
+      for (const f of FAMILIES) if (f.match(name) || f.after?.(name)) out.add(f.id);
       if (mcpServerOf(name)) out.add(`mcpt:${name}`);
     }
   }
@@ -228,13 +266,14 @@ interface LoadContext {
   hasPdf?: boolean;
   /** Everything on, whatever else is true. */
   all?: boolean;
-  /** Bring families in only as they are wanted (the person's words, use, tools_enable). Off by default: every tool is a default tool. */
+  /** Bring families in only as they are wanted (the person's words, use, tools_enable). On by default: the specialist sets are the expensive part of every call. */
   lazy?: boolean;
 }
 
 /** The families in the model's list this step. */
 export function loadedFamilies(ctx: LoadContext): Set<string> {
-  // Every tool is a default tool: the agent has all of them, and the handbook (server/handbook.ts) says how each works.
+  // On by default: the specialist sets are off the list until the words, a call or tools_enable ask for them (AUTORA_ALL_TOOLS=1
+  // puts every one of them back, which is what the e2e harness and tests/e2e-alltools.test.ts use).
   if (ctx.all || !ctx.lazy) return new Set(FAMILIES.map((f) => f.id));
   const out = loadedFromLog(ctx.events);
   if (ctx.hasPdf) out.add("pdf");

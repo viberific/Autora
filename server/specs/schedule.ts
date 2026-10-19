@@ -230,18 +230,20 @@ export const scheduleSPECS: ToolSpec[] = [
     name: "tools_enable",
     group: "schedule",
     description:
-      "Bring in tools that are not in your list yet. The console note lists what exists: tool sets (pdf, office, ...) " +
-      "and the tools of connected servers. Say what you need in whichever way is easiest: query (plain words for the job, " +
-      "like \"search google drive files\" -- finds the best matches across every connected server and loads them), " +
-      "tools (exact names from the note), or family (a whole set, or a small server). The reply shows how each loaded tool " +
-      "is called; they are in your list on your next step and stay for the chat. You do not need it for tools you can " +
-      "already see, nor for a tool named in the note: calling that by its full name loads it.",
+      "Bring in tools that are not in your list yet. The console note lists what exists, one line each: the specialist sets " +
+      "(pdf, video, studio, office, cad, game, photo, widgets, browser, live, custom, research, creator, schedule, notebooks, " +
+      "organization, mcp) and the tools of connected servers. Say what you need in whichever way is easiest: query (plain " +
+      "words for the job, like \"search google drive files\" -- finds the best matches across every connected server and " +
+      "loads them), tools (exact names from the note), or family (a whole set by its name, or a server as mcp:<server> for a " +
+      "small one). The reply shows how each loaded tool is called; they are in your list on your next step and stay for the " +
+      "chat. You do not need it for tools you can already see, nor for a tool named in the note: calling that by its full " +
+      "name loads it.",
     parameters: {
       type: "object",
       properties: {
         query: { type: "string", description: "What you want to do, in a few words. Loads the closest connected tools." },
         tools: { type: "array", items: { type: "string" }, description: "Exact tool names from the console note." },
-        family: { type: "string", description: "A set by name (pdf, widgets, mcp, schedule, notebooks) or a connected server (mcp:github)." },
+        family: { type: "string", description: "A set by its name (pdf, video, studio, office, cad, game, photo, widgets, browser, live, custom, research, creator, schedule, notebooks, organization, mcp), or a connected server as mcp:<server>." },
       },
     },
   },

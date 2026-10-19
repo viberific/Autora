@@ -1,7 +1,8 @@
 /**
  * The tools handbook: how every window and tool of Autora works.
  *
- * Every tool is a default tool (server/toolload.ts), so the agent has all of them; the manuals say how each is used, what the
+ * Every tool is in a set (server/toolload.ts): the everyday ones are in the list every call, the specialist ones are loaded on
+ * demand and named in one line each in the briefing. Either way the manuals say how each is used, what the
  * person sees while it is, and where it can go wrong, so it can navigate them as someone who knows the app would: the right
  * window for the work, what is shared with the person, what the person can change by hand, and how to check its own work.
  * The tool schemas say what each parameter is; a manual says what the window is for.

@@ -172,7 +172,7 @@ export function updateToolSettings(patch: any): ToolSettings {
 
 import { terminalSPECS } from "./specs/terminal";
 import { scheduleSPECS } from "./specs/schedule";
-import { makesTimerOrWake } from "./guard";
+import { makesTimerOrWake, waitsInside } from "./guard";
 import { browserSPECS } from "./specs/browser";
 import { computerSPECS } from "./specs/computer";
 import { personSPECS } from "./specs/person";
@@ -1912,6 +1912,13 @@ const TIMER_REFUSAL = (what: string) =>
   `That would make ${what}. A recurring job is the schedule tool's: give it a cron time and the shell command to run, and it ` +
   "runs by itself, shows on the Schedule page and can be paused. A job that has to wake a model each time spends tokens " +
   "for nothing and is the person's to set up on the Schedule page, not yours.";
+/** Why a command that only waits is refused, and what to do instead. */
+const WAIT_REFUSAL = (seconds: number) =>
+  `That command only waits ${seconds} seconds. A long wait is killed in this terminal -- the shell is OOM-killed before it ends -- ` +
+  "and until then it holds the turn open and prints nothing. Start the slow work with run_background: it keeps going after the " +
+  "turn ends and you read it with background_output on your next turn. For something that has to happen at a time, make a " +
+  "schedule. A wait of 10 seconds or less is fine, and so is a sleep inside a longer command.";
+
 /** How long the second attempt waits before it goes. */
 const RETRY_BACKOFF_MS = 1_500;
 
@@ -2177,6 +2184,8 @@ async function runToolUnredacted(
         if (!command) return { ok: false, summary: "No command was given." };
         const timer = makesTimerOrWake(command);
         if (timer) return { ok: false, summary: TIMER_REFUSAL(timer) };
+        const waited = waitsInside(command);
+        if (waited) return { ok: false, summary: WAIT_REFUSAL(waited) };
         const asked = String(args.cwd ?? "").trim();
         // A relative directory is taken from the terminal's own, like `cd`; once the Terminal window is open, its own.
         const base = termCwd(ctx.session) ?? terminalDir();

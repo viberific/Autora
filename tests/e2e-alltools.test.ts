@@ -1,6 +1,7 @@
 /**
- * Every tool is a default tool: a plain chat is shown the specialist sets too, and is not told to load anything.
- * (AUTORA_LAZY_TOOLS=1 is the short list that grows as it is wanted: tests/e2e-toolload.test.ts.)
+ * The switch that puts every specialist set back in the list (AUTORA_ALL_TOOLS=1, which the harness sets for the e2e tests).
+ * The default a person gets is the short list that grows as it is wanted: tests/e2e-toolload.test.ts, and
+ * tests/toolbudget.test.ts for what the default costs.
  *
  *   npx tsx tests/e2e-alltools.test.ts
  */
