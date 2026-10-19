@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.30"
+version: "0.3.31"
 port: 8096
 folderAccess:
   - id: umbrel-downloads
@@ -54,15 +54,15 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Moving around the television interface is now crisper: the remote keeps to the
-  row you are on, the focus ring lands on the tile it picks, and the page no
-  longer slides under the highlight on every press. Starting an episode no
-  longer shows a grey placeholder poster behind the logo while it loads, and the
-  light that traces the Flix mark now follows its rounded square edge instead of
-  circling it. A Next Episode card appears at the bottom right as soon as the
-  credits start, fills like Netflix and plays the next episode on its own, and
-  the following episode is prepared in the background so it starts almost at
-  once. Skip Intro now also works on episodes whose file carries no chapters,
-  using the intro you skipped last time on that show. Episodes unlock in order:
-  a small lock means watch the one before it first, and downloads are still
-  possible from any episode.
+  The home screen now shows what is new on Disney+ in its own row, and that row
+  matches everything Disney puts out: Disney Channel, Disney Junior, National
+  Geographic and Hulu shows all count as Disney+. Netflix is no longer surfaced
+  on the home screen at all, since that is where you watch it anyway; its shows
+  stay in the library, search and My List and still play. A service with only a
+  handful of shows in the library now gets a short row of its own instead of no
+  row at all, so Showcase, Crave, Apple TV+ and Paramount+ appear as soon as
+  there is anything to show. Also in this version: crisper remote navigation,
+  no grey placeholder behind the loading logo, the loading light follows the
+  Flix mark's rounded edge, a Next Episode card at the credits that fills and
+  plays on its own, faster episode starts, Skip Intro without chapters, and
+  episodes that unlock in order.
