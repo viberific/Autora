@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.43"
+version: "0.3.44"
 port: 8096
 folderAccess:
   - id: umbrel-downloads
@@ -54,20 +54,18 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Seek previews no longer cost the box anything. When a download finishes, Flix
-  cuts one sheet of thumbnails from the film; scrubbing the bar shows a picture
-  straight from it instead of starting an ffmpeg for every hover. Scrubbing a
-  file that is still arriving behaves as it did.
+  Up next now arrives when the end credits start rather than when the file ends,
+  so the next episode is there while the credits are still running. A gate in
+  the player used to hold the box back until playback had ended, which is why it
+  turned up after the credits were already over.
 
-  The loading mark floats as one object now, so the tracer travels with it
-  instead of sliding across a still shape, and the loading screen is pure black
-  that fades in with the logo rather than a grey panel appearing first.
+  Where the credits begin is measured once per downloaded file instead of being
+  guessed. When an episode finishes downloading, Flix asks ffmpeg where the
+  picture goes black and where the sound stops in the last quarter of the file,
+  and keeps the answer. A chapter named for the credits wins over that
+  measurement, and with neither the player estimates from the runtime as before.
+  Nothing is ever measured while you watch.
 
-  Skip intro is gone. It guessed where an intro was and put a button over the
-  first seconds of every episode, including cold opens that have no intro; the
-  player is cleaner without it.
-
-  The TV's selection is a thinner stroke that wraps the poster and its title
-  together, so there is no seam between them. And a profile's PIN lockout is
-  written to disk: it used to live only in memory, so restarting Flix cleared a
-  lockout that was meant to still be running.
+  Episodes already on disk are measured a few at a time in the background, so an
+  existing library fills in over the next few hours; until a file has been
+  measured, the estimate is what you get.
