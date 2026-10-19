@@ -188,11 +188,9 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  Folding a long conversation now waits until you are between jobs, and until there is something worth folding. A fold
-  rewrites the head of the conversation and is re-billed in full, so a fold made while the agent was partway through a
-  job lost the reasoning that got it there and paid again for every round after it: over 9,533 calls, 559 such folds
-  accounted for about $10.50 of wasted input. The message count now only starts a fold once the prompt is already half
-  of the model's window, and a fold never lands mid-job unless the prompt has reached 95% of the window. What a long
-  session remembers is unchanged. The memory tools also now say how long a body may be before it is refused -- a fact
-  600 characters, a preference 400, a procedure 1200, a reference 1500 -- so the refusal no longer arrives as a
-  surprise.
+  A command Autora gave up on is now actually stopped. When the terminal tool hit its limit it killed what the
+  command had started but left the shell that started it, and a shell whose child dies carries on with the next
+  command in the chain: a `sleep` followed by a write timed out, was reported as finished, and wrote the file
+  anyway. The whole process group is frozen before anything is killed now, so nothing can take another step. Two
+  smaller fixes behind a stuck check: the field under a reply used two colours that were never defined and its own
+  focus ring instead of the shared one.

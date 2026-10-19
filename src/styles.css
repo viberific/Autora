@@ -240,6 +240,7 @@ body::before {
 .app-row select:focus-visible,
 .app-comment-edit:focus-visible,
 .app-note:focus-visible,
+.msg-why-input:focus-visible,
 .st-field select:focus-visible,
 .st-field input:focus-visible,
 .st-clip-name-input:focus-visible,
@@ -647,10 +648,9 @@ body::before {
 .msg-why { display: flex; gap: 6px; margin-top: 6px; max-width: 520px; }
 .msg-why-input {
   flex: 1 1 auto; min-width: 0; padding: 5px 9px; font: inherit; font-size: 13px;
-  color: var(--text-1); background: var(--s1); border: 1px solid var(--border);
+  color: var(--text); background: var(--s1); border: 1px solid var(--border);
   border-radius: var(--r-sm);
 }
-.msg-why-input:focus { outline: none; border-color: var(--accent-line); }
 .msg-why-send { flex: 0 0 auto; padding: 4px 10px; font-size: 12px; }
 
 .frame-wrap { position: relative; max-width: 100%; max-height: 100%; line-height: 0; }

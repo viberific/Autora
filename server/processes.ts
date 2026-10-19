@@ -137,12 +137,16 @@ function blockFor(ms: number) {
     both spawn with `detached: true`, so the leader also leads a process group
     and the group kill takes any member that has moved to its own parent.
 
-    The order is what keeps zombies out of it. Killing the whole group at once
-    is the obvious thing and the wrong one: every member dies as its parent
-    does, so nobody is left to wait() on anybody and each of them is
-    reparented to PID 1 as a zombie. Instead the children go first, deepest
-    first, and the leader is given `graceMs` to collect them -- a shell sitting
-    in wait() reaps in microseconds -- before it too is killed. */
+    The group is FROZEN before anything dies, and that is the point of it.
+    Children used to be killed first, deepest first, with the leader left running
+    `graceMs` to collect them -- and the leader is a shell: the moment its child
+    dies, bash runs the NEXT command in the chain. So `sleep 3; echo done > f`
+    timed out, the `sleep` was killed, and the shell went on to write `f` after
+    the agent had been told the call was over. Frozen first, nothing can take
+    another step, and the tree is then killed in any order. A stopped leader
+    cannot reap, so its children are reparented to PID 1 -- docker-init in the
+    container, an init on a runner and on any normal host, all of which reap. A
+    process that carries on after it was stopped is the worse of the two. */
 export function killTree(pid: number, signal: NodeJS.Signals = "SIGKILL", graceMs = 150): number {
   if (!Number.isInteger(pid) || pid <= 1 || pid === process.pid) return 0;
   const tree = descendants(pid);
@@ -162,11 +166,23 @@ export function killTree(pid: number, signal: NodeJS.Signals = "SIGKILL", graceM
       return false;
     }
   };
+  /* Freeze the whole group before killing anything, so that no member can run
+     a step while the rest is being taken down: a shell whose child is killed
+     carries on with the next command in the chain otherwise. Both the group and
+     each member are stopped, because a member that left the group would miss
+     the group signal. */
+  let froze = false;
+  try {
+    process.kill(-pid, "SIGSTOP");
+    froze = true;
+  } catch {
+    // Not a group leader: the members are stopped one by one below.
+  }
+  if (!froze && killOne(pid, "SIGSTOP")) froze = true;
+  for (const id of tree) if (killOne(id, "SIGSTOP")) froze = true;
+
   let killed = 0;
   for (const id of tree) if (killOne(id, signal)) killed += 1;
-  // A moment for their parents to collect them, so they never become orphans.
-  const deadline = Date.now() + graceMs;
-  while (Date.now() < deadline && tree.some(alive)) blockFor(10);
   if (killOne(pid, signal)) killed += 1;
   // The sweep, for a member the /proc scan missed. Usually nothing is left.
   try {
@@ -175,6 +191,9 @@ export function killTree(pid: number, signal: NodeJS.Signals = "SIGKILL", graceM
   } catch {
     // Not a group leader, or the group is already empty.
   }
+  // A moment for them to be gone, so a caller that looks straight after sees none.
+  const deadline = Date.now() + graceMs;
+  while (Date.now() < deadline && (alive(pid) || tree.some(alive))) blockFor(10);
   return killed;
 }
 

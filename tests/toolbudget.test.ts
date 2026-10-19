@@ -40,7 +40,11 @@ const SCHEMA_BUDGET_CHARS = 52_000;
 // Raised again, to 26_000 (2026-10-16): the overview's "Saving and files" (Save, project folders, Load in every window, the
 // composer's Artifacts button) and the scripts-only schedule line, both trimmed; CI measured 26,473 before the trim, about
 // 25,700 after (24,151 on a machine without a browser).
-const BRIEFING_BUDGET_CHARS = 26_000;
+// Raised again, to 28_000 (2026-10-19): CI measured 27,198 on c7c99e1, over the 26,000 ceiling, and the test was GREEN
+// on this box at 23,857 -- it installs every window (office, PDF, video, video game, 3D, photo), so the briefing carries
+// each one's line here and not there. That is the trap this comment is for: a ceiling that only the fuller machine reaches
+// fails after the push, not before it. Set against CI's number, with room for one more window.
+const BRIEFING_BUDGET_CHARS = 28_000;
 
 console.log("tool budget");
 

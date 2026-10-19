@@ -19,14 +19,14 @@ import type { Express, Request, Response } from "express";
 import type { AutoraEvent, Session } from "./session-types";
 
 /** A rating on a turn. `turn` is the seq of the turn's own `turn.user` event. */
-export const RATING_KIND = "turn.rating";
+const RATING_KIND = "turn.rating";
 /** The rating taken back. Carries the turn and nothing else. */
-export const RATING_CLEAR_KIND = "turn.rating.cleared";
+const RATING_CLEAR_KIND = "turn.rating.cleared";
 
 /** One line, because a reason is read in a list and never shown in a box. */
 export const MAX_REASON = 280;
 
-export type Rating = { up: boolean; reason?: string };
+type Rating = { up: boolean; reason?: string };
 
 /**
  * What the person typed, as one short line: newlines and control characters
@@ -45,7 +45,7 @@ export function cleanReason(value: unknown): string | undefined {
 }
 
 /** The seqs of every turn in a log: one per `turn.user`. */
-export function turnSeqs(events: readonly { kind: string; seq: number }[]): Set<number> {
+function turnSeqs(events: readonly { kind: string; seq: number }[]): Set<number> {
   const out = new Set<number>();
   for (const e of events) if (e.kind === "turn.user") out.add(Number(e.seq));
   return out;
@@ -72,16 +72,11 @@ export function ratingsFrom(
   return out;
 }
 
-/** What one turn is rated, or undefined when it is not. */
-export function ratingFor(events: readonly { kind: string; payload?: Record<string, any> }[], turn: number): Rating | undefined {
-  return ratingsFrom(events).get(turn);
-}
-
 /**
  * The decision the route makes, kept apart from the route so it can be tested
  * without a server: what to write down, or why nothing is written.
  */
-export type RatingCall =
+type RatingCall =
   | { ok: true; clear: true; turn: number }
   | { ok: true; clear: false; turn: number; up: boolean; reason?: string }
   | { ok: false; status: number; error: string };
@@ -109,7 +104,7 @@ export function ratingCall(
 }
 
 /** The event a call writes, in the one place both the route and a test look. */
-export function ratingEvent(call: Extract<RatingCall, { ok: true }>): { kind: string; payload: Record<string, any> } {
+function ratingEvent(call: Extract<RatingCall, { ok: true }>): { kind: string; payload: Record<string, any> } {
   return call.clear
     ? { kind: RATING_CLEAR_KIND, payload: { turn: call.turn } }
     : { kind: RATING_KIND, payload: call.reason ? { turn: call.turn, up: call.up, reason: call.reason } : { turn: call.turn, up: call.up } };
