@@ -27,7 +27,11 @@ export const memorySPECS: ToolSpec[] = [
         },
         body: {
           type: "string",
-          description: "The fact itself, written so it still makes sense months from now.",
+          description:
+            "The fact itself, written so it still makes sense months from now. " +
+            "There is a hard limit per kind, and a longer body is refused: a fact 600 " +
+            "characters, a preference 400, a procedure 1200, a reference or skill 1500. " +
+            "Over the limit, split it into one record per topic rather than trimming it.",
         },
         kind: {
           type: "string",
@@ -75,7 +79,13 @@ export const memorySPECS: ToolSpec[] = [
       properties: {
         id: { type: "string", description: "The memory's id, e.g. mem-abc123." },
         title: { type: "string", description: "A new title, if it should change." },
-        body: { type: "string", description: "The whole new body, replacing the old one." },
+        body: {
+          type: "string",
+          description:
+            "The whole new body, replacing the old one. The same hard limits apply " +
+            "and a longer body is refused: a fact 600 characters, a preference 400, a " +
+            "procedure 1200, a reference or skill 1500.",
+        },
         kind: { type: "string", enum: ["fact", "preference", "procedure", "reference"] },
         subject: { type: "string", description: "What it is about, if that should change." },
         facet: { type: "string", enum: ["interface", "api", "docs", "workflow", "quirk"] },
