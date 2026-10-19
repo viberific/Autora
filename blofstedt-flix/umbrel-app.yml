@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.44"
+version: "0.3.45"
 port: 8096
 folderAccess:
   - id: umbrel-downloads
@@ -54,18 +54,13 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Up next now arrives when the end credits start rather than when the file ends,
-  so the next episode is there while the credits are still running. A gate in
-  the player used to hold the box back until playback had ended, which is why it
-  turned up after the credits were already over.
+  This release switches off the background work that was decoding episodes. The
+  previous version asked ffmpeg to measure where each file's credits start and to
+  cut seek previews, and on a four-core box that pinned every core: the app could
+  not load, artwork timed out, and posters fell back to flat coloured blocks. Both
+  passes are gone, so nothing decodes in the background any more.
 
-  Where the credits begin is measured once per downloaded file instead of being
-  guessed. When an episode finishes downloading, Flix asks ffmpeg where the
-  picture goes black and where the sound stops in the last quarter of the file,
-  and keeps the answer. A chapter named for the credits wins over that
-  measurement, and with neither the player estimates from the runtime as before.
-  Nothing is ever measured while you watch.
-
-  Episodes already on disk are measured a few at a time in the background, so an
-  existing library fills in over the next few hours; until a file has been
-  measured, the estimate is what you get.
+  Playback is direct only. A file that would need converting is now refused with a
+  message rather than quietly converted, so the box never spends its evening
+  encoding. Up next still appears when the credits start: from a chapter marker when
+  the file has one, and from the runtime estimate otherwise.
