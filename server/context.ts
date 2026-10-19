@@ -52,6 +52,13 @@ export interface ContextConfig {
   /** A message count that also starts compaction, whatever the tokens say, so
       a long chat of short turns is folded rather than scrolled away. */
   maxMessages: number;
+  /** Fraction of the window the prompt must reach before the message count may
+      start a fold on its own (see the comment on messageLimit). */
+  countHighWaterPct: number;
+  /** Fraction of the window past which a fold no longer waits for the job to
+      stop: above this a very long single chain folds anyway rather than growing
+      into the window and being refused by the vendor. */
+  forceHighWaterPct: number;
 }
 
 const envNumber = (name: string, fallback: number, min: number, max: number) => {
@@ -92,10 +99,12 @@ export const CONTEXT_WINDOW_SETTING: number | null = (() => {
  */
 export const CONTEXT_CONFIG: ContextConfig = {
   maxContextTokens: CONTEXT_WINDOW_SETTING ?? DEFAULT_CONTEXT_TOKENS,
-  highWaterPct: envNumber("AUTORA_COMPACT_AT", 0.75, 0.2, 0.95),
+  highWaterPct: envNumber("AUTORA_COMPACT_AT", 0.85, 0.2, 0.95),
   protectedRecent: Math.round(envNumber("AUTORA_PROTECTED_TURNS", 6, 2, 50)),
   maxToolTokens: Math.round(envNumber("AUTORA_MAX_TOOL_TOKENS", 3_000, 250, 50_000)),
   maxMessages: 24,
+  countHighWaterPct: envNumber("AUTORA_FOLD_COUNT_AT", 0.5, 0.2, 0.95),
+  forceHighWaterPct: envNumber("AUTORA_FOLD_FORCE_AT", 0.95, 0.5, 0.99),
 };
 
 /** Where an engine's window came from, so the gauge can say whether it is a
@@ -326,7 +335,10 @@ export class ContextEngine {
    * a summariser call each time, the cached prompt lost from the system text
    * on (the anchored memory lives there), and detail the agent then read
    * again. The configured count holds at the assumed window and below; a
-   * bigger window lets the token high-water mark decide for longer.
+   * bigger window lets the token high-water mark decide for longer. Scaling it
+   * was not enough on its own: a long session still passes the count while the
+   * window is nearly empty, so the count only decides once the prompt is
+   * countHighWaterPct of the window (see maybeCompact for the measurement).
    */
   get messageLimit(): number {
     const scale = Math.max(1, this.limitTokens / DEFAULT_CONTEXT_TOKENS);
@@ -763,8 +775,30 @@ export class ContextEngine {
     const system = this.systemFor(pinned);
     const tokens = estimateTokens(system, this.active);
     const overTokens = tokens >= this.limitTokens * this.config.highWaterPct;
-    const overCount = this.active.length > this.messageLimit;
+    /* The count only folds a prompt that is already a real fraction of the
+       window. Measured over 9,533 calls: not one of 559 folds was near the
+       token mark -- all fired between 1.5% and 13% of the window, because a
+       long session passes 24 messages per 100k of window long before it passes
+       the mark. Each fold changes the system text (the anchored
+       memory is inserted there), so the whole prompt after it is re-billed:
+       35.0M fresh tokens, about $10.50, for a fold that bought nothing a
+       cached prompt was not already giving. A long chat of short turns still
+       folds; it folds once the tokens say there is something worth folding. */
+    const overCount =
+      tokens >= this.limitTokens * this.config.countHighWaterPct &&
+      this.active.length > this.messageLimit;
     if (!overTokens && !overCount) return false;
+
+    /* Between jobs, not in the middle of one. This is asked at the top of every
+       round of the turn, which means most of the time it is asked mid-chain:
+       the last message is a tool reply, or an assistant message whose calls are
+       still unanswered. A fold there loses the reasoning that got the job that
+       far -- the failed approach and why it failed -- and re-bills every round
+       of the chain that follows. So a fold waits for the loop to come back to a
+       user message. Past forceHighWaterPct it folds anyway: one chain that long
+       must not grow into the window and be refused. */
+    const forced = tokens >= this.limitTokens * this.config.forceHighWaterPct;
+    if (!forced && !this.atJobBoundary()) return false;
 
     const end = this.safeEvictionBoundary();
     if (end <= 0) return false;
@@ -782,6 +816,20 @@ export class ContextEngine {
 
     this.compacting = true;
     void this.runWorker(job, pinned, summarize, onDone);
+    return true;
+  }
+
+  /**
+   * Whether the history stops between jobs rather than inside one.
+   *
+   * False while a tool round is unanswered and while the model's latest message
+   * is a call still waiting for its reply: in both the loop is mid-chain.
+   */
+  private atJobBoundary(): boolean {
+    const last = this.active[this.active.length - 1];
+    if (!last) return true;
+    if (last.role === "tool") return false;
+    if (last.role === "assistant" && (last.calls?.length ?? 0) > 0) return false;
     return true;
   }
 

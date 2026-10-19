@@ -33,6 +33,8 @@ async function test(name: string, fn: () => Promise<void> | void) {
 const config: ContextConfig = {
   maxContextTokens: 400,
   highWaterPct: 0.5,
+  countHighWaterPct: 0.5,
+  forceHighWaterPct: 0.95,
   protectedRecent: 2,
   maxToolTokens: 500,
   maxMessages: 24,
@@ -188,6 +190,43 @@ await test("a fold that keeps failing is retried later each time, not every minu
   } finally {
     Date.now = realNow;
   }
+});
+
+await test("a long chat of short turns is not folded while the window is mostly empty", () => {
+  /* The measured case: a session passes the message count long before it comes
+     near the token mark, and every fold re-bills the whole prompt because the
+     system text changes. Short turns in an empty window stay as they are. */
+  const engine = new ContextEngine(config, "test-count");
+  const history = Array.from({ length: 40 }, (_, i) => ({
+    message: { role: (i % 2 ? "assistant" : "user") as ChatMessage["role"], text: "hi" },
+    seq: i + 1,
+  }));
+  engine.load(history);
+  const s = held();
+  assert.equal(
+    engine.maybeCompact("system", s.summarize),
+    false,
+    "past the message count but nowhere near the token mark: no fold",
+  );
+  assert.equal(s.calls(), 0, "and the summariser was not asked");
+});
+
+await test("and it folds once the tokens say there is something worth folding", async () => {
+  const engine = new ContextEngine(config, "test-count-2");
+  const history = Array.from({ length: 40 }, (_, i) => ({
+    message: { role: (i % 2 ? "assistant" : "user") as ChatMessage["role"], text: "hi" },
+    seq: i + 1,
+  }));
+  engine.load(history);
+  engine.append({ role: "user", text: "x".repeat(1_200) }, 41);
+  const s = held();
+  assert.equal(
+    engine.maybeCompact("system", s.summarize),
+    true,
+    "now the prompt is a real fraction of the window, so the count may fold",
+  );
+  s.release();
+  await tick();
 });
 
 console.log(`\n${passed} passed`);
