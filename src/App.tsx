@@ -157,7 +157,8 @@ function preloadPages() {
   else setTimeout(go, 1500);
 }
 
-/** The route that puts a window away, for the × on its tab; null for a tab that cannot be closed (the Activity feed, the browser). */
+/** The route that puts a window away, for the × on its tab; null for a tab that cannot be closed (the Activity feed,
+    the browser) and for the Widget, which has no window on the server to close: App dismisses that one itself. */
 function closeUrlFor(pane: SideWindow, session: string): string | null {
   const id = encodeURIComponent(session);
   switch (pane) {
