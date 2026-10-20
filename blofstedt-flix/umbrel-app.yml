@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.46"
+version: "0.3.47"
 port: 8096
 folderAccess:
   - id: umbrel-downloads
@@ -54,13 +54,8 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  This release switches off the background work that was decoding episodes. The
-  previous version asked ffmpeg to measure where each file's credits start and to
-  cut seek previews, and on a four-core box that pinned every core: the app could
-  not load, artwork timed out, and posters fell back to flat coloured blocks. Both
-  passes are gone, so nothing decodes in the background any more.
-
-  Playback is direct only. A file that would need converting is now refused with a
-  message rather than quietly converted, so the box never spends its evening
-  encoding. Up next still appears when the credits start: from a chapter marker when
-  the file has one, and from the runtime estimate otherwise.
+  Fixes the idle artwork: the poster slideshow used to slide over a show that was
+  still playing whenever the remote sat untouched for three seconds. It now only
+  appears when the show is actually stopped - paused, or cast with the TV itself
+  idle - and only after thirty seconds of no input. Pressing play always takes it
+  down at once.
