@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.49"
+version: "0.3.50"
 port: 8096
 folderAccess:
   - id: umbrel-downloads
@@ -64,8 +64,9 @@ releaseNotes: >-
   On a show, "Ready to watch" now means that episode's own file is fully on
   disk: before that it shows how far the download has got, and an episode in a
   season pack that nobody has asked for says it is waiting in the pack.
-  The next episode of a season pack starts fetching once the one you are
-  watching holds enough of itself to play for forty minutes, so the handover is
-  ready instead of cold. The Torrents page and the storage graph count the
-  episodes you asked for rather than the whole pack, so a 38 GB season with one
-  6.25 GB episode selected reads as 6.25 GB.
+  In a season pack the next episode now starts fetching once the one you are
+  watching holds twenty minutes of playback - about half an episode, so the
+  handover is ready instead of cold. It takes only bandwidth the episode you are
+  watching is not using, at a lower priority. The Torrents page and the storage
+  graph count the episodes you asked for rather than the whole pack, so a 38 GB
+  season with one 6.25 GB episode selected reads as 6.25 GB.
