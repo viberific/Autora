@@ -9,7 +9,7 @@ import type { Express, Request, Response } from "express";
 import { mergeAutomation } from "../automation";
 import { mergeCaptcha } from "../captcha";
 import { dictationStatus } from "../dictation";
-import { AUTO_ORDER, PRICES_CHECKED, PROVIDERS, modelsFor, providerSpec } from "../providers";
+import { AUTO_ROUTERS, PRICES_CHECKED, PROVIDERS, modelsFor, providerSpec } from "../providers";
 import { mergePush, readyChannels } from "../push";
 import { mergeProactivity } from "../quiet";
 import { forgetSpeech, speakStream, speechStatus, speak as synthesise } from "../speech";
@@ -109,7 +109,7 @@ export function settingsRoutes(app: Express, deps: {
       model: active.model,
       base_url: active.provider ? baseUrlFor(active.provider) : "",
       providers: ["auto", ...PROVIDERS.map((p) => p.id)],
-      auto_order: AUTO_ORDER,
+      auto_order: PROVIDERS.filter((p) => !AUTO_ROUTERS.includes(p.id)).map((p) => p.id),
       system_prompt: state.systemPrompt,
       system_prompt_limit: 8000,
       timezone: state.timezone,

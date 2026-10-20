@@ -996,12 +996,6 @@ export const WorkFeed = memo(function WorkFeed({
   };
   return (
     <div className="work-feed" ref={scroller} onScroll={onScroll}>
-      {busy && doing && (
-        <div className="work-feed-doing" aria-live="polite">
-          <span className="working-mark" aria-hidden="true">{phaseGlyph(phase)}</span>
-          <span>{doing}</span>
-        </div>
-      )}
       {rows.length === 0 && <p className="work-feed-empty">What the agent looks at and does shows up here as it happens.</p>}
       {rows.map(({ b, cells }) => (
         <section className="work-feed-turn" key={b.seq}>

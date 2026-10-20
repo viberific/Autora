@@ -653,11 +653,9 @@ export function Settings({
             >
               <b>Automatic</b>
               <span>
-                The first connected one, in this order:{" "}
-                {state.auto_order
-                  .map((id) => state.catalog.find((p) => p.id === id)?.label ?? id)
-                  .join(", ")}
-                .
+                Decides among the connected ones: the cheapest per call here
+                (your own usage, then list prices), never a router, and it
+                switches only when the work asks for it.
               </span>
             </button>
             {choiceCards.map((card) => (

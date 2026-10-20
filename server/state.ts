@@ -20,7 +20,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { isEphemeral } from "./ephemeral";
-import { AUTO_ORDER, PROVIDERS, providerSpec } from "./providers";
+import { AUTO_ROUTERS, PROVIDERS, autoPriceOf, providerSpec } from "./providers";
 import type { Target } from "./roles";
 import { LOOP_DEFAULTS, type LoopWatchConfig } from "./loopwatch";
 import { mergeVerify, VERIFY_DEFAULTS, type VerifyConfig } from "./verify";
@@ -250,11 +250,14 @@ interface PersistedState {
   /** Roles (see ./roles): the model that plans, per provider. In Agent and Plan
       mode the planning rounds run on it, and the building rounds on the main
       model above, so a smart model thinks the task through and a cheaper one
-      does the many rounds of work. Empty means the main model plans too. */
+      does the many rounds of work. Empty means the main model plans too.
+      Only read when the provider is Automatic: a model the person named is
+      the one that answers, every round, planning included. */
   plannerModels: Record<string, string>;
   /** Roles: the model for unwatched work (condensing old turns, learning,
       remarks), per provider. Empty means talk mode's model when one is named,
-      else the main model -- what background work used before roles existed. */
+      else the main model -- what background work used before roles existed.
+      Only read when the provider is Automatic (see plannerModels). */
   backgroundModels: Record<string, string>;
   /** Which provider each of those two roles is on, keyed by the main provider.
       Empty (or absent) means the main provider itself; another one is reached
@@ -1276,11 +1279,20 @@ export interface Resolved {
 /**
  * Which provider the next turn will actually call.
  *
- * "Automatic" means the first provider in AUTO_ORDER that has a key -- with a
- * local server counting as configured without one, since that is the whole
- * point of running your own. A named provider is used even when its key is
- * missing, and says so, because silently answering from a different vendor
- * than the one selected is how a bill arrives from somewhere unexpected.
+ * "Automatic" decides among the providers that are actually connected, it
+ * does not walk a fixed list: the one a call has been cheapest on here (this
+ * install's own usage ledger), with the list price of the model it would
+ * call standing in for a provider not used yet, and more calls breaking a
+ * tie. It never chooses a router (AUTO_ROUTERS) -- a router is already a
+ * model chosen by someone else, and choosing one automatically would be
+ * routing on top of routing. A local server counts as configured without a
+ * key, since that is the whole point of running your own, but it is the
+ * fallback rather than a racer: it costs nothing you can predict, and a
+ * forgotten Ollama should not quietly outrank a key you just pasted. A
+ * named provider is used
+ * even when its key is missing, and says so, because silently answering
+ * from a different vendor than the one selected is how a bill arrives from
+ * somewhere unexpected.
  */
 export function resolveProvider(): Resolved {
   const wanted = state.provider || "auto";
@@ -1292,8 +1304,34 @@ export function resolveProvider(): Resolved {
 
   let chosen = wanted;
   if (wanted === "auto") {
-    chosen = AUTO_ORDER.find(usable) ?? "";
+    /* Score, then pick: what a call has actually cost here on each connected
+       provider, or what its list price says a first call would cost. Cheap
+       and proven beats cheap and guessed only when the prices tie. */
+    const scored = PROVIDERS
+      .filter((p) => !AUTO_ROUTERS.includes(p.id) && usable(p.id))
+      .map((p) => {
+        const rows = state.usage.filter((e) => e.provider === p.id && e.priced);
+        const spent = rows.reduce((sum, e) => sum + e.cost, 0);
+        /* A local server costs nothing you can predict, so it would win every
+           price race -- and a forgotten Ollama on :8000 would quietly take
+           every turn. It is the answer when nothing priced is connected, not
+           a racer (the old order kept it last for the same reason). */
+        const avg = p.id === "local" ? Infinity : rows.length > 0 ? spent / rows.length : (autoPriceOf(p.id) ?? 0);
+        return { id: p.id, avg, calls: rows.length };
+      })
+      .sort((a, b) => a.avg - b.avg || b.calls - a.calls);
+    chosen = scored[0]?.id ?? "";
     if (!chosen) {
+      /* Automatic never picks a router (see AUTO_ROUTERS), so a person whose only
+         keys are router keys is told so plainly rather than being routed twice
+         without knowing, or left with an error that says nothing is connected
+         when two things are. */
+      const routers = AUTO_ROUTERS.filter(usable);
+      const problem = routers.length > 0
+        ? `Automatic does not choose a router (routing on top of routing). ${routers
+            .map((id) => providerSpec(id)?.label ?? id)
+            .join(" and ")} is connected — pick a model on it in Settings, or add a key for a direct vendor.`
+        : "No provider is connected yet. Add an API key for one.";
       return {
         provider: "",
         model: "",
@@ -1303,7 +1341,7 @@ export function resolveProvider(): Resolved {
         roleProblems: [],
         key: "",
         baseUrl: "",
-        problem: "No provider is connected yet. Add an API key for one.",
+        problem,
       };
     }
   }
@@ -1328,8 +1366,13 @@ export function resolveProvider(): Resolved {
   let problem: string | null = null;
   if (!key && chosen !== "local") problem = `${spec.label} has no API key set.`;
   else if (!model) problem = `No model chosen for ${spec.label}.`;
-  const planner = roleTarget("planner", chosen);
-  const background = roleTarget("background", chosen);
+  /* Roles are Automatic's own trick: when the person named the model, that
+     model answers, every round, planning included -- switching parts of the
+     work to other models behind a named choice would be choosing for them.
+     On Automatic the named roles are what make the switching careful: only
+     the rounds that need them move, and only between models the person set. */
+  const planner = wanted === "auto" ? roleTarget("planner", chosen) : { target: null, problem: null as string | null };
+  const background = wanted === "auto" ? roleTarget("background", chosen) : { target: null, problem: null as string | null };
 
   return {
     provider: chosen,

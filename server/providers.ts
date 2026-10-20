@@ -275,10 +275,24 @@ export const PROVIDERS: ProviderSpec[] = [
   },
 ];
 
-/** Which provider "Automatic" reaches for first. Cheap and likely-configured
-    before expensive and exotic; a local server last, because a forgotten
-    Ollama on the box should not quietly outrank a key you just pasted. */
-export const AUTO_ORDER = ["orcarouter", "openrouter", "openai", "gemini", "anthropic", "deepseek", "local"];
+/** The routers: vendors that pick the model themselves. "Automatic" never
+    chooses one -- a router is already a choice of model made by someone else,
+    so Automatic picking one too would be routing on top of routing, a choice
+    the person never saw and cannot see. It is still a fine provider to name
+    yourself in Settings. */
+export const AUTO_ROUTERS = ["orcarouter", "openrouter"];
+
+/** What a call on this provider costs at list price, in $/Mtok added
+    input+output, for the model Automatic would call on it (its default, or
+    the first listed). Null when the provider has no priced model -- which is
+    how a local server says "I cost nothing you can predict". */
+export function autoPriceOf(providerId: string): number | null {
+  const spec = providerSpec(providerId);
+  if (!spec) return null;
+  const m = spec.models.find((x) => x.id === spec.defaultModel) ?? spec.models[0];
+  if (!m || typeof m.input !== "number" || typeof m.output !== "number") return null;
+  return m.input + m.output;
+}
 
 export function providerSpec(id: string): ProviderSpec | undefined {
   return PROVIDERS.find((p) => p.id === id);

@@ -169,41 +169,107 @@ await test("the note names the planner and says when it is the last hand-back", 
 });
 
 await test("the settings carry the roles to the resolved provider, on any provider with a key", () => {
-  state.provider = "deepseek";
+  /* Hermetic: an env key on this machine must not choose the provider. */
+  const envBefore = { ...process.env };
+  for (const k of ["OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "OPENROUTER_API_KEY", "ORCA_ROUTER_API_KEY", "ORCA_API_KEY"]) delete process.env[k];
+  state.provider = "auto";
+  state.usage = [];
+  state.keys.anthropic = "sk-ant-test";
+  state.models.anthropic = "claude-haiku-4-5";
   state.keys.deepseek = "sk-test";
   state.models.deepseek = "deepseek-flash";
-  state.plannerModels.deepseek = "deepseek-v4-pro";
+  /* The cheap vendor wins the building; the planner sits on the dear one. */
+  state.plannerModels.deepseek = "claude-sonnet-4-5";
+  state.plannerProviders.deepseek = "anthropic";
   state.backgroundModels.deepseek = "deepseek-flash";
   let r = resolveProvider();
+  assert.equal(r.provider, "deepseek", "the cheaper per-call vendor is chosen");
   assert.equal(r.model, "deepseek-flash");
-  assert.deepEqual(workTarget(r, "plan"), { provider: "deepseek", model: "deepseek-v4-pro", key: "sk-test", baseUrl: r.baseUrl });
+  const plan = workTarget(r, "plan");
+  assert.equal(plan.provider, "anthropic");
+  assert.equal(plan.model, "claude-sonnet-4-5");
+  assert.equal(plan.key, "sk-ant-test", "the planner is reached with Anthropic's own key");
   assert.equal(r.background?.model, "deepseek-flash");
   assert.deepEqual(r.roleProblems, []);
 
-  /* The planner on Anthropic: reached with Anthropic's own key and address. */
-  state.plannerProviders.deepseek = "anthropic";
-  state.plannerModels.deepseek = "claude-sonnet-4-5";
-  state.keys.anthropic = "sk-ant-test";
-  r = resolveProvider();
-  const plan = workTarget(r, "plan");
-  assert.equal(plan.provider, "anthropic");
-  assert.equal(plan.key, "sk-ant-test");
-  assert.match(plan.baseUrl, /anthropic/);
-  assert.equal(workTarget(r, "build").key, "sk-test", "the builder keeps DeepSeek's key");
-
   /* Anthropic's key removed: the main model plans, and Settings says why. */
   delete state.keys.anthropic;
-  const before = { ...process.env };
-  delete process.env.ANTHROPIC_API_KEY;
   r = resolveProvider();
-  Object.assign(process.env, before);
   assert.equal(hasPlanner(r), false);
   assert.equal(workTarget(r, "plan").model, "deepseek-flash");
   assert.match(r.roleProblems.join(" "), /planner \(claude-sonnet-4-5\) is on Anthropic[^,]*, which has no key/);
 
   state.plannerProviders.deepseek = "";
   state.plannerModels.deepseek = "";
+  state.backgroundModels.deepseek = "";
   assert.equal(workTarget(resolveProvider(), "plan").model, "deepseek-flash");
+  Object.assign(process.env, envBefore);
+});
+
+
+await test("a named provider answers with itself every round: roles are Automatic's alone", () => {
+  const envBefore = { ...process.env };
+  for (const k of ["OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "OPENROUTER_API_KEY", "ORCA_ROUTER_API_KEY", "ORCA_API_KEY"]) delete process.env[k];
+  state.provider = "anthropic";
+  state.keys.anthropic = "sk-ant-test";
+  state.models.anthropic = "claude-haiku-4-5";
+  state.plannerModels.anthropic = "deepseek-v4-pro";
+  state.plannerProviders.anthropic = "deepseek";
+  state.keys.deepseek = "sk-test";
+  const r = resolveProvider();
+  assert.equal(r.model, "claude-haiku-4-5");
+  assert.equal(hasPlanner(r), false, "no planner behind a named model");
+  assert.equal(workTarget(r, "plan").model, "claude-haiku-4-5");
+  assert.equal(r.background, null);
+  assert.deepEqual(r.roleProblems, []);
+
+  /* The same settings, on Automatic: the cheapest vendor is chosen and the
+     roles named for it resolve. */
+  state.usage = [];
+  state.plannerModels.deepseek = "deepseek-v4-pro";
+  state.backgroundModels.deepseek = "deepseek-flash";
+  state.provider = "auto";
+  const auto = resolveProvider();
+  assert.equal(auto.provider, "deepseek");
+  assert.equal(workTarget(auto, "plan").model, "deepseek-v4-pro");
+  assert.equal(auto.background?.model, "deepseek-flash");
+
+  state.plannerProviders.anthropic = "";
+  state.plannerModels.anthropic = "";
+  state.plannerModels.deepseek = "";
+  state.backgroundModels.anthropic = "";
+  state.provider = "deepseek";
+  Object.assign(process.env, envBefore);
+});
+
+await test("Automatic never picks a router, and says so when only routers are connected", () => {
+  const envBefore = { ...process.env };
+  for (const k of ["OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "OPENROUTER_API_KEY", "ORCA_ROUTER_API_KEY", "ORCA_API_KEY"]) delete process.env[k];
+  state.keys.deepseek = "";
+  state.keys.anthropic = "";
+  state.keys.openrouter = "sk-or-test";
+  state.keys.orcarouter = "";
+  state.models.openrouter = "z-ai/glm-5.3-flash";
+  state.provider = "auto";
+  const r = resolveProvider();
+  assert.equal(r.provider, "");
+  assert.match(r.problem, /does not choose a router/);
+  assert.match(r.problem, /OpenRouter/);
+
+  /* A direct vendor with a key is chosen over nothing, routers never. */
+  state.keys.deepseek = "sk-test";
+  const direct = resolveProvider();
+  assert.equal(direct.provider, "deepseek");
+
+  /* Nothing at all: the old plain message. */
+  state.keys.deepseek = "";
+  state.keys.openrouter = "";
+  const none = resolveProvider();
+  assert.match(none.problem, /No provider is connected yet/);
+
+  state.provider = "openrouter";
+  state.keys.deepseek = "sk-test";
+  Object.assign(process.env, envBefore);
 });
 
 await test("the task ledger keeps the pair only when both models worked", () => {
