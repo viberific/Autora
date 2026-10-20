@@ -32,7 +32,10 @@ export function skillRoutes(app: Express) {
     const s = getSkill(req.params.name);
     if (!s) return res.status(404).json({ error: "No such skill." });
     const { dir: _dir, ...rest } = s;
-    res.json({ skill: rest, versions: skillVersions(s.name).map((v) => ({ at: v.at, by: v.by, text: v.text })) });
+    res.json({
+      skill: rest,
+      versions: skillVersions(s.name).map((v) => ({ at: v.at, by: v.by, text: v.text, files: v.files })),
+    });
   });
 
   app.get("/api/skills/:name/file", (req: Request, res: Response) => {
@@ -72,7 +75,8 @@ export function skillRoutes(app: Express) {
   app.put("/api/skills/:name/files", (req: Request, res: Response) => {
     try {
       const rel = String(req.body?.path ?? "");
-      const text = req.body?.text === null || req.body?.text === "" ? null : String(req.body?.text ?? "");
+      /* Only null removes a file: an empty text is an empty file, which is what "New file" sends. */
+      const text = req.body?.text === null ? null : String(req.body?.text ?? "");
       const info = writeSkillFile(req.params.name, rel, text, { kind: "person" });
       res.json({ skill: info, versions: skillVersions(info.name).map((v) => ({ at: v.at, by: v.by, text: v.text, files: v.files })) });
     } catch (err) {

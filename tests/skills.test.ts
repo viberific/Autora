@@ -254,6 +254,15 @@ await test("a skill's script is edited on its own, kept as a version, and the wh
     assert.equal(added.status, 200);
     assert.equal(reads("scripts/run.sh"), "echo one\n");
 
+    /* "New file" sends an empty text: that makes an empty file, it does not delete one. */
+    const empty = await put("scripts/empty.txt", "");
+    assert.equal(empty.status, 200);
+    assert.equal(reads("scripts/empty.txt"), "", "an empty text creates an empty file");
+
+    const absolute = await put("/etc/passwd", "x");
+    assert.equal(absolute.status, 400, "an absolute path is refused, not tucked into the folder");
+    assert.match(absolute.body.error, /absolute path/);
+
     const escape = await put("../../outside.txt", "x");
     assert.equal(escape.status, 400, "a path out of the skill's folder is refused");
     assert.match(escape.body.error, /inside the skill's folder/);
@@ -263,6 +272,11 @@ await test("a skill's script is edited on its own, kept as a version, and the wh
     assert.equal(reads("scripts/run.sh"), "echo two\n");
     assert.equal(edited.body.versions[0].files["scripts/run.sh"], "echo one\n", "the version keeps the script it replaced");
     assert.equal(edited.body.skill.text === undefined, true, "the route does not send the body back");
+    const opened = await (await fetch(`${base}/api/skills/with-script`)).json() as any;
+    assert.ok(
+      opened.versions.some((v: { files?: Record<string, string | null> }) => v.files && v.files["scripts/run.sh"] === "echo one\n"),
+      "the page is told which files a version changed, so it can say so",
+    );
 
     skills.revertSkill("with-script", 0);
     assert.equal(reads("scripts/run.sh"), "echo one\n", "going back puts the script back too");

@@ -8016,6 +8016,9 @@ body.is-resizing iframe { pointer-events: none; }
 /* One row of a skill's files, and the small box a new file's name is typed in. */
 .skill-file-row { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .skill-file-row .page-search { flex: 1 1 220px; }
+/* A script's editor is as wide as SKILL.md's, not a 200px box with the buttons beside it. */
+.skill-files .jf-row { flex: 1 1 100%; }
+.skill-files .jf-row textarea { width: 100%; }
 .skill-version { display: flex; align-items: center; gap: 8px; flex: 1 1 100%; font-size: var(--fs-sm); color: var(--text-2); }
 
 /* The Mind, one agent at a time: the chooser, and an agent's profile. */

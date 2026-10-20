@@ -687,7 +687,12 @@ export function exportSkills(): { zip: Uint8Array; count: number } {
 export function writeSkillFile(name: string, rel: string, text: string | null, by: SkillAuthor): SkillInfo {
   const s = getSkill(name);
   if (!s) throw new SkillError(`There is no skill "${name}".`);
-  const clean = String(rel ?? "").replace(/\\/g, "/").replace(/^\.?\//, "");
+  /* Checked before the leading ./ is stripped, or "/etc/passwd" would read as a file inside the folder. */
+  const raw = String(rel ?? "").replace(/\\/g, "/");
+  if (raw.startsWith("/") || /^[a-zA-Z]:/.test(raw)) {
+    throw new SkillError(`"${raw}" is an absolute path: name the file from the skill's folder, like scripts/run.sh.`);
+  }
+  const clean = raw.replace(/^\.?\//, "");
   if (!inside(s.dir, clean)) {
     throw new SkillError(`"${clean}" is not a path inside the skill's folder (SKILL.md itself is the text; hidden files are not kept).`);
   }

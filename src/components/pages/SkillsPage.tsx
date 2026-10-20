@@ -233,6 +233,17 @@ function SkillEditor({ name, onClose, onSaved }: { name: string | null; onClose:
 
   const changed = skill ? text !== skill.text : true;
 
+  /* Going back drops anything typed and unsaved, in SKILL.md or an open file: ask first, then close the file. */
+  const goBack = (index: number) => act(async () => {
+    if (!name) return;
+    const unsaved = changed || (file ? file.text !== file.saved : false);
+    if (unsaved && !(await sure("Going back to an earlier version drops what you have typed and not saved. Carry on?"))) return;
+    await revertSkill(name, index);
+    setFile(null);
+    setNewFile(null);
+    load();
+  });
+
   /* A file beside SKILL.md: opened, saved and removed on its own, so a script is the person's to change. */
   const openFile = (path: string) => {
     if (!skill) return;
@@ -375,7 +386,7 @@ function SkillEditor({ name, onClose, onSaved }: { name: string | null; onClose:
           {versions.map((v, i) => (
             <div key={v.at} className="skill-version">
               <span>{when(v.at)}, replaced by {v.by}{v.files && Object.keys(v.files).length > 0 ? ` \u00b7 ${Object.keys(v.files).length} file${Object.keys(v.files).length === 1 ? "" : "s"}` : ""}</span>
-              <button className="btn tiny ghost" disabled={busy} onClick={() => void act(async () => { await revertSkill(name, i); load(); })}>
+              <button className="btn tiny ghost" disabled={busy} onClick={() => void goBack(i)}>
                 <IconRotateCcw size={12} /> Go back to this
               </button>
             </div>
