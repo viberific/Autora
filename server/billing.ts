@@ -154,6 +154,27 @@ export function billingSummary() {
      counted and every line is reported beside it, for whoever wants to
      compare the two. */
   const vendors = vendorMoneyAll();
+  /* A vendor that publishes no balance -- OpenAI, Gemini, Anthropic, a local
+     server -- has no line from vendorMoneyAll() however much it has spent, so
+     its spend used to vanish from the bar entirely. The ledger knows what its
+     turns cost this month, so it gets a line with no till: no balance, no
+     paid-in figure, nothing claimed as credit, and the month to speak for it. */
+  const withTill = new Set(vendors.map((entry) => entry.provider));
+  for (const [provider, usd] of monthByProvider) {
+    if (withTill.has(provider) || usd <= 0) continue;
+    vendors.push({
+      provider,
+      label: providerSpec(provider)?.label ?? provider,
+      balance_usd: 0,
+      topped_up_usd: null,
+      at: now,
+      lifetime_usd: null,
+      month_real_usd: null,
+      month_since: null,
+      auto_top_ups: [],
+      credit: null,
+    });
+  }
   /* The account the next turn will call, if any: a bar that shows one vendor's
      till has to know which vendor's till that is. */
   const active = resolveProvider().provider;

@@ -1,9 +1,8 @@
 import { memo, useState } from "react";
 import { money } from "./Billing";
-import { barVendor, combineVendorViews, creditTotal, ownSpent, spendView, vendorSpendView } from "../lib/spend";
+import { barVendor, creditTotal, ownSpent, spendView, vendorSpendView } from "../lib/spend";
 import { SpendPeek } from "./SpendPeek";
 import { VendorLogo } from "./VendorLogo";
-import { IconChevron } from "./Icons";
 
 /** What `/api/usage` answers with, as far as this bar is concerned. */
 export type Usage = {
@@ -35,13 +34,12 @@ export type Usage = {
 /**
  * The money, in the three spans it is actually thought about, over the composer.
  *
- * With several APIs, one combined bar -- the credit consumed across all of
- * them -- that a tap opens into one bar per API, each behind its own white
- * mark. Otherwise one bar for the month. Each vendor bar is that account's
- * money alone: what was consumed of what was paid in there, or what is left
- * when there is no paid-in figure. Without readable
- * credit the bar is what it always was, the month against the ceiling set in
- * Settings, or the month alone.
+ * With several APIs, one line each -- always open, no combined bar to tap --
+ * behind its own white mark. Otherwise one bar for the month. Each vendor line
+ * is that account's money alone: what was consumed of what was paid in there,
+ * what is left when there is no paid-in figure, or, for a vendor that publishes
+ * no balance at all, what its turns cost this month. The session's own spend
+ * sits under the list, because it is the question asked most often.
  *
  * A tap opens a card of the figures over the chat -- see SpendPeek -- with
  * Usage, ceiling and all, one button further on.
@@ -67,11 +65,12 @@ export const SpendBar = memo(function SpendBar({
   onOpen: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [expanded, setExpanded] = useState(false);
 
-  /* Per-provider bars when several tills can be read; the old single bar
-     otherwise (one vendor headline, or none). */
-  const readableVendors = vendors?.filter((v) => v.spent_known || v.balance_usd > 0) ?? [];
+  /* Per-provider lines when more than one till can be named; the old single bar
+     otherwise. A vendor that publishes no balance counts too, as long as the
+     ledger counted money at it this month. */
+  const readableVendors =
+    vendors?.filter((v) => v.spent_known || v.balance_usd > 0 || (v.month_usd ?? 0) > 0) ?? [];
   const multiVendor = readableVendors.length > 1;
 
   if (multiVendor) {
@@ -84,96 +83,76 @@ export const SpendBar = memo(function SpendBar({
           spent: v.lifetime_usd,
           paid: v.topped_up_usd,
           balance: v.balance_usd,
+          month: v.month_usd ?? 0,
         }),
       }))
       .filter((row) => row.view.show);
     if (rows.length === 0) return null;
 
     const share = (n: number) => `${Math.min(100, Math.max(0, n * 100))}%`;
-    const total = combineVendorViews(rows.map((row) => row.view));
-    const monthAll = rows.reduce((sum, row) => sum + row.month, 0);
-    const tone = total.over ? "is-over" : total.near ? "is-near" : "";
-    /* The bar across the APIs is what is left of their credit, so it drains
-       rather than fills. */
-    const leftAll = Math.max(0, total.paid - total.drawn);
-    const leftShareAll = total.paid > 0 ? Math.min(1, leftAll / total.paid) : 0;
-    const said = total.show
-      ? `${money(leftAll)} left of ${money(total.paid)} credit across ${total.count} APIs`
-      : `${money(monthAll)} this month across ${rows.length} APIs`;
 
     return (
       <>
-        <div className={`spend-stack ${expanded ? "is-open" : ""}`.trim()}>
-          {/* All of them in one bar. A tap opens the list under it, one bar per
-              API, each with its own mark. */}
-          <button
-            type="button"
-            className={`spend spend-all ${tone}`.trim()}
-            onClick={() => setExpanded((v) => !v)}
-            aria-expanded={expanded}
-            aria-label={`${said}. ${expanded ? "Hide" : "Show"} each API.`}
-            title={`${said}.`}
-          >
-            <span className="spend-logos" aria-hidden="true">
-              {rows.slice(0, 4).map((row) => (
-                <VendorLogo key={row.view.provider} provider={row.view.provider} size={12} />
-              ))}
-            </span>
-            <span className="spend-track" aria-hidden="true">
-              <i
-                className={`spend-used ${leftShareAll > 0 ? "is-any" : ""}`.trim()}
-                style={{ width: share(leftShareAll) }}
-              />
-            </span>
-            <span className="spend-text">
-              <span className="spend-long">{said}</span>
-              <span className="spend-short">
-                {total.show ? `${money(leftAll)}/${money(total.paid)}` : money(monthAll)}
-              </span>
-            </span>
-            <IconChevron size={12} className="spend-caret" />
-          </button>
-          {expanded && (
-            <div className="spend-each">
-              {rows.map(({ view, month }) => {
-                const rowTone = view.over ? "is-over" : view.near ? "is-near" : "";
-                /* Said as what is left, set first: the bar beside these words
-                   drains. A vendor that only publishes a balance has no credit
-                   to consume, so its whole bar is what is left there. */
-                const leftHere = Math.max(0, (view.paid ?? 0) - view.drawn);
-                const leftShare = view.remaining
+        {/* No combined bar: one line per API, always open. The list is the bar
+            now, so there is nothing to tap to see whose money is whose. */}
+        <div className="spend-stack is-open">
+          <div className="spend-each">
+            {rows.map(({ view, month }) => {
+              const rowTone = view.over ? "is-over" : view.near ? "is-near" : "";
+              /* Said as what is left, set first: the bar beside these words
+                 drains. A vendor that only publishes a balance has no credit
+                 to consume, so its whole bar is what is left there. A vendor
+                 with no till at all has no meter: its line is the month. */
+              const leftHere = Math.max(0, (view.paid ?? 0) - view.drawn);
+              const leftShare = view.ledgerOnly
+                ? 0
+                : view.remaining
                   ? 1
                   : view.paid && view.paid > 0
                     ? Math.min(1, leftHere / view.paid)
                     : 0;
-                const figures = view.remaining
+              const figures = view.ledgerOnly
+                ? `${money(month)} this month`
+                : view.remaining
                   ? `${money(view.drawn)} left`
                   : `${money(leftHere)} left of ${money(view.paid!)}`;
-                const said = `${view.label}: ${figures}, ${money(month)} this month`;
-                return (
-                  <div key={view.provider} className={`spend-row ${rowTone}`.trim()} title={said}>
-                    <VendorLogo provider={view.provider} size={14} className="spend-row-logo" />
-                    <span className="spend-row-name">{view.label}</span>
-                    <span className="spend-track" aria-hidden="true">
-                      <i
-                        className={`spend-used ${leftShare > 0 ? "is-any" : ""}`.trim()}
-                        style={{ width: share(leftShare) }}
-                      />
+              const said = view.ledgerOnly
+                ? `${view.label}: ${money(month)} this month, no balance published`
+                : `${view.label}: ${figures}, ${money(month)} this month`;
+              return (
+                <div key={view.provider} className={`spend-row ${rowTone}`.trim()} title={said}>
+                  <VendorLogo provider={view.provider} size={14} className="spend-row-logo" />
+                  <span className="spend-row-name">{view.label}</span>
+                  <span className="spend-track" aria-hidden="true">
+                    <i
+                      className={`spend-used ${leftShare > 0 ? "is-any" : ""}`.trim()}
+                      style={{ width: share(leftShare) }}
+                    />
+                  </span>
+                  <span className="spend-text" aria-label={said}>
+                    <span className="spend-long">
+                      {view.ledgerOnly ? figures : `${figures} · ${money(month)} this month`}
                     </span>
-                    <span className="spend-text" aria-label={said}>
-                      <span className="spend-long">{figures} · {money(month)} this month</span>
-                      <span className="spend-short">
-                        {view.remaining ? money(view.drawn) : `${money(leftHere)}/${money(view.paid!)}`}
-                      </span>
+                    <span className="spend-short">
+                      {view.ledgerOnly
+                        ? money(month)
+                        : view.remaining
+                          ? money(view.drawn)
+                          : `${money(leftHere)}/${money(view.paid!)}`}
                     </span>
-                  </div>
-                );
-              })}
+                  </span>
+                </div>
+              );
+            })}
+            <div className="spend-foot">
+              <span className="spend-session">
+                {session > 0 ? `${money(session)} this session` : "nothing spent this session"}
+              </span>
               <button type="button" className="spend-more" onClick={() => setOpen(true)}>
                 Details
               </button>
             </div>
-          )}
+          </div>
         </div>
         {open && <SpendPeek session={session} onUsage={onOpen} onClose={() => setOpen(false)} />}
       </>

@@ -164,6 +164,10 @@ type VendorSpend = {
   /** What is left with the vendor -- the one figure a till with no paid-in
       figure can still speak. */
   balance: number | null;
+  /** What the ledger counted this vendor's own turns at this month. A vendor
+      that publishes no balance (OpenAI, Gemini, Anthropic) has no till to read,
+      and this is the only figure there is for it. */
+  month?: number;
 };
 
 type VendorView = {
@@ -184,6 +188,9 @@ type VendorView = {
       be read at all is worth drawing -- credit sitting unspent is exactly what
       the bar is for -- so this is false only when nothing could be read. */
   show: boolean;
+  /** True for a vendor that publishes no balance: there is no till to draw, so
+      its line carries what it cost this month and nothing else. */
+  ledgerOnly?: boolean;
 };
 
 /**
@@ -226,16 +233,22 @@ export function vendorSpendView(vendor: VendorSpend): VendorView {
       show: true,
     };
   }
+  /* No till and nothing left to read: a vendor that publishes no balance
+     (OpenAI, Gemini, Anthropic, a local server) still spent money, and the
+     ledger knows how much this month. It gets a line with no meter rather than
+     no line at all -- which is what used to hide OpenAI's spend entirely. */
+  const month = dollars(vendor.month ?? 0);
   return {
     provider: vendor.provider,
     label: vendor.label,
-    drawn: 0,
+    drawn: month,
     paid: null,
     remaining: false,
     used: 0,
     over: false,
     near: false,
-    show: false,
+    show: month > 0,
+    ledgerOnly: month > 0,
   };
 }
 
