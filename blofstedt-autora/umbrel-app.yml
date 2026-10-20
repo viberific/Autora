@@ -188,8 +188,11 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  On the Skills page a skill's scripts and reference files now open in their own editor and save on their own, so
-  you can fix a run.sh without touching the instructions beside it; New file and Delete file sit next to them,
-  and every save is kept as a version. Rolling a version back puts those files back exactly as they were, and
-  asks first if you have typing in the editor that it would drop. A version also says which files it changed. And
-  a Download all button gives you the whole skills library as one .zip instead of one skill at a time.
+  Housekeeping has stopped throwing away what it was told to keep forever. With Delete sessions after set to 0 days
+  (0 = never) it ignored that and cleared every session and artifact past the number it always keeps, so the
+  gentlest-looking setting was the most destructive one; now a limit of 0 really means nothing is old enough to go.
+  Quiet hours refuse an hour past 23 instead of saving a window that never opens. A quick "what's up" typed on a
+  phone is answered as small talk again, because a phone sends a curly apostrophe. The session list stops polling
+  in a tab you have left and no longer takes a server error for a list of sessions, which is what broke the menu.
+  docker run --rm no longer costs an extra safety check, and countdowns read "in 3d" to match the "3d ago"
+  beside them.
