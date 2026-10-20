@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.52"
+version: "0.3.53"
 port: 8096
 folderAccess:
   - id: umbrel-downloads
@@ -54,12 +54,13 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Always 1080p, and of two 1080p copies of the same episode the smaller one
-  is taken: this box's line is what stalls a play, not the swarm.
+  The screen while an episode is fetched now reads like a player, not a
+  torrent client: a progress bar, "Getting your episode ready", and a wait
+  said in plain words ("About 1 hour 10 minutes to go"). The bar drifts
+  while nothing has arrived yet, so a slow start no longer looks frozen.
   
-  Also new: opening a show starts fetching its first episode before anyone
-  presses Play, so the click lands on bytes already moving. Only episodes,
-  one file from a season pack, never the season, and nothing already on disk.
-  It waits ten seconds with the show still on screen first, and leaving the
-  page cancels it. Movies are left alone: a film is one 8-30 GB file with no
-  episode to take.
+  Percent, speed and how many people are sharing it are still there, one
+  tap away under Details. Settings and the Torrents page are unchanged.
+  
+  Carried from 0.3.52, which some boxes may not have taken: always 1080p,
+  and of two 1080p copies of the same episode the smaller one is taken.
