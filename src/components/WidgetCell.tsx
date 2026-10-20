@@ -68,7 +68,7 @@ const MAX_GROWTHS = 8;
  * that have no element fullscreen.
  */
 export function WidgetCell({
-  widget, sessionId, canFix, pinned = false,
+  widget, sessionId, canFix, pinned = false, fill = false,
 }: {
   widget: Widget;
   sessionId: string;
@@ -76,6 +76,8 @@ export function WidgetCell({
   canFix: boolean;
   /** In the pinned stage on a phone: its expand is the shared full screen (lib/fullscreen.ts). */
   pinned?: boolean;
+  /** In a window of its own beside the chat: it fills the pane, and there is nothing bigger to expand into. */
+  fill?: boolean;
 }) {
   const needsThree = useMemo(() => usesThree(widget.html), [widget.html]);
   const [bundle, setBundle] = useState<string | null | undefined>(needsThree ? undefined : null);
@@ -178,7 +180,7 @@ export function WidgetCell({
   };
 
   return (
-    <section className={`cell widget ${expanded ? "is-expanded" : ""} ${errors.length ? "is-bad" : ""}`}>
+    <section className={`cell widget ${expanded ? "is-expanded" : ""} ${fill ? "is-fill" : ""} ${errors.length ? "is-bad" : ""}`}>
       <header className="cell-top">
         <IconMark size={13} />
         <span className="shot-where">{widget.title}</span>
@@ -187,14 +189,16 @@ export function WidgetCell({
         <button className="btn icon ghost" onClick={restart} title="Restart" aria-label="Restart widget">
           <IconRotateCcw size={14} />
         </button>
-        <button
-          className="btn icon ghost"
-          onClick={() => setExpanded((v) => !v)}
-          title={expanded ? "Back into the thread (Esc)" : "Expand"}
-          aria-label={expanded ? "Collapse widget" : "Expand widget"}
-        >
-          {expanded ? <IconMinimize size={14} /> : <IconMaximize size={14} />}
-        </button>
+        {!fill && (
+          <button
+            className="btn icon ghost"
+            onClick={() => setExpanded((v) => !v)}
+            title={expanded ? "Back into the thread (Esc)" : "Expand"}
+            aria-label={expanded ? "Collapse widget" : "Expand widget"}
+          >
+            {expanded ? <IconMinimize size={14} /> : <IconMaximize size={14} />}
+          </button>
+        )}
       </header>
 
       {errors.length > 0 && (
@@ -209,7 +213,7 @@ export function WidgetCell({
         </div>
       )}
 
-      <div className="widget-body" style={expanded ? undefined : { height }}>
+      <div className="widget-body" style={expanded || fill ? undefined : { height }}>
         {doc === null ? (
           <div className="widget-loading">Loading 3D…</div>
         ) : (

@@ -6209,6 +6209,11 @@ button.dock-card:hover { border-color: var(--border-strong); }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .stage-stub + .steps, .stage-stub + .msg { margin-top: 10px; }
+/* A card standing in for a window beside the chat: the words on it are the way to bring the window up. */
+.stage-stub.is-open {
+  width: 100%; text-align: left; font: inherit; background: none; cursor: pointer;
+}
+.stage-stub.is-open:hover, .stage-stub.is-open:focus-visible { border-color: var(--accent); color: var(--text-2); }
 
 /* What the agent is about to do on the page, on a phone: a line under the
    picture rather than a pill over it, so none of the page is hidden. */
@@ -6341,6 +6346,15 @@ button.dock-card:hover { border-color: var(--border-strong); }
 .app-pane[data-pane='browser'] .shot-stage.is-big { flex: 1; min-height: 0; display: flex; }
 .app-pane[data-pane='browser'] .shot-stage.is-big .frame { max-height: none; height: 100%; }
 .app-pane[data-pane='browser'] .shot-stage.is-big .frame img { height: 100%; object-fit: contain; }
+
+/* The explainer the agent drew, in a window of its own: its frame fills what the strip leaves, at whatever width
+   the column has, so a chart or an orbit is drawn at the size it was meant for rather than in a card. */
+.app-pane[data-pane='widget'] .cell.widget.is-fill {
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+  border: 0; border-radius: 0; background: var(--bg);
+}
+.app-pane[data-pane='widget'] .cell.widget.is-fill .cell-top { border-bottom: 1px solid var(--border); }
+.app-pane[data-pane='widget'] .cell.widget.is-fill .widget-body { flex: 1; min-height: 0; height: auto; }
 
 /* The column beside the chat: the strip of open windows, then the window itself. The strip is the top of the
    screen: this column starts above the header, so the tabs sit at the very edge and what shows of the header over

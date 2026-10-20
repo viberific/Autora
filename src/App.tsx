@@ -9,6 +9,7 @@ import { Kind, type AutoraEvent, type BrowserState } from "./lib/types";
 import { setLiveFields, setLiveFrame, setLivePaneOwns, setLiveTabs } from "./lib/liveFrame";
 import { resetPreview, setPreviewFrame, setPreviewState, usePreviewState, type PreviewState } from "./lib/preview";
 import { ScreencastCell } from "./components/ScreencastCell";
+import { WidgetCell } from "./components/WidgetCell";
 import { AppPreview, CadWindow, GameWindow, OfficeWindow, OpenCutWindow, PhotoWindow, SpectraWindow, StudioWindow, TerminalWindow } from "./components/lazyWindows";
 import { emitCadHand, resetCad, setCadState, useCadState } from "./lib/caddesk";
 import { resetGame, setGameState, useGameState } from "./lib/gamedesk";
@@ -23,7 +24,7 @@ import { emitOfficeHand, emitOfficePush, resetOffice, setOfficeState, useOfficeS
 import { emitDeskHand, resetDesk, setDeskState, useDeskState } from "./lib/pdfdesk";
 import { emitVideoCommand, resetVideo, setVideoState, useVideoState } from "./lib/opencut";
 import { resetCollab, setCollabState } from "./lib/collab";
-import { cellKey, dockedPlan, usePhone } from "./lib/stage";
+import { cellKey, dockedPlan, pickSurfaces, usePhone } from "./lib/stage";
 import { lastWorkedPane } from "./lib/followPane";
 import { setFollowing, useFollowing } from "./lib/follow";
 import { Thread, WorkFeed, hasWork, type Outgoing } from "./components/Thread";
@@ -136,7 +137,7 @@ const LIBRARY_TABS: LibraryTab[] = ["notebooks", "files"];
 const ARTIFACT_TABS: LibraryTab[] = ["files", "folders"];
 
 /** The windows that can sit beside the chat on a wide screen, one at a time. */
-type SideWindow = "app" | "pdf" | "video" | "cad" | "game" | "photo" | "term" | "studio" | "pages" | "sheets" | "slides" | "browser" | "work";
+type SideWindow = "app" | "pdf" | "video" | "cad" | "game" | "photo" | "term" | "studio" | "pages" | "sheets" | "slides" | "browser" | "widget" | "work";
 
 /**
  * The Office windows that can be open beside the chat, one per app, in the order their tabs sit in. Each has its
@@ -1554,11 +1555,30 @@ export function App() {
     setPickedWindow(pane);
     setFollow(false);
   }, [setFollow, setPickedWindow]);
+  const openWidgetWindow = useCallback(() => pickWindow("widget"), [pickWindow]);
   /* On a desktop what the agent looks at and does is shown in the work area, not in the conversation (a phone has one
      column and keeps it all in the thread): the Activity tab is there as soon as there is anything to show. */
   const workOn = useMemo(() => !phoneLayout && hasWork(view.buckets), [phoneLayout, view.buckets]);
+  /* The newest explainer the agent drew. On a desktop it is a window of its own beside the chat, so a widget is
+     never left behind in a thread that has moved on since; a phone has one column and keeps it in the pinned view
+     (lib/stage.ts). A recorded session is read, not watched, so its widgets stay in the thread. */
+  const widgetCell = useMemo(() => {
+    if (phoneLayout || !live) return null;
+    const found = pickSurfaces(view.buckets, null, false).find((s) => s.kind === "widget");
+    return found && found.cell.kind === "widget" ? found.cell : null;
+  }, [phoneLayout, live, view.buckets]);
+  /* When it arrived, for the tab order (a widget that lands while another window is open takes the pane, the way
+     a page the agent opens does). Closing the tab dismisses this one; the next widget opens a new one. */
+  const [widgetAt, setWidgetAt] = useState(0);
+  const [widgetClosed, setWidgetClosed] = useState<number | null>(null);
+  const widgetSeq = widgetCell ? widgetCell.widget.seq : null;
+  useEffect(() => {
+    if (widgetSeq !== null) setWidgetAt(Date.now());
+  }, [widgetSeq]);
+  const widget = widgetCell && widgetCell.widget.seq !== widgetClosed ? widgetCell : null;
   const openWindows: Array<{ pane: SideWindow; since: number }> = [
     ...(workOn ? [{ pane: "work" as const, since: 0 }] : []),
+    ...(widget ? [{ pane: "widget" as const, since: widgetAt }] : []),
     ...(preview.open ? [{ pane: "app" as const, since: preview.since ?? 0 }] : []),
     ...(desk.open ? [{ pane: "pdf" as const, since: desk.since ?? 0 }] : []),
     ...(video.open ? [{ pane: "video" as const, since: video.since ?? 0 }] : []),
@@ -1589,6 +1609,7 @@ export function App() {
      person. Every window that is open stays mounted (see below), so a tab is never a reload. */
   const sideWindows: Array<{ pane: SideWindow; label: string }> = [
     ...(workOn ? [{ pane: "work" as const, label: "Activity" }] : []),
+    ...(widget ? [{ pane: "widget" as const, label: "Widget" }] : []),
     ...(desk.open ? [{ pane: "pdf" as const, label: "PDF" }] : []),
     ...(video.open ? [{ pane: "video" as const, label: "Video" }] : []),
     ...(cad.open ? [{ pane: "cad" as const, label: "3D" }] : []),
@@ -2089,6 +2110,8 @@ export function App() {
             onOpenSettings={openModelSettings}
             placeholder={placeholder}
             dockedPlanKey={dockPlan ? cellKey(dockPlan) : ""}
+            widgetHeld={widget ? cellKey(widget) : ""}
+            onOpenWidget={openWidgetWindow}
             outbox={outbox}
             // The thread stays mounted under the other pages: told which of them is
             // on screen, so a row that was answered elsewhere catches up.
@@ -2603,24 +2626,30 @@ export function App() {
               <div className="pane-pick" role="tablist" aria-label="Windows open beside the chat">
                 {sideWindows.map((w) => {
                   const closeUrl = sessionId ? closeUrlFor(w.pane, sessionId) : null;
+                  /* A widget has no server-side window to close: its tab is dismissed here, and the thread keeps
+                     the card inline again. */
+                  const closable = closeUrl !== null || w.pane === "widget";
                   return (
                     <div key={w.pane} className={`pane-pick-item${sidePane === w.pane ? " is-on" : ""}`}>
                       <button
                         type="button"
                         role="tab"
                         aria-selected={sidePane === w.pane}
-                        className={`pane-pick-tab${sidePane === w.pane ? " is-on" : ""}${closeUrl ? " has-close" : ""}`}
+                        className={`pane-pick-tab${sidePane === w.pane ? " is-on" : ""}${closable ? " has-close" : ""}`}
                         title={w.label}
                         data-pane={w.pane}
                         onClick={() => pickWindow(w.pane)}
                       >
                         {w.label}
                       </button>
-                      {closeUrl && (
+                      {closable && (
                         <button
                           type="button"
                           className="pane-pick-x"
-                          onClick={() => { void fetch(closeUrl, { method: "POST" }).catch(() => undefined); }}
+                          onClick={() => {
+                            if (closeUrl) void fetch(closeUrl, { method: "POST" }).catch(() => undefined);
+                            else setWidgetClosed(widgetSeq);
+                          }}
                           title={`Close ${w.label}`}
                           aria-label={`Close ${w.label}`}
                         >
@@ -2659,6 +2688,8 @@ export function App() {
                   liveBrowserSeq={view.liveBrowserSeq}
                   browserOpen={browser?.open === true}
                   live={live}
+                  widgetHeld={widget ? cellKey(widget) : ""}
+                  onOpenWidget={openWidgetWindow}
                   // The feed is a window of its own: it follows the page it belongs to.
                   showing={workOn && sidePane === "work"}
                   phase={reading.phase}
@@ -2669,6 +2700,13 @@ export function App() {
                   onOpenMind={openKnowledge}
                   onOpenSettings={openModelSettings}
                 />
+              </aside>
+            )}
+            {/* The newest explainer the agent drew, at the size it was drawn for. A phone has one column and holds it
+                in the pinned view instead (see Stage). */}
+            {widget && sessionId && (
+              <aside className="app-pane" data-pane="widget" hidden={sidePane !== "widget"} aria-label="The explainer the agent drew">
+                <WidgetCell widget={widget.widget} sessionId={sessionId} canFix={live && !view.busy} fill />
               </aside>
             )}
             {browser?.open && sessionId && (

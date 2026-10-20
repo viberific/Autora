@@ -138,15 +138,22 @@ export function Stage({
  * worked the page stay under it, in the thread, where they can be scrolled.
  */
 export function StageStub({
-  kind, title, note, children,
-}: { kind: SurfaceKind; title: string; note: string; children?: ReactNode }) {
+  kind, title, note, onOpen, children,
+}: { kind: SurfaceKind; title: string; note: string; /** Where it went, when it can be brought up: a window beside the chat. */ onOpen?: () => void; children?: ReactNode }) {
+  const body = (
+    <>
+      <span className="stage-stub-ico" aria-hidden="true">{ICON[kind]}</span>
+      <b className="stage-stub-title">{title}</b>
+      <span className="stage-stub-note">{note}</span>
+    </>
+  );
   return (
     <>
-      <div className="stage-stub">
-        <span className="stage-stub-ico" aria-hidden="true">{ICON[kind]}</span>
-        <b className="stage-stub-title">{title}</b>
-        <span className="stage-stub-note">{note}</span>
-      </div>
+      {onOpen ? (
+        <button type="button" className="stage-stub is-open" onClick={onOpen} title={note}>{body}</button>
+      ) : (
+        <div className="stage-stub">{body}</div>
+      )}
       {children}
     </>
   );

@@ -78,6 +78,8 @@ export function Thread({
   placeholder,
   dock,
   dockedPlanKey = "",
+  widgetHeld = "",
+  onOpenWidget,
   outbox = NO_OUTGOING,
   ...work
 }: {
@@ -95,6 +97,9 @@ export function Thread({
   /** The key (cellKey) of the to-do list docked above the message box, which
       the thread then shows as a one-line stub. */
   dockedPlanKey?: string;
+  /** The widget shown in the window beside the chat: the thread keeps only a card for it, which brings it up. */
+  widgetHeld?: string;
+  onOpenWidget?: () => void;
   /** Sent from this page and not in the log yet: shown with one tick until it is. */
   outbox?: Outgoing[];
   busy: boolean;
@@ -192,7 +197,7 @@ export function Thread({
   const held = surfaces.map((s) => s.key).join("|");
   /* What the thread shows as a stub rather than the card: whatever the stage
      holds, and the plan docked above the message box. */
-  const docked = dockedPlanKey ? (held ? `${held}|${dockedPlanKey}` : dockedPlanKey) : held;
+  const docked = [held, dockedPlanKey, widgetHeld].filter(Boolean).join("|");
   const [stageView, setStageView] = useState<{ held: string; pick: SurfaceKind | null; folded: boolean; expanded: boolean }>(
     { held: "", pick: null, folded: false, expanded: false },
   );
@@ -649,6 +654,8 @@ const TurnBucket = memo(function TurnBucket({
   liveBrowserSeq,
   live,
   docked,
+  widgetHeld = "",
+  onOpenWidget,
   phase,
   onPermissionDecide,
   ...work
@@ -661,6 +668,9 @@ const TurnBucket = memo(function TurnBucket({
   /** The keys of the cards held in the stage, so the thread leaves them out. */
   docked: string;
   phase: MarkPhase;
+  /** The widget shown in its own window, whose card here is only a stand-in. */
+  widgetHeld?: string;
+  onOpenWidget?: () => void;
   onPermissionDecide?: (requestId: string, approved: boolean, response?: string) => void;
 } & WorkState) {
   // The agent's mark animates on its current utterance for as long as the turn
@@ -691,6 +701,7 @@ const TurnBucket = memo(function TurnBucket({
           phase={phase}
           turnSeq={bucket.seq}
           onPermissionDecide={onPermissionDecide}
+          onOpenWidget={onOpenWidget}
           {...work}
         />
       </div>
@@ -742,6 +753,8 @@ type CellContext = {
   open: boolean;
   /** Keys of the cards held in the pinned stage, joined with "|". */
   docked: string;
+  /** Brings the widget's own window up, where the card in the thread stands in for it. */
+  onOpenWidget?: () => void;
   /** Which of the mark's two busy states suits what it is doing. */
   phase: MarkPhase;
   onPermissionDecide?: (requestId: string, approved: boolean, response?: string) => void;
@@ -963,7 +976,7 @@ function OfficeStage({ sessionId, kind }: { sessionId: string; kind: OfficeKind 
  * at the bottom and followed while it is. The conversation beside it keeps only the talking (`chatOnly`).
  */
 export const WorkFeed = memo(function WorkFeed({
-  buckets, sessionId, liveBrowserSeq, browserOpen, live, phase, onPermissionDecide, ...work
+  buckets, sessionId, liveBrowserSeq, browserOpen, live, phase, onPermissionDecide, widgetHeld = "", onOpenWidget, ...work
 }: {
   buckets: Bucket[];
   busy: boolean;
@@ -975,6 +988,9 @@ export const WorkFeed = memo(function WorkFeed({
   live: boolean;
   phase: MarkPhase;
   onPermissionDecide?: (requestId: string, approved: boolean, response?: string) => void;
+  /** The widget in its own window beside this one, so the feed keeps only a card for it. */
+  widgetHeld?: string;
+  onOpenWidget?: () => void;
 } & WorkState) {
   const scroller = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
@@ -1007,11 +1023,12 @@ export const WorkFeed = memo(function WorkFeed({
             sessionId={sessionId}
             liveBrowserSeq={liveBrowserSeq}
             live={live}
-            docked=""
+            docked={widgetHeld}
             open={b.open}
             phase={phase}
             turnSeq={b.seq}
             onPermissionDecide={onPermissionDecide}
+            onOpenWidget={onOpenWidget}
             {...work}
           />
         </section>
@@ -1027,6 +1044,7 @@ const CellView = memo(function CellView({
   live,
   open,
   docked,
+  onOpenWidget,
   stage = false,
   phase,
   active,
@@ -1056,6 +1074,8 @@ const CellView = memo(function CellView({
   onPermissionDecide?: (requestId: string, approved: boolean, response?: string) => void;
   /** Which turn this cell belongs to, for the thumb under a reply. */
   turnSeq: number;
+  /** Brings the widget's own window up, where the card here stands in for it. */
+  onOpenWidget?: () => void;
 } & WorkState) {
   const held = !stage && docked !== "" && docked.split("|").includes(cellKey(cell));
   switch (cell.kind) {
@@ -1152,7 +1172,16 @@ const CellView = memo(function CellView({
     case "files":
       return <FilesCell files={cell.files} />;
     case "widget":
-      if (held) return <StageStub kind="widget" title={NAME.widget} note={`${cell.widget.title} · pinned above`} />;
+      if (held) {
+        return (
+          <StageStub
+            kind="widget"
+            title={NAME.widget}
+            note={stage ? `${cell.widget.title} · pinned above` : `${cell.widget.title} · open beside you`}
+            onOpen={stage ? undefined : onOpenWidget}
+          />
+        );
+      }
       return <WidgetCell widget={cell.widget} sessionId={sessionId} canFix={live && !driving} pinned={stage} />;
     case "file":
       return <FileCell file={cell.file} />;
