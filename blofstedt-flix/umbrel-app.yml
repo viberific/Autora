@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.48"
+version: "0.3.49"
 port: 8096
 folderAccess:
   - id: umbrel-downloads
@@ -54,13 +54,18 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Playback fixes. Flix no longer announces a file it can play as "would need
-  converting": direct play is now decided on container, video codec and pixel
-  format, so a 4K file your TV handles is played as it is. The signing key is
-  kept across restarts, so an update or a restart no longer leaves a dead link
-  and a force close to get playing again - the app also asks for a fresh link
-  when it comes back to the foreground. On the TV the controls fade after five
-  seconds while playing, the fullscreen button is gone (the TV is always full
-  screen), left and right seek ten seconds and the caption list is walkable with
-  the d-pad. The parental rating now sits with the title instead of floating at
-  the far right of the card.
+  The wait for a slow episode is no longer a black screen. While its file is
+  still downloading the player says how far it has got, how fast, from how many
+  people and roughly how long is left, and after twenty seconds with nothing to
+  play it says so plainly and offers a cancel. It also stopped quietly giving up
+  and trying another source after twenty-five seconds, which could throw away a
+  download that was working perfectly well - a two-seeder season pack taking
+  hours is a wait, not a fault.
+  On a show, "Ready to watch" now means that episode's own file is fully on
+  disk: before that it shows how far the download has got, and an episode in a
+  season pack that nobody has asked for says it is waiting in the pack.
+  The next episode of a season pack starts fetching once the one you are
+  watching holds enough of itself to play for forty minutes, so the handover is
+  ready instead of cold. The Torrents page and the storage graph count the
+  episodes you asked for rather than the whole pack, so a 38 GB season with one
+  6.25 GB episode selected reads as 6.25 GB.
