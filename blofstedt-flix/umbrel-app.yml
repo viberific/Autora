@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.47"
+version: "0.3.48"
 port: 8096
 folderAccess:
   - id: umbrel-downloads
@@ -54,8 +54,13 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Fixes the idle artwork: the poster slideshow used to slide over a show that was
-  still playing whenever the remote sat untouched for three seconds. It now only
-  appears when the show is actually stopped - paused, or cast with the TV itself
-  idle - and only after thirty seconds of no input. Pressing play always takes it
-  down at once.
+  Playback fixes. Flix no longer announces a file it can play as "would need
+  converting": direct play is now decided on container, video codec and pixel
+  format, so a 4K file your TV handles is played as it is. The signing key is
+  kept across restarts, so an update or a restart no longer leaves a dead link
+  and a force close to get playing again - the app also asks for a fresh link
+  when it comes back to the foreground. On the TV the controls fade after five
+  seconds while playing, the fullscreen button is gone (the TV is always full
+  screen), left and right seek ten seconds and the caption list is walkable with
+  the d-pad. The parental rating now sits with the title instead of floating at
+  the far right of the card.
