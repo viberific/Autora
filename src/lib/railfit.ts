@@ -68,6 +68,10 @@ export function useRailIcons(width: number, need: number, folded: boolean): bool
  */
 export function useRowSpare(ref: React.RefObject<HTMLElement | null>): number {
   const [spare, setSpare] = useState(0);
+  /* Deliberately on every render: a squeezed child does not resize the row, so no
+     observer would catch the moment it stops fitting, and the number is stored
+     only when it changes, so this cannot loop. */
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
