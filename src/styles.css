@@ -8013,6 +8013,9 @@ body.is-resizing iframe { pointer-events: none; }
 .skill-ok { color: var(--live); margin: 0; }
 .skill-files, .skill-versions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .skill-file { flex: 1 1 100%; max-height: 320px; overflow: auto; }
+/* One row of a skill's files, and the small box a new file's name is typed in. */
+.skill-file-row { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.skill-file-row .page-search { flex: 1 1 220px; }
 .skill-version { display: flex; align-items: center; gap: 8px; flex: 1 1 100%; font-size: var(--fs-sm); color: var(--text-2); }
 
 /* The Mind, one agent at a time: the chooser, and an agent's profile. */

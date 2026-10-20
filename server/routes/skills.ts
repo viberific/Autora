@@ -6,8 +6,8 @@
 
 import express, { type Express, type Request, type Response } from "express";
 import {
-  SkillError, approveSkill, deleteSkill, exportSkill, getSkill, importSkills, listSkills, parseSkillMd,
-  readSkillFile, revertSkill, skillVersions, writeSkill,
+  SkillError, approveSkill, deleteSkill, exportSkill, exportSkills, getSkill, importSkills, listSkills, parseSkillMd,
+  readSkillFile, revertSkill, skillVersions, writeSkill, writeSkillFile,
 } from "../skills";
 
 const failed = (res: Response, err: unknown) => {
@@ -68,6 +68,18 @@ export function skillRoutes(app: Express) {
     }
   });
 
+  /** One file beside SKILL.md, written or removed on its own: the scripts are the person's to edit. */
+  app.put("/api/skills/:name/files", (req: Request, res: Response) => {
+    try {
+      const rel = String(req.body?.path ?? "");
+      const text = req.body?.text === null || req.body?.text === "" ? null : String(req.body?.text ?? "");
+      const info = writeSkillFile(req.params.name, rel, text, { kind: "person" });
+      res.json({ skill: info, versions: skillVersions(info.name).map((v) => ({ at: v.at, by: v.by, text: v.text, files: v.files })) });
+    } catch (err) {
+      failed(res, err);
+    }
+  });
+
   app.post("/api/skills/:name/approve", (req: Request, res: Response) => {
     try { res.json({ skill: approveSkill(req.params.name) }); } catch (err) { failed(res, err); }
   });
@@ -85,6 +97,18 @@ export function skillRoutes(app: Express) {
       const zip = exportSkill(req.params.name);
       res.setHeader("Content-Type", "application/zip");
       res.setHeader("Content-Disposition", `attachment; filename="${req.params.name}.zip"`);
+      res.send(Buffer.from(zip));
+    } catch (err) {
+      failed(res, err);
+    }
+  });
+
+  /** Every skill in one zip, each in its own folder. */
+  app.get("/api/skills-export", (_req: Request, res: Response) => {
+    try {
+      const { zip, count } = exportSkills();
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader("Content-Disposition", `attachment; filename="autora-skills-${count}.zip"`);
       res.send(Buffer.from(zip));
     } catch (err) {
       failed(res, err);

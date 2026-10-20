@@ -40,8 +40,12 @@ interface Sidecar {
   failed: number;
   /** Rounds of tool calls the turns that used it and went well took, newest last: what "usually" means for it. */
   steps: number[];
-  /** Earlier SKILL.md texts, newest first, with who replaced them. */
-  versions: { at: number; by: string; text: string }[];
+  /**
+   * Earlier SKILL.md texts, newest first, with who replaced them. `files` is the
+   * files beside it that version changed, as they held before it (null: the file
+   * was not there), so going back puts the scripts back too.
+   */
+  versions: { at: number; by: string; text: string; files?: Record<string, string | null> }[];
 }
 
 interface SkillInfo {
@@ -80,6 +84,8 @@ const FILE_MAX = 1_000_000;
 const TOTAL_MAX = 5_000_000;
 const FILES_MAX = 100;
 const VERSIONS_KEPT = 5;
+/** A file bigger than this, or not text, is not kept in a version: a rollback leaves it as it is. */
+const VERSION_FILE_MAX = 200_000;
 const STEPS_KEPT = 9;
 /** A draft an agent wrote goes live after this many turns that used it went well. */
 export const LIVE_AFTER = 3;
@@ -239,6 +245,24 @@ function inside(dir: string, rel: string): string | null {
   return target.startsWith(dir + path.sep) ? target : null;
 }
 
+/** A script that will be run keeps its executable bit; anything else is private. */
+const modeFor = (target: string) => (/\.(sh|py|js|mjs|ts|rb|pl)$/.test(target) ? 0o700 : 0o600);
+
+/** What these files hold now (null: not there), kept as the other side of a rollback. */
+function filesNow(dir: string, paths: string[]): Record<string, string | null> {
+  const out: Record<string, string | null> = {};
+  for (const rel of paths) {
+    const target = inside(dir, rel);
+    if (!target) continue;
+    try {
+      const bytes = fs.readFileSync(target);
+      if (bytes.includes(0) || bytes.byteLength > VERSION_FILE_MAX) continue;
+      out[rel] = bytes.toString("utf8");
+    } catch { out[rel] = null; }
+  }
+  return out;
+}
+
 function listFiles(dir: string, base = dir): string[] {
   const out: string[] = [];
   let entries: fs.Dirent[] = [];
@@ -351,6 +375,21 @@ export function writeSkill(
     if (bytes && typeof data === "string" && SECRET.test(data)) throw new SkillError(`"${rel}" holds what looks like a password, key or token. Read it from an environment variable or a saved credential instead.`);
     planned.set(target, bytes);
   }
+  /* What each file this write changes held before it (null: it was not there), so an edit keeps the old script too. */
+  const beforeFiles: Record<string, string | null> = {};
+  for (const [rel, data] of Object.entries(files)) {
+    if (data !== null && typeof data !== "string") continue;
+    const target = inside(dir, rel);
+    if (!target) continue;
+    let old: string | null;
+    try {
+      const had = fs.readFileSync(target);
+      if (had.includes(0) || had.byteLength > VERSION_FILE_MAX) continue;
+      old = had.toString("utf8");
+    } catch { old = null; }
+    const next = data === null ? null : data.replace(/\r\n?/g, "\n");
+    if (old !== next) beforeFiles[rel.replace(/^\.?\//, "")] = old;
+  }
   const kept = before ? before.files.filter((f) => !planned.has(path.join(dir, f))) : [];
   const total = kept.reduce((n, f) => n + (fs.statSync(path.join(dir, f)).size), 0) +
     [...planned.values()].reduce((n, b) => n + (b?.byteLength ?? 0), 0);
@@ -361,12 +400,17 @@ export function writeSkill(
   for (const [target, bytes] of planned) {
     if (bytes === null) { fs.rmSync(target, { force: true }); continue; }
     fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, bytes, { mode: /\.(sh|py|js|mjs|ts|rb|pl)$/.test(target) ? 0o700 : 0o600 });
+    fs.writeFileSync(target, bytes, { mode: modeFor(target) });
   }
   const side = readSidecar(dir);
   const now = Date.now();
   if (before) {
-    if (before.text !== text) side.versions = [{ at: now, by: byLabel(by), text: before.text }, ...side.versions].slice(0, VERSIONS_KEPT);
+    if (before.text !== text || Object.keys(beforeFiles).length > 0) {
+      side.versions = [
+        { at: now, by: byLabel(by), text: before.text, ...(Object.keys(beforeFiles).length ? { files: beforeFiles } : {}) },
+        ...side.versions,
+      ].slice(0, VERSIONS_KEPT);
+    }
   } else {
     side.status = by.kind === "agent" ? "draft" : "live";
     side.author = by;
@@ -409,7 +453,21 @@ export function revertSkill(name: string, index = 0): SkillInfo {
   if (!v) throw new SkillError("There is no earlier version to go back to.");
   const parsed = parseSkillMd(v.text);
   if (!parsed.ok || parsed.name !== name) throw new SkillError("That earlier version is not a valid skill of this name.");
-  side.versions = [{ at: Date.now(), by: "you", text: s.text }, ...side.versions.filter((_, i) => i !== index)].slice(0, VERSIONS_KEPT);
+  /* The files that version changed go back as they were then; what they hold now is kept, so this too can be undone. */
+  const back = v.files ? filesNow(s.dir, Object.keys(v.files)) : null;
+  if (v.files) {
+    for (const [rel, held] of Object.entries(v.files)) {
+      const target = inside(s.dir, rel);
+      if (!target) continue;
+      if (held === null) { fs.rmSync(target, { force: true }); continue; }
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, held, { mode: modeFor(target) });
+    }
+  }
+  side.versions = [
+    { at: Date.now(), by: "you", text: s.text, ...(back && Object.keys(back).length ? { files: back } : {}) },
+    ...side.versions.filter((_, i) => i !== index),
+  ].slice(0, VERSIONS_KEPT);
   side.updated = Date.now();
   fs.writeFileSync(path.join(s.dir, "SKILL.md"), v.text, { mode: 0o600 });
   writeSidecar(s.dir, side);
@@ -606,6 +664,34 @@ export function exportSkill(name: string): Uint8Array {
   const files: Record<string, Uint8Array> = { [`${name}/SKILL.md`]: strToU8(s.text) };
   for (const f of s.files) files[`${name}/${f}`] = new Uint8Array(fs.readFileSync(path.join(s.dir, f)));
   return zipSync(files);
+}
+
+/** Every skill as one zip, each in its own folder: the whole library in a file. */
+export function exportSkills(): { zip: Uint8Array; count: number } {
+  const skills = listSkills();
+  if (!skills.length) throw new SkillError("There are no skills to export yet.");
+  const files: Record<string, Uint8Array> = {};
+  for (const info of skills) {
+    const s = getSkill(info.name);
+    if (!s) continue;
+    files[`${s.name}/SKILL.md`] = strToU8(s.text);
+    for (const f of s.files) files[`${s.name}/${f}`] = new Uint8Array(fs.readFileSync(path.join(s.dir, f)));
+  }
+  return { zip: zipSync(files), count: skills.length };
+}
+
+/**
+ * Write one file beside a skill's SKILL.md (null removes it), leaving SKILL.md as
+ * it is. What it replaces is kept as a version, so a bad script is one step back.
+ */
+export function writeSkillFile(name: string, rel: string, text: string | null, by: SkillAuthor): SkillInfo {
+  const s = getSkill(name);
+  if (!s) throw new SkillError(`There is no skill "${name}".`);
+  const clean = String(rel ?? "").replace(/\\/g, "/").replace(/^\.?\//, "");
+  if (!inside(s.dir, clean)) {
+    throw new SkillError(`"${clean}" is not a path inside the skill's folder (SKILL.md itself is the text; hidden files are not kept).`);
+  }
+  return writeSkill(s.text, by, { [clean]: text }).info;
 }
 
 // -------------------------------------------------------------- migration --

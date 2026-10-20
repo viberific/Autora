@@ -226,6 +226,64 @@ await test("the Skills page's routes: list, open, check as typed, create, rename
   }
 });
 
+await test("a skill's script is edited on its own, kept as a version, and the whole library comes out as one zip", async () => {
+  const express = (await import("express")).default;
+  const { skillRoutes } = await import("../server/routes/skills");
+  const { unzipSync } = await import("fflate");
+  const app = express();
+  app.use(express.json());
+  skillRoutes(app);
+  const server = app.listen(0);
+  const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  const put = async (path: string, text: string | null) => {
+    const r = await fetch(`${base}/api/skills/with-script/files`, {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path, text }),
+    });
+    return { status: r.status, body: await r.json().catch(() => null) as any };
+  };
+  const reads = (rel: string) => {
+    const got = skills.readSkillFile("with-script", rel);
+    return got.ok ? got.text : `not read: ${got.error}`;
+  };
+  try {
+    skills.writeSkill(
+      skills.composeSkillMd("with-script", "Runs a small script beside it, to prove a file can be edited here.", "1. Run `scripts/run.sh` from the skill's folder.\n2. Read what it prints and compare it with the figures in the report.\n3. When a line differs, say which one before changing anything."),
+      { kind: "person" },
+    );
+    const added = await put("scripts/run.sh", "echo one\n");
+    assert.equal(added.status, 200);
+    assert.equal(reads("scripts/run.sh"), "echo one\n");
+
+    const escape = await put("../../outside.txt", "x");
+    assert.equal(escape.status, 400, "a path out of the skill's folder is refused");
+    assert.match(escape.body.error, /inside the skill's folder/);
+    assert.equal((await put("SKILL.md", "x")).status, 400, "SKILL.md is the text, not a file beside it");
+
+    const edited = await put("scripts/run.sh", "echo two\n");
+    assert.equal(reads("scripts/run.sh"), "echo two\n");
+    assert.equal(edited.body.versions[0].files["scripts/run.sh"], "echo one\n", "the version keeps the script it replaced");
+    assert.equal(edited.body.skill.text === undefined, true, "the route does not send the body back");
+
+    skills.revertSkill("with-script", 0);
+    assert.equal(reads("scripts/run.sh"), "echo one\n", "going back puts the script back too");
+
+    const removed = await put("scripts/run.sh", null);
+    assert.equal(removed.status, 200);
+    assert.match(reads("scripts/run.sh"), /^not read/);
+    skills.revertSkill("with-script", 0);
+    assert.equal(reads("scripts/run.sh"), "echo one\n", "a removed file comes back too");
+
+    const all = await fetch(`${base}/api/skills-export`);
+    assert.equal(all.headers.get("content-type"), "application/zip");
+    const zipped = Object.keys(unzipSync(new Uint8Array(await all.arrayBuffer())));
+    assert.ok(zipped.includes("with-script/SKILL.md"), "every skill's SKILL.md is in the one zip");
+    assert.ok(zipped.includes("with-script/scripts/run.sh"), "and the scripts beside it");
+    assert.ok(zipped.filter((p) => /\.zip/.test(p)).length === 0);
+  } finally {
+    server.close();
+  }
+});
+
 console.log(`${passed} passed`);
 
 function ctx(self?: { id: string; name: string }) {

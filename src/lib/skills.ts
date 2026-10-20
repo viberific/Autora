@@ -17,7 +17,7 @@ export type SkillInfo = {
 };
 
 export type Skill = SkillInfo & { text: string; body: string };
-export type SkillVersion = { at: number; by: string; text: string };
+export type SkillVersion = { at: number; by: string; text: string; files?: Record<string, string | null> };
 
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -45,6 +45,11 @@ export const revertSkill = (name: string, index: number) =>
   call<{ skill: SkillInfo }>(`/api/skills/${encodeURIComponent(name)}/revert`, json("POST", { index }));
 export const deleteSkill = (name: string) => call<{ ok: true }>(`/api/skills/${encodeURIComponent(name)}`, { method: "DELETE" });
 export const exportUrl = (name: string) => `/api/skills/${encodeURIComponent(name)}/export`;
+/** Every skill in one zip. */
+export const exportAllUrl = () => "/api/skills-export";
+/** One file beside SKILL.md, saved on its own (null removes it). */
+export const saveSkillFile = (name: string, path: string, text: string | null) =>
+  call<{ skill: SkillInfo; versions: SkillVersion[] }>(`/api/skills/${encodeURIComponent(name)}/files`, json("PUT", { path, text }));
 export const importSkills = (file: Blob) =>
   call<{ imported: SkillInfo[]; skipped: { where: string; error: string }[] }>("/api/skills-import", {
     method: "POST", headers: { "Content-Type": "application/zip" }, body: file,

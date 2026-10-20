@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { IconDownload, IconPlus, IconRotateCcw, IconSkill, IconTrash, IconUpload } from "../Icons";
 import {
-  SKILL_TEMPLATE, approveSkill, authorLabel, checkSkill, createSkill, deleteSkill, exportUrl, fetchSkill, fetchSkillFile,
-  fetchSkills, importSkills, revertSkill, saveSkill, type Skill, type SkillInfo, type SkillVersion,
+  SKILL_TEMPLATE, approveSkill, authorLabel, checkSkill, createSkill, deleteSkill, exportAllUrl, exportUrl, fetchSkill,
+  fetchSkillFile, fetchSkills, importSkills, revertSkill, saveSkill, saveSkillFile, type Skill, type SkillInfo, type SkillVersion,
 } from "../../lib/skills";
 import { every } from "../../lib/poll";
 import { sure } from "../../lib/sure";
@@ -105,6 +105,15 @@ export function SkillsPage({ topSlot }: { topSlot?: HTMLElement | null }) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
+          <a
+            className="btn ghost"
+            href={skills && skills.length ? exportAllUrl() : undefined}
+            download="autora-skills.zip"
+            title="Download every skill, each in its own folder, as one .zip"
+            aria-disabled={!skills || skills.length === 0}
+          >
+            <IconDownload size={14} /> Download all
+          </a>
           <button className="btn ghost" onClick={() => picker.current?.click()} title="Import a .zip of one or more skill folders">
             <IconUpload size={14} /> Import
           </button>
@@ -187,7 +196,9 @@ function SkillEditor({ name, onClose, onSaved }: { name: string | null; onClose:
   const [versions, setVersions] = useState<SkillVersion[]>([]);
   const [text, setText] = useState(name ? "" : SKILL_TEMPLATE);
   const [verdict, setVerdict] = useState<{ ok: boolean; error?: string } | null>(null);
-  const [file, setFile] = useState<{ path: string; text: string } | null>(null);
+  const [file, setFile] = useState<{ path: string; text: string; saved: string } | null>(null);
+  /** A new file's name, while it is being typed. */
+  const [newFile, setNewFile] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -221,6 +232,47 @@ function SkillEditor({ name, onClose, onSaved }: { name: string | null; onClose:
   });
 
   const changed = skill ? text !== skill.text : true;
+
+  /* A file beside SKILL.md: opened, saved and removed on its own, so a script is the person's to change. */
+  const openFile = (path: string) => {
+    if (!skill) return;
+    setError(null);
+    fetchSkillFile(skill.name, path)
+      .then((t) => setFile({ path, text: t, saved: t }))
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Could not open that file."));
+  };
+
+  const took = (r: { skill: SkillInfo; versions: SkillVersion[] }) => {
+    setSkill((s) => (s ? { ...s, ...r.skill } : s));
+    setVersions(r.versions);
+    load();
+  };
+
+  const saveFile = () => act(async () => {
+    if (!skill || !file) return;
+    const r = await saveSkillFile(skill.name, file.path, file.text);
+    setFile({ ...file, saved: file.text });
+    took(r);
+  });
+
+  const removeFile = () => act(async () => {
+    if (!skill || !file) return;
+    if (!(await sure(`Delete \u201c${file.path}\u201d from this skill? The one there now is kept as a version.`))) return;
+    const r = await saveSkillFile(skill.name, file.path, null);
+    setFile(null);
+    took(r);
+  });
+
+  const addFile = (path: string) => act(async () => {
+    if (!skill) return;
+    const clean = path.trim().replace(/^\.?\//, "");
+    if (!clean) return;
+    if (skill.files.includes(clean)) { setError("There is already a file called that."); return; }
+    const r = await saveSkillFile(skill.name, clean, "");
+    setNewFile(null);
+    setFile({ path: clean, text: "", saved: "" });
+    took(r);
+  });
 
   return (
     <section className="set-card skill-editor">
@@ -267,18 +319,53 @@ function SkillEditor({ name, onClose, onSaved }: { name: string | null; onClose:
       )}
       {error && <p className="set-warn">{error}</p>}
 
-      {skill && skill.files.length > 0 && (
+      {skill && (
         <div className="skill-files">
-          <span className="jf-hint">Files beside it</span>
-          {skill.files.map((f) => (
-            <button
-              key={f} type="button" className={`mind-rel ${file?.path === f ? "on" : ""}`}
-              onClick={() => void (file?.path === f ? setFile(null) : fetchSkillFile(skill.name, f).then((t) => setFile({ path: f, text: t })).catch(() => undefined))}
-            >
-              {f}
+          <span className="jf-hint">Files beside it: the scripts and references this skill uses, edited here and saved on their own</span>
+          <div className="skill-file-row">
+            {skill.files.map((f) => (
+              <button
+                key={f} type="button" className={`mind-rel ${file?.path === f ? "on" : ""}`}
+                onClick={() => openFile(f)}
+              >
+                {f}
+              </button>
+            ))}
+            <button type="button" className="btn tiny ghost" onClick={() => setNewFile(newFile === null ? "scripts/" : null)}>
+              <IconPlus size={12} /> New file
             </button>
-          ))}
-          {file && <pre className="kd-body skill-file">{file.text}</pre>}
+          </div>
+          {newFile !== null && (
+            <div className="skill-file-row">
+              <input
+                className="page-search" autoFocus placeholder="scripts/run.mjs" aria-label="New file's path"
+                value={newFile} onChange={(e) => setNewFile(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void addFile(newFile);
+                  if (e.key === "Escape") setNewFile(null);
+                }}
+              />
+              <button className="btn tiny primary" disabled={busy || !newFile.trim()} onClick={() => void addFile(newFile)}>Add</button>
+              <button className="btn tiny ghost" onClick={() => setNewFile(null)}>Cancel</button>
+            </div>
+          )}
+          {file && (
+            <>
+              <label className="jf-row">
+                <span>{file.path}</span>
+                <textarea
+                  className="jf-cron skill-md" rows={14} spellCheck={false}
+                  value={file.text} onChange={(e) => setFile({ ...file, text: e.target.value })}
+                />
+              </label>
+              <div className="jf-actions">
+                <button className="btn ghost" disabled={busy} onClick={() => void removeFile()}>Delete file</button>
+                <button className="btn primary" disabled={busy || file.text === file.saved} onClick={() => void saveFile()}>
+                  Save file
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -287,7 +374,7 @@ function SkillEditor({ name, onClose, onSaved }: { name: string | null; onClose:
           <span className="jf-hint">Earlier versions</span>
           {versions.map((v, i) => (
             <div key={v.at} className="skill-version">
-              <span>{when(v.at)}, replaced by {v.by}</span>
+              <span>{when(v.at)}, replaced by {v.by}{v.files && Object.keys(v.files).length > 0 ? ` \u00b7 ${Object.keys(v.files).length} file${Object.keys(v.files).length === 1 ? "" : "s"}` : ""}</span>
               <button className="btn tiny ghost" disabled={busy} onClick={() => void act(async () => { await revertSkill(name, i); load(); })}>
                 <IconRotateCcw size={12} /> Go back to this
               </button>
