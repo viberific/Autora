@@ -18,3 +18,7 @@ opencut-editor/.prepared
 gdevelop-editor/node_modules
 gdevelop-editor/work
 gdevelop-editor/.prepared
+
+# Autora 3D, the same again: `npm --prefix autora-3d ci` makes it in the build stage, and COPY autora-3d/ must not
+# bring a developer's own node_modules in over the top of it.
+autora-3d/node_modules

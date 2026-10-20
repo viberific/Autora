@@ -10,6 +10,11 @@ venv/
 
 # Node
 node_modules/
+# node_modules with no trailing slash is the symlink some clones have in place of the directory (pointing at
+# another clone on the same machine). `node_modules/` matches the directory only, so without this line the
+# link shows up as untracked and `git add -A` puts an absolute local path back in the tree -- which is what
+# broke the 0.9.284 image build: an autora-3d/node_modules symlink copied over the real directory.
+node_modules
 *.tsbuildinfo
 
 # Autora runtime state
