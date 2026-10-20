@@ -188,11 +188,9 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  Housekeeping has stopped throwing away what it was told to keep forever. With Delete sessions after set to 0 days
-  (0 = never) it ignored that and cleared every session and artifact past the number it always keeps, so the
-  gentlest-looking setting was the most destructive one; now a limit of 0 really means nothing is old enough to go.
-  Quiet hours refuse an hour past 23 instead of saving a window that never opens. A quick "what's up" typed on a
-  phone is answered as small talk again, because a phone sends a curly apostrophe. The session list stops polling
-  in a tab you have left and no longer takes a server error for a list of sessions, which is what broke the menu.
-  docker run --rm no longer costs an extra safety check, and countdowns read "in 3d" to match the "3d ago"
-  beside them.
+  Luna answers again. OpenAI's newer models - GPT-5 and later, and the o-series - refuse the old name for the
+  reply limit, so every call to gpt-6-luna failed with "Unsupported parameter: 'max_tokens'". They are now
+  asked with max_completion_tokens, and their own temperature is left alone rather than overruled. The spend
+  bar keeps one line open per API instead of hiding them behind a single combined bar, says what this
+  conversation has cost so far, and shows OpenAI's spend at all - OpenAI publishes no balance to read, so its
+  line carries the month the ledger counted rather than disappearing.
