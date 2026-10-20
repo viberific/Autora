@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AutoraMark, type MarkState } from "./AutoraMark";
 import {
   IconBrain, IconSkill, IconChart, IconClock, IconFolder, IconList, IconMask, IconMessage,
@@ -20,6 +20,7 @@ import {
 } from "../lib/memory";
 import { MemoryPeek } from "./MemoryCell";
 import { every, usePoll } from "../lib/poll";
+import { useRailNeed } from "../lib/railfit";
 
 export type PageId =
   | "chat" | "config" | "sessions" | "artifacts" | "notebooks" | "analytics"
@@ -60,6 +61,7 @@ export function Rail({
   page, onNavigate, onOpenSession, onOpenMemory, context, relayOn, alert, onNew, onIncognito,
   onStartTask, drawer = false, onClose, mini = false, onMini,
   mood = "rest", attention = 0, pulse = 0, learned = 0, bloom = 0, mindGlow = false, threadsUnread = 0,
+  onNeed,
 }: {
   page: PageId;
   onNavigate: (page: PageId) => void;
@@ -97,7 +99,23 @@ export function Rail({
   mindGlow?: boolean;
   /** What the agents have said in Threads since it was last open, shown as N new. */
   threadsUnread?: number;
+  /** How wide this menu has to be before its words fit, measured here from the
+      words themselves (lib/railfit.ts) and reported up so the app knows where
+      the menu folds to icons. */
+  onNeed?: (px: number) => void;
 }) {
+  /* The words, measured rather than guessed: a hidden copy of the menu's rows,
+     laid out at their natural width. A copy, because the rows on screen are as
+     wide as the menu and their labels are what gets cut; here, because the
+     theme's text size, the font and this menu's own padding all count this way
+     without a number to keep in step. */
+  const gauge = useRef<HTMLDivElement | null>(null);
+  const list = useRef<HTMLDivElement | null>(null);
+  const { need } = useRailNeed(gauge, list);
+  /* Only the desktop rail measures: a drawer is always wide enough for the
+     words, and a phone never shows this menu at all. */
+  useEffect(() => { if (!drawer && need > 0) onNeed?.(need); }, [drawer, need, onNeed]);
+
   const item = (p: (typeof PAGES)[number]) => (
     <button
       // Re-keyed on each landing so the bloom animation plays again.
@@ -127,6 +145,18 @@ export function Rail({
 
   return (
     <aside className={`rail ${drawer ? "is-drawer" : ""}${mini && !drawer ? " is-mini" : ""}`} aria-label="Navigation">
+      {/* What the labels would need at their full width. Never seen, read by the
+          measurement above, and only on a desktop -- a drawer is always wide
+          enough for its words. */}
+      {!drawer && (
+        <div className="rail-gauge" ref={gauge} aria-hidden="true">
+          <div className="rail-nav">
+            {PAGES.map((p) => (
+              <div className="rail-nav-item" key={p.id}>{p.icon}<span>{p.label}</span></div>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="rail-top">
         <span className="rail-brand presence">
           <AutoraMark size={30} state={mood} idle attention={attention} pulse={pulse} />
@@ -163,7 +193,7 @@ export function Rail({
 
       {/* The pages at the top; at the foot, how full this session's context
           is and what is running without you. */}
-      <div className="rail-scroll">
+      <div className="rail-scroll" ref={list}>
         <nav className="rail-nav">
           {PAGES.filter((p) => p.group === "work").map(item)}
           <div className="rail-divider" role="separator" />

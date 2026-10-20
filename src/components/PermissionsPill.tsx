@@ -23,6 +23,7 @@ export function PermissionsPill({
   onChangeWhen,
   busy,
   error,
+  dot = false,
 }: {
   permissions: Permissions;
   askWhen: string;
@@ -30,6 +31,11 @@ export function PermissionsPill({
   onChangeWhen: (text: string) => void;
   busy?: boolean;
   error?: string | null;
+  /** No room in the header for the word: the dot alone, in its own colour, with
+      the same menu behind it. It was being pushed off the end of the row and
+      cut off, which is worse than a pill you have to point at -- and the two
+      modes are told apart by colour, the title and the menu here. */
+  dot?: boolean;
 }) {
   const phone = usePhone();
   const [open, setOpen] = useState(false);
@@ -124,14 +130,15 @@ export function PermissionsPill({
   return (
     <div className="mode-pill-wrap" ref={wrap}>
       <button
-        className={`badge mode-pill m-${current.id}${open ? " open" : ""}`}
+        className={`badge mode-pill m-${current.id}${open ? " open" : ""}${dot ? " is-dot" : ""}`}
         onClick={() => (open ? close() : setOpen(true))}
         title={`Permissions for this chat: ${current.label} — press to change`}
+        aria-label={`Permissions for this chat: ${current.label}`}
         aria-haspopup="menu"
         aria-expanded={open}
       >
         <span className="mode-dot" aria-hidden="true" />
-        {summary}
+        {dot ? null : summary}
       </button>
 
       {open && (() => {

@@ -1017,16 +1017,21 @@ body::before {
    long note cannot squeeze into a 40px column and stand on the buttons. */
 .composer-tools { display: flex; align-items: center; gap: 2px; min-width: 0; margin-left: -8px; flex-wrap: wrap; row-gap: 4px; }
 .composer-tools > .hint.voice-note { flex: 1 1 100%; order: 10; padding: 4px 4px 0 8px; }
-/* The toolstrip is one line at every width. A control that falls to a second
-   line reads as a different kind of thing -- the wrench stopped looking like
-   the one that belongs beside Send -- so what gives way is the mode pill's
-   word (a glyph on a phone and beside the app pane: see ModeSelect), then a
-   few pixels off each button (the min-width below). The strip itself never
-   wraps, and the note after it still takes the line under it. */
-.composer-strip { display: flex; align-items: center; gap: 2px; min-width: 0; flex: 0 1 auto; flex-wrap: nowrap; }
-.composer-tools .composer-strip .btn.icon { flex: 0 1 auto; min-width: 32px; }
-.composer-strip .mode-sel-wrap { flex: 0 1 auto; min-width: 0; overflow: hidden; }
-.composer-strip .mode-sel-pill { min-width: 0; }
+/* The toolstrip is one line as long as one line holds it. What gives way first
+   is the mode pill's word (a glyph on a phone and beside the app pane: see
+   ModeSelect), then a few pixels off each button (the min-width below) -- but
+   never a button down to nothing, and never half a pill. Below that the strip
+   wraps rather than cuts: two short lines beat a control nobody can press. */
+.composer-strip { display: flex; align-items: center; gap: 2px; min-width: 0; flex: 0 1 auto; flex-wrap: wrap; row-gap: 4px; }
+/* Nothing in the strip is allowed to shrink into its own icon: a button squeezed
+   below its glyph is a button that is half drawn, and the mode pill squeezed
+   below its tile is the pill cut in half that Brian reported. What gives way is
+   the mode pill's word (see ModeSelect and .is-icon) and, if even that will not
+   fit on one line, the line itself -- the row under the box already wraps, so a
+   second line is four pixels taller and nothing is lost. */
+.composer-tools .composer-strip .btn.icon { flex: 0 0 auto; min-width: 32px; }
+.composer-strip .mode-sel-wrap { flex: 0 0 auto; min-width: 0; }
+.composer-strip .mode-sel-pill { min-width: 0; white-space: nowrap; }
 .composer-acts { display: flex; align-items: center; gap: 8px; }
 .composer-send {
   display: grid; place-items: center; width: 36px; height: 36px; padding: 0;
@@ -2346,8 +2351,20 @@ label + .jf-hint { margin-top: -5px; }
    session list belongs in it -- covering the conversation to show a list that
    would fit in the gutter is a phone habit on a 27-inch screen.
    ============================================================================ */
-.rail { display: flex; flex-direction: column; min-height: 0; width: 100%; height: 100%; background: var(--s1); }
+.rail { display: flex; flex-direction: column; min-height: 0; width: 100%; height: 100%; background: var(--s1); position: relative; }
 .rail-slot { display: none; }
+/* The menu's own measurement (lib/railfit.ts): the same rows at their natural
+   width, laid out off the corner where nobody can see them. The right padding is
+   the list's own 8px plus the 14 a classic scrollbar takes, because the list is
+   taller than a laptop window and the words have to fit beside that bar too. */
+.rail-gauge {
+  position: absolute; left: 0; top: 0; width: max-content; z-index: -1;
+  visibility: hidden; pointer-events: none; padding: 0 8px;
+}
+.rail-gauge .rail-nav-item { width: max-content; }
+/* Always with its words, in every state: this copy is what the words are
+   measured from, so it must never be the one folded to icons. */
+.rail .rail-gauge .rail-nav-item > span { display: inline; position: static; opacity: 1; transform: none; }
 
 .rail-top {
   display: flex; align-items: center; gap: 9px; height: 58px; padding: 0 14px;
@@ -2394,7 +2411,12 @@ label + .jf-hint { margin-top: -5px; }
   .rail-slot {
     display: flex; flex: 0 0 164px; min-height: 0;
     border-right: 1px solid var(--border);
+    /* Folded and unfolded by the button, the menu slides between the two widths
+       instead of jumping; a drag is the person's own finger and follows it
+       exactly (body.is-resizing below). */
+    transition: flex-basis var(--dur-2) var(--ease);
   }
+  body.is-resizing .rail-slot { transition: none; }
   /* The header's job is done by the rail on this width: the wordmark, the
      session switcher and the settings button are all up there already. */
   .top .brand.in-top, .top .btn.in-top { display: none; }
@@ -5897,6 +5919,10 @@ button.dock-card:hover { border-color: var(--border-strong); }
 .badge.mode-pill.m-ask .mode-dot { background: var(--accent-2); }
 .badge.mode-pill.m-yolo { color: var(--text-2); }
 .badge.mode-pill.m-yolo .mode-dot { background: var(--text-3); }
+/* No room in the header for the word: the dot alone, in a circle the size of the
+   pill's height, so the control keeps its place instead of being pushed off the
+   end of the row. Its title and menu still say which mode it is. */
+.badge.mode-pill.is-dot { width: 27px; padding: 0; gap: 0; justify-content: center; flex: 0 0 auto; }
 
 /* Position comes from the component, which measures the window and keeps the
    menu inside it: the pill can be hard against the right edge, and a menu
@@ -6260,6 +6286,11 @@ button.dock-card:hover { border-color: var(--border-strong); }
 /* The pill with no word in it: the icon and its caret are the whole control,
    which is what lets the toolstrip hold it and every tool on one line. */
 .mode-sel-pill.is-icon { gap: 4px; padding: 0 8px 0 4px; }
+/* As a choice between word and glyph, the pill has to be the same control in
+   both forms: it never shrinks below its tile, and the word leaves rather than
+   being cut in half at the edge of the tile (which is what it used to do, in a
+   box with overflow: hidden). */
+.mode-sel-pill.is-icon .mode-sel-ico { flex: 0 0 auto; }
 .mode-sel-caret { font-size: var(--fs-2xs); opacity: 0.7; }
 /* The sheet is centred in the window with the page dimmed behind it, on every screen: the one the phone had, which
    is the one people like. Fixed, so what it opens from no longer matters. */
@@ -7194,7 +7225,13 @@ body.is-resizing iframe { pointer-events: none; }
    and up, which read as scrolling.) */
 .rail-chev-left { transform: rotate(180deg); }
 .rail-chev-right { transform: none; }
-@media (max-width: 1179px) { .rail-mini-btn { display: none; } }
+@media (min-width: 1179px) { .rail-mini-btn { display: none; } }
+/* The whole menu's top row, at the slimmest it is ever drawn: the mark and three
+   buttons have to fit in the width the words need, or the row is what gets cut
+   when the menu is just wide enough for its labels. */
+@media (min-width: 1180px) {
+  .rail:not(.is-drawer) .rail-top { padding: 0 8px 0 10px; gap: 6px; }
+}
 
 /* ---- Folded to icons (desktop): a strip of icons, with the context as one vertical bar under the last of them. */
 @media (min-width: 1180px) {
@@ -7204,9 +7241,25 @@ body.is-resizing iframe { pointer-events: none; }
 .rail.is-mini .rail-top { height: var(--top-h, 52px); padding: 0; justify-content: center; }
 /* Folded, the top of the strip is the mark alone: its buttons are in the header (.top-rail-acts). */
 .rail.is-mini .rail-top .spacer, .rail.is-mini .rail-top .brand-word, .rail.is-mini .rail-top .rail-icon-btn { display: none; }
+/* The rows themselves widen and narrow with the menu rather than snapping: the
+   padding and the gap between icon and word are what move when it folds. */
+.rail:not(.is-drawer) .rail-nav-item {
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease),
+    padding var(--dur-2) var(--ease), gap var(--dur-2) var(--ease);
+}
+.rail.is-mini .rail-nav-item { transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease),
+  padding var(--dur-2) var(--ease), gap var(--dur-2) var(--ease); }
+@media (prefers-reduced-motion: reduce) {
+  .rail-slot, .rail:not(.is-drawer) .rail-nav-item, .rail.is-mini .rail-nav-item, .rail.is-mini .rail-nav-item > span { transition: none; }
+}
 .rail.is-mini .rail-scroll { padding: 6px 6px 12px; }
 .rail.is-mini .rail-nav-item { justify-content: center; padding: 9px 0; gap: 0; }
-.rail.is-mini .rail-nav-item > span { display: none; }
+.rail.is-mini .rail-nav-item > span {
+  /* Off the flow rather than display: none, so the icon can slide to the middle
+     of the strip while the word fades out instead of vanishing between frames. */
+  position: absolute; left: 44px; top: 50%; transform: translateY(-50%);
+  opacity: 0; transition: opacity var(--dur-1) var(--ease); pointer-events: none;
+}
 .rail.is-mini .rail-nav-item .rail-tag { display: none; }
 .rail.is-mini .rail-nav-item:has(.rail-tag.is-alert)::after { content: ""; position: absolute; top: 6px; right: 10px; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
 .rail.is-mini .rail-nav-item:has(.rail-tag.is-grew)::after { content: ""; position: absolute; top: 6px; right: 10px; width: 7px; height: 7px; border-radius: 50%; background: var(--glow-light); }

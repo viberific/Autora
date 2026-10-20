@@ -19,6 +19,7 @@ import { emitStudioCommand, resetStudio, setStudioState, useStudioState } from "
 import { emitSpectraEvent } from "./lib/spectra";
 import { ResizeHandle } from "./components/ResizeHandle";
 import { CHAT, RAIL, setChatWidth, setRailMini, setRailWidth, usePanes } from "./lib/panes";
+import { RAIL_SLACK, useGivesWay, useRailIcons, useRowSpare, useWidthOf } from "./lib/railfit";
 import { clearOfficePick, getOfficePick, pickLabel, pickSentence, useOfficePick } from "./lib/officeSelection";
 import { emitOfficeHand, emitOfficePush, resetOffice, setOfficeState, useOfficeState, type OfficeKind } from "./lib/officedesk";
 import { emitDeskHand, resetDesk, setDeskState, useDeskState } from "./lib/pdfdesk";
@@ -1526,14 +1527,40 @@ export function App() {
   const windowAt = (kind: OfficeKind) => off.windows.find((w) => w.kind === kind) ?? null;
   const pointedAt = useOfficePick();
   const panes = usePanes();
-  /* Too narrow for words: the menu shows icons only, whether it was folded to
-     them or dragged down to them. */
-  const railNarrow = (panes.rail ?? RAIL.fallback) < RAIL.words;
+  /* The menu folds to a strip of icons when it is too narrow for its words, and
+     that width is measured rather than assumed (lib/railfit.ts): the labels, the
+     theme's text size and the font all decide it, and a band either side of the
+     measurement keeps a drag from flickering across one number. */
+  const railSlot = useRef<HTMLDivElement | null>(null);
+  const railWidth = useWidthOf(railSlot);
+  const [railNeed, setRailNeed] = useState(0);
+  const railNarrow = useRailIcons(railWidth, railNeed || RAIL.words, false);
+  const railIcons = panes.mini || railNarrow;
+  /* Where the words fit again: what they measured, plus the same margin the fold
+     waits for, so "Show the whole menu" never leaves a strip of icons. */
+  const railWhole = Math.max(RAIL.whole, railNeed ? railNeed + RAIL_SLACK : 0);
+  /* Two rows that give way rather than clip. The header's Ask/Yolo pill and the
+     composer's mode pill are both "what this chat may do", both at a fixed size,
+     and both were being pushed out of the window or cut in half when the column
+     was narrow. Measured, not guessed at a breakpoint: the header's contents are
+     a session name, badges and buttons whose number and wording change with the
+     session, and the composer's row changes with which tools are available. */
+  const headerRef = useRef<HTMLElement | null>(null);
+  const headerSpare = useRowSpare(headerRef);
+  /* Compacting the pill wins about 40px back, so it comes back at 52. */
+  const tightHeader = useGivesWay(headerSpare, 52);
+  /* The composer's row, not just the toolstrip inside it: the strip is as wide as
+     its own contents, so the room it has is the foot's -- from the first tool to
+     the Send button. Dropping the mode pill's word wins about 45px back; it
+     returns at 56, which is more than the word costs. */
+  const footRef = useRef<HTMLDivElement | null>(null);
+  const footSpare = useRowSpare(footRef);
+  const tightStrip = useGivesWay(footSpare, 56);
   const foldRail = useCallback((mini: boolean) => {
     setRailMini(mini);
     // Asking for the whole menu from a dragged-thin one widens it to where the words fit.
-    if (!mini) setRailWidth(RAIL.whole);
-  }, []);
+    if (!mini) setRailWidth(railWhole);
+  }, [railWhole]);
   /* What is open beside the chat, each with when it changed: the window shown is the newest, unless the person
      has picked a tab, and their pick sticks until that window is put away. The browser is live work in front of
      the person, so it takes the window while it is open; the document is back the moment it is put away. */
@@ -1846,7 +1873,7 @@ export function App() {
 
   return (
     <div
-      className={`app${panes.mini ? " rail-mini" : ""}${panes.mini || railNarrow ? " rail-icons" : ""}`}
+      className={`app${panes.mini ? " rail-mini" : ""}${railIcons ? " rail-icons" : ""}`}
       style={{
         ...(panes.rail ? { "--rail-w": `${panes.rail}px` } : {}),
         ...(panes.chat ? { "--chat-w": `${panes.chat}px` } : {}),
@@ -1858,6 +1885,7 @@ export function App() {
       {(["rail", "drawer"] as const).map((kind) => kind === "drawer" && !drawerOpen && !drawerLeaving ? null : (
         <div
           key={kind}
+          ref={kind === "rail" ? railSlot : undefined}
           className={kind === "drawer" ? `drawer-scrim${drawerOpen ? "" : " is-leaving"}` : "rail-slot"}
           onClick={kind === "drawer"
             ? (e) => { if (e.target === e.currentTarget) setDrawerOpen(false); }
@@ -1888,8 +1916,9 @@ export function App() {
             onStartTask={(text, title) => { void startTask(text, title); }}
             drawer={kind === "drawer"}
             onClose={() => setDrawerOpen(false)}
-            mini={panes.mini || railNarrow}
+            mini={railIcons}
             onMini={foldRail}
+            onNeed={setRailNeed}
           />
         </div>
       ))}
@@ -1904,7 +1933,7 @@ export function App() {
         // Back to the menu the words fit in, the same width the rail's own
         // "Show the whole menu" widens to: a double click that left a strip of
         // icons would need the button pressed anyway to read anything.
-        onReset={() => setRailWidth(RAIL.whole)}
+        onReset={() => setRailWidth(railWhole)}
       />
 
       <div className="shell">
@@ -1916,7 +1945,7 @@ export function App() {
         <AgentThought events={events} />
         <InstallApp />
 
-        <header className="top">
+        <header className="top" ref={headerRef}>
           {/* The menu button and the presence: a phone's and a narrow window's, where the menu is a drawer. A desktop
               always shows the menu in the margin, whole or as icons, so it has neither. */}
           <button
@@ -1933,7 +1962,7 @@ export function App() {
 
           {/* The menu folded to icons: the way back to the whole menu and New session, in a row just right of the
               strip and left of the chat's name, rather than stacked over the icons. A desktop only (styles.css). */}
-          {(panes.mini || railNarrow) && (
+          {railIcons && (
             <span className="top-rail-acts">
               <button className="btn icon ghost" onClick={() => foldRail(false)} title="Show the whole menu" aria-label="Show the whole menu">
                 <IconChevron size={13} className="rail-chev-right" />
@@ -1968,6 +1997,7 @@ export function App() {
               onChangeWhen={setSessionAskWhen}
               busy={modeSaving}
               error={modeError}
+              dot={tightHeader}
             />
           )}
 
@@ -2436,7 +2466,7 @@ export function App() {
                       )}
                     </div>
                   )}
-                  <div className="composer-foot">
+                  <div className="composer-foot" ref={footRef}>
                     <div className="composer-tools">
                       {/* One strip, always one line: the row is the toolstrip,
                           and a control that falls to a second line reads as a
@@ -2448,7 +2478,7 @@ export function App() {
                       <div className="composer-strip">
                       {/* How the agent goes about the work, on the row above
                           Send: it applies to the words in the box. */}
-                      <ModeSelect mode={sessionMode} onChange={setSessionMode} busy={modeSaving} compact={appPane} />
+                      <ModeSelect mode={sessionMode} onChange={setSessionMode} busy={modeSaving} compact={appPane || tightStrip} />
                       {/* Leftmost in the row, and the only one of the two that
                           carries a conversation: Talk sits where the hand
                           goes first. It used to float over the thread above
