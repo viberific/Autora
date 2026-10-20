@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.50"
+version: "0.3.52"
 port: 8096
 folderAccess:
   - id: umbrel-downloads
@@ -54,19 +54,12 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  The wait for a slow episode is no longer a black screen. While its file is
-  still downloading the player says how far it has got, how fast, from how many
-  people and roughly how long is left, and after twenty seconds with nothing to
-  play it says so plainly and offers a cancel. It also stopped quietly giving up
-  and trying another source after twenty-five seconds, which could throw away a
-  download that was working perfectly well - a two-seeder season pack taking
-  hours is a wait, not a fault.
-  On a show, "Ready to watch" now means that episode's own file is fully on
-  disk: before that it shows how far the download has got, and an episode in a
-  season pack that nobody has asked for says it is waiting in the pack.
-  In a season pack the next episode now starts fetching once the one you are
-  watching holds twenty minutes of playback - about half an episode, so the
-  handover is ready instead of cold. It takes only bandwidth the episode you are
-  watching is not using, at a lower priority. The Torrents page and the storage
-  graph count the episodes you asked for rather than the whole pack, so a 38 GB
-  season with one 6.25 GB episode selected reads as 6.25 GB.
+  Always 1080p, and of two 1080p copies of the same episode the smaller one
+  is taken: this box's line is what stalls a play, not the swarm.
+  
+  Also new: opening a show starts fetching its first episode before anyone
+  presses Play, so the click lands on bytes already moving. Only episodes,
+  one file from a season pack, never the season, and nothing already on disk.
+  It waits ten seconds with the show still on screen first, and leaving the
+  page cancels it. Movies are left alone: a film is one 8-30 GB file with no
+  episode to take.
