@@ -459,6 +459,7 @@ export function Thread({
             docked={docked}
             chatOnly={chatOnly}
             onPermissionDecide={onPermissionDecide}
+            onOpenWidget={onOpenWidget}
             {...work}
             phase={phase}
           />
@@ -654,7 +655,6 @@ const TurnBucket = memo(function TurnBucket({
   liveBrowserSeq,
   live,
   docked,
-  widgetHeld = "",
   onOpenWidget,
   phase,
   onPermissionDecide,
@@ -669,7 +669,6 @@ const TurnBucket = memo(function TurnBucket({
   docked: string;
   phase: MarkPhase;
   /** The widget shown in its own window, whose card here is only a stand-in. */
-  widgetHeld?: string;
   onOpenWidget?: () => void;
   onPermissionDecide?: (requestId: string, approved: boolean, response?: string) => void;
 } & WorkState) {
