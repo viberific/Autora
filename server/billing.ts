@@ -160,9 +160,14 @@ export function billingSummary() {
      turns cost this month, so it gets a line with no till: no balance, no
      paid-in figure, nothing claimed as credit, and the month to speak for it. */
   const withTill = new Set(vendors.map((entry) => entry.provider));
+  /* Kept out of `vendors`: that list means "money in a till", and a vendor with
+     no balance publishes none. Mixing the two would let a line with no till
+     stand in for an account's credit, so they are reported apart and the page
+     draws both. */
+  const withoutTill: typeof vendors = [];
   for (const [provider, usd] of monthByProvider) {
     if (withTill.has(provider) || usd <= 0) continue;
-    vendors.push({
+    withoutTill.push({
       provider,
       label: providerSpec(provider)?.label ?? provider,
       balance_usd: 0,
@@ -288,6 +293,16 @@ export function billingSummary() {
        the headline. One line per vendor that publishes a balance and has had
        money paid into it; empty when there is none, because nothing here is
        guessed and an absent line means "not known", never "nothing". */
+    /* Spend at vendors that publish no balance (OpenAI, Gemini, Anthropic, a
+       local server), one line each, with the month to speak for it. Separate
+       from `vendors`, which is only money in a till. */
+    vendors_without_till: withoutTill.map((entry) => ({
+      provider: entry.provider,
+      label: entry.label,
+      selected: entry.provider === active,
+      month_usd: monthByProvider.get(entry.provider) ?? 0,
+      counted_usd: countedFor(entry.provider),
+    })),
     vendors: vendors.map((entry) => ({
       provider: entry.provider,
       label: entry.label,

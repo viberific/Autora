@@ -2203,6 +2203,7 @@ export function App() {
                     budget={usage.budget.monthly_usd}
                     lifetime={usage.lifetime.cost}
                     vendors={usage.vendors}
+                    withoutTill={usage.vendors_without_till}
                     onOpen={() => navigate("analytics")}
                   />
                 </div>
@@ -2237,6 +2238,7 @@ export function App() {
                       budget={usage.budget.monthly_usd}
                       lifetime={usage.lifetime.cost}
                       vendors={usage.vendors}
+                      withoutTill={usage.vendors_without_till}
                       onOpen={() => navigate("analytics")}
                     />
                   )}

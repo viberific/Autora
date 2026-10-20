@@ -29,6 +29,15 @@ export type Usage = {
     /** True for the account the console is spending right now. */
     selected?: boolean;
   }[];
+  /** Spend at vendors that publish no balance (OpenAI, Gemini, Anthropic):
+      there is no till to read, so each is the month its own turns cost. Kept
+      apart from `vendors`, which means money in a till. */
+  vendors_without_till?: {
+    provider: string;
+    label: string;
+    month_usd: number;
+    selected?: boolean;
+  }[];
 };
 
 /**
@@ -53,6 +62,7 @@ export const SpendBar = memo(function SpendBar({
   budget,
   lifetime,
   vendors,
+  withoutTill,
   onOpen,
 }: {
   spent: number;
@@ -62,6 +72,8 @@ export const SpendBar = memo(function SpendBar({
   lifetime: number;
   /** Every vendor's own balance this app was able to read, one each. */
   vendors?: Usage["vendors"];
+  /** Vendors with no balance to read, whose spend the ledger counted. */
+  withoutTill?: Usage["vendors_without_till"];
   onOpen: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -69,8 +81,21 @@ export const SpendBar = memo(function SpendBar({
   /* Per-provider lines when more than one till can be named; the old single bar
      otherwise. A vendor that publishes no balance counts too, as long as the
      ledger counted money at it this month. */
-  const readableVendors =
-    vendors?.filter((v) => v.spent_known || v.balance_usd > 0 || (v.month_usd ?? 0) > 0) ?? [];
+  const readableVendors = [
+    ...(vendors ?? []),
+    /* No till, but money went out there: a line the month speaks for. */
+    ...(withoutTill ?? []).map((v) => ({
+      provider: v.provider,
+      label: v.label,
+      topped_up_usd: null,
+      balance_usd: 0,
+      lifetime_usd: null,
+      headline: false,
+      spent_known: false,
+      month_usd: v.month_usd,
+      selected: v.selected,
+    })),
+  ].filter((v) => v.spent_known || v.balance_usd > 0 || (v.month_usd ?? 0) > 0);
   const multiVendor = readableVendors.length > 1;
 
   if (multiVendor) {
