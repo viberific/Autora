@@ -188,9 +188,8 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  The Activity feed no longer repeats the one-line "what it is doing" pill that the chat already shows; the
-  thoughts, the cursor and the step list are untouched. The provider choice is honest now: the planner and
-  background models you name in Settings only act when Automatic is selected -- pick a model yourself and that
-  model answers, every round, planning included. And Automatic decides dynamically instead of walking a fixed
-  order: it picks the provider your own usage says is cheapest per call (list prices fill in for one you have
-  not used yet), never a router, and says so plainly if the only keys connected are router keys.
+  On the Skills page a skill's scripts and reference files now open in their own editor and save on their own, so
+  you can fix a run.sh without touching the instructions beside it; New file and Delete file sit next to them,
+  and every save is kept as a version. Rolling a version back puts those files back exactly as they were, and
+  asks first if you have typing in the editor that it would drop. A version also says which files it changed. And
+  a Download all button gives you the whole skills library as one .zip instead of one skill at a time.
