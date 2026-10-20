@@ -253,6 +253,7 @@ await test("Automatic never picks a router, and says so when only routers are co
   state.provider = "auto";
   const r = resolveProvider();
   assert.equal(r.provider, "");
+  assert.ok(r.problem);
   assert.match(r.problem, /does not choose a router/);
   assert.match(r.problem, /OpenRouter/);
 
@@ -265,6 +266,7 @@ await test("Automatic never picks a router, and says so when only routers are co
   state.keys.deepseek = "";
   state.keys.openrouter = "";
   const none = resolveProvider();
+  assert.ok(none.problem);
   assert.match(none.problem, /No provider is connected yet/);
 
   state.provider = "openrouter";

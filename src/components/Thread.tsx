@@ -963,7 +963,7 @@ function OfficeStage({ sessionId, kind }: { sessionId: string; kind: OfficeKind 
  * at the bottom and followed while it is. The conversation beside it keeps only the talking (`chatOnly`).
  */
 export const WorkFeed = memo(function WorkFeed({
-  buckets, busy, doing, sessionId, liveBrowserSeq, browserOpen, live, phase, onPermissionDecide, ...work
+  buckets, sessionId, liveBrowserSeq, browserOpen, live, phase, onPermissionDecide, ...work
 }: {
   buckets: Bucket[];
   busy: boolean;
