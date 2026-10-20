@@ -131,7 +131,22 @@ def changed_files(base: str, head: str) -> list[str]:
 
 
 def touches_the_app(files: list[str]) -> list[str]:
-    return [f for f in files if f.startswith(WATCHED)]
+    """The changed files that reach the container.
+
+    A `node_modules` path is never a change to the app, whatever it is: the
+    directories are ignored, but an absolute symlink named `node_modules` is a
+    file as far as git is concerned, and four of them were committed by
+    accident (one per sub-project, pointing at a clone on somebody's machine).
+    They made this check fail a store-only commit -- 854fc81, "Offer Flix
+    0.3.46 on Umbrel" -- with "this changes the app" about files that build
+    nothing. Ignored here rather than only in .gitignore, because a tracked
+    path stays tracked however the ignore file reads (the same reason the 0.9.284
+    image build had a symlink copied over a real node_modules: see .gitignore).
+    """
+    return [
+        f for f in files
+        if f.startswith(WATCHED) and "node_modules" not in f.split("/")
+    ]
 
 
 def read_manifest(ref: str) -> str:
