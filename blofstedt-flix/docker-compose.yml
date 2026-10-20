@@ -16,7 +16,7 @@ services:
     # Built by viberific/Flix's own workflow from the repo's package.json
     # version. Bump this tag (and `version` above) only once that tag exists
     # in the registry, or an update will fail with "manifest unknown".
-    image: ghcr.io/viberific/flix:0.3.45
+    image: ghcr.io/viberific/flix:0.3.46
     restart: unless-stopped
     # The GPU, for Quick Sync. The N95 in this box has it, and without
     # these two lines a container cannot see /dev/dri at all, so every
