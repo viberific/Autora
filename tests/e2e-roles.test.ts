@@ -26,7 +26,10 @@ async function main() {
   const app: App = await startApp({ env: { DEEPSEEK_API_KEY: "sk-test", OPENROUTER_API_KEY: "sk-or-test" } });
   try {
     const set = await app.api("PATCH", "/api/settings", {
-      provider: "deepseek",
+      /* Roles are Automatic's: a named provider answers with itself every round, planning included
+         (server/state.ts, and tests/roles.test.ts). So the planner is named on Automatic, which
+         resolves the main model to DeepSeek and its planner to OpenRouter. */
+      provider: "auto",
       models: { deepseek: BUILDER },
       base_urls: { deepseek: app.modelUrl, openrouter: app.modelUrl },
       planner_providers: { deepseek: "openrouter" },

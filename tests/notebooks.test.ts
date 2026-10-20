@@ -97,7 +97,9 @@ test("export is one document: notes in order, files as numbered exhibits", () =>
 test("retention keeps what a notebook holds or cites, and a deleted file leaves every notebook", () => {
   const other = nb.createNotebook({ title: "Screens", by: "user" });
   nb.addEntries(other.id, [{ title: "See", text: "x", cites: [shot.id] }], "user");
-  const result = prune({ sessionDays: 0, keepSessions: 0, artifactDays: 0, keepArtifacts: 0 });
+  /* A day of retention measured from two days ahead: 0 days is "never" (server/retention.ts), so a policy of 0
+     would prune nothing and prove nothing. Only loose, in no notebook, is old enough and unfiled. */
+  const result = prune({ sessionDays: 0, keepSessions: 0, artifactDays: 1, keepArtifacts: 0 }, Date.now() + 2 * 86_400_000);
   assert.deepEqual(result.artifacts.ids, [loose.id]);
   for (const kept of [email, contract, shot]) assert.ok(getArtifact(kept.id), kept.name);
   nb.forgetArtifact(email.id);

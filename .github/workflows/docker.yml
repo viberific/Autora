@@ -117,10 +117,22 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          # The cache only saves time: a failure to write it ("failed to
-          # reserve cache") must not fail a build that otherwise succeeded.
-          cache-to: type=gha,mode=max,ignore-error=true
+          # Cache in the registry this job already pushes to, not in the Actions cache.
+          #
+          # Measured on run 450 (2026-10-20, 1205s in total): the export to the Actions cache was the largest
+          # single item in the build -- step #83 "sending cache export" 310.7s of its 392.8s -- and the cache
+          # is capped at 10 GB per repository, so it evicts: on that same run the gdevelop-editor install (#24,
+          # 108.9s) and the runtime image's apk add (#77, 101.7s) were cache misses despite nothing above them
+          # having changed. A registry cache holds the same layers as ordinary blobs, is not capped, and is
+          # imported/exported by the same login this job already does. `type=gha` stays as a second source so the
+          # first run after this change still finds what the previous one left.
+          cache-from: |
+            type=registry,ref=ghcr.io/viberific/autora:buildcache
+            type=gha
+          # A failed cache export must not fail a build that otherwise succeeded (ignore-error, registry cache
+          # backend). mode=max keeps the intermediate stages -- the npm installs and the Rust builds -- which is
+          # where the time is; it is the reason this is not simply mode=min.
+          cache-to: type=registry,ref=ghcr.io/viberific/autora:buildcache,mode=max,ignore-error=true
 
       # Only now, with the image in the registry, does Umbrel get to see it.
       - name: Offer this version on Umbrel
