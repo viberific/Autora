@@ -111,6 +111,14 @@ export function skipReason(jobName: string, budget: AutomationBudget): string {
   );
 }
 
+/** Whether a job's error is skipReason's: held back by the budget, not failed.
+    One test, used by everyone who asks, so rewording skipReason cannot make one
+    caller see a failure where another sees a hold. The dot rather than an
+    apostrophe takes the curly one too. */
+export function isBudgetSkip(error: string | null | undefined): boolean {
+  return /^Today.s automation budget\b/.test(error ?? "");
+}
+
 /** Why a run was stopped part-way. */
 export function stopReason(budget: AutomationBudget, spent: number): string {
   return (

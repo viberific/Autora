@@ -81,6 +81,13 @@ test("the wider pre-filter is left alone", () => {
   // the person: it still matches things that are perfectly ordinary.
   assert.equal(guardWorthy("terminal", { command: "rm -rf node_modules" }), true);
   assert.equal(guardWorthy("terminal", { command: "ls" }), false);
+  // A flag that only spells a command is not the command: each false match
+  // costs a model call for nothing.
+  assert.equal(guardWorthy("terminal", { command: "docker run --rm -it node:22 npm test" }), false);
+  assert.equal(guardWorthy("terminal", { command: "timeout --kill-after=5 60 npm test" }), false);
+  assert.equal(guardWorthy("terminal", { command: "make --halt-on-error" }), false);
+  assert.equal(guardWorthy("terminal", { command: "/bin/rm -rf build" }), true);
+  assert.equal(guardWorthy("terminal", { command: "cd x && rm -r y" }), true);
   assert.equal(guardWorthy("http_request", { method: "POST" }), true);
 });
 

@@ -69,6 +69,11 @@ test("the times it is told about are the times it was given, and survive nonsens
   assert.equal(parseTime("not a time"), null);
   assert.equal(parseTime(-5), null);
   assert.equal(parseTime(1440), null);
+  // "25:00" used to pass (the hours were checked against 59), giving minute
+  // 1500: an edge no clock reaches, so the window silently never opened.
+  assert.equal(parseTime("24:00"), null);
+  assert.equal(parseTime("25:00"), null);
+  assert.equal(parseTime("23:59"), 1439);
   assert.equal(clockTime(1410), "23:30");
   assert.equal(clockTime(0), "00:00");
 

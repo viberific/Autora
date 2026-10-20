@@ -93,6 +93,21 @@ test("the report says what is stored, by area", () => {
   assert.ok(report.total >= report.sessions.bytes + report.artifacts.bytes);
 });
 
+test("0 days with a small floor still deletes nothing: the floor is not a cap", () => {
+  // Settings says "Delete sessions after 0 days (0 = never)" and "Always keep
+  // the newest N". Every session and artifact past that floor used to go when
+  // the days were 0, because the age check was skipped and nothing else stopped it.
+  const before = store.loadSessionIndex().length;
+  const result = retention.prune(
+    { sessionDays: 0, keepSessions: 1, artifactDays: 0, keepArtifacts: 1 },
+    Date.now(),
+  );
+  assert.equal(result.sessions.count, 0, "no session is old enough when the limit is 0");
+  assert.equal(result.artifacts.count, 0, "nor any artifact");
+  assert.equal(store.loadSessionIndex().length, before);
+  assert.ok(fs.existsSync(path.join(dir, "artifacts", oldArtifact)), "the artifact past the floor is still there");
+});
+
 test("an age limit and a floor: older than the days, never fewer than the newest N", () => {
   const result = retention.prune(
     { sessionDays: 180, keepSessions: 1, artifactDays: 180, keepArtifacts: 1 },

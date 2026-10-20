@@ -196,13 +196,13 @@ const hashOf = (text: string) => crypto.createHash("sha256").update(text).digest
 // ------------------------------------------------------------- the clock --
 
 interface SchedulerHooks {
-  /** Run the prompt in a fresh session. */
   /** Asked before a job is allowed to spend anything. A string back is the
-      reason it must not start -- the day\u0027s automation budget is spent,
-      most often -- and that goes in the job\u0027s run list as a failure with
+      reason it must not start -- the day's automation budget is spent,
+      most often -- and that goes in the job's run list as a failure with
       no session opened, so the job itself is untouched and runs again at its
       next time. See server/automation.ts. */
   allow?: (job: Job) => string | null;
+  /** Run the prompt in a fresh session. */
   run: (job: Job, prompt: string, reason: JobRun["reason"]) => Promise<{
     session: string;
     done: Promise<{ ok: boolean; error: string | null; reply: string }>;

@@ -49,7 +49,7 @@ export function parseTime(value: unknown): number | null {
     const [h, m] = value.split(":");
     const hours = minute(Number(h));
     const mins = minute(Number(m));
-    if (hours === null || hours > 59 || mins === null || mins > 59) return null;
+    if (hours === null || hours > 23 || mins === null || mins > 59) return null;
     return hours * 60 + mins;
   }
   return minute(value);

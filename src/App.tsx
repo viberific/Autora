@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { SessionStream, mergeEvents, type StreamStatus } from "./lib/stream";
 import { derive, isRunning, type Cell, type Derived } from "./lib/derive";
 import { share } from "./lib/share";
+import { every } from "./lib/poll";
 import { useThreadsUnread } from "./lib/threadsUnread";
 import { chime, paintChrome, type Chrome } from "./lib/chrome";
 import { Kind, type AutoraEvent, type BrowserState } from "./lib/types";
@@ -326,9 +327,12 @@ export function App() {
     let alive = true;
     const load = () =>
       fetch("/api/sessions")
-        .then((r) => r.json())
-        .then((rows) => {
-          if (!alive) return;
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`sessions: HTTP ${r.status}`))))
+        .then((rows: unknown) => {
+          // An error body is an object, not a list: set as the list it broke the
+          // session menu, and rows.some below threw inside a state update, which
+          // React re-throws during render.
+          if (!alive || !Array.isArray(rows)) return;
           setSessions(rows);
           // Functional update so polling never needs `sessionId` as a dep --
           // otherwise every session switch restarts the poll. A session that
@@ -342,10 +346,12 @@ export function App() {
         })
         .catch(() => undefined);
     void load();
-    const timer = window.setInterval(load, SESSION_POLL_MS);
+    // every(), not a bare setInterval: a tab in the background has nobody to
+    // show the list to (docs/REVIEW.md U1), and it catches up on return.
+    const stop = every(load, SESSION_POLL_MS);
     return () => {
       alive = false;
-      window.clearInterval(timer);
+      stop();
     };
   }, []);
 

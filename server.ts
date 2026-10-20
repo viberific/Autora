@@ -128,7 +128,7 @@ import { checkArgs } from "./server/argcheck";
 import { healthBriefing, recordOutcome, targetOf } from "./server/toolhealth";
 import { Scheduler, type Job, type JobWatch } from "./server/scheduler";
 import {
-  addSpend, overDay, overRun, rollLedger, skipReason,
+  addSpend, isBudgetSkip, overDay, overRun, rollLedger, skipReason,
   stopReason, type AutomationLedger,
 } from "./server/automation";
 import { backgroundBriefing, findJob, listJobs, readTail, startJob, stopJob } from "./server/background";
@@ -2996,7 +2996,7 @@ const scheduler = new Scheduler(jobs, {
   notify: (job, run) => {
     /* A job held back by the day\u0027s budget is not a failure and is worth
        saying once, not once per job that then sat out. */
-    const held = !run.ok && (run.error ?? "").startsWith("Today\u0027s automation budget");
+    const held = !run.ok && isBudgetSkip(run.error);
     if (held) {
       if (automationSkipNoted) return;
       automationSkipNoted = true;
@@ -3545,7 +3545,7 @@ async function containersNow(): Promise<Container[] | null> {
 function jobBriefs(): JobBrief[] {
   return jobs.map((j) => {
     const last = j.runs?.[j.runs.length - 1];
-    const budget = /^Today.s automation budget/.test(j.last_error ?? "");
+    const budget = isBudgetSkip(j.last_error);
     const failed = !budget && !scheduler.running(j.id) &&
       (Boolean(j.last_error) || (last?.finished != null && last.ok === false));
     return {

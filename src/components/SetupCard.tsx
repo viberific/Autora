@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { IconArrow, IconCheck } from "./Icons";
 import { answerOffer, dismissNotice, fetchProactive, type Proactive } from "../lib/proactive";
+import { ago } from "../lib/ago";
 
 type Provider = {
   id: string;
@@ -203,13 +204,6 @@ type JobBrief = {
 };
 type Thread = { key: string; text: string; sub?: string; tone?: "ok" | "warn"; go: () => void };
 
-const ago = (ts: number) => {
-  const s = Math.max(0, Math.round(Date.now() / 1000 - ts));
-  if (s < 90) return "just now";
-  if (s < 5400) return `${Math.round(s / 60)}m ago`;
-  if (s < 129600) return `${Math.round(s / 3600)}h ago`;
-  return `${Math.round(s / 86400)}d ago`;
-};
 const at = (ts: number) =>
   new Date(ts * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 

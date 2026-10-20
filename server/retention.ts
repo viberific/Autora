@@ -112,30 +112,37 @@ export function prune(
   /* Newest first, so "keep the newest N" is a slice. */
   const folders = sessionFolders().sort((a, b) => b.modified - a.modified);
   const cutoff = policy.sessionDays > 0 ? now - policy.sessionDays * DAY_MS : 0;
-  folders.forEach((folder, index) => {
-    if (index < policy.keepSessions) return;
-    if (folder.pinned) return;
-    if (cutoff && folder.modified > cutoff) return;
-    if (busy(folder.id)) return;
-    deleteSession(folder.id);
-    result.sessions.count += 1;
-    result.sessions.bytes += folder.bytes;
-    result.sessions.ids.push(folder.id);
-  });
+  /* 0 days is "never", exactly as Settings reads beside the box. The newest-N
+     number is a floor, never a cap, so with no age limit nothing is old enough
+     to go. This once fell through and deleted every session past the floor. */
+  if (cutoff) {
+    folders.forEach((folder, index) => {
+      if (index < policy.keepSessions) return;
+      if (folder.pinned) return;
+      if (folder.modified > cutoff) return;
+      if (busy(folder.id)) return;
+      deleteSession(folder.id);
+      result.sessions.count += 1;
+      result.sessions.bytes += folder.bytes;
+      result.sessions.ids.push(folder.id);
+    });
+  }
 
   const files = listArtifacts().sort((a, b) => b.ts - a.ts);
   const artifactCutoff = policy.artifactDays > 0 ? now - policy.artifactDays * DAY_MS : 0;
   // What a notebook holds is somebody's filed work, however old.
   const filed = notebookArtifacts();
-  files.forEach((file, index) => {
-    if (index < policy.keepArtifacts) return;
-    if (artifactCutoff && file.ts > artifactCutoff) return;
-    if (filed.has(file.id)) return;
-    if (!deleteArtifact(file.id)) return;
-    result.artifacts.count += 1;
-    result.artifacts.bytes += file.size || 0;
-    result.artifacts.ids.push(file.id);
-  });
+  if (artifactCutoff) {
+    files.forEach((file, index) => {
+      if (index < policy.keepArtifacts) return;
+      if (file.ts > artifactCutoff) return;
+      if (filed.has(file.id)) return;
+      if (!deleteArtifact(file.id)) return;
+      result.artifacts.count += 1;
+      result.artifacts.bytes += file.size || 0;
+      result.artifacts.ids.push(file.id);
+    });
+  }
 
   return result;
 }

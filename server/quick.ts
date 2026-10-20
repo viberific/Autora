@@ -28,6 +28,10 @@ const SMALL_TALK: readonly RegExp[] = [
 function plain(text: string): string {
   return text
     .toLowerCase()
+    // A phone keyboard types a curly apostrophe and the patterns spell it
+    // straight; stripped with the punctuation below, "what’s up" became
+    // "what s up" and matched nothing.
+    .replace(/[\u2018\u2019\u02bc]/g, "'")
     .replace(/(^|[^\w@.])@[\w-]+/g, " ")
     .replace(/[^a-z' ]+/g, " ")
     .replace(/\s+/g, " ")

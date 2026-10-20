@@ -36,6 +36,11 @@ test("anything that could be an instruction is not", () => {
   ]) assert.equal(isSmallTalk(text), false, text);
 });
 
+test("a phone's curly apostrophe reads the same as a straight one", () => {
+  for (const text of ["What’s up?", "how’s it going", "how’s everything"]) assert.equal(isSmallTalk(text), true, text);
+  assert.equal(isSmallTalk("what’s up with the build"), false);
+});
+
 test("an empty or long message is not", () => {
   assert.equal(isSmallTalk(""), false);
   assert.equal(isSmallTalk("   "), false);

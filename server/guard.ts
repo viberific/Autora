@@ -15,7 +15,10 @@
     only decides whether to ask the model, never whether to block. */
 const RISKY_COMMAND = new RegExp(
   [
-    String.raw`\b(rm|rmdir|shred|dd|mkfs\S*|wipefs|fdisk|parted|truncate|kill|pkill|killall|shutdown|reboot|halt|poweroff|userdel|crontab\s+-r)\b`,
+    /* Not after a "-": `docker run --rm`, `--kill-after` and `--halt-on-error`
+       are flags, not the command, and each false match costs a model call for
+       nothing. A path in front (`/bin/rm`) still counts. */
+    String.raw`(?<![\w-])(rm|rmdir|shred|dd|mkfs\S*|wipefs|fdisk|parted|truncate|kill|pkill|killall|shutdown|reboot|halt|poweroff|userdel|crontab\s+-r)\b`,
     String.raw`\bsystemctl\s+(stop|disable|mask)\b`,
     String.raw`\bch(mod|own)\s+-R\b`,
     String.raw`\bgit\s+(push\b.*(\s-f\b|--force)|reset\s+--hard|clean\s+-\S*f|branch\s+-D|checkout\s+--\s|restore\b)`,
@@ -164,7 +167,7 @@ export function waitsInside(command: string): number | null {
 /** Where a recursive delete stops being a tidy-up. */
 const WHOLE = new Set([
   "/", "/*", "/.", "/*/", "~", "~/", "~/*", "$HOME", "${HOME}", "$HOME/",
-  "${HOME}/", "$HOME/*", "*", "/*", "/..", "\\/",
+  "${HOME}/", "$HOME/*", "*", "/..", "\\/",
 ]);
 
 function words(segment: string): string[] {
@@ -174,11 +177,11 @@ function words(segment: string): string[] {
     .filter(Boolean);
 }
 
-/** An `rm` with both the recursive and the force flag, pointed at everything:
-    the one form of delete that takes the machine with it. */
 /** Words that may stand in front of a command without changing what runs. */
 const PREFIXES = new Set(["sudo", "doas", "command", "nice", "time", "env", "nohup", "xargs"]);
 
+/** An `rm` with both the recursive and the force flag, pointed at everything:
+    the one form of delete that takes the machine with it. */
 function wholeTreeDelete(segment: string): string | null {
   const tokens = words(segment);
   /* The command itself has to be the first thing on the line: `echo 'rm -rf

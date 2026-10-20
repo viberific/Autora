@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 const auto = await import("../server/automation");
 const {
   AUTOMATION_DEFAULTS, addSpend, blankLedger, budgetLine, mergeAutomation, overDay, overRun,
-  rollLedger, skipReason, stopReason,
+  rollLedger, skipReason, isBudgetSkip, stopReason,
 } = auto;
 type AutomationBudget = import("../server/automation").AutomationBudget;
 type AutomationLedger = import("../server/automation").AutomationLedger;
@@ -107,6 +107,14 @@ test("a job held back is told its schedule is untouched", () => {
   assert.match(why, /automation budget/);
   assert.match(why, /runs again after midnight/, "the job is not deleted, and it says so");
   assert.match(why, /Keep Umbrel/);
+  // The one test server.ts uses to tell a hold from a failure, in both places
+  // that ask. A curly apostrophe counts too, so a reworded message is not a
+  // failure in one caller and a hold in another.
+  assert.ok(isBudgetSkip(why), "skipReason's own text is a hold");
+  assert.ok(isBudgetSkip("Today’s automation budget ($1.00) is spent"), "and with a curly apostrophe");
+  assert.ok(!isBudgetSkip("exit 1"), "a real failure is not a hold");
+  assert.ok(!isBudgetSkip(null), "no error is not a hold");
+  assert.ok(!isBudgetSkip(undefined), "nor a missing one");
 });
 
 test("a run stopped part-way says what it cost and when it runs again", () => {
