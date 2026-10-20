@@ -2112,7 +2112,9 @@ export function App() {
             placeholder={placeholder}
             dockedPlanKey={dockPlan ? cellKey(dockPlan) : ""}
             widgetHeld={widget ? cellKey(widget) : ""}
-            onOpenWidget={openWidgetWindow}
+            // A phone has no column to open it in: there the card is the plain one, and the widget itself is in the
+            // pinned stage above the thread.
+            onOpenWidget={phoneLayout ? undefined : openWidgetWindow}
             outbox={outbox}
             // The thread stays mounted under the other pages: told which of them is
             // on screen, so a row that was answered elsewhere catches up.
