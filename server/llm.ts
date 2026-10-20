@@ -458,6 +458,16 @@ export function openAiMessages(call: ChatCall): any[] {
 /** Models (by vendor and name) that answered "reasoning is mandatory": asked to think off, they are sent no switch. */
 const thinkingForced = new Set<string>();
 const refusesThinkingOff = (message: string) => /reasoning is mandatory|cannot be disabled|can'?t be disabled|must be enabled/i.test(message);
+/* OpenAI renamed the reply cap for its newer models: GPT-5 and later, and the
+   o-series, 400 on `max_tokens` and ask for `max_completion_tokens`. They also
+   refuse a temperature the caller picked, so it is left out and the model's own
+   default stands. Older OpenAI models keep the old names, and every other
+   OpenAI-shaped vendor (DeepSeek, OpenRouter, Orca, a local server) takes them,
+   so those requests are untouched. */
+function modernOpenAi(call: ChatCall): boolean {
+  const openai = call.provider === "openai" || /(^|\/\/)api\.openai\.com/.test(call.baseUrl ?? "");
+  return openai && /^(gpt-5|gpt-6|o[1-9])/i.test(call.model ?? "");
+}
 
 async function streamOpenAi(call: ChatCall, onDelta: (text: string) => void): Promise<ChatTurn> {
   const deepseek = (call.provider ?? "") === "deepseek" || /api\.deepseek\.com/.test(call.baseUrl ?? "");
@@ -483,8 +493,9 @@ async function streamOpenAi(call: ChatCall, onDelta: (text: string) => void): Pr
       ...(openrouter && pin ? { provider: { only: [pin], allow_fallbacks: false } } : {}),
       stream: true,
       stream_options: { include_usage: true },
-      temperature: call.temperature ?? 0.7,
-      max_tokens: call.maxTokens ?? 2048,
+      ...(modernOpenAi(call)
+        ? { max_completion_tokens: call.maxTokens ?? 2048 }
+        : { temperature: call.temperature ?? 0.7, max_tokens: call.maxTokens ?? 2048 }),
       // Only DeepSeek takes this, and only when the caller asked either way:
       // left alone, its own default stands.
       ...(deepseek && call.thinking ? { thinking: { type: call.thinking === "off" ? "disabled" : "enabled" } } : {}),
