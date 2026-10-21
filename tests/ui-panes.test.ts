@@ -56,7 +56,12 @@ async function main() {
       assert.ok((await width(".rail-slot")) <= 520);
       await page.locator(".pane-handle.is-rail").dblclick();
       const back = await width(".rail-slot");
-      assert.ok(back >= 150 && back <= 180, String(back));
+      // 0.9.289: the reset width is no longer a constant. The menu is put back as the WHOLE menu -- wide enough for its
+      // words, measured from the labels themselves -- so the old 150-180 expectation asserted a number the app stopped
+      // using when it began measuring what the words need (R13). What matters is that it comes back as words and not as
+      // the strip of icons, and that it is a width a whole menu can be.
+      assert.ok(back >= 150 && back <= 280, `put back to ${back}px, which is not a whole menu`);
+      assert.equal(await page.locator(".app").evaluate((el) => el.classList.contains("rail-icons")), false, "the reset puts the words back, not the icons");
     });
 
     await test("a desktop has no way to fold the menu away: it is whole or icons, and no menu button", async () => {
