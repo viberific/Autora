@@ -624,7 +624,7 @@ export function AppPreview({ sessionId, phone }: { sessionId: string; phone: boo
         <TakeControl sessionId={sessionId} surface="app" mine={mine} phone={phone} thing="window" variant="app" />
         {/* Whether the agent's cursor shows is Visible work, the eye beside Follow: not a switch of this window's own. */}
         {phone && (
-          <button type="button" className="app-icon" onClick={() => setFull(!full)} title={full ? "Back to the conversation" : "Full screen"} aria-label={full ? "Back to the conversation" : "Full screen"} aria-pressed={full}>
+          <button type="button" className="app-icon app-full-btn" onClick={() => setFull(!full)} title={full ? "Back to the conversation" : "Full screen"} aria-label={full ? "Back to the conversation" : "Full screen"} aria-pressed={full}>
             {full ? <IconMinimize size={15} /> : <IconMaximize size={15} />}
           </button>
         )}

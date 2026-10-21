@@ -188,9 +188,9 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  Luna answers again. OpenAI's newer models - GPT-5 and later, and the o-series - refuse the old name for the
-  reply limit, so every call to gpt-6-luna failed with "Unsupported parameter: 'max_tokens'". They are now
-  asked with max_completion_tokens, and their own temperature is left alone rather than overruled. The spend
-  bar keeps one line open per API instead of hiding them behind a single combined bar, says what this
-  conversation has cost so far, and shows OpenAI's spend at all - OpenAI publishes no balance to read, so its
-  line carries the month the ledger counted rather than disappearing.
+  Follow no longer goes missing, and a tool on a phone can always be minimized. Follow was only drawn while two or
+  more tools were open, so it vanished the moment one was closed (and, in full screen on a phone, whenever only one
+  was up); it is now always there, and on a phone it sits outside the row of tabs so many tabs cannot scroll it
+  away. In a phone tool's top bar, the button that leaves full screen could be scrolled off the end of the bar or
+  sit under the chat button and Follow laid over it; it is now the first control in the bar and stays at the left
+  edge.

@@ -40,12 +40,11 @@ function sideOf(at: { x: number; y: number }): React.CSSProperties {
 }
 
 export function ImmersiveChat({
-  say, onSend, canFollow, following, onFollow,
+  say, onSend, following, onFollow,
 }: {
   /** What the agent last said, as it is written. */
   say: string;
   onSend: (text: string) => void;
-  canFollow: boolean;
   following: boolean;
   onFollow: () => void;
 }) {
@@ -112,12 +111,11 @@ export function ImmersiveChat({
       {!open && (
         <div className="immersive-corner">
           <VisibleWork className="immersive-follow" compact />
-          {canFollow && (
-            <button type="button" className={`immersive-follow${following ? " on" : ""}`} aria-pressed={following} onClick={onFollow}
-              title={following ? "Following the agent between tools" : "Follow the agent between tools"}>
-              Follow
-            </button>
-          )}
+          {/* Always here, even with one tool up: it is a standing order for the next one too. */}
+          <button type="button" className={`immersive-follow${following ? " on" : ""}`} aria-pressed={following} onClick={onFollow}
+            title={following ? "Following the agent between tools" : "Follow the agent between tools"}>
+            Follow
+          </button>
           <button type="button" className="immersive-chat" onClick={() => setOpen(true)} aria-label="Message Autora" title="Message Autora">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" />

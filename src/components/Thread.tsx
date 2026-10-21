@@ -406,8 +406,7 @@ export function Thread({
         <ImmersiveChat
           say={lastSaid}
           onSend={(text) => onSuggest?.(text)}
-          canFollow={surfaces.length > 1}
-          following={follow && surfaces.length > 1}
+          following={follow}
           onFollow={toggleFollow}
         />
       )}

@@ -6145,12 +6145,18 @@ button.dock-card:hover { border-color: var(--border-strong); }
 .stage-bar {
   display: flex; align-items: flex-end; gap: 3px;
   padding: 6px 8px 1px;
-  overflow-x: auto; scrollbar-width: none;
-  /* The line under the tabs is drawn here, in the bar, because the bar scrolls and clips: the tab that is up
+  /* The line under the tabs is drawn here, in the bar, because the tabs scroll and clip: the tab that is up
      reaches down over it, so the line breaks under that tab's name and the name reads as the panel's tab. */
   background: linear-gradient(var(--border), var(--border)) bottom / 100% 1px no-repeat;
 }
-.stage-bar::-webkit-scrollbar { display: none; }
+/* The tabs scroll sideways on their own; Visible, Follow, expand and fold stay put at the right of them. The 1px
+   of padding and margin lets the tab that is up reach over the bar's line without being clipped. */
+.stage-tabs {
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: flex-end; gap: 3px;
+  padding-bottom: 1px; margin-bottom: -1px;
+  overflow-x: auto; scrollbar-width: none;
+}
+.stage-tabs::-webkit-scrollbar { display: none; }
 
 /* Folder tabs: each is a tab on the edge of the panel below, and the one that is up is the panel's own colour and
    joins it, so the panel reads as that tab's page. */
@@ -6720,6 +6726,11 @@ button.app-url:hover { border-color: var(--border-strong); color: var(--text); }
    file's name beside it clips first, which is what the ellipsis is for. */
 .pdf-full-btn { flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%; }
 @media (pointer: coarse) { .pdf-full-btn { width: 38px; height: 38px; } }
+/* On a phone the bar scrolls sideways, and in full screen Autora's chat button and Follow are laid over its right end:
+   a way out at the end of the bar could be scrolled off or sit under them. So it is the first control, held at the
+   left edge. */
+.pdf-window.is-phone .pdf-bar > .pdf-full-btn,
+.app-window.is-phone .app-bar > .app-full-btn { order: -1; position: sticky; left: 0; z-index: 2; background: var(--s1); }
 .pdf-problem {
   padding: 7px 12px; font-size: var(--fs-sm); color: var(--warn);
   background: rgba(var(--warn-rgb), 0.08); border-bottom: 1px solid rgba(var(--warn-rgb), 0.25);

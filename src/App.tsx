@@ -2696,18 +2696,17 @@ export function App() {
                 })}
                 <div className="pane-acts">
                   <VisibleWork className="pane-follow" />
-                  {sideWindows.length > 1 && (
-                    <button
-                      type="button"
-                      className={`pane-follow${followAgent ? " is-on" : ""}`}
-                      onClick={() => setFollow(!followAgent)}
-                      aria-pressed={followAgent}
-                      title={followAgent ? "Following the agent between tools: click to stop" : "Switch to whatever the agent is working on"}
-                    >
-                      <span className="watch-dot" aria-hidden="true" />
-                      Follow
-                    </button>
-                  )}
+                  {/* Always here, even with one tab: it is a standing order for the next tool too. */}
+                  <button
+                    type="button"
+                    className={`pane-follow${followAgent ? " is-on" : ""}`}
+                    onClick={() => setFollow(!followAgent)}
+                    aria-pressed={followAgent}
+                    title={followAgent ? "Following the agent between tools: click to stop" : "Switch to whatever the agent is working on"}
+                  >
+                    <span className="watch-dot" aria-hidden="true" />
+                    Follow
+                  </button>
                 </div>
               </div>
             )}
