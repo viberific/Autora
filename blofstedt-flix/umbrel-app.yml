@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.53"
+version: "0.3.54"
 port: 8096
 folderAccess:
   - id: umbrel-downloads
@@ -54,13 +54,13 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  The screen while an episode is fetched now reads like a player, not a
-  torrent client: a progress bar, "Getting your episode ready", and a wait
-  said in plain words ("About 1 hour 10 minutes to go"). The bar drifts
-  while nothing has arrived yet, so a slow start no longer looks frozen.
-  
-  Percent, speed and how many people are sharing it are still there, one
-  tap away under Details. Settings and the Torrents page are unchanged.
-  
-  Carried from 0.3.52, which some boxes may not have taken: always 1080p,
-  and of two 1080p copies of the same episode the smaller one is taken.
+  The sound is back. 0.3.48 began deciding whether a file could be handed over
+  untouched by looking only at its picture and container, and stopped asking
+  about its audio. An MKV reports its container as "matroska,webm", so it passed
+  -- and every AMZN WEB-DL in this library carries E-AC-3 sound, which no browser
+  can decode. The episode played with a picture and no sound at all.
+
+  Flix asks both again: a file whose sound the player cannot decode goes to the
+  MP4 repack, which carries AAC. A television that does decode E-AC-3 still gets
+  the file untouched. The repack copies the picture, so it takes a moment once
+  per episode, and an episode still downloading waits until it is complete.
