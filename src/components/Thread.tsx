@@ -416,7 +416,7 @@ export function Thread({
           active={activeKind}
           collapsed={folded}
           expanded={expanded}
-          following={follow && surfaces.length > 1}
+          following={follow}
           onPick={pickTab}
           onFollow={toggleFollow}
           onToggle={foldStage}

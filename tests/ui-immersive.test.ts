@@ -62,7 +62,7 @@ async function main() {
       await phone.getByRole("button", { name: "Edit", exact: true }).tap();
       await phone.waitForSelector(".office-window.is-full");
       assert.equal(await phone.locator(".pdf-window:not(.office-window):visible").count(), 0, "only the memo is up");
-      await phone.tap(".immersive-follow");
+      await phone.tap(".immersive-follow:not(.visible-work)");
       await phone.locator(".pdf-window:not(.office-window).is-full:visible").waitFor({ timeout: 20_000 });
       assert.equal(await phone.locator(".office-window:visible").count(), 0, "the memo made way for the lease");
       const box = await phone.locator(".pdf-window:not(.office-window).is-full:visible").boundingBox();
@@ -76,6 +76,35 @@ async function main() {
     });
     assert.deepEqual(errors, [], "the page threw");
     await phone.close();
+
+    // One tool up: Follow is still there (it is a standing order for the next tool), and so is the way out of full screen.
+    const one = await app.newSession("One tool");
+    let again = 0;
+    app.decide = (req) => /You check one action/.test(req.system) ? { text: '{"destructive": false, "requested": true}' }
+      : again++ === 0 ? { tools: [{ name: "pdf_look", args: { file } }] } : { text: "Here it is." };
+    await app.turn(one, "show me the lease", 120_000);
+    const alone = await browser.newPage({ viewport: { width: 320, height: 640 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+    await alone.goto(`${app.base}/?session=${one}`);
+    await alone.waitForSelector(".stage .pdf-window", { timeout: 20_000 });
+    await test("with one tool up, Follow is still in the pinned view and still on", async () => {
+      assert.equal(await alone.locator(".stage-tab").count(), 1);
+      const follow = alone.locator(".stage-follow:not(.visible-work)");
+      assert.ok(await follow.isVisible(), "Follow is drawn");
+      assert.equal(await follow.getAttribute("aria-pressed"), "true");
+      assert.ok(await alone.locator(".stage-fold").isVisible(), "so is the fold");
+    });
+    await test("the way out of full screen is the first control in the bar, and Follow is over it in full screen too", async () => {
+      const toggle = alone.locator(".stage .pdf-bar button.pdf-full-btn:visible");
+      const bar = await alone.locator(".stage .pdf-window:visible .pdf-bar").boundingBox();
+      const at = await toggle.boundingBox();
+      assert.ok(bar && at && at.x - bar.x < 20, `it is at the bar's left edge (${at?.x} in a bar from ${bar?.x})`);
+      await toggle.tap();
+      await alone.waitForSelector(".pdf-window.is-full");
+      assert.ok(await alone.locator(".immersive-follow:not(.visible-work)").isVisible(), "Follow is over a full-screen tool");
+      await alone.tap('.pdf-bar button[aria-label="Back to the conversation"]');
+      assert.equal(await alone.locator(".pdf-window.is-full").count(), 0);
+    });
+    await alone.close();
   } finally {
     await browser.close();
     await app.stop();
