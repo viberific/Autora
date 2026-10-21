@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.54"
+version: "0.3.55"
 port: 8096
 folderAccess:
   - id: umbrel-downloads
@@ -54,13 +54,18 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  The sound is back. 0.3.48 began deciding whether a file could be handed over
-  untouched by looking only at its picture and container, and stopped asking
-  about its audio. An MKV reports its container as "matroska,webm", so it passed
-  -- and every AMZN WEB-DL in this library carries E-AC-3 sound, which no browser
-  can decode. The episode played with a picture and no sound at all.
+  Sound, without refusing the episode. 0.3.54 fixed the silence by sending any file
+  whose audio the browser cannot decode to a whole-file MP4 repack -- and that repack
+  is capped at 1080p, needs the episode complete, and answers "this file would need
+  converting" until the copy is ready. Every AMZN WEB-DL here is E-AC-3, so every
+  episode was refused instead.
 
-  Flix asks both again: a file whose sound the player cannot decode goes to the
-  MP4 repack, which carries AAC. A television that does decode E-AC-3 still gets
-  the file untouched. The repack copies the picture, so it takes a moment once
-  per episode, and an episode still downloading waits until it is complete.
+  The sound is the only part that cannot be passed through: no browser decodes
+  E-AC-3. The picture can. A file in that position now plays as a stream with the
+  picture copied byte for byte and only the audio encoded to AAC, so it starts at
+  once, at whatever height it is, with nothing left duplicated on the disk. A
+  finished episode still prefers the single repacked file, because one file seeks the
+  whole episode at once.
+
+  What this costs: while such an episode plays, a few percent of one core is spent
+  encoding its audio. The picture is never re-encoded.
