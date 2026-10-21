@@ -541,7 +541,7 @@ type VideoOutcome = { ok: boolean; summary: string; preview?: string; held?: boo
 type Clip = {
   id: string; type: string; name: string; start: number; duration: number; trimStart: number; trimEnd: number; mediaId?: string; text?: string;
   effects?: Array<{ id: string; type: string; enabled: boolean }>; mask?: { id: string; type: string };
-  keyframes?: Array<{ property: string; keys: Array<{ id: string; at: number }> }>; speed?: number; hidden?: boolean;
+  keyframes?: Array<{ property: string; keys: Array<{ id: string; at: number }> }>; speed?: number; hidden?: boolean; muted?: boolean;
 };
 type Snapshot = {
   project: { id: string; name: string };
@@ -584,7 +584,7 @@ function describe(s: Snapshot): string {
     lines.push(`Track ${t.id} (${t.type}${t.name ? `, "${t.name}"` : ""}):`);
     for (const c of t.clips) {
       const extra = c.type === "text" ? ` text "${String(c.text ?? "").slice(0, 80)}"` : c.mediaId ? ` of ${c.mediaId}` : "";
-      lines.push(`  ${c.id}  ${c.type} "${c.name}"${extra}  ${fmt(c.start)} to ${fmt(c.start + c.duration)}${c.trimStart || c.trimEnd ? ` (source in ${fmt(c.trimStart)}, out-trim ${fmt(c.trimEnd)})` : ""}${c.hidden ? " [hidden]" : ""}${c.speed ? ` [speed ${c.speed}x]` : ""}`);
+      lines.push(`  ${c.id}  ${c.type} "${c.name}"${extra}  ${fmt(c.start)} to ${fmt(c.start + c.duration)}${c.trimStart || c.trimEnd ? ` (source in ${fmt(c.trimStart)}, out-trim ${fmt(c.trimEnd)})` : ""}${c.hidden ? " [hidden]" : ""}${c.muted ? " [muted]" : ""}${c.speed ? ` [speed ${c.speed}x]` : ""}`);
       for (const e of c.effects ?? []) lines.push(`      effect ${e.id} ${e.type}${e.enabled ? "" : " (off)"}`);
       if (c.mask) lines.push(`      mask ${c.mask.id} ${c.mask.type}`);
       for (const k of c.keyframes ?? []) lines.push(`      keyframes ${k.property}: ${k.keys.map((x) => `${x.id} at ${fmt(x.at)}`).join(", ")}`);

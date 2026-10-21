@@ -45,7 +45,11 @@ export function describe(element: TimelineElement) {
   };
   const extra: Record<string, unknown> = {};
   if ("mediaId" in element) extra.mediaId = element.mediaId;
-  if (element.type === "text") extra.text = element.params.content;
+  if (element.type === "text") {
+    extra.text = element.params.content;
+    const { fontFamily, fontSize, color, textAlign, fontWeight } = element.params as Record<string, unknown>;
+    extra.style = { fontFamily, fontSize, color, textAlign, fontWeight };
+  }
   if ("effects" in element && element.effects?.length) extra.effects = element.effects.map((e) => ({ id: e.id, type: e.type, enabled: e.enabled }));
   if ("masks" in element && element.masks?.length) extra.mask = { id: element.masks[0].id, type: element.masks[0].type };
   if (element.animations) {
@@ -56,6 +60,7 @@ export function describe(element: TimelineElement) {
   }
   if ("retime" in element && element.retime) extra.speed = element.retime.rate;
   if ("hidden" in element && element.hidden) extra.hidden = true;
+  if ("muted" in element && element.muted) extra.muted = true;
   return { ...base, ...extra };
 }
 

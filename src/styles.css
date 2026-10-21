@@ -6720,6 +6720,10 @@ button.app-url:hover { border-color: var(--border-strong); color: var(--text); }
   font-size: var(--fs-base); font-weight: 600; color: var(--text);
 }
 .pdf-bar-note { flex: 0 0 auto; font-size: var(--fs-xs); color: var(--text-3); white-space: nowrap; }
+.pdf-bar-soon {
+  flex: 0 0 auto; font-size: var(--fs-xs); color: var(--text-3); white-space: nowrap;
+  padding: 1px 8px; border-radius: var(--r-pill); border: 1px dashed var(--border);
+}
 /* Full screen, and the way back out of it, is the one control in the bar that
    must never give way: it used to shrink to 16px at the end of a full bar, so
    the way out of the phone's full screen was the hardest thing to hit. The

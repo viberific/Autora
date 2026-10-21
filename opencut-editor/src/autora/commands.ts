@@ -316,7 +316,7 @@ async function locate(editor: EditorCore, args: Record<string, unknown>): Promis
  * body or one of its edges, a track's row, a media or text tile's "+". Out of view, it is scrolled into view first, as a
  * person scrolls. Null when it is not on the screen at all.
  */
-type HandSpot = { x: number; y: number; view: { w: number; h: number }; pps?: number; start?: number; duration?: number };
+type HandSpot = { x: number; y: number; view: { w: number; h: number }; pps?: number; start?: number; duration?: number; selector?: string };
 
 const view = () => ({ w: window.innerWidth, h: window.innerHeight });
 const frames = () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
@@ -405,6 +405,23 @@ async function handPoint(editor: EditorCore, args: Record<string, unknown>): Pro
     row.scrollIntoView({ block: "nearest" });
     const r = row.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2, view: view() };
+  }
+  if (kind === "field") {
+    // A field of the Properties panel by the words on its row ("Content", "Font Size"): its control, marked so a
+    // click and typing can name it, and where it is. A control that is hidden (its section folded) is not found.
+    const name = need(str(args, "name"), "name").toLowerCase();
+    const label = [...document.querySelectorAll<HTMLElement>("label")].find((l) => (l.textContent ?? "").trim().toLowerCase() === name && l.getBoundingClientRect().width > 0);
+    if (!label) return null;
+    let control: HTMLElement | null = null;
+    for (let group = label.parentElement, up = 0; group && up < 4 && !control; group = group.parentElement, up++) {
+      control = group.querySelector<HTMLElement>("textarea, input:not([type=checkbox]), [role=combobox], [role=switch]");
+    }
+    if (!control) return null;
+    for (const old of document.querySelectorAll("[data-autora-hand]")) old.removeAttribute("data-autora-hand");
+    control.setAttribute("data-autora-hand", "field");
+    control.scrollIntoView({ block: "nearest" });
+    const r = control.getBoundingClientRect();
+    return { x: r.left + Math.min(r.width / 2, 90), y: r.top + r.height / 2, view: view(), selector: '[data-autora-hand="field"]' };
   }
   if (kind === "tile") {
     // A media or text tile in the panel on the left: its "+", which adds it at the playhead.

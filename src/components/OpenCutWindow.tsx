@@ -90,10 +90,23 @@ const LONG: Record<string, number> = { export: 31 * 60_000, import_media: 11 * 6
 
 type Located = { x: number; y: number; view: { w: number; h: number } };
 /** A place the editor gives the hand: where, and for a clip how many pixels a second is and where it is in time. */
-type HandSpot = Located & { pps?: number; start?: number; duration?: number };
+type HandSpot = Located & { pps?: number; start?: number; duration?: number; selector?: string };
 
 /** The edits done with the editor's own controls when Visible work is on (`byHand`). */
-const HAND = new Set(["split", "delete", "move", "trim", "add_clip", "add_text"]);
+const HAND = new Set([
+  "split", "delete", "move", "trim", "add_clip", "add_text", "set", "set_params", "duplicate", "undo", "redo", "seek", "select",
+  "toggle_mute", "toggle_visibility", "copy", "paste", "separate_audio",
+]);
+
+/** A text clip's own fields in the Properties panel, by the key the agent names and the words on the row. */
+const TEXT_FIELDS: Record<string, { label: string; how: "words" | "hex" | "choice" }> = {
+  content: { label: "Content", how: "words" },
+  fontFamily: { label: "Font Family", how: "words" },
+  fontSize: { label: "Font Size", how: "words" },
+  color: { label: "Color", how: "hex" },
+  textAlign: { label: "Text Align", how: "choice" },
+  fontWeight: { label: "Font Weight", how: "choice" },
+};
 
 export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: boolean }) {
   const desk = useVideoState();
@@ -368,7 +381,10 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
    * needs is on the screen): then the command goes to the editor as it is, at once.
    */
   const byHand = useCallback(async (name: string, args: Record<string, unknown>): Promise<unknown> => {
-    type Clip = { id: string; start: number; duration: number; trimStart: number; trimEnd: number; type: string };
+    type Clip = {
+      id: string; start: number; duration: number; trimStart: number; trimEnd: number; type: string;
+      text?: string; style?: Record<string, unknown>; muted?: boolean; hidden?: boolean;
+    };
     type State = { duration: number; playhead: number; tracks: Array<{ id: string; clips: Clip[] }>; media: Array<{ id: string; name: string }> };
     const now = async () => (await toFrame("state", {})) as State;
     const clips = (st: State) => st.tracks.flatMap((t) => t.clips.map((c) => ({ ...c, track: t.id })));
@@ -380,6 +396,64 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
     const skip = (why: string) => { console.debug(`[video hand] ${name}: not by hand (${why})`); return undefined; };
     const before = await now();
     const id = typeof args.elementId === "string" ? args.elementId : "";
+    const idsOf = () => (Array.isArray(args.elementIds) ? args.elementIds.filter((v): v is string => typeof v === "string") : id ? [id] : []);
+    /** Clip by clip picked with a click (Shift for each after the first); how many were there to pick. */
+    const pick = async (ids: string[]) => {
+      let picked = 0;
+      for (const one of ids) {
+        const body = await handAt("clip", { elementId: one });
+        if (!body) continue;
+        await press(body, picked > 0);
+        picked++;
+      }
+      return picked;
+    };
+    const cap = (w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+    /** One field of the Properties panel: clicked, and the value typed in a key at a time (or its option picked from the list). */
+    const setField = async (key: string, value: unknown): Promise<boolean> => {
+      const f = TEXT_FIELDS[key];
+      if (!f || (typeof value !== "string" && typeof value !== "number")) return false;
+      const spot = await handAt("field", { name: f.label });
+      if (!spot?.selector) return false;
+      await goTo({ x: spot.x, y: spot.y }, spot.view);
+      await toFrame("ui_click", { selector: spot.selector });
+      if (f.how === "choice") {
+        await sleep(250);
+        const option = cap(String(value));
+        const row = await locate({ target: { label: option } });
+        if (!row) { await toFrame("ui_press", { key: "escape" }).catch(() => undefined); return false; }
+        await goTo({ x: row.x, y: row.y }, row.view);
+        await toFrame("ui_click", { label: option });
+        await sleep(200);
+        return true;
+      }
+      const text = f.how === "hex" ? String(value).replace(/^#/, "") : String(value);
+      await typed(text, (shown) => toFrame("ui_type", { selector: spot.selector, text: shown, replace: true, enter: false, blur: false }));
+      // The words in a box are done by leaving it; a number or a colour, by Enter.
+      await toFrame("ui_commit", { selector: spot.selector, how: key === "content" ? "blur" : "enter" });
+      await sleep(150);
+      return true;
+    };
+    const same = (a: unknown, b: unknown) => {
+      if (typeof a === "number" || typeof b === "number") return Math.abs(Number(a) - Number(b)) < 0.01;
+      return String(a ?? "").replace(/^#/, "").toLowerCase() === String(b ?? "").replace(/^#/, "").toLowerCase();
+    };
+    /** The fields a text clip should have, typed in; what is still not right after is set exactly, and the result says so. */
+    const fillText = async (clipId: string, want: Record<string, unknown>): Promise<string[]> => {
+      const fixed: string[] = [];
+      for (const [key, value] of Object.entries(want)) await setField(key, value).catch(() => false);
+      const end = clipOf(await now(), clipId);
+      const wrong: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(want)) {
+        const have = key === "content" ? end?.text : end?.style?.[key];
+        if (!end || !same(have, value)) wrong[key] = value;
+      }
+      if (Object.keys(wrong).length) {
+        await toFrame("set_params", { elementId: clipId, params: wrong });
+        fixed.push(`${Object.keys(wrong).join(", ")} ${Object.keys(wrong).length === 1 ? "was" : "were"} set exactly`);
+      }
+      return fixed;
+    };
 
     if (name === "split") {
       const at = typeof args.time === "number" ? args.time : null;
@@ -399,14 +473,7 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
     if (name === "delete") {
       const ids = Array.isArray(args.elementIds) ? args.elementIds.filter((v): v is string => typeof v === "string") : id ? [id] : [];
       if (!ids.length) return skip("4");
-      let picked = 0;
-      for (const one of ids) {
-        const body = await handAt("clip", { elementId: one });
-        if (!body) continue;
-        await press(body, picked > 0);
-        picked++;
-      }
-      if (!picked) return skip("5");
+      if (!(await pick(ids))) return skip("5");
       await tool("Delete");
       const after = await now();
       const left = ids.filter((one) => clipOf(after, one));
@@ -459,11 +526,14 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
 
     if (name === "add_clip" || name === "add_text") {
       const start = typeof args.start === "number" ? args.start : name === "add_clip" ? before.duration : before.playhead;
-      // The ruler only reaches the end of what is there: past it, the clip goes in as it is.
-      if (start > before.duration + 0.01) return skip("11");
+      // A size the editor would refuse is said by the editor, not worked around.
+      const size = args.fontSize;
+      if (name === "add_text" && size !== undefined && (typeof size !== "number" || !(size > 0) || size > 45)) return skip("size");
+      // The ruler only reaches the end of what is there: past it, the clip goes in at the end and is dragged out after.
+      const place = Math.min(start, before.duration);
       const tileName = name === "add_text" ? "Default text" : before.media.find((m) => m.id === args.mediaId)?.name;
       if (!tileName) return skip("12");
-      const at = await handAt("time", { time: start });
+      const at = await handAt("time", { time: place });
       if (!at) return skip("13");
       await press(at);
       await tool(name === "add_text" ? "Text" : "Media");
@@ -477,12 +547,13 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
       if (!made) return said(await toFrame(name, args), `clicked "${tileName}" in its panel`, "it was added");
       const fixed: string[] = [];
       if (name === "add_text") {
-        // The words go in a few letters at a time, into the clip the hand just made.
-        const text = String(args.text ?? "");
-        if (text) await typed(text, (shown, first) => toFrame("set_params", { elementId: made.id, params: { content: shown }, history: first }));
-        const rest: Record<string, unknown> = {};
-        for (const key of ["color", "fontFamily", "fontSize", "fontWeight", "textAlign"]) if (args[key] !== undefined) rest[key] = args[key];
-        if (Object.keys(rest).length) { await toFrame("set_params", { elementId: made.id, params: rest }); fixed.push("its style was set"); }
+        // The words, and then its look, typed into the Properties panel's own fields, with the clip picked.
+        const body = await handAt("clip", { elementId: made.id });
+        if (body) await press(body);
+        const want: Record<string, unknown> = {};
+        if (typeof args.text === "string" && args.text) want.content = args.text;
+        for (const key of ["fontFamily", "fontSize", "color", "textAlign", "fontWeight"]) if (args[key] !== undefined) want[key] = args[key];
+        fixed.push(...(await fillText(made.id, want)));
       }
       const want = typeof args.duration === "number" ? args.duration : name === "add_text" ? 3 : null;
       if (want !== null && !near(made.duration, want)) {
@@ -493,13 +564,91 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
         if (right?.pps) await pull(right, { x: right.x + (want - made.duration) * right.pps, y: right.y });
       }
       after = await now();
-      const end = clipOf(after, made.id);
-      if (end && !near(end.start, start)) { await toFrame("move", { elementId: made.id, start }); fixed.push("it was put exactly at its time"); }
+      let end = clipOf(after, made.id);
+      if (end && !near(end.start, start)) {
+        // Past the end of the timeline: the clip is taken by its body and dragged out to its time, when that is on screen.
+        const body = await handAt("clip", { elementId: made.id });
+        if (body?.pps) {
+          const to = { x: body.x + (start - end.start) * body.pps, y: body.y };
+          if (to.x > 0 && to.x < body.view.w - 24) await pull(body, to);
+        }
+        end = clipOf(await now(), made.id);
+        if (end && !near(end.start, start)) { await toFrame("move", { elementId: made.id, start }); fixed.push("it was put exactly at its time"); }
+      }
       if (end && want !== null && !near(end.duration, want)) fixed.push(`it is ${end.duration}s long, not ${want}s (drag its right edge, or trim it)`);
-      return said(await now(), `clicked the ruler at ${start}s and pressed "+" on "${tileName}"${name === "add_text" ? ", typed the words" : ""}`, fixed.join(", ") || undefined);
+      return said(await now(), `clicked the ruler at ${place}s and pressed "+" on "${tileName}"${name === "add_text" ? ", typed the words into its Content field" : ""}${place !== start ? " and dragged the clip out to its time" : ""}`, fixed.join(", ") || undefined);
+    }
+
+    if (name === "set" || name === "set_params") {
+      const params = (args.params ?? {}) as Record<string, unknown>;
+      const keys = Object.keys(params);
+      const was = clipOf(before, id);
+      // Only a title's own fields have a place on the panel to type into; the rest of a clip's properties are done directly.
+      if (!was || was.type !== "text" || !keys.length || keys.some((k) => !TEXT_FIELDS[k])) return skip("set");
+      if (typeof params.fontSize !== "undefined" && (typeof params.fontSize !== "number" || params.fontSize > 45)) return skip("size");
+      if (!(await pick([id]))) return skip("set-pick");
+      const fixed = await fillText(id, params);
+      return said(await now(), `picked the clip and typed ${keys.join(", ")} into its fields in the Properties panel`, fixed.join(", ") || undefined);
+    }
+
+    if (name === "duplicate" || name === "copy" || name === "separate_audio") {
+      const ids = idsOf();
+      if (!ids.length || !(await pick(ids))) return skip("pick");
+      const label = name === "duplicate" ? "Duplicate" : name === "copy" ? "Copy" : "Extract audio";
+      await tool(label);
+      const after = await now();
+      if (name === "copy") return said({ copied: true, ...after }, `picked the clip and pressed ${label}`);
+      if (clips(after).length > clips(before).length) return said(after, `picked the clip${ids.length === 1 ? "" : "s"} and pressed ${label}`);
+      return skip("nothing new");
+    }
+
+    if (name === "toggle_mute" || name === "toggle_visibility") {
+      const was = clipOf(before, id);
+      if (!was || !(await pick([id]))) return skip("pick");
+      await tool(name === "toggle_mute" ? "Mute" : "Show / hide");
+      const after = await now();
+      const now_ = clipOf(after, id);
+      const key = name === "toggle_mute" ? "muted" : "hidden";
+      if (now_ && Boolean(now_[key]) !== Boolean(was[key])) return said(after, `picked the clip and pressed ${name === "toggle_mute" ? "Mute" : "Show / hide"}`);
+      return skip("unchanged");
+    }
+
+    if (name === "paste") {
+      if (typeof args.time === "number") {
+        const at = await handAt("time", { time: args.time });
+        if (!at) return skip("paste-time");
+        await press(at);
+      }
+      await tool("Paste");
+      const after = await now();
+      if (clips(after).length > clips(before).length) return said(after, "put the playhead there and pressed Paste");
+      return skip("nothing pasted");
+    }
+
+    if (name === "select") {
+      const ids = idsOf();
+      if (args.all === true) { await tool("Select all"); return said(await now(), "pressed Select all"); }
+      if (!ids.length || !(await pick(ids))) return skip("select");
+      return said({ selected: ids }, `clicked ${ids.length === 1 ? "the clip" : `the ${ids.length} clips`}`);
+    }
+
+    if (name === "seek") {
+      const to = typeof args.time === "number" ? Math.max(0, args.time) : null;
+      if (to === null) return skip("seek");
+      const at = await handAt("time", { time: to });
+      if (!at) return skip("seek-ruler");
+      await press(at);
+      const after = await now();
+      if (near(after.playhead, to)) return said(after, `clicked the ruler at ${to}s`);
+      return said(await toFrame("seek", args), `clicked the ruler at ${to}s`, "the playhead was put exactly there");
+    }
+
+    if (name === "undo" || name === "redo") {
+      await tool(name === "undo" ? "Undo" : "Redo");
+      return said(await now(), `pressed ${name === "undo" ? "Undo" : "Redo"} on the tool bar`);
     }
     return skip("15");
-  }, [handAt, press, pull, toFrame, tool, typed]);
+  }, [goTo, handAt, locate, press, pull, toFrame, tool, typed]);
 
   /** One command from the agent: pointed at, then done, then answered. */
   const play = useCallback(async (cmd: VideoCommand): Promise<unknown> => {
