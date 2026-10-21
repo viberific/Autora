@@ -287,6 +287,22 @@
       if (!key(root, "Backspace")) document.execCommand("delete");
       return;
     }
+    if (step.kind === "format") {
+      const el = paragraph(step.text, step.at);
+      if (!el) throw new Error("the paragraph is not on the page");
+      await scrollTo(el);
+      if (!(await selectSpan(el, step.from, step.to))) throw new Error("the words are not on the page");
+      const command = step.attr;
+      const letter = { bold: "b", italic: "i", underline: "u" }[command];
+      const now = () => document.queryCommandState(command);
+      if (now() === step.on) return;
+      // The editor's own shortcut, as a person presses it (Cmd on a Mac, Ctrl elsewhere).
+      key(root, letter, /Mac|iPhone|iPad/.test(navigator.platform) ? { metaKey: true } : { ctrlKey: true });
+      await sleep(rand(160, 260));
+      if (now() !== step.on) { document.execCommand(command); await sleep(rand(120, 200)); }
+      if (now() !== step.on) throw new Error(`${command} did not take`);
+      return;
+    }
     throw new Error(`Pages does not type a ${step.kind}`);
   }
 

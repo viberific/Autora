@@ -2179,6 +2179,8 @@ function gridStep(span: number): number {
 // -- pdf_edit --
 
 /** What the editor's own tools make, so the agent's hand can make it in the window (spectra-editor/src/autora/hand.ts). */
+/** The most pages one item is done on by hand; past this it is done on the file. */
+const MAX_HAND_PAGES = 12;
 const BY_HAND = new Set(["text", "note", "highlight", "rect", "ellipse", "line", "arrow", "stamp", "check", "cross", "curve", "path"]);
 
 /**
@@ -2200,9 +2202,17 @@ async function editByHand(args: Record<string, any>, ctx: PdfContext): Promise<P
   const flatten = args.flatten === true;
   const values = !flatten && args.fields && typeof args.fields === "object" && !Array.isArray(args.fields) ? args.fields as Record<string, unknown> : null;
   const listed: Record<string, any>[] = (Array.isArray(args.add) ? args.add : args.add ? [args.add] : []).filter((i: unknown) => i && typeof i === "object");
-  const handable = listed
-    .map((item, i): Record<string, any> & { i: number } => ({ ...item, i }))
-    .filter((item) => BY_HAND.has(String(item.type)) && /^\d+$/.test(String(item.page ?? 1)) && !item.image && !item.field && !item.background);
+  /* An item on several pages ("all", "2-5", "odd") is done one page at a time, as a person would; past MAX_HAND_PAGES it is
+     left for the file. Every copy carries the item's own number, so the result can tell whether all of it was done. */
+  const count = await openDoc(given.data).then((o) => o.doc.getPageCount()).catch(() => 0);
+  const handable = listed.flatMap((item, i): Array<Record<string, any> & { i: number }> => {
+    if (!BY_HAND.has(String(item.type)) || item.image || item.field || item.background) return [];
+    if (/^\d+$/.test(String(item.page ?? 1))) return [{ ...item, i }];
+    let pages: number[] = [];
+    try { pages = count ? pageSet(item.page ?? item.pages ?? 1, count) : []; } catch { return []; }
+    if (pages.length === 0 || pages.length > MAX_HAND_PAGES) return [];
+    return pages.map((p) => ({ ...item, page: p + 1, pages: undefined, i, ofMany: true }));
+  });
   const fieldCount = values ? Object.keys(values).length : 0;
   if (fieldCount === 0 && handable.length === 0) return null;
   const what = [
@@ -2215,16 +2225,25 @@ async function editByHand(args: Record<string, any>, ctx: PdfContext): Promise<P
 
   // What the hand could not do goes to the server, on the file the window saved.
   const skippedFields = new Set(reply.steps.filter((s) => s.kind === "field" && s.skipped).map((s) => String(s.key)));
-  const doneItems = new Set(reply.steps.filter((s) => s.kind === "add" && !s.skipped).map((s) => Number(s.key)));
+  // An item on several pages is done when every page of it was; what is left of it is just the pages the hand could not do.
+  const undone = new Set(reply.steps.filter((s) => s.kind === "add" && s.skipped).map((s) => Number(s.key)));
+  const doneItems = new Set(reply.steps.filter((s) => s.kind === "add" && !s.skipped && !undone.has(Number(s.key))).map((s) => Number(s.key)));
+  const donePages = new Map<number, Set<number>>();
+  for (const s of reply.steps) if (s.kind === "add" && s.ok && s.page) donePages.set(Number(s.key), (donePages.get(Number(s.key)) ?? new Set<number>()).add(s.page));
   const restFields = flatten ? args.fields : values ? Object.fromEntries(Object.entries(values).filter(([k]) => skippedFields.has(k))) : undefined;
-  const restAdd = listed.filter((_, i) => !doneItems.has(i));
+  const restAdd = listed.filter((_, i) => !doneItems.has(i)).map((item) => {
+    const done = donePages.get(listed.indexOf(item));
+    if (!done?.size) return item;
+    const left = pageSet(item.page ?? item.pages ?? 1, count).map((p) => p + 1).filter((p) => !done.has(p));
+    return { ...item, page: left.join(","), pages: undefined };
+  });
   const rest: Record<string, any> = { ...args, add: restAdd, fields: restFields };
   const restCount = restAdd.length + (restFields ? Object.keys(restFields).length : 0);
   const restOther = flatten || args.watermark || args.page_numbers || args.metadata || args.strip_metadata
     || (Array.isArray(args.change) ? args.change.length : args.change) || (Array.isArray(args.remove) ? args.remove.length : args.remove);
 
   const lines = reply.steps.map((step) => {
-    const name = step.kind === "field" ? `field "${step.key}"` : `add[${step.key}] (${listed[Number(step.key)]?.type ?? step.what ?? "item"})`;
+    const name = step.kind === "field" ? `field "${step.key}"` : `add[${step.key}] (${step.what ?? listed[Number(step.key)]?.type ?? "item"})`;
     if (step.ok) return `- ${name}: done by hand in the window`;
     if (step.skipped) return `- ${name}: done on the file instead (${step.error ?? "no tool for it on screen"})`;
     return `- ${name}: FAILED in the window -- ${step.error ?? "it did not work"}`;

@@ -260,6 +260,37 @@ export async function runStudioHand(steps: StudioStep[], env: HandEnv): Promise<
   const rollButton = (text: string) =>
     qa<HTMLButtonElement>(".st-roll-tools button").find((b) => b.textContent?.trim().replace(/\s+/g, " ") === text || b.textContent?.trim().endsWith(text)) ?? null;
 
+  /** The piano roll's grid for a clip, and where a note (by its beat and pitch) is on it, scrolled into view. */
+  const rollGeom = (cid: string) => {
+    const scroller = q(".st-roll-scroll");
+    const grid = q(".st-grid");
+    const c = clipOf(cid);
+    if (!scroller || !grid || !c) throw new Skip("the piano roll is not on screen");
+    const point = async (beat: number, pitch: number): Promise<Point | null> => {
+      const key = q(`.st-keys button[aria-label="${pitchName(pitch)}"]`);
+      if (!key) return null;
+      const view = scroller.getBoundingClientRect();
+      let kr = key.getBoundingClientRect();
+      let gr = grid.getBoundingClientRect();
+      const bw = gr.width / c.clip.length;
+      let x = gr.left + beat * bw;
+      if (kr.top < view.top + 4 || kr.bottom > view.bottom - 4 || x < view.left + 56 || x > view.right - 12) {
+        scroller.scrollTo({
+          top: scroller.scrollTop + (kr.top - view.top) - view.height / 2,
+          left: Math.max(0, scroller.scrollLeft + (x - view.left) - view.width / 2),
+          behavior: "smooth",
+        });
+        await sleep(380);
+        kr = key.getBoundingClientRect();
+        gr = grid.getBoundingClientRect();
+        x = gr.left + beat * bw;
+      }
+      return { x, y: kr.top + kr.height / 2 };
+    };
+    const bwNow = () => grid.getBoundingClientRect().width / c.clip.length;
+    return { point, bwNow, grid };
+  };
+
   const one = async (s: StudioStep) => {
     switch (s.k) {
       case "name": {
@@ -313,6 +344,16 @@ export async function runStudioHand(steps: StudioStep[], env: HandEnv): Promise<
         const input = await waitFor(() => row(s.track)?.querySelector<HTMLInputElement>(".st-name-input"), 1500);
         await typeInto(input, s.name);
         if (input) enter(input);
+        return;
+      }
+      case "instrument": {
+        const t = trackOf(s.track);
+        if (!t) throw new Skip("no such track");
+        if (t.instrument === s.instrument) return;
+        const r = row(s.track);
+        await click(r?.querySelector(".st-more") ?? null);
+        const pick = await waitFor(() => r?.querySelector<HTMLSelectElement>('.st-menu select[aria-label^="Instrument for"]'), 1500);
+        await choose(pick ?? null, s.instrument);
         return;
       }
       case "flag": {
@@ -431,6 +472,28 @@ export async function runStudioHand(steps: StudioStep[], env: HandEnv): Promise<
         await click(rollButton(s.tool));
         return;
       }
+      case "force": {
+        await pickClip(s.clip);
+        await editor();
+        const { point, bwNow } = rollGeom(s.clip);
+        let picked = 0;
+        for (const n of s.notes) {
+          const p = await point(n.start, n.pitch);
+          const at = p ? { x: p.x + Math.min(4, bwNow() * 0.1), y: p.y } : null;
+          const note = at ? document.elementFromPoint(at.x, at.y)?.closest("[data-note]") : null;
+          if (!at || !note) continue;
+          await pointerGo(at, true, note);
+          note.dispatchEvent(ptr("pointerdown", at, { shiftKey: picked > 0 }));
+          q(".st-grid")?.dispatchEvent(ptr("pointerup", at));
+          picked++;
+          await sleep(150);
+        }
+        if (!picked) throw new Skip("none of the notes were on the roll");
+        const force = await waitFor(() => q<HTMLInputElement>('.st-roll-tools input[type="range"]'), 1200);
+        await slide(force ?? null, s.vel * 100);
+        if (picked < s.notes.length) throw new Skip(`${s.notes.length - picked} of the notes were not on the roll`);
+        return;
+      }
       case "notes": {
         await pickClip(s.clip);
         await editor();
@@ -449,33 +512,8 @@ export async function runStudioHand(steps: StudioStep[], env: HandEnv): Promise<
           if (missed) throw new Skip(`${missed} of the hits had no step on screen`);
           return;
         }
-        const scroller = q(".st-roll-scroll");
-        const grid = q(".st-grid");
-        const c = clipOf(s.clip);
-        if (!scroller || !grid || !c) throw new Skip("the piano roll is not on screen");
-        /** The grid point for a beat and pitch, scrolled into view. */
-        const point = async (beat: number, pitch: number): Promise<Point | null> => {
-          const key = q(`.st-keys button[aria-label="${pitchName(pitch)}"]`);
-          if (!key) return null;
-          const view = scroller.getBoundingClientRect();
-          let kr = key.getBoundingClientRect();
-          let gr = grid.getBoundingClientRect();
-          const bw = gr.width / c.clip.length;
-          let x = gr.left + beat * bw;
-          if (kr.top < view.top + 4 || kr.bottom > view.bottom - 4 || x < view.left + 56 || x > view.right - 12) {
-            scroller.scrollTo({
-              top: scroller.scrollTop + (kr.top - view.top) - view.height / 2,
-              left: Math.max(0, scroller.scrollLeft + (x - view.left) - view.width / 2),
-              behavior: "smooth",
-            });
-            await sleep(380);
-            kr = key.getBoundingClientRect();
-            gr = grid.getBoundingClientRect();
-            x = gr.left + beat * bw;
-          }
-          return { x, y: kr.top + kr.height / 2 };
-        };
-        const bwNow = () => grid.getBoundingClientRect().width / c.clip.length;
+        const g = rollGeom(s.clip);
+        const { point, bwNow, grid } = g;
         let missed = 0;
         for (const n of s.remove) {
           const p = await point(n.start, n.pitch);

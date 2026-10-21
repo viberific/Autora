@@ -2,9 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { SaveButton, keptAs } from "./SaveButton";
 import { LoadButton } from "./LoadButton";
 import { useFullscreen } from "../lib/fullscreen";
-import { gameStateNow, onGameState, useGameState, type GameCue } from "../lib/gamedesk";
-import { useAgentCursor } from "../lib/agentCursor";
-import { GameCursor } from "./GameCursor";
+import { gameStateNow, onGameState, useGameState } from "../lib/gamedesk";
 import { IconArrowLeft, IconGame, IconMaximize, IconMinimize } from "./Icons";
 import { GameRail, type GameRailState } from "./game/GameRail";
 
@@ -50,16 +48,10 @@ export function GameWindow({ sessionId, phone }: { sessionId: string; phone: boo
   /* The colours the frame was opened with: its address, which must not change while it is up. */
   const [src] = useState(() => `/gdevelop-editor/index.html?autora=${encodeURIComponent(sessionId)}&theme=${encodeURIComponent(themeNow())}${phone ? "&phone=1" : ""}`);
   const lastTheme = useRef(themeNow());
-  /* The agent's cursor goes to what it changed, then the editor takes the new version. */
-  const [cursorOn] = useAgentCursor();
-  const cursorRef = useRef(cursorOn);
-  cursorRef.current = cursorOn;
-  const [show, setShow] = useState<{ cues: GameCue[]; seq: number } | null>(null);
 
   const post = useCallback((msg: Record<string, unknown>) => {
     frame.current?.contentWindow?.postMessage(msg, window.location.origin);
   }, []);
-  const reloadAfter = useCallback(() => post({ autoraGameCmd: "reload" }), [post]);
 
   // What the editor says.
   useEffect(() => {
@@ -95,8 +87,7 @@ export function GameWindow({ sessionId, phone }: { sessionId: string; phone: boo
         if (!now.open || now.rev === undefined || !ready.current) return;
         if (now.by === "agent" && now.rev > known.current) {
           known.current = now.rev;
-          if (cursorRef.current && now.cues?.length) setShow({ cues: now.cues, seq: now.rev });
-          else post({ autoraGameCmd: "reload" });
+          post({ autoraGameCmd: "reload" });
         } else {
           known.current = Math.max(known.current, now.rev);
         }
@@ -150,6 +141,8 @@ export function GameWindow({ sessionId, phone }: { sessionId: string; phone: boo
         <span className="pdf-bar-name">{game.name ?? "Your game"}{scenes ? ` · ${scenes === 1 ? "1 scene" : `${scenes} scenes`}` : ""}</span>
         <span className="pdf-bar-note">{up ? "Saved as you go" : "Starting the engine…"}</span>
         <div className="spacer" />
+        {/* The agent's hand is not in this editor yet; no cursor is played over a game it already changed. */}
+        <span className="pdf-bar-soon" title="Watching the agent work in the game editor is not here yet: the game changes and the editor reloads it">Visible work: coming soon</span>
         <LoadButton app="game" session={sessionId} phone={phone} />
         <SaveButton onSave={keep} phone={phone} disabled={!up} />
         {phone && (
@@ -182,7 +175,6 @@ export function GameWindow({ sessionId, phone }: { sessionId: string; phone: boo
           <IconArrowLeft size={13} /> Back to the scene
         </button>
       )}
-      {show && <GameCursor cues={show.cues} seq={show.seq} frame={frame} onDone={reloadAfter} />}
       </div>
       <GameRail phone={phone} rail={up ? rail : null} run={run} ask={ask} asked={asked} />
     </div>

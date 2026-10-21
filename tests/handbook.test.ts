@@ -136,6 +136,33 @@ await test("the PDF manual says that with Visible work on pdf_edit is done in th
   }
 });
 
+await test("the Office manual says Pages' bold, italic and underline are pressed by hand", () => {
+  assert.ok(manualText("office").includes("bold, italic or underline put on or taken off words"));
+});
+
+await test("the PDF manual says an item over several pages is done a page at a time", () => {
+  assert.ok(manualText("pdf").includes("a page at a time"));
+});
+
+await test("the Video manual says which edits are done by hand, the fields a title is typed into, and what is not", () => {
+  const video = manualText("video");
+  for (const needle of ["Properties panel's own", "Extract audio", "dragged out to its time", "seek (the ruler clicked)", "Every other action", "With Visible work off"]) {
+    assert.ok(video.includes(needle), `the Video manual lacks "${needle}"`);
+  }
+});
+
+await test("the Music manual says an instrument is chosen in the track's menu and a velocity set with the Force slider", () => {
+  const music = manualText("studio");
+  for (const needle of ["Instrument", "Force slider", "a quantize at less than full strength"]) {
+    assert.ok(music.includes(needle), `the Music manual lacks "${needle}"`);
+  }
+});
+
+await test("the Games manual says Visible work is not here yet, and that no cursor is played over the game", () => {
+  const game = manualText("game");
+  assert.ok(game.includes("coming soon") && game.includes("no cursor is played"));
+});
+
 await test("the Photo manual says that with Visible work on the edit is done in the window by hand", () => {
   const photo = manualText("photo");
   for (const needle of ["Visible work on", "by your hand", "clicks its tile", "command's own dialog", "Visible work off"]) {

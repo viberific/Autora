@@ -151,6 +151,20 @@ async function main() {
       assert.equal(d.tracks.find((t: { id: string }) => t.id === drums.id).clips[0].notes.length, 4);
     });
 
+    await test("with Visible work on, an instrument is chosen in the track's menu and a velocity set with the roll's Force slider", async () => {
+      const strings = (await doc()).tracks.find((t: { name: string }) => t.name === "Strings");
+      app.script.push({ tools: [{ name: "studio_track", args: { action: "set", track: strings.id, instrument: "synth" } }] });
+      app.script.push({ tools: [{ name: "studio_notes", args: { action: "velocity", clip: strings.clips[0].id, vel: 0.4 } }] });
+      app.script.push({ text: "Done." });
+      await app.turn(s, "make the strings a synth, and play them softer", 240_000);
+      const all = JSON.stringify(app.seen.flatMap((r) => r.messages).filter((m: { role: string }) => m.role === "tool").slice(-2));
+      assert.match(all, /chose synth for a track in its menu/, all.slice(-2000));
+      assert.match(all, /picked 3 notes and moved the Force slider to 40/, all.slice(-2000));
+      const d = (await doc()).tracks.find((t: { id: string }) => t.id === strings.id);
+      assert.equal(d.instrument, "synth");
+      assert.deepEqual(d.clips[0].notes.map((n: { vel: number }) => n.vel), [0.4, 0.4, 0.4]);
+    });
+
     await test("play moves the playhead and makes sound; stop brings it back", async () => {
       await page.click(".st-play");
       const head = () => page.evaluate(() => Number(document.querySelector<HTMLElement>(".st-window")!.style.getPropertyValue("--ph") || 0));

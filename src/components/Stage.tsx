@@ -62,7 +62,8 @@ export function Stage({
       className={`stage${collapsed ? " is-collapsed" : ""}${expanded && !collapsed ? " is-expanded" : ""}${surfaces.length > 2 ? " is-tight" : ""}`}
       aria-label="Pinned view"
     >
-      <div className="stage-bar" role="tablist">
+      <div className="stage-bar">
+        <div className="stage-tabs" role="tablist">
         {surfaces.map((surface) => {
           const on = surface.kind === active;
           return (
@@ -80,19 +81,20 @@ export function Stage({
             </button>
           );
         })}
+        </div>
+        {/* Out of the tabs' scroller, so a row of tabs never pushes Follow or the fold off the edge. Follow is always
+            here, even with one tool up: it is a standing order for the next one too. */}
         <VisibleWork className="stage-follow" compact />
-        {surfaces.length > 1 && (
-          <button
-            type="button"
-            className={`stage-follow${following ? " is-on" : ""}`}
-            onClick={onFollow}
-            aria-pressed={following}
-            title={following ? "Following the agent — tap to stop" : "Switch to whatever the agent is working on"}
-          >
-            <span className="watch-dot" aria-hidden="true" />
-            Follow
-          </button>
-        )}
+        <button
+          type="button"
+          className={`stage-follow${following ? " is-on" : ""}`}
+          onClick={onFollow}
+          aria-pressed={following}
+          title={following ? "Following the agent — tap to stop" : "Switch to whatever the agent is working on"}
+        >
+          <span className="watch-dot" aria-hidden="true" />
+          Follow
+        </button>
         {!collapsed && (
           <button
             type="button"

@@ -188,9 +188,12 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  Luna answers again. OpenAI's newer models - GPT-5 and later, and the o-series - refuse the old name for the
-  reply limit, so every call to gpt-6-luna failed with "Unsupported parameter: 'max_tokens'". They are now
-  asked with max_completion_tokens, and their own temperature is left alone rather than overruled. The spend
-  bar keeps one line open per API instead of hiding them behind a single combined bar, says what this
-  conversation has cost so far, and shows OpenAI's spend at all - OpenAI publishes no balance to read, so its
-  line carries the month the ledger counted rather than disappearing.
+  Watching the agent work reaches more of each window. In Video it types a title's words, size, colour, alignment
+  and weight into the Properties panel's own fields, and presses Duplicate, Copy, Paste, Extract audio, Mute, Show
+  / hide, Undo and Redo, clicks the ruler to move the playhead, and drags a clip that goes past the end of the
+  timeline out to its time. In Music a track's menu now has an Instrument list and the agent uses it, and it sets
+  a velocity with the piano roll's Force slider. In Pages, bold, italic and underline on words are selected and pressed with the editor's own shortcut. In PDF an item on several pages is done a page at a time. The
+  Games window says "Visible work: coming soon" instead of playing a cursor over a game that has already been
+  changed. Follow no longer goes missing (it was only drawn while two or more tools were open), and a tool on a
+  phone can always be minimized: the button that leaves full screen is now the first control in the bar, so it
+  cannot be scrolled off or sit under the chat button and Follow.

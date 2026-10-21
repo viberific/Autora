@@ -135,6 +135,48 @@ async function main() {
       assert.match(out, /picked the clip and pressed Delete, by hand in the Video window/, out.slice(-1500));
       assert.ok(!(await clipsNow()).some((c) => c.id === clipId));
     });
+
+    /** The clips of any kind on the timeline now, read with video_look. */
+    const lines = async () => (await run("look", [{ name: "video_look", args: {} }])).replace(/\\n/g, "\n");
+
+    let titleId = "";
+    await test("a title: the words and its look typed into the Properties panel's own fields", async () => {
+      const out = await run("add a title", [{ name: "video_edit", args: { action: "add_text", text: "Hello there", start: 0, duration: 2, fontSize: 20, color: "#ff0000", textAlign: "left" } }]);
+      assert.match(out, /typed the words into its Content field, by hand in the Video window/, out.slice(-1500));
+      assert.ok(!/set exactly/.test(out), `every field went in by hand: ${out.slice(-600)}`);
+      const look = await lines();
+      const row = /([0-9a-f-]{36}) {2}text "Text" text "Hello there"/.exec(look);
+      assert.ok(row, look.slice(-900));
+      titleId = row![1];
+    });
+
+    await test("a title's words changed: the clip picked and its Content field typed over", async () => {
+      const out = await run("change the title", [{ name: "video_edit", args: { action: "set", elementId: titleId, params: { content: "Goodbye", fontSize: 12 } } }]);
+      assert.match(out, /picked the clip and typed content, fontSize into its fields in the Properties panel, by hand/, out.slice(-1500));
+      assert.match(await lines(), /text "Goodbye"/);
+    });
+
+    await test("a duplicate, a hide, an undo and a seek are the tool bar's and the ruler's", async () => {
+      const before = (await clipsNow()).length;
+      let out = await run("duplicate it", [{ name: "video_edit", args: { action: "duplicate", elementId: (await clipsNow())[0].id } }]);
+      assert.match(out, /picked the clip and pressed Duplicate, by hand/, out.slice(-1200));
+      assert.equal((await clipsNow()).length, before + 1);
+      const pic = (await clipsNow())[0].id;
+      out = await run("hide it", [{ name: "video_edit", args: { action: "toggle_visibility", elementId: pic } }]);
+      assert.match(out, /pressed Show \/ hide, by hand/, out.slice(-1200));
+      assert.match(await lines(), /\[hidden\]/);
+      out = await run("undo", [{ name: "video_edit", args: { action: "undo" } }]);
+      assert.match(out, /pressed Undo on the tool bar, by hand/, out.slice(-1200));
+      assert.ok(!/\[hidden\]/.test(await lines()), "the hide was undone");
+      out = await run("go to 1s", [{ name: "video_edit", args: { action: "seek", time: 1 } }]);
+      assert.match(out, /clicked the ruler at 1s, by hand/, out.slice(-1200));
+    });
+
+    await test("a title past the end of the timeline is added at the end and dragged out to its time", async () => {
+      const out = await run("a late title", [{ name: "video_edit", args: { action: "add_text", text: "Late", start: 9, duration: 1 } }]);
+      assert.match(out, /dragged the clip out to its time, by hand/, out.slice(-1500));
+      assert.match(await lines(), /text "Late" {2}9\.00s to 10\.00s/);
+    });
     clearInterval(watch);
   } finally {
     await browser.close();

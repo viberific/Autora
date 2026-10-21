@@ -70,7 +70,7 @@ async function main() {
         });
         await page.keyboard.type(" Bring snacks.", { delay: 20 });
         const asked = app.seen.length;
-        const save = page.locator(".office-window .win-save");
+        const save = page.locator(".office-window .win-save:not(.win-load)");
         await save.click();
         await until("Saved", async () => /Saved/.test((await save.textContent()) ?? ""), 20_000);
         assert.match((await save.getAttribute("aria-label")) ?? "", /Kept in Artifacts as memo\.docx/);
