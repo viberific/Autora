@@ -14,7 +14,7 @@ import crypto from "node:crypto";
 import express, { type Express, type Request, type Response } from "express";
 import { deskState, expectHandSave } from "./pdfdesk";
 
-export type HandStep = { kind: "field" | "add"; key: string | number; ok: boolean; skipped?: boolean; error?: string; what?: string };
+export type HandStep = { kind: "field" | "add"; key: string | number; ok: boolean; skipped?: boolean; error?: string; what?: string; page?: number };
 export type HandJob = { fields?: Record<string, unknown>; add?: Array<Record<string, unknown> & { i: number }> };
 /** What the window did: each step, and whether its save reached the desk. */
 export type HandReply = { steps: HandStep[]; saved: boolean; error?: string };
@@ -109,6 +109,7 @@ export function pdfHandRoutes(app: Express, opts: {
       ...(r?.skipped === true ? { skipped: true } : {}),
       ...(typeof r?.error === "string" ? { error: r.error.slice(0, 400) } : {}),
       ...(typeof r?.what === "string" ? { what: r.what.slice(0, 120) } : {}),
+      ...(Number.isInteger(r?.page) && r.page > 0 ? { page: r.page } : {}),
     }));
     p.resolve({ steps, saved: body.saved === true, ...(typeof body.error === "string" ? { error: body.error.slice(0, 400) } : {}) });
     res.json({ ok: true });

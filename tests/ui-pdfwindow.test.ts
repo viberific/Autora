@@ -32,6 +32,8 @@ async function lease(): Promise<Buffer> {
   const p = doc.addPage([612, 792]);
   p.drawText("Lease agreement", { x: 50, y: 740, size: 22, font });
   p.drawText("Tenant signature: ____________________", { x: 50, y: 200, size: 12, font });
+  // Two more pages, for an edit that goes on several.
+  for (const word of ["Schedule A", "Schedule B"]) doc.addPage([612, 792]).drawText(word, { x: 50, y: 740, size: 22, font });
   return Buffer.from(await doc.save());
 }
 
@@ -201,7 +203,7 @@ async function main() {
 
     await test("Save in the bar presses the editor's own Save and says where the file is, waking no agent", async () => {
       const asked = app.seen.length;
-      const save = page.locator(".pdf-window .win-save");
+      const save = page.locator(".pdf-window .win-save:not(.win-load)");
       await save.click();
       for (let i = 0; i < 100 && !/Saved/.test((await save.textContent()) ?? ""); i++) await sleep(200);
       assert.match((await save.textContent()) ?? "", /Saved/);
@@ -228,6 +230,25 @@ async function main() {
       assert.equal((answers.match(/done by hand in the window/g) ?? []).length, 6, answers.slice(-2000));
       assert.match(answers, /The rest, done on the file/, "the watermark, which has no tool on the bar, was done on the file");
       assert.doesNotMatch(answers, /FAILED/);
+    });
+
+    await test("by hand: one item on several pages is done a page at a time", async () => {
+      let k = 0;
+      app.decide = (req) => /You check one action/.test(req.system) ? { text: '{"destructive": false, "requested": true}' } : k++ === 0
+        ? { tools: [{ name: "pdf_edit", args: { file, add: [{ type: "text", text: "Initialled", page: "2-3", x: 400, y: 60, size: 12 }] } }] }
+        : { text: "Initialled both schedules." };
+      await app.turn(s, "initial the schedules", 240_000);
+      const answers = JSON.stringify(app.seen.flatMap((r) => r.messages).filter((m: { role: string }) => m.role === "tool").slice(-1));
+      assert.match(answers, /add\[0\] \(text on page 2\): done by hand in the window/, answers.slice(-2000));
+      assert.match(answers, /add\[0\] \(text on page 3\): done by hand in the window/, answers.slice(-2000));
+      assert.doesNotMatch(answers, /FAILED/);
+      // What the hand made is in the saved file, as one annotation on each of the two pages (page 1 is as it was).
+      const working = (await app.api("GET", `/api/pdfdesk/${s}`)).body.working as string;
+      const saved = await PDFDocument.load(new Uint8Array(await (await fetch(`${app.base}/api/artifacts/${working}`)).arrayBuffer()));
+      const annots = saved.getPages().map((pg) => pg.node.Annots()?.size() ?? 0);
+      assert.equal(annots[1], 1, `page 2 has the initials: ${annots}`);
+      assert.equal(annots[2], 1, `page 3 has the initials: ${annots}`);
+      assert.ok(Buffer.from(await saved.save({ useObjectStreams: false })).toString("latin1").includes("Initialled"));
     });
 
     await test("put away, it stays away until the agent works on a PDF again", async () => {

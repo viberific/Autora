@@ -19,7 +19,7 @@
 type Who = { name?: string; color?: string };
 type Item = Record<string, unknown> & { type?: string; i: number };
 export type HandJob = { fields?: Record<string, unknown>; add?: Item[] };
-type Result = { kind: "field" | "add"; key: string | number; ok: boolean; skipped?: boolean; error?: string; what: string };
+type Result = { kind: "field" | "add"; key: string | number; ok: boolean; skipped?: boolean; error?: string; what: string; page?: number };
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const rand = (lo: number, hi: number) => lo + Math.random() * (hi - lo);
@@ -572,6 +572,9 @@ async function fillField(name: string, value: unknown): Promise<void> {
 
 let busy = false;
 
+/** What an item is called in the answer: one page of an item on several says which. */
+const what = (item: Item) => `${String(item.type)}${item.ofMany ? ` on page ${String(item.page)}` : ""}`;
+
 /** The whole edit: the fields, then the items, then Select and Save. Says what each step did. */
 export async function runHand(id: string, job: HandJob, who: Who): Promise<void> {
   const reply = (results: Result[], extra: Record<string, unknown> = {}) =>
@@ -605,9 +608,9 @@ export async function runHand(id: string, job: HandJob, who: Who): Promise<void>
     for (const item of job.add ?? []) {
       try {
         await addItem(item);
-        results.push({ kind: "add", key: item.i, ok: true, what: String(item.type) });
+        results.push({ kind: "add", key: item.i, ok: true, what: what(item), ...(item.ofMany ? { page: Number(item.page) } : {}) });
       } catch (err) {
-        results.push({ kind: "add", key: item.i, ok: false, skipped: err instanceof Skip, error: String((err as Error)?.message ?? err), what: String(item.type) });
+        results.push({ kind: "add", key: item.i, ok: false, skipped: err instanceof Skip, error: String((err as Error)?.message ?? err), what: what(item), ...(item.ofMany ? { page: Number(item.page) } : {}) });
       }
     }
     const did = results.some((r) => r.ok);
