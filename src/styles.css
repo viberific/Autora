@@ -7414,6 +7414,7 @@ body.is-resizing iframe { pointer-events: none; }
 .st-menu button span { flex-basis: 100%; font-size: 11px; color: var(--text-3); }
 .st-menu button:hover { background: var(--s4); color: var(--text); }
 .st-menu .is-danger:hover { color: var(--danger); }
+.st-menu-field { justify-content: space-between; padding: 5px 9px; }
 .st-lane {
   position: relative; flex: 0 0 auto; touch-action: pan-y; cursor: crosshair;
   background-image:

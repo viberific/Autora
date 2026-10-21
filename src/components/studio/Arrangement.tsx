@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
-  copyClip, DRUMS, instrumentOf, isDrumTrack, MAX_CLIPS_PER_TRACK, MAX_TRACKS, newClip, newTrack, songBeats, tidy,
+  copyClip, DRUMS, INSTRUMENTS, instrumentOf, isDrumTrack, MAX_CLIPS_PER_TRACK, MAX_TRACKS, newClip, newTrack, songBeats, tidy,
   type Clip, type Project, type Track,
 } from "../../lib/studio/model";
 import type { Editor } from "./useSong";
@@ -238,6 +238,19 @@ export function Arrangement({
                     {menu === t.id && (
                       <div className="st-menu" role="menu">
                         <button role="menuitem" onClick={() => { setMenu(null); setRenaming(t.id); }}>Rename</button>
+                        {/* Drums and pitched instruments read notes differently: a track with notes keeps its kind. */}
+                        <label className="st-field st-menu-field">
+                          Instrument
+                          <select
+                            value={t.instrument}
+                            aria-label={`Instrument for ${t.name}`}
+                            onChange={(e) => { const to = e.target.value as Track["instrument"]; setMenu(null); patch(t.id, (x) => { x.instrument = to; }); }}
+                          >
+                            {INSTRUMENTS.map((i) => (
+                              <option key={i.id} value={i.id} disabled={i.drums !== isDrumTrack(t) && t.clips.some((c) => c.notes.length > 0)}>{i.name}</option>
+                            ))}
+                          </select>
+                        </label>
                         <button role="menuitem" onClick={() => {
                           setMenu(null);
                           if (full) return;

@@ -82,10 +82,29 @@ test("more notes than a hand places in one call: the rest are counted, for the f
   assert.ok(notes && notes.k === "notes" && notes.add.length === MAX_HAND_NOTES);
 });
 
-test("nothing a hand can do (a velocity) is no steps: the finished song simply goes in", () => {
+test("a velocity is the roll's Force slider, on the notes picked, one force at a time", () => {
   const next = copy(base);
   next.tracks[0]!.clips[0]!.notes[0]!.vel = 0.3;
-  assert.equal(studioSteps("studio_notes", { action: "velocity" }, base, next).steps.length, 0);
+  next.tracks[0]!.clips[0]!.notes[1]!.vel = 0.3;
+  const plan = studioSteps("studio_notes", { action: "velocity", vel: 0.3 }, base, next);
+  assert.deepEqual(kinds(plan), ["force"]);
+  const step = plan.steps[0]!;
+  assert.ok(step.k === "force" && step.vel === 0.3 && step.notes.length === 2);
+  assert.match(stepWords(step), /picked 2 notes and moved the Force slider to 30/);
+});
+
+test("an instrument changed is the track menu's Instrument list", () => {
+  const next = copy(base);
+  next.tracks[0]!.instrument = "pad";
+  const plan = studioSteps("studio_track", { action: "set", instrument: "pad" }, base, next);
+  assert.deepEqual(kinds(plan), ["instrument"]);
+  assert.match(stepWords(plan.steps[0]!), /chose pad for a track in its menu/);
+});
+
+test("a quantize at less than full strength has no control: the finished song simply goes in", () => {
+  const next = copy(base);
+  next.tracks[0]!.clips[0]!.notes[0]!.start = 0.1;
+  assert.ok(!studioSteps("studio_notes", { action: "quantize", strength: 0.5, grid: "1/4" }, base, next).steps.some((s) => s.k === "rollTool"));
 });
 
 console.log(`studiohand: ${passed} passed`);

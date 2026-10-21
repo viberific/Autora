@@ -2,7 +2,7 @@
  * What the agent's hand does in the Music window to turn one song into another, as a person would with the window's
  * own controls (Visible work, docs/VISIBLE-WORK.md). The server works out the finished song (server/studio.ts); this says
  * how to get there by hand, and the window does it (src/components/studio/hand.ts) while the tool call waits. What has no
- * step here -- an instrument changed, a note's velocity -- is in the finished song, which goes in afterwards.
+ * step here -- a quantize at less than full strength, a window of notes -- is in the finished song, which goes in afterwards.
  *
  * Shared by the server and the page: pure, no DOM.
  *
@@ -19,6 +19,7 @@ export type StudioStep =
   | { k: "loop"; on: boolean }
   | { k: "master"; v: number }
   | { k: "addTrack"; track: string; instrument: string; name: string }
+  | { k: "instrument"; track: string; instrument: string }
   | { k: "renameTrack"; track: string; name: string }
   | { k: "flag"; track: string; which: "mute" | "solo"; on: boolean }
   | { k: "mix"; track: string; which: "volume" | "pan" | "reverb"; v: number }
@@ -29,8 +30,11 @@ export type StudioStep =
   | { k: "renameClip"; clip: string; name: string }
   | { k: "clipTool"; clip: string; tool: "Duplicate" | "Delete" | "Split"; at?: number; made?: string }
   | { k: "notes"; clip: string; drum: boolean; snap: number; add: Array<{ pitch: number; start: number; length: number }>; remove: Array<{ pitch: number; start: number }> }
+  | { k: "force"; clip: string; vel: number; notes: Array<{ pitch: number; start: number }> }
   | { k: "rollTool"; clip: string; tool: "Clear" | "Humanize" | "Tidy timing" | "♯" | "♭" | "+8" | "−8"; snap?: number };
 
+/** The most notes one force step picks by hand; the rest are in the finished song. */
+const MAX_FORCE_NOTES = 16;
 /** The most notes one call places by hand; the rest are in the finished song. */
 export const MAX_HAND_NOTES = 48;
 /** The most steps of any kind one call does by hand. */
@@ -112,6 +116,7 @@ export function studioSteps(tool: string, args: Record<string, unknown>, before:
     const old = was.get(t.id);
     if (copied.has(t.id)) continue;
     if (old && old.name !== t.name) steps.push({ k: "renameTrack", track: t.id, name: t.name });
+    if (old && old.instrument !== t.instrument) steps.push({ k: "instrument", track: t.id, instrument: t.instrument });
     // A new one is checked against what Add track gives it, by the window, which knows.
     if (!old) steps.push({ k: "renameTrack", track: t.id, name: t.name });
     for (const which of ["mute", "solo"] as const) {
@@ -183,9 +188,22 @@ export function studioSteps(tool: string, args: Record<string, unknown>, before:
       const grid = Number({ "1/4": 1, "1/8": 0.5, "1/16": 0.25, "1/32": 0.125 }[String(args.grid ?? "1/16")] ?? 0);
       if (grid) { steps.push({ k: "rollTool", clip: clip.id, tool: "Tidy timing", snap: grid }); continue; }
     }
+    const had = new Map(before.map((n) => [n.id, n]));
+    // Only how hard the notes are played changed: the roll's Force slider, on the notes picked, one force at a time.
+    if (old && !drum && before.length > 0 && before.length === clip.notes.length && clip.notes.every((n) => {
+      const o = had.get(n.id);
+      return o && o.pitch === n.pitch && near(o.start, n.start) && near(o.length, n.length);
+    })) {
+      const byForce = new Map<number, Note[]>();
+      for (const n of clip.notes) if (!near(had.get(n.id)!.vel, n.vel)) byForce.set(Math.round(n.vel * 100), [...(byForce.get(Math.round(n.vel * 100)) ?? []), n]);
+      for (const [pct, list] of byForce) {
+        steps.push({ k: "force", clip: clip.id, vel: pct / 100, notes: list.slice(0, MAX_FORCE_NOTES).map((n) => ({ pitch: n.pitch, start: n.start })) });
+        skipped += Math.max(0, list.length - MAX_FORCE_NOTES);
+      }
+      continue;
+    }
     const keep = new Set(clip.notes.map((n) => n.id));
     const gone = before.filter((n) => !keep.has(n.id));
-    const had = new Map(before.map((n) => [n.id, n]));
     // A note moved or reshaped is taken away and placed again, as a person would redraw it.
     const moved = clip.notes.filter((n) => { const o = had.get(n.id); return o && (o.pitch !== n.pitch || !near(o.start, n.start) || !near(o.length, n.length)); });
     const fresh = clip.notes.filter((n) => !had.has(n.id));
@@ -218,6 +236,7 @@ export function stepWords(s: StudioStep): string {
     case "master": return `moved the master fader to ${Math.round(s.v * 100)}`;
     case "addTrack": return `added a ${s.instrument} track with Add track`;
     case "renameTrack": return `named a track "${s.name}"`;
+    case "instrument": return `chose ${s.instrument} for a track in its menu`;
     case "flag": return `${s.on ? "pressed" : "released"} ${s.which === "mute" ? "M (mute)" : "S (solo)"}`;
     case "mix": return `moved a track's ${s.which} to ${Math.round(s.v * 100)} in the Mixer`;
     case "trackMenu": return `chose ${s.item} in a track's menu`;
@@ -227,6 +246,7 @@ export function stepWords(s: StudioStep): string {
     case "renameClip": return `named a clip "${s.name}"`;
     case "clipTool": return `used ${s.tool} on a clip`;
     case "notes": return `${s.add.length ? `placed ${s.add.length} note${s.add.length === 1 ? "" : "s"}` : ""}${s.add.length && s.remove.length ? " and " : ""}${s.remove.length ? `took away ${s.remove.length}` : ""} in the ${s.drum ? "drum grid" : "piano roll"}`;
+    case "force": return `picked ${s.notes.length} note${s.notes.length === 1 ? "" : "s"} and moved the Force slider to ${Math.round(s.vel * 100)}`;
     case "rollTool": return `pressed ${s.tool} in the piano roll`;
   }
 }
