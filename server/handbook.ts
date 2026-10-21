@@ -136,7 +136,8 @@ const PDF = [
     "into the editor's own text box, clicks each form field and types into it or ticks it, then presses \"Fill N fields\", goes back " +
     "to Select and saves with Ctrl+S. The person watches every step, and it is one change for them to accept or decline. It takes " +
     "seconds per item, so send what the change needs, not trials. Only the five stamps the editor has (APPROVED, REJECTED, DRAFT, " +
-    "CONFIDENTIAL, REVIEWED) are pressed by hand; a picture, a signature, an item over several pages, a watermark, page numbers and " +
+    "CONFIDENTIAL, REVIEWED) are pressed by hand; an item over several pages (page \"all\", \"2-5\", \"odd\", up to 12 pages) is done " +
+    "a page at a time. A picture, a signature, a watermark, page numbers and " +
     "properties are done on the file afterwards, and the result says which. With Visible work off, or no window open, all of it is " +
     "done on the file at once and the window shows the result.",
   "  Saving. Edits are saved as you go. The window's top bar (Autora PDF, the file's name) also has Save: it presses the editor's own Save and says the file is kept in Artifacts. The person saves with it without asking you, and is not waiting on you when they do.",
@@ -164,11 +165,16 @@ const VIDEO = [
   "  With Visible work on and the window open, these video_edit actions are done there by your hand, live, while the call " +
     "waits: split (the clip picked, the ruler clicked at the cut, Split pressed on the bar), delete (the clips picked, Delete " +
     "pressed), move (the clip dragged along the timeline, or to another track), trim (its edges dragged), add_clip (the ruler " +
-    "clicked at its time, the media tile's \"+\" pressed in the Media panel) and add_text (the same with the Text panel's " +
-    "\"Default text\", then the words typed in and its end dragged to its length). Your result says \"by hand in the Video " +
-    "window\", and where the editor landed somewhere else (snapping) what was then set exactly. Each is a person's step of " +
-    "undo. A clip past the end of the timeline, and every other action, is done by the editor directly, with your cursor " +
-    "pointing at where it lands. With Visible work off everything is done directly, at speed.",
+    "clicked at its time, the media tile's \"+\" pressed in the Media panel), add_text (the same with the Text panel's " +
+    "\"Default text\", then the words, size, colour, alignment, weight and font typed or chosen in the Properties panel's own " +
+    "fields, and its end dragged to its length), set on a title (the clip picked and those same fields typed over), duplicate, " +
+    "copy, paste, separate_audio, toggle_mute and toggle_visibility (the clip picked and Duplicate, Copy, Paste, Extract audio, " +
+    "Mute or Show / hide pressed on the bar or in All tools), select, seek (the ruler clicked) and undo and redo (on the bar). " +
+    "A clip or title past the end of the timeline is added at the end and dragged out to its time. Your result says \"by hand in " +
+    "the Video window\", and where the editor landed somewhere else (snapping, a field that did not take it) what was then set " +
+    "exactly. Each is a person's step of undo. Every other action (effects, masks, keyframes, speed, tracks, scenes, the project's " +
+    "settings, a clip's other properties) is done by the editor directly, with your cursor pointing at where it lands. With " +
+    "Visible work off everything is done directly, at speed.",
   "  Saving. The project is saved as you go; the window's top bar (Autora Video, the project's name) also has Save, which writes the project now. Projects are the person's across chats, so Save keeps nothing in Artifacts; the video file comes from Export.",
 ].join("\n");
 
@@ -215,8 +221,10 @@ const STUDIO = [
     "levels dragged in the Mixer; a track's menu (Duplicate, Clear clips, Delete track); a clip drawn across its lane, " +
     "dragged to its place or by its end, named in the piano roll's name field; Split, Duplicate and Delete on the bar; " +
     "notes drawn in the piano roll (its Snap set to fit them) and hits clicked in the drum grid; the roll's own ♯ ♭ +8 −8, " +
-    "Clear, Humanize and Tidy timing. Then the finished song goes in, with what had no control (an instrument changed, " +
-    "velocities) and the notes past the hand's limit of 48 a call; your result says which was which. With Visible work off " +
+    "Clear, Humanize and Tidy timing; a track's instrument chosen in its menu (Instrument; drums and pitched instruments " +
+    "keep their kind once a track has notes); a velocity set by picking the notes and moving the roll's Force slider. Then the " +
+    "finished song goes in, with what had no control (a quantize at less than full strength, a window of notes, a velocity " +
+    "on drum hits) and the notes past the hand's limit of 48 a call; your result says which was which. With Visible work off " +
     "(or the window shut) the song simply changes, the clips you touched lit for a moment.",
   "  Saving. The song is saved as you go; the window's top bar (beside the song's name, before Export) also has Save (and Ctrl+S), which writes it now and keeps a copy in Artifacts as <song name>.song.json. Export makes the WAV.",
 ].join("\n");
@@ -305,8 +313,8 @@ const GAME = [
     "tool in groups (Play, Build, Make it do things, Scenes, View, Edit, Game, Share, Advanced): scene settings and variables, 2D/3D view, " +
     "grid, zoom, Pictures & sounds, Game settings, Export web game (a .zip), and under Advanced the Rules sheet (the game's events; a " +
     "Back to the scene chip returns). Name a tool by its button and say \"open All tools\" if it is not on their bar. You have every part " +
-    "of the game through the game_* tools whatever is shown. Visible work is still a recording for this window: the game is changed, then " +
-    "the cursor points at what changed.",
+    "of the game through the game_* tools whatever is shown. Visible work is not here yet for this window (its bar says \"coming soon\"): " +
+    "no cursor is played over a game you have already changed. The game is changed and the editor reloads it.",
   "  Saving. The game is saved as you go; the window's top bar (Autora Games, the game's name), on a desktop too, has Save, which keeps the GDevelop project in Artifacts as a .json named after the chat.",
 ].join("\n");
 
