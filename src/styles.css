@@ -1017,21 +1017,28 @@ body::before {
    long note cannot squeeze into a 40px column and stand on the buttons. */
 .composer-tools { display: flex; align-items: center; gap: 2px; min-width: 0; margin-left: -8px; flex-wrap: wrap; row-gap: 4px; }
 .composer-tools > .hint.voice-note { flex: 1 1 100%; order: 10; padding: 4px 4px 0 8px; }
-/* The toolstrip is one line as long as one line holds it. What gives way first
-   is the mode pill's word (a glyph on a phone and beside the app pane: see
-   ModeSelect), then a few pixels off each button (the min-width below) -- but
-   never a button down to nothing, and never half a pill. Below that the strip
-   wraps rather than cuts: two short lines beat a control nobody can press. */
-.composer-strip { display: flex; align-items: center; gap: 2px; min-width: 0; flex: 0 1 auto; flex-wrap: wrap; row-gap: 4px; }
-/* Nothing in the strip is allowed to shrink into its own icon: a button squeezed
-   below its glyph is a button that is half drawn, and the mode pill squeezed
-   below its tile is the pill cut in half that Brian reported. What gives way is
-   the mode pill's word (see ModeSelect and .is-icon) and, if even that will not
-   fit on one line, the line itself -- the row under the box already wraps, so a
-   second line is four pixels taller and nothing is lost. */
-.composer-tools .composer-strip .btn.icon { flex: 0 0 auto; min-width: 32px; }
+/* The toolstrip is one line at every width. A control that falls to a second
+   line reads as a different kind of thing -- the wrench stopped looking like
+   the one that belongs beside Send -- so what gives way is the mode pill's
+   word (a glyph on a phone and beside the app pane: see ModeSelect), then a
+   few pixels off each button (the min-width below). The strip itself never
+   wraps, and the note after it still takes the line under it. */
+.composer-strip { display: flex; align-items: center; gap: 2px; min-width: 0; flex: 0 1 auto; flex-wrap: nowrap; }
+/* What gives way first is the mode pill's word (see ModeSelect and .is-icon), then
+   a few pixels off each button (the min-width) -- never the pill's own tile, which
+   used to be cut in half by the box's overflow, and never a button down to
+   nothing. One line, always: a tool on a second line stops reading as the tool
+   beside Send (tests/ui-flows.test.ts asserts it). */
+.composer-tools .composer-strip .btn.icon { flex: 0 1 auto; min-width: 32px; }
 .composer-strip .mode-sel-wrap { flex: 0 0 auto; min-width: 0; }
 .composer-strip .mode-sel-pill { min-width: 0; white-space: nowrap; }
+/* A phone is the one place the pill's own box still gives: eight tools and a glyph
+   in 260px is more than fits at 320px, and there the row has always kept its one
+   line by squeezing the pill rather than by moving a tool (tests/ui-flows.test.ts).
+   On a desktop the pill drops its word instead and is never cut. */
+@media (pointer: coarse), (max-width: 680px) {
+  .composer-strip .mode-sel-wrap { flex: 0 1 auto; overflow: hidden; }
+}
 .composer-acts { display: flex; align-items: center; gap: 8px; }
 .composer-send {
   display: grid; place-items: center; width: 36px; height: 36px; padding: 0;
@@ -2362,9 +2369,13 @@ label + .jf-hint { margin-top: -5px; }
   visibility: hidden; pointer-events: none; padding: 0 8px;
 }
 .rail-gauge .rail-nav-item { width: max-content; }
+/* A column like the list it copies, but not the list itself: a second .rail-nav in
+   the rail is a second match for the tests (and for anything else) that looks for
+   the menu, and the first one is invisible. */
+.rail-gauge-list { display: flex; flex-direction: column; gap: 1px; }
 /* Always with its words, in every state: this copy is what the words are
    measured from, so it must never be the one folded to icons. */
-.rail .rail-gauge .rail-nav-item > span { display: inline; position: static; opacity: 1; transform: none; }
+.rail .rail-gauge .rail-nav-item > span { display: inline; position: static; opacity: 1; visibility: visible; transform: none; }
 
 .rail-top {
   display: flex; align-items: center; gap: 9px; height: 58px; padding: 0 14px;
@@ -7225,7 +7236,7 @@ body.is-resizing iframe { pointer-events: none; }
    and up, which read as scrolling.) */
 .rail-chev-left { transform: rotate(180deg); }
 .rail-chev-right { transform: none; }
-@media (min-width: 1179px) { .rail-mini-btn { display: none; } }
+@media (max-width: 1179px) { .rail-mini-btn { display: none; } }
 /* The whole menu's top row, at the slimmest it is ever drawn: the mark and three
    buttons have to fit in the width the words need, or the row is what gets cut
    when the menu is just wide enough for its labels. */
@@ -7256,10 +7267,14 @@ body.is-resizing iframe { pointer-events: none; }
 .rail.is-mini .rail-nav-item { justify-content: center; padding: 9px 0; gap: 0; }
 .rail.is-mini .rail-nav-item > span {
   /* Off the flow rather than display: none, so the icon can slide to the middle
-     of the strip while the word fades out instead of vanishing between frames. */
+     of the strip while the word fades out instead of vanishing between frames.
+     visibility goes with it, at the end of the fade, so a folded menu has no words
+     on it at all -- nothing to hover, click or read out (tests/ui-panes.test.ts). */
   position: absolute; left: 44px; top: 50%; transform: translateY(-50%);
-  opacity: 0; transition: opacity var(--dur-1) var(--ease); pointer-events: none;
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity var(--dur-1) var(--ease), visibility 0s var(--dur-1);
 }
+.rail:not(.is-drawer) .rail-nav-item > span { transition: opacity var(--dur-1) var(--ease); }
 .rail.is-mini .rail-nav-item .rail-tag { display: none; }
 .rail.is-mini .rail-nav-item:has(.rail-tag.is-alert)::after { content: ""; position: absolute; top: 6px; right: 10px; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
 .rail.is-mini .rail-nav-item:has(.rail-tag.is-grew)::after { content: ""; position: absolute; top: 6px; right: 10px; width: 7px; height: 7px; border-radius: 50%; background: var(--glow-light); }

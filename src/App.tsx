@@ -1538,7 +1538,7 @@ export function App() {
   const railIcons = panes.mini || railNarrow;
   /* Where the words fit again: what they measured, plus the same margin the fold
      waits for, so "Show the whole menu" never leaves a strip of icons. */
-  const railWhole = Math.max(RAIL.whole, railNeed ? railNeed + RAIL_SLACK : 0);
+  const railWhole = Math.max(RAIL.whole, railNeed ? railNeed + RAIL_SLACK + 4 : 0);
   /* Two rows that give way rather than clip. The header's Ask/Yolo pill and the
      composer's mode pill are both "what this chat may do", both at a fixed size,
      and both were being pushed out of the window or cut in half when the column

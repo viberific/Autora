@@ -110,8 +110,7 @@ export function Rail({
      theme's text size, the font and this menu's own padding all count this way
      without a number to keep in step. */
   const gauge = useRef<HTMLDivElement | null>(null);
-  const list = useRef<HTMLDivElement | null>(null);
-  const { need } = useRailNeed(gauge, list);
+  const { need } = useRailNeed(gauge);
   /* Only the desktop rail measures: a drawer is always wide enough for the
      words, and a phone never shows this menu at all. */
   useEffect(() => { if (!drawer && need > 0) onNeed?.(need); }, [drawer, need, onNeed]);
@@ -150,7 +149,7 @@ export function Rail({
           enough for its words. */}
       {!drawer && (
         <div className="rail-gauge" ref={gauge} aria-hidden="true">
-          <div className="rail-nav">
+          <div className="rail-gauge-list">
             {PAGES.map((p) => (
               <div className="rail-nav-item" key={p.id}>{p.icon}<span>{p.label}</span></div>
             ))}
@@ -193,7 +192,7 @@ export function Rail({
 
       {/* The pages at the top; at the foot, how full this session's context
           is and what is running without you. */}
-      <div className="rail-scroll" ref={list}>
+      <div className="rail-scroll">
         <nav className="rail-nav">
           {PAGES.filter((p) => p.group === "work").map(item)}
           <div className="rail-divider" role="separator" />

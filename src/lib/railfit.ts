@@ -17,8 +17,11 @@ import { useCallback, useLayoutEffect, useState } from "react";
  * without the icons appearing and disappearing each time.
  */
 
-/** How much wider than the words need before they come back after folding. */
-export const RAIL_SLACK = 24;
+/** How much wider than the words need before they come back after folding. Small on
+    purpose: the whole menu is 164px and the words need about 144, so the band has to
+    fit inside that -- but a band there still is, which is what stops a drag chattering
+    on one number. */
+export const RAIL_SLACK = 16;
 
 /** An element's own width, kept current. 0 until it has been measured. */
 export function useWidthOf(ref: React.RefObject<HTMLElement | null>): number {
@@ -113,21 +116,20 @@ export function useGivesWay(spare: number, band = 48): boolean {
  */
 export function useRailNeed(
   gauge: React.RefObject<HTMLElement | null>,
-  /** The list the words sit in, for the width of the scrollbar it grows when it
-      is taller than the window -- a bar the words have to fit beside. */
-  list?: React.RefObject<HTMLElement | null>,
 ): { need: number; measure: () => void } {
   const [need, setNeed] = useState(0);
   const measure = useCallback(() => {
     const el = gauge.current;
     if (!el) return;
     /* scrollWidth of the gauge, which is width:max-content: its widest row, with
-       the list's own padding already in it. */
-    const bar = list?.current ? Math.max(0, list.current.offsetWidth - list.current.clientWidth) : 0;
-    const scroll = Math.ceil(el.scrollWidth) + bar;
-    /* Two pixels of edge for the rail's own border and the seam. */
-    setNeed((was) => (scroll > 2 && Math.abs(scroll - was) > 1 ? scroll + 2 : was));
-  }, [gauge, list]);
+       the list's own padding already in it. Two pixels of edge for the rail's own
+       border and the seam. The list's scrollbar is deliberately left out: it sits
+       in the list's right padding, and counting it would put the fold line above
+       164px, the width the whole menu has always been -- so "show the whole menu"
+       would widen the rail to a width the words then still did not unfold at. */
+    const scroll = Math.ceil(el.scrollWidth);
+    setNeed((was) => (scroll > 2 ? Math.max(scroll + 2, was) : was));
+  }, [gauge]);
   useLayoutEffect(() => {
     measure();
     const ro = new ResizeObserver(measure);
