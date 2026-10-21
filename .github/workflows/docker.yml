@@ -53,10 +53,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # One architecture per runner, built natively.
+  #
+  # This job used to build linux/amd64 and linux/arm64 together on ubuntu-latest,
+  # so the whole arm64 half of every image ran emulated under QEMU -- four to
+  # five minutes of each build spent translating arm64 instructions on an x86
+  # CPU. GitHub's hosted arm64 Linux runners (`ubuntu-24.04-arm`, 4 CPU / 16 GB)
+  # are free and unlimited on public repositories, and this repository is
+  # public, so the arm64 image can be built on a real arm64 machine instead:
+  # same wall clock as the amd64 half, nothing emulated, no cost.
+  # https://docs.github.com/en/actions/reference/runners/github-hosted-runners
+  #
+  # Neither job publishes a tag. Each pushes its image by digest, and the merge
+  # job below joins the two digests into one multi-arch manifest, so no tag can
+  # be left pointing at a single architecture.
   build:
     # A fork's pull request cannot push to this registry.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
+    strategy:
+      # One architecture failing must not cancel the other: both logs are
+      # wanted, and the merge job is skipped either way, so nothing is
+      # published half-built.
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            # Umbrel Home, and the runner every build used before.
+            runner: ubuntu-latest
+          - arch: arm64
+            platform: linux/arm64
+            # Raspberry Pi. A native arm64 runner: no QEMU setup step anywhere.
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     # Measured over the last twenty runs on main: 17 minutes when every layer
     # is cached, 33-42 when the Rust stages (photo, office-engine) have to be
     # compiled again, which is what happens whenever the cache has been
@@ -65,11 +94,13 @@ jobs:
     # commit -- an image in the registry that no Umbrel was ever offered, which
     # is what a timeout looks like from the outside. 60 leaves room for a cold
     # build with the cache export behind it, and the concurrency block above is
-    # what keeps the queue from growing.
+    # what keeps the queue from growing. Two runners in parallel do not lengthen
+    # it: each half is building one architecture.
     timeout-minutes: 60
     permissions:
-      # write: to commit the version bump that offers the update.
-      contents: write
+      # read: this job no longer commits. The commit that offers the update is
+      # made by the merge job, which holds the write on contents.
+      contents: read
       packages: write
     steps:
       - uses: actions/checkout@v4
@@ -78,10 +109,9 @@ jobs:
       # login service), and every release failed before building anything. The helper images and the
       # Dockerfile's base images come from Google's pull-through mirror of Docker Hub instead (same images,
       # same tags, no login), so a Docker Hub outage cannot stop a release.
-      - uses: docker/setup-qemu-action@v3
-        with:
-          image: mirror.gcr.io/tonistiigi/binfmt:latest
-
+      #
+      # No docker/setup-qemu-action: nothing is emulated any more. The arm64 job
+      # runs on an arm64 machine and the amd64 job on an amd64 one.
       - uses: docker/setup-buildx-action@v3
         with:
           driver-opts: image=mirror.gcr.io/moby/buildkit:buildx-stable-1
@@ -109,14 +139,19 @@ jobs:
             type=raw,value=${{ steps.version.outputs.version }}
             type=ref,event=tag
 
-      - uses: docker/build-push-action@v6
+      - id: build
+        uses: docker/build-push-action@v6
         with:
           context: .
-          # Umbrel Home is amd64; Raspberry Pi is arm64.
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
+          # Umbrel Home is amd64; Raspberry Pi is arm64. One platform per job.
+          platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Pushed by digest, never by tag: two jobs pushing the same tag would
+          # leave whichever finished last, a single-architecture image. The
+          # `push` in here is false for a pull request, which then only builds
+          # (that is where a broken Dockerfile is meant to be caught) and
+          # publishes nothing.
+          outputs: type=image,name=ghcr.io/viberific/autora,push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
           # Cache in the registry this job already pushes to, not in the Actions cache.
           #
           # Measured on run 450 (2026-10-20, 1205s in total): the export to the Actions cache was the largest
@@ -126,15 +161,104 @@ jobs:
           # having changed. A registry cache holds the same layers as ordinary blobs, is not capped, and is
           # imported/exported by the same login this job already does. `type=gha` stays as a second source so the
           # first run after this change still finds what the previous one left.
+          #
+          # One cache ref per architecture, because the two jobs now export at the same time and a single
+          # `:buildcache` would be overwritten by whichever finished last, leaving the other architecture
+          # permanently cold. The old shared ref stays as a source until this one has caught up.
           cache-from: |
+            type=registry,ref=ghcr.io/viberific/autora:buildcache-${{ matrix.arch }}
             type=registry,ref=ghcr.io/viberific/autora:buildcache
             type=gha
           # A failed cache export must not fail a build that otherwise succeeded (ignore-error, registry cache
           # backend). mode=max keeps the intermediate stages -- the npm installs and the Rust builds -- which is
           # where the time is; it is the reason this is not simply mode=min.
-          cache-to: type=registry,ref=ghcr.io/viberific/autora:buildcache,mode=max,ignore-error=true
+          cache-to: type=registry,ref=ghcr.io/viberific/autora:buildcache-${{ matrix.arch }},mode=max,ignore-error=true
+
+      # Hand the digest to the merge job: one empty file named after the digest,
+      # because that is the shape `buildx imagetools create` reads back.
+      - name: Save the digest for the merge job
+        if: github.event_name != 'pull_request'
+        run: |
+          mkdir -p "${{ runner.temp }}/digests"
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: digest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          # A day is enough: the merge job runs in the same workflow.
+          retention-days: 1
+
+  # The two digests become one tag.
+  #
+  # Skipped on a pull request (nothing is published) and skipped if either
+  # architecture failed (needs: build without `always()`), so a tag that already
+  # exists is only ever replaced by a manifest carrying both architectures.
+  merge:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      # write: to commit the version bump that offers the update.
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=mirror.gcr.io/moby/buildkit:buildx-stable-1
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: version
+        run: |
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      # The same tags this workflow has always published: the version
+      # docker-compose.yml names, :latest from main, and the tag name itself.
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/viberific/autora
+          tags: |
+            type=raw,value=latest
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=ref,event=tag
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digest-*
+          merge-multiple: true
+
+      - name: Publish the multi-arch manifest
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf 'ghcr.io/viberific/autora@sha256:%s ' *)
+
+      # Both architectures, on every tag, before Umbrel is told about it.
+      - name: Check every tag carries both architectures
+        run: |
+          set -euo pipefail
+          for tag in $(jq -cr '.tags[]' <<< "$DOCKER_METADATA_OUTPUT_JSON"); do
+            echo "== $tag"
+            docker buildx imagetools inspect "$tag"
+            docker buildx imagetools inspect "$tag" --raw \
+              | jq -r '.manifests[].platform | "\(.architecture)"' | sort | tr '\n' ' '
+            echo
+          done
 
       # Only now, with the image in the registry, does Umbrel get to see it.
       - name: Offer this version on Umbrel
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main'
         run: python3 .github/scripts/offer_release.py "${{ steps.version.outputs.version }}"
