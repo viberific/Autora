@@ -4,8 +4,14 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.56"
+version: "0.3.57"
 port: 8096
+# umbrelOS only hands a container the GPU when the manifest says so: with this
+# permission it adds /dev/dri plus the render/video groups those nodes belong
+# to. Without it, a hand-written `devices: /dev/dri` in docker-compose.yml is
+# deleted when umbrelOS patches that file at install time.
+permissions:
+  - GPU
 folderAccess:
   - id: umbrel-downloads
     name: Downloads
@@ -54,15 +60,13 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Playback that recovers, seeks, resumes and moves on. Leaving an episode now releases
-  its <video> element properly: a detached one kept its decoder and its open request,
-  and a few of those left the next episode unable to play until the app was force-closed.
-  On Android TV the Back button and an open list behave as they should, and the controls
-  bar no longer sticks because a tapped button kept the focus.
+  A quality choice for slow connections. The player's new quality button offers Auto,
+  Original, 720p and 480p. Auto plays the original and drops to a smaller size by itself
+  when the picture keeps stalling, so a phone on mobile data or Tailscale keeps playing
+  instead of buffering. The choice is saved per device, and casting always gets the
+  original.
 
-  Seeking is the probed length on a streamed episode instead of an estimate, so the bar
-  matches the file. Captions are one held choice and every other track is forced off.
-  The volume slider is gone -- the TV and the phone set the volume.
-
-  Up next passes on sooner (the last 3.5% instead of 8%, 25-60 seconds), an episode that
-  moves on is marked watched first, and leaving during the credits still counts.
+  Conversions run on the GPU. Flix now asks umbrelOS for the GPU and the image carries
+  Intel's media driver, so the smaller sizes (and 4K, HDR, or a picture the player cannot
+  decode) are encoded by Quick Sync instead of on the CPU's four cores. Settings shows
+  which encoder is in use; if the GPU cannot open a session, Flix falls back to the CPU.
