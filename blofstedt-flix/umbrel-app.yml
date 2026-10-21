@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.55"
+version: "0.3.56"
 port: 8096
 folderAccess:
   - id: umbrel-downloads
@@ -54,18 +54,15 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Sound, without refusing the episode. 0.3.54 fixed the silence by sending any file
-  whose audio the browser cannot decode to a whole-file MP4 repack -- and that repack
-  is capped at 1080p, needs the episode complete, and answers "this file would need
-  converting" until the copy is ready. Every AMZN WEB-DL here is E-AC-3, so every
-  episode was refused instead.
+  Playback that recovers, seeks, resumes and moves on. Leaving an episode now releases
+  its <video> element properly: a detached one kept its decoder and its open request,
+  and a few of those left the next episode unable to play until the app was force-closed.
+  On Android TV the Back button and an open list behave as they should, and the controls
+  bar no longer sticks because a tapped button kept the focus.
 
-  The sound is the only part that cannot be passed through: no browser decodes
-  E-AC-3. The picture can. A file in that position now plays as a stream with the
-  picture copied byte for byte and only the audio encoded to AAC, so it starts at
-  once, at whatever height it is, with nothing left duplicated on the disk. A
-  finished episode still prefers the single repacked file, because one file seeks the
-  whole episode at once.
+  Seeking is the probed length on a streamed episode instead of an estimate, so the bar
+  matches the file. Captions are one held choice and every other track is forced off.
+  The volume slider is gone -- the TV and the phone set the volume.
 
-  What this costs: while such an episode plays, a few percent of one core is spent
-  encoding its audio. The picture is never re-encoded.
+  Up next passes on sooner (the last 3.5% instead of 8%, 25-60 seconds), an episode that
+  moves on is marked watched first, and leaving during the credits still counts.
