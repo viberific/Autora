@@ -136,6 +136,10 @@ await test("the PDF manual says that with Visible work on pdf_edit is done in th
   }
 });
 
+await test("the Office manual says Pages' bold, italic and underline are pressed by hand", () => {
+  assert.ok(manualText("office").includes("bold, italic or underline put on or taken off words"));
+});
+
 await test("the PDF manual says an item over several pages is done a page at a time", () => {
   assert.ok(manualText("pdf").includes("a page at a time"));
 });

@@ -128,6 +128,22 @@ async function main() {
         assert.doesNotMatch(told, /Not typed/, told.slice(-1500));
         await until("the line gone", async () => !/Lunch is on the house/.test(await bodyText(frame)));
       });
+      await test("Pages: bold and italic on words are selected and pressed by hand, and the words are as the operations made them", async () => {
+        await sleep(5000);
+        const told = await agentDoes(app, s, "make Monday bold and italicise the title", { name: "office_edit", args: { file: "memo.docx", ops: [
+          { op: "setMatchedFont", text: "Monday", bold: true },
+          { op: "setFont", target: { blockIndexes: [0] }, italic: true },
+        ], track: false } });
+        assert.match(told, /Typed by hand in the Autora Pages window/, told.slice(-1500));
+        assert.match(told, /bold on \\?"Monday/, told.slice(-1500));
+        assert.match(told, /italic on \\?"Launch memo/, told.slice(-1500));
+        assert.doesNotMatch(told, /Not typed/, told.slice(-1500));
+        await until("the words bold in the editor", async () => frame.evaluate(() => [...document.querySelectorAll(".ProseMirror strong, .ProseMirror b")].some((e) => /Monday/.test(e.textContent ?? ""))));
+        const st = (await app.api("GET", `/api/officedesk/${s}`)).body;
+        const win = (st.windows as Array<{ kind: string; working?: string }>).find((w) => w.kind === "docx")!;
+        const bytes = Buffer.from(await (await fetch(`${app.base}/api/artifacts/${win.working}`)).arrayBuffer());
+        assert.match((docxParagraphs(bytes) ?? []).join("\n"), /on Monday at noon/);
+      });
       await page.close();
     }
     if (!only || only === "sheets") {

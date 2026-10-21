@@ -27,6 +27,7 @@ export type HandStep =
   | { kind: "para"; at: number; was: string; now: string }
   | { kind: "insert"; after: number; anchor: string; text: string }
   | { kind: "remove"; at: number; was: string }
+  | { kind: "format"; at: number; text: string; from: number; to: number; attr: "bold" | "italic" | "underline"; on: boolean }
   | { kind: "cell"; sheet: string; ref: string; input: string; was: string }
   | { kind: "box"; slide: number; id: string; name: string; box: [number, number, number, number]; size: [number, number]; was: string; now: string };
 
@@ -43,6 +44,10 @@ function docxSteps(before: Buffer, after: Buffer): HandStep[] {
   const a = docxParagraphs(before);
   const b = docxParagraphs(after);
   if (!a || !b || a.length > 3000 || b.length > 3000) return [];
+  // How each paragraph's characters look, when both files can be read that way and line up with the words above.
+  const la = docxLooks(before);
+  const lb = docxLooks(after);
+  const looks = la && lb && la.length === a.length && lb.length === b.length ? { a: la, b: lb } : null;
   // Longest common subsequence of identical paragraphs.
   const n = a.length, m = b.length;
   const lcs: Uint16Array[] = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
@@ -52,7 +57,11 @@ function docxSteps(before: Buffer, after: Buffer): HandStep[] {
   /** The last paragraph of the old document that is still in place: what a new one is typed after. */
   let anchor = -1;
   while (i < n || j < m) {
-    if (i < n && j < m && a[i] === b[j]) { anchor = i; i++; j++; continue; }
+    if (i < n && j < m && a[i] === b[j]) {
+      if (looks) steps.push(...formatChanges(looks.a[i], looks.b[j], i));
+      anchor = i; i++; j++;
+      continue;
+    }
     // A changed paragraph: one gone and one come in the same place, both with words.
     if (i < n && j < m && lcs[i + 1][j + 1] === lcs[i][j] && a[i].trim() && b[j].trim()) {
       steps.push({ kind: "para", at: i, was: a[i], now: b[j] });
@@ -74,6 +83,60 @@ function docxSteps(before: Buffer, after: Buffer): HandStep[] {
 const ENT: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
 const unxml = (t: string) => t.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (w, e: string) =>
   e[0] === "#" ? String.fromCodePoint(e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10)) : ENT[e.toLowerCase()] ?? w);
+
+type Look = { b: boolean; i: boolean; u: boolean };
+
+/** Each paragraph's words, and for every character whether its run says bold, italic and underline (the run's own
+    properties: a style that makes a whole paragraph bold is not a run's formatting, and is not typed by hand). */
+function docxLooks(data: Buffer): Array<{ text: string; looks: Look[] }> | null {
+  try {
+    const zip = unzipSync(new Uint8Array(data), { filter: (f) => f.name === "word/document.xml" });
+    const xml = zip["word/document.xml"] ? strFromU8(zip["word/document.xml"]) : "";
+    if (!xml) return null;
+    const on = (rpr: string, tag: string) => {
+      const m = new RegExp(`<w:${tag}(?:\\s[^>]*)?\\/?>`).exec(rpr);
+      if (!m) return false;
+      const val = /w:val="([^"]*)"/.exec(m[0])?.[1];
+      return val === undefined || !/^(0|false|off|none)$/i.test(val);
+    };
+    const out: Array<{ text: string; looks: Look[] }> = [];
+    for (const p of xml.matchAll(/<w:p[ >][\s\S]*?<\/w:p>/g)) {
+      let text = "";
+      const looks: Look[] = [];
+      for (const r of p[0].matchAll(/<w:r[ >][\s\S]*?<\/w:r>/g)) {
+        const rpr = /<w:rPr>([\s\S]*?)<\/w:rPr>/.exec(r[0])?.[1] ?? "";
+        const look = { b: on(rpr, "b"), i: on(rpr, "i"), u: on(rpr, "u") };
+        for (const m of r[0].matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<w:tab\s*\/>|<w:br\s*\/>/g)) {
+          const piece = m[1] === undefined ? (m[0].startsWith("<w:tab") ? "\t" : "\n") : unxml(m[1]);
+          for (const ch of Array.from(piece)) { text += ch; for (let k = 0; k < ch.length; k++) looks.push(look); }
+        }
+      }
+      out.push({ text, looks });
+      if (out.length > 20000) break;
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+const ATTRS = [["b", "bold"], ["i", "italic"], ["u", "underline"]] as const;
+
+/** The stretches of one paragraph whose bold, italic or underline changed. */
+function formatChanges(was: { text: string; looks: Look[] }, now: { text: string; looks: Look[] }, at: number): HandStep[] {
+  if (was.text !== now.text || was.looks.length !== now.looks.length || was.looks.length !== was.text.length) return [];
+  const steps: HandStep[] = [];
+  for (const [key, attr] of ATTRS) {
+    for (let i = 0; i < now.looks.length; i++) {
+      if (was.looks[i][key] === now.looks[i][key]) continue;
+      let j = i;
+      while (j + 1 < now.looks.length && was.looks[j + 1][key] !== now.looks[j + 1][key] && now.looks[j + 1][key] === now.looks[i][key]) j++;
+      steps.push({ kind: "format", at, text: now.text, from: i, to: j + 1, attr, on: now.looks[i][key] });
+      i = j;
+    }
+  }
+  return steps;
+}
 
 /** Each filled cell: what a person types to get it (its formula, or its value). */
 function cellsOf(data: Buffer): Map<string, { sheet: string; ref: string; input: string }> | null {
@@ -165,6 +228,7 @@ export function stepWords(step: HandStep): string {
     case "para": return `paragraph ${step.at + 1} retyped`;
     case "insert": return `"${short(step.text)}" typed in a new paragraph`;
     case "remove": return `paragraph ${step.at + 1} deleted`;
+    case "format": return `${step.on ? "" : "un"}${step.attr} on "${short(step.text.slice(step.from, step.to))}"`;
     case "cell": return step.input ? `${step.sheet}!${step.ref} = ${short(step.input)}` : `${step.sheet}!${step.ref} cleared`;
     case "box": return `slide ${step.slide} ${step.name || step.id} retyped`;
   }
