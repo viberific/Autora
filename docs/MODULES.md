@@ -694,31 +694,37 @@ Spectra's fetched renderer is most of what is on disk.
 
 ## Roles: which model does which part
 
-- **Roles** (`server/roles.ts`; per provider in `state.ts`: `models` builds, `plannerModels`, `fastModels` for talk mode,
-  `backgroundModels`, and `plannerProviders` / `backgroundProviders` for a role on another vendor; the pickers are `RoleRow` in
-  `Settings.tsx`). A role is a `Target` (provider, model, key, address) built by `roleTarget`, so a Claude planner over a DeepSeek
-  builder calls each with its own key, is priced on its own vendor (`charge(model, usage, provider)`) and measured against its own
-  window; a role whose vendor has no key now resolves to null with a sentence in `roleProblems` (shown under Currently using). Each role left empty keeps the rule from before roles: the main
-  model does everything, and background work uses talk mode's model, else the main one (`AUTORA_COMPACTION_MODEL` still overrides).
-  With a planner named, `runTurn` asks `workTarget(active, phase)` every round, so Agent mode's planning rounds and every round of
-  a Plan-mode chat run on the planner, and building rounds on the main model. The model only changes where the work already changes
-  hands (`set_mode`, a talk-mode handover); each change costs one uncached read of the conversation by the model taking over, which
-  is why small talk has no role of its own. Another vendor reading the history is safe because it is kept as `ChatMessage`
-  and rebuilt per vendor on every call; `anthropicMessages` rewrites tool ids into ones Anthropic takes (Gemini's repeat each
-  round, some gateways' carry a colon), unique and paired with their results. A role on another vendor that will not answer
-  (`roleDown` in `runTurn`) hands the rest of the turn to the main model and logs why, rather than failing it. The context
-  window is the smallest of `conversationTargets`. **Escalation**: the loop
-  watch's and error budget's notes, the `[Stall]` checkpoint and two project-check failures in a row (`Escalation`) switch an Agent
-  chat that is building back to planning, on the planner, at most `MAX_ESCALATIONS` times a turn and never in a spoken turn; the
-  stops behind those warnings are unchanged. The `mode.switch` event carries `model` (shown on the chip) and `auto: true` for an
-  escalation. A task the planner worked on records `planner` in `tasks.json`, and Cost per good result keeps the pair as its own
-  cell. Traps: `pinned` names both models and must not change between rounds (cache); a new model call in `runTurn` takes its
-  provider, key and address from the `Target` it calls, never from `active` (which is only the main model's).
-  `tests/e2e-roles.test.ts` drives a planner on OpenRouter over a DeepSeek builder through the real server.
+- **Roles** (`server/roles.ts`; per provider in `state.ts`: `models` does the work, `fastModels` for talk mode, `backgroundModels`
+  and `backgroundProviders` for the background role on another vendor; the pickers are `RoleRow` in `Settings.tsx`). The background
+  role is a `Target` (provider, model, key, address) built by `backgroundTargetFor`, so it calls its own vendor with its own key and is
+  priced there (`charge(model, usage, provider)`); a vendor with no key now resolves to null with a sentence in `roleProblems` (shown under
+  Currently using). Left empty it keeps the rule from before roles: background work uses talk mode's model, else a cheaper sibling, else
+  the main one (`AUTORA_COMPACTION_MODEL` still overrides).
+  **There is no planner role, on purpose.** A planner on another model meant the conversation changed hands at every `set_mode`, and each
+  hand-over cost one uncached read of the whole history by the model taking over (a model's prompt cache is its own); two models also read
+  one history a little differently. Planning, building and every tool call run on the main model, in one conversation. A planner saved by
+  an older version is ignored on load and dropped on the next save; `tasks.json` entries that recorded `planner`/`built` are still read
+  (`workedBy` in `taskledger.ts`) so old tasks keep the pair they were priced as, and an old `mode.switch` event's `model` still shows on its
+  chip. The stuck signals (loop watch, error budget, `[Stall]`, a failing project check) no longer hand the work to another model; the stops
+  behind them are unchanged. Another vendor reading the history (background calls, an agent's own model) is safe because it is kept as
+  `ChatMessage` and rebuilt per vendor on every call; `anthropicMessages` rewrites tool ids into ones Anthropic takes (Gemini's repeat each
+  round, some gateways' carry a colon), unique and paired with their results. The context window is the smallest of `conversationTargets`
+  (the main model and talk mode's voice). Traps: a new model call in `runTurn` takes its provider, key and address from the `Target` it
+  calls, never assuming the main model's. `tests/e2e-roles.test.ts` drives it through the real server.
+- **The fast path** (`server/fastpath.ts`; called from `beginTurn` in `server.ts`, after `turn.user` is logged). A few exact questions the
+  console can answer from its own clock and settings ("what time is it", "what's the date", "which model are you") are answered with no model
+  call: `matchFastPath` is anchored on the whole message like `isSmallTalk`, so anything more ("what time is it in Tokyo") goes to the model as
+  before. Safe by construction: it only reads; `runFastPath` answers under a 3 s timeout and a timeout, an error or an empty answer falls
+  through to the normal turn (fail open); every decision is a `system.log` event `{ event: "fastpath", action, outcome, ms }` through
+  `emitEvent` (no `message`, so it stays out of the thread), which is the audit trail for tightening the patterns. A fast turn is not an agent
+  turn: no task record, no learning, no next-step chips. To add an action, add it to `FastAction`, `PATTERNS` and `answerFor`, with a case in
+  `tests/fastpath.test.ts` for what must match and what must not. A local model (Ollama/llama.cpp) deciding the route was considered and
+  rejected: a 1.5B model's confidence is not a measure of being right, it adds latency to every message, and a wrong catch answers the person
+  with something false.
 - **An agent's own model** (`model` on an agent in `agents.ts`, `{ provider, model }`; chosen on the Organization page's editor
   from `GET /api/agents-models`; `agentModelFor` in `roles.ts`; `providerFor(session)` in `server.ts`, used by `beginTurn` for the
   task ledger and by `runTurn`). It replaces the main model for that agent's chat only: an agent runs in a chat of its own, so its
-  model never shares the lead's conversation or prompt cache. The planner and the background model stay Settings' own. It holds
+  model never shares the lead's conversation or prompt cache. The background model stays Settings' own. It holds
   its provider and is reached with that provider's own key (`reachFor`); the editor offers every provider with a key. When that
   key is gone the agent runs on the main model and a log line in its chat says why. Only the person sets it (the `agents` tool cannot), never on the lead, and `agentLine` tells the
   lead "Builds on X" so it can send work where it is cheapest or strongest.

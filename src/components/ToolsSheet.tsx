@@ -145,7 +145,7 @@ export function ToolsSheet({ session, onClose, onTrouble, onOpened, onAsk }: {
           </button>
         </div>
         <div className="modal-body tools-body">
-          <p className="jf-hint">Opens the app on its own, with a new blank file in it (the terminal opens at your working folder). No message, no waiting.</p>
+          <p className="jf-hint">Opens a tool with a new blank file: no message, no waiting. The terminal opens in your working folder.</p>
           <div className="tool-tiles">
             {TOOLS.map((tool) => {
               const off = on !== null && on[tool.setting]?.enabled === false;

@@ -1,22 +1,18 @@
 /**
- * Roles: which model does which part of the work, and when the work goes back
- * to the planner.
+ * Roles: which model does which part of the work.
  *
- * Checked here: with no planner named, every round is the main model's, as
- * before; with one, planning rounds are the planner's and building rounds the
- * main model's; background work keeps its old rule (talk mode's model, else the
- * main one) unless a background model or the environment says otherwise; the
- * context window counts every model that may answer the conversation; stuck
- * signals hand the work back only in Agent mode, only while building, only to a
- * planner that is a different model, never in a spoken turn, and at most
- * MAX_ESCALATIONS times a turn; a project check has to fail twice in a row to
- * count; the settings round-trip and the task ledger records the pair only when
- * the planner actually ran. A planner or background model may be another
- * provider's, reached with that provider's own key, and falls back to the main
- * model (saying why) when that key is gone. An Organization agent's own model
- * replaces the main model for its chat, on its own provider when that can be
- * reached, says why when it cannot, and is never set on the lead. Anthropic is
- * sent tool ids it accepts, unique and paired, whoever made the calls.
+ * Checked here: the main model does every round, planning and building alike
+ * (there is no planner role); background work keeps its old rule (talk mode's
+ * model, else the main one) unless a background model or the environment says
+ * otherwise; the context window counts every model that may answer the
+ * conversation; the settings round-trip, a planner saved by an older version is
+ * ignored, and the task ledger still reads tasks that recorded one. A background
+ * model may be another provider's, reached with that provider's own key, and
+ * falls back to the main model (saying why) when that key is gone. An
+ * Organization agent's own model replaces the main model for its chat, on its
+ * own provider when that can be reached, says why when it cannot, and is never
+ * set on the lead. Anthropic is sent tool ids it accepts, unique and paired,
+ * whoever made the calls.
  *
  *   npx tsx tests/roles.test.ts
  */
@@ -28,12 +24,9 @@ import path from "node:path";
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "autora-roles-"));
 process.env.AUTORA_STATE_DIR = dir;
 
-const {
-  Escalation, MAX_ESCALATIONS, agentModelFor, backgroundTarget, conversationTargets, escalationNote, hasPlanner,
-  targetName, workTarget,
-} = await import("../server/roles");
+const { agentModelFor, backgroundTarget, conversationTargets, mainTarget } = await import("../server/roles");
 const { state, resolveProvider } = await import("../server/state");
-const { openTask, withTask, noteRound, closeTask, taskSummary } = await import("../server/taskledger");
+const { openTask, closeTask, taskSummary } = await import("../server/taskledger");
 const { anthropicMessages } = await import("../server/llm");
 const { createAgent, updateAgent, getAgent, agentLine, LEAD_ID } = await import("../server/agents");
 
@@ -52,29 +45,13 @@ async function test(name: string, fn: () => void | Promise<void>) {
 const main = { provider: "deepseek", key: "k-ds", baseUrl: "https://ds" };
 const at = (model: string, provider = "deepseek") =>
   ({ provider, model, key: `k-${provider}`, baseUrl: `https://${provider}` });
-const roles = (over: Partial<{ model: string; fastModel: string; planner: ReturnType<typeof at> | null; background: ReturnType<typeof at> | null }> = {}) => ({
-  ...main, model: "cheap", fastModel: "", planner: null, background: null, ...over,
+const roles = (over: Partial<{ model: string; fastModel: string; background: ReturnType<typeof at> | null }> = {}) => ({
+  ...main, model: "cheap", fastModel: "", background: null, ...over,
 });
 const model = (t: { model: string }) => t.model;
 
-await test("no planner: every round is the main model's, as before roles", () => {
-  const r = roles();
-  assert.equal(hasPlanner(r), false);
-  assert.equal(model(workTarget(r, "plan")), "cheap");
-  assert.equal(model(workTarget(r, "build")), "cheap");
-  /* Naming the main model again is no planner either. */
-  assert.equal(hasPlanner(roles({ planner: at("cheap") })), false);
-  /* The same id on another vendor is another model. */
-  assert.equal(hasPlanner(roles({ planner: at("cheap", "openrouter") })), true);
-});
-
-await test("a planner plans and the main model builds, each with its own key", () => {
-  const r = roles({ planner: at("claude-sonnet-4-5", "anthropic") });
-  assert.equal(hasPlanner(r), true);
-  assert.deepEqual(workTarget(r, "plan"), at("claude-sonnet-4-5", "anthropic"));
-  assert.deepEqual(workTarget(r, "build"), { ...main, model: "cheap" });
-  assert.equal(targetName(workTarget(r, "plan"), "deepseek", (id) => id.toUpperCase()), "claude-sonnet-4-5 (ANTHROPIC)");
-  assert.equal(targetName(workTarget(r, "build"), "deepseek"), "cheap");
+await test("the main model is the target of the work", () => {
+  assert.deepEqual(mainTarget(roles()), { ...main, model: "cheap" });
 });
 
 await test("background work keeps its old rule unless told otherwise", () => {
@@ -100,72 +77,10 @@ await test("the cheaper sibling is the provider's priced default, only when it c
 });
 
 await test("the context window counts every model that may answer, on its own provider", () => {
-  const r = roles({ planner: at("smart", "anthropic") });
   const names = (list: { provider: string; model: string }[]) => list.map((t) => `${t.provider}/${t.model}`);
-  assert.deepEqual(names(conversationTargets(r, "agent")), ["deepseek/cheap", "anthropic/smart"]);
-  assert.deepEqual(names(conversationTargets(r, "plan")), ["deepseek/cheap", "anthropic/smart"]);
-  /* Build mode never plans, so the planner's window does not bind it. */
-  assert.deepEqual(names(conversationTargets(r, "build")), ["deepseek/cheap"]);
-  assert.deepEqual(names(conversationTargets(r, "agent", "fast")), ["deepseek/cheap", "anthropic/smart", "deepseek/fast"]);
-  assert.deepEqual(names(conversationTargets(roles(), "agent", "cheap")), ["deepseek/cheap"]);
-});
-
-const building = { work: "agent" as const, phase: "build" as const, planner: true, spoken: false };
-
-await test("a stuck signal hands the work to the planner, once per signal", () => {
-  const e = new Escalation();
-  assert.equal(e.take(building), null, "nothing raised, nothing handed");
-  e.signal("the loop watch saw it repeating itself");
-  e.signal("a second reason does not replace the first");
-  assert.equal(e.take(building), "the loop watch saw it repeating itself");
-  assert.equal(e.count, 1);
-  assert.equal(e.take(building), null, "the signal was used up");
-});
-
-await test("only Agent mode, only while building, only with a different planner, never spoken", () => {
-  for (const at of [
-    { ...building, work: "build" as const },
-    { ...building, work: "plan" as const },
-    { ...building, phase: "plan" as const },
-    { ...building, planner: false },
-    { ...building, spoken: true },
-  ]) {
-    const e = new Escalation();
-    e.signal("stuck");
-    assert.equal(e.take(at), null, JSON.stringify(at));
-    /* A signal that could not be acted on is dropped, not saved for later. */
-    assert.equal(e.take(building), null);
-    assert.equal(e.count, 0);
-  }
-});
-
-await test("at most MAX_ESCALATIONS times a turn", () => {
-  const e = new Escalation();
-  for (let i = 0; i < MAX_ESCALATIONS + 2; i += 1) {
-    e.signal("stuck");
-    const got = e.take(building);
-    assert.equal(got !== null, i < MAX_ESCALATIONS, `escalation ${i + 1}`);
-  }
-  assert.equal(e.count, MAX_ESCALATIONS);
-});
-
-await test("a project check counts only when it fails twice in a row", () => {
-  const e = new Escalation();
-  e.check(false);
-  assert.equal(e.take(building), null, "one failure is the normal fix-and-retry");
-  e.check(true);
-  e.check(false);
-  assert.equal(e.take(building), null, "a pass in between starts the count again");
-  e.check(false);
-  assert.match(e.take(building) ?? "", /failed 2 times in a row/);
-});
-
-await test("the note names the planner and says when it is the last hand-back", () => {
-  const note = escalationNote("several rounds changed nothing", "smart", 1);
-  assert.match(note, /smart/);
-  assert.match(note, /set_mode/);
-  assert.doesNotMatch(note, /last time/);
-  assert.match(escalationNote("x", "smart", 0), /last time/);
+  assert.deepEqual(names(conversationTargets(roles())), ["deepseek/cheap"]);
+  assert.deepEqual(names(conversationTargets(roles(), "fast")), ["deepseek/cheap", "deepseek/fast"]);
+  assert.deepEqual(names(conversationTargets(roles(), "cheap")), ["deepseek/cheap"]);
 });
 
 await test("the settings carry the roles to the resolved provider, on any provider with a key", () => {
@@ -178,31 +93,26 @@ await test("the settings carry the roles to the resolved provider, on any provid
   state.models.anthropic = "claude-haiku-4-5";
   state.keys.deepseek = "sk-test";
   state.models.deepseek = "deepseek-flash";
-  /* The cheap vendor wins the building; the planner sits on the dear one. */
-  state.plannerModels.deepseek = "claude-sonnet-4-5";
-  state.plannerProviders.deepseek = "anthropic";
-  state.backgroundModels.deepseek = "deepseek-flash";
+  /* The cheap vendor does the work; the background model sits on the dear one. */
+  state.backgroundModels.deepseek = "claude-haiku-4-5";
+  state.backgroundProviders.deepseek = "anthropic";
   let r = resolveProvider();
   assert.equal(r.provider, "deepseek", "the cheaper per-call vendor is chosen");
   assert.equal(r.model, "deepseek-flash");
-  const plan = workTarget(r, "plan");
-  assert.equal(plan.provider, "anthropic");
-  assert.equal(plan.model, "claude-sonnet-4-5");
-  assert.equal(plan.key, "sk-ant-test", "the planner is reached with Anthropic's own key");
-  assert.equal(r.background?.model, "deepseek-flash");
+  assert.equal(r.background?.provider, "anthropic");
+  assert.equal(r.background?.model, "claude-haiku-4-5");
+  assert.equal(r.background?.key, "sk-ant-test", "the background model is reached with Anthropic's own key");
   assert.deepEqual(r.roleProblems, []);
 
-  /* Anthropic's key removed: the main model plans, and Settings says why. */
+  /* Anthropic's key removed: the main model does that work, and Settings says why. */
   delete state.keys.anthropic;
   r = resolveProvider();
-  assert.equal(hasPlanner(r), false);
-  assert.equal(workTarget(r, "plan").model, "deepseek-flash");
-  assert.match(r.roleProblems.join(" "), /planner \(claude-sonnet-4-5\) is on Anthropic[^,]*, which has no key/);
+  assert.equal(r.background, null);
+  assert.match(r.roleProblems.join(" "), /background model \(claude-haiku-4-5\) is on Anthropic[^,]*, which has no key/);
 
-  state.plannerProviders.deepseek = "";
-  state.plannerModels.deepseek = "";
+  state.backgroundProviders.deepseek = "";
   state.backgroundModels.deepseek = "";
-  assert.equal(workTarget(resolveProvider(), "plan").model, "deepseek-flash");
+  assert.equal(resolveProvider().background, null);
   Object.assign(process.env, envBefore);
 });
 
@@ -213,31 +123,26 @@ await test("a named provider answers with itself every round: roles are Automati
   state.provider = "anthropic";
   state.keys.anthropic = "sk-ant-test";
   state.models.anthropic = "claude-haiku-4-5";
-  state.plannerModels.anthropic = "deepseek-v4-pro";
-  state.plannerProviders.anthropic = "deepseek";
+  state.backgroundModels.anthropic = "deepseek-v4-pro";
+  state.backgroundProviders.anthropic = "deepseek";
   state.keys.deepseek = "sk-test";
   const r = resolveProvider();
   assert.equal(r.model, "claude-haiku-4-5");
-  assert.equal(hasPlanner(r), false, "no planner behind a named model");
-  assert.equal(workTarget(r, "plan").model, "claude-haiku-4-5");
-  assert.equal(r.background, null);
+  assert.equal(r.background, null, "no background model behind a named provider");
   assert.deepEqual(r.roleProblems, []);
 
   /* The same settings, on Automatic: the cheapest vendor is chosen and the
      roles named for it resolve. */
   state.usage = [];
-  state.plannerModels.deepseek = "deepseek-v4-pro";
   state.backgroundModels.deepseek = "deepseek-flash";
   state.provider = "auto";
   const auto = resolveProvider();
   assert.equal(auto.provider, "deepseek");
-  assert.equal(workTarget(auto, "plan").model, "deepseek-v4-pro");
   assert.equal(auto.background?.model, "deepseek-flash");
 
-  state.plannerProviders.anthropic = "";
-  state.plannerModels.anthropic = "";
-  state.plannerModels.deepseek = "";
+  state.backgroundProviders.anthropic = "";
   state.backgroundModels.anthropic = "";
+  state.backgroundModels.deepseek = "";
   state.provider = "deepseek";
   Object.assign(process.env, envBefore);
 });
@@ -274,29 +179,17 @@ await test("Automatic never picks a router, and says so when only routers are co
   Object.assign(process.env, envBefore);
 });
 
-await test("the task ledger keeps the pair only when both models worked", () => {
-  const task = (rounds: [string, boolean][]) => {
-    const id = openTask({ session: "s1", provider: "deepseek", model: "cheap", version: "1.0.0", automated: false });
-    withTask(id, () => { for (const [model, planner] of rounds) noteRound(model, planner); });
-    closeTask(id, "finished", 1);
-    return id;
-  };
-  const plain = task([["cheap", false], ["cheap", false]]);
-  const paired = task([["smart", true], ["cheap", false], ["smart", true]]);
-  const planned = task([["smart", true]]);
+await test("the task ledger files a task under the model that ran it", () => {
+  const id = openTask({ session: "s1", provider: "deepseek", model: "cheap", version: "1.0.0", automated: false });
+  closeTask(id, "finished", 1);
   const summary = taskSummary();
-  const row = (id: string | null) => summary.recent.find((r) => r.id === id)!;
-  assert.deepEqual([row(plain).model, row(plain).planner], ["cheap", null]);
-  assert.deepEqual([row(paired).model, row(paired).planner], ["cheap", "smart"]);
-  /* A Plan-mode chat: the planner did all of it, so it is the planner's task alone. */
-  assert.deepEqual([row(planned).model, row(planned).planner], ["smart", null]);
-  /* Three cells: the builder alone, the pair, and the planner alone. */
-  const cells = summary.cells.map((c) => `${c.planner ?? "-"}>${c.model}`).sort();
-  assert.deepEqual(cells, ["->cheap", "->smart", "smart>cheap"]);
+  const row = summary.recent.find((r) => r.id === id)!;
+  assert.deepEqual([row.model, row.planner], ["cheap", null]);
+  assert.deepEqual(summary.cells.map((c) => `${c.planner ?? "-"}>${c.model}`), ["->cheap"]);
 });
 
 await test("an agent's own model builds its chat, on its own provider when it can be reached", () => {
-  const active = roles({ model: "deepseek-flash", fastModel: "deepseek-flash", planner: at("deepseek-v4-pro") });
+  const active = roles({ model: "deepseek-flash", fastModel: "deepseek-flash", background: at("deepseek-v4-pro") });
   const reach = (id: string) => (id === "openrouter" ? { key: "k-or", baseUrl: "https://or" } : null);
   const none = agentModelFor(active, { name: "Ada" }, reach);
   assert.equal(none.active, active, "no model of its own: Settings' choice, untouched");
@@ -304,7 +197,7 @@ await test("an agent's own model builds its chat, on its own provider when it ca
   const own = agentModelFor(active, { name: "Ada", model: { provider: "deepseek", model: "deepseek-v4-pro" } }, reach);
   assert.equal(own.active.model, "deepseek-v4-pro");
   assert.equal(own.active.key, "k-ds");
-  assert.deepEqual(own.active.planner, active.planner, "the planner stays Settings' own");
+  assert.deepEqual(own.active.background, active.background, "the background model stays Settings' own");
   const there = agentModelFor(active, { name: "Ada", model: { provider: "openrouter", model: "z-ai/glm" } }, reach);
   assert.deepEqual(
     [there.active.provider, there.active.model, there.active.key, there.active.baseUrl, there.active.fastModel],

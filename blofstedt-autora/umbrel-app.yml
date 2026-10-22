@@ -188,22 +188,12 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  Security and stability fixes. On Umbrel only the app's own login proxy may now connect to Autora: other apps on the
-  box can no longer reach it directly, past the login. Autora also refuses requests addressed to a name a hostile
-  web page could point at it (DNS rebinding); if you reach Autora through a domain of your own, add it to
-  AUTORA_ALLOWED_HOSTS. Installing a browser extension from a file named "...zip" no longer deletes Autora's settings,
-  keys and chats, and a zip that unpacks to far more than it claims (an extension, a skill, a document) is refused
-  instead of exhausting memory. Plan and Ask modes no longer treat a few commands that write files or run programs
-  (pdftotext with an output file, uniq, rg --pre) as read-only, and deleting /host, /data or a system folder is held
-  for your yes like deleting everything already was. A web request that carries your saved sign-ins no longer follows
-  a redirect to another site, a media file that vanishes while it is served no longer restarts the server, a large
-  browser download is refused before it is read into memory, new chats get unguessable ids, a chat that reconnects
-  is caught up in pieces, and a log line cut short by a crash no longer swallows the next event. The webclaw
-  integration now uses a fixed release (WEBCLAW_MCP_VERSION to choose another) instead of fetching the newest.
-  Interface fixes: with a window open beside the chat, the permissions pill (Yolo / Ask) is no longer hidden under it
-  and a long chat name shortens with an ellipsis; on tablets and other touch screens wider than a phone the small
-  controls (filters, chips, the Activity rows, the mode pill) get a finger-sized target; the zoom label on the
-  Organization chart no longer clips; and removing an agent says Remove on its button. On phones: a long message can
-  no longer fill the screen when the keyboard is up or the phone is on its side (it scrolls, and Send stays visible),
-  tables keep their words whole and scroll sideways instead of breaking them mid-word, and buttons and dialogs are
-  finger-sized on a phone held sideways and on tablets too.
+  Settings no longer has a separate Planner model. Planning and building now always run on the one model you chose, so
+  a task keeps a single conversation and a single prompt cache instead of re-reading the whole chat each time the work
+  moved between two models (which cost extra and could change how the history was understood). A planner you had
+  saved is ignored, and past tasks still show the pair they ran on. Talk mode and Background tasks keep their own model
+  pickers; the Background provider and model now sit on one line, and the provider dropdown shows its arrow. Quick
+  questions the app can answer itself (what time it is, today's date, which model is running) are now answered
+  instantly without calling the model, and anything slower than three seconds, or anything more than that exact
+  question, goes to the model as before. Wording tidied in the Yolo / Ask menu, the Automatic provider card, the Tools
+  window and the /triggers command, and the provider buttons now have an outline so they read as buttons.

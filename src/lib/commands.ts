@@ -35,7 +35,7 @@ const COMMANDS: Command[] = [
   { id: "sessions", name: "sessions", hint: "Open the session list" },
   { id: "mind", name: "mind", hint: "Open what Autora remembers" },
   { id: "cron", name: "schedules", hint: "Open tasks that run on a clock", aliases: ["cron"] },
-  { id: "triggers", name: "triggers", hint: "Open the URLs that can start a turn", aliases: ["hooks"] },
+  { id: "triggers", name: "triggers", hint: "Open the web addresses that can start work", aliases: ["hooks"] },
   { id: "config", name: "settings", hint: "Open settings and API keys", aliases: ["config"] },
   { id: "system", name: "system", hint: "Open status and logs" },
 ];

@@ -247,22 +247,15 @@ interface PersistedState {
       over when the question turns out to need the work. Empty means talk mode
       uses the main model, exactly as it did before this existed. */
   fastModels: Record<string, string>;
-  /** Roles (see ./roles): the model that plans, per provider. In Agent and Plan
-      mode the planning rounds run on it, and the building rounds on the main
-      model above, so a smart model thinks the task through and a cheaper one
-      does the many rounds of work. Empty means the main model plans too.
-      Only read when the provider is Automatic: a model the person named is
-      the one that answers, every round, planning included. */
-  plannerModels: Record<string, string>;
-  /** Roles: the model for unwatched work (condensing old turns, learning,
-      remarks), per provider. Empty means talk mode's model when one is named,
-      else the main model -- what background work used before roles existed.
-      Only read when the provider is Automatic (see plannerModels). */
+  /** Roles (see ./roles): the model for unwatched work (condensing old turns,
+      learning, remarks), per provider. Empty means talk mode's model when one
+      is named, else the main model -- what background work used before roles
+      existed. Only read when the provider is Automatic: a model the person
+      named is the one that answers everything. */
   backgroundModels: Record<string, string>;
-  /** Which provider each of those two roles is on, keyed by the main provider.
-      Empty (or absent) means the main provider itself; another one is reached
-      with that provider's own key and address (see roleTarget). */
-  plannerProviders: Record<string, string>;
+  /** Which provider that role is on, keyed by the main provider. Empty (or
+      absent) means the main provider itself; another one is reached with that
+      provider's own key and address (see backgroundTargetFor). */
   backgroundProviders: Record<string, string>;
   /** Per-provider API root override. Mostly for local servers and proxies. */
   baseUrls: Record<string, string>;
@@ -574,9 +567,7 @@ function blank(): PersistedState {
     provider: "auto",
     models: {},
     fastModels: {},
-    plannerModels: {},
     backgroundModels: {},
-    plannerProviders: {},
     backgroundProviders: {},
     baseUrls: {},
     endpointPins: {},
@@ -675,9 +666,7 @@ function read(): PersistedState {
     if (typeof raw.provider === "string") state.provider = raw.provider;
     if (raw.models && typeof raw.models === "object") state.models = { ...raw.models };
     if (raw.fastModels && typeof raw.fastModels === "object") state.fastModels = { ...raw.fastModels };
-    if (raw.plannerModels && typeof raw.plannerModels === "object") state.plannerModels = { ...raw.plannerModels };
     if (raw.backgroundModels && typeof raw.backgroundModels === "object") state.backgroundModels = { ...raw.backgroundModels };
-    if (raw.plannerProviders && typeof raw.plannerProviders === "object") state.plannerProviders = { ...raw.plannerProviders };
     if (raw.backgroundProviders && typeof raw.backgroundProviders === "object") state.backgroundProviders = { ...raw.backgroundProviders };
     if (raw.baseUrls && typeof raw.baseUrls === "object") state.baseUrls = { ...raw.baseUrls };
     if (raw.endpointPins && typeof raw.endpointPins === "object") state.endpointPins = { ...raw.endpointPins };
@@ -1158,22 +1147,15 @@ export function fastModelFor(providerId: string): string {
   return (state.fastModels[providerId] || "").trim();
 }
 
-/** The model that plans, when one is named for the provider. Empty means the
-    main model plans as well. See ./roles. */
-export function plannerModelFor(providerId: string): string {
-  return (state.plannerModels[providerId] || "").trim();
-}
-
 /** The model for background work, when one is named. Empty means the old rule
     (talk mode's model, else the main one). See ./roles. */
 export function backgroundModelFor(providerId: string): string {
   return (state.backgroundModels[providerId] || "").trim();
 }
 
-/** The provider a role is on, for a main provider: its own id when none is named. */
-export function roleProviderFor(role: "planner" | "background", providerId: string): string {
-  const named = ((role === "planner" ? state.plannerProviders : state.backgroundProviders)[providerId] || "").trim();
-  return named || providerId;
+/** The provider the background role is on, for a main provider: its own id when none is named. */
+export function backgroundProviderFor(providerId: string): string {
+  return (state.backgroundProviders[providerId] || "").trim() || providerId;
 }
 
 /** A provider's key and address, or null when it cannot be reached (no key; a
@@ -1186,21 +1168,21 @@ export function reachFor(providerId: string): { key: string; baseUrl: string } |
 }
 
 /**
- * A role's model as a whole target, for a main provider: null when no model is
- * named, and null with a reason when it is on a provider that cannot be reached
- * (its key was removed), so the role falls back to the main model and Settings
- * can say why rather than every turn failing.
+ * The background model as a whole target, for a main provider: null when no
+ * model is named, and null with a reason when it is on a provider that cannot
+ * be reached (its key was removed), so the role falls back to the main model
+ * and Settings can say why rather than every turn failing.
  */
-function roleTarget(role: "planner" | "background", providerId: string): { target: Target | null; problem: string | null } {
-  const model = role === "planner" ? plannerModelFor(providerId) : backgroundModelFor(providerId);
+function backgroundTargetFor(providerId: string): { target: Target | null; problem: string | null } {
+  const model = backgroundModelFor(providerId);
   if (!model) return { target: null, problem: null };
-  const provider = roleProviderFor(role, providerId);
+  const provider = backgroundProviderFor(providerId);
   const reach = reachFor(provider);
   if (!reach) {
     const label = providerSpec(provider)?.label ?? provider;
     return {
       target: null,
-      problem: `The ${role} (${model}) is on ${label}, which has no key, so the main model does that work.`,
+      problem: `The background model (${model}) is on ${label}, which has no key, so the main model does that work.`,
     };
   }
   return { target: { provider, model, ...reach }, problem: null };
@@ -1264,8 +1246,6 @@ export interface Resolved {
   /** Talk mode's own model: the fast one, when the vendor has one named.
       Empty when live voice should answer with `model` like everything else. */
   fastModel: string;
-  /** The planner when one is named and reachable; null means `model` plans too. See ./roles. */
-  planner: Target | null;
   /** The background model when one is named and reachable; null means the old rule. */
   background: Target | null;
   /** A role that is named and cannot be used, said in a sentence. */
@@ -1336,7 +1316,6 @@ export function resolveProvider(): Resolved {
         provider: "",
         model: "",
         fastModel: "",
-        planner: null,
         background: null,
         roleProblems: [],
         key: "",
@@ -1352,7 +1331,6 @@ export function resolveProvider(): Resolved {
       provider: chosen,
       model: "",
       fastModel: "",
-      planner: null,
       background: null,
       roleProblems: [],
       key: "",
@@ -1367,20 +1345,16 @@ export function resolveProvider(): Resolved {
   if (!key && chosen !== "local") problem = `${spec.label} has no API key set.`;
   else if (!model) problem = `No model chosen for ${spec.label}.`;
   /* Roles are Automatic's own trick: when the person named the model, that
-     model answers, every round, planning included -- switching parts of the
-     work to other models behind a named choice would be choosing for them.
-     On Automatic the named roles are what make the switching careful: only
-     the rounds that need them move, and only between models the person set. */
-  const planner = wanted === "auto" ? roleTarget("planner", chosen) : { target: null, problem: null as string | null };
-  const background = wanted === "auto" ? roleTarget("background", chosen) : { target: null, problem: null as string | null };
+     model answers, every round -- moving background work to another model
+     behind a named choice would be choosing for them. */
+  const background = wanted === "auto" ? backgroundTargetFor(chosen) : { target: null, problem: null as string | null };
 
   return {
     provider: chosen,
     model,
     fastModel: fastModelFor(chosen),
-    planner: planner.target,
     background: background.target,
-    roleProblems: [planner.problem, background.problem].filter((p): p is string => Boolean(p)),
+    roleProblems: [background.problem].filter((p): p is string => Boolean(p)),
     key,
     baseUrl: baseUrlFor(chosen),
     problem,

@@ -1,13 +1,12 @@
 /**
  * Roles across providers, end to end: the real server, a scripted model.
  *
- * DeepSeek builds and the planner is on OpenRouter, both pointed at the same
- * fake model, which answers by the model each request names. Checked: an Agent
- * chat plans on the planner and builds on DeepSeek, each request carrying its
- * own vendor's model; the planning chip names the planner and its vendor; each
- * call is billed to the vendor that made it; and a planner that will not answer
- * (a key refused) does not fail the turn -- the main model carries it, and the
- * chat says so.
+ * DeepSeek does the work and the background model is on OpenRouter, both
+ * pointed at the same fake model, which answers by the model each request
+ * names. Checked: an Agent chat plans and builds on the one main model, every
+ * request carrying that model and the mode chips naming no other; a planner
+ * sent by an older client is ignored, not stored; and the settings report the
+ * background model on its own provider.
  *
  *   npx tsx tests/e2e-roles.test.ts
  */
@@ -19,65 +18,49 @@ async function test(name: string, fn: () => Promise<void>) {
   try { await fn(); passed += 1; console.log(`  ok  ${name}`); } catch (err) { console.error(`  FAIL ${name}`); throw err; }
 }
 
-const PLANNER = "planner-x";
 const BUILDER = "deepseek-flash";
+const BACKGROUND = "background-x";
 
 async function main() {
   const app: App = await startApp({ env: { DEEPSEEK_API_KEY: "sk-test", OPENROUTER_API_KEY: "sk-or-test" } });
   try {
     const set = await app.api("PATCH", "/api/settings", {
-      /* Roles are Automatic's: a named provider answers with itself every round, planning included
-         (server/state.ts, and tests/roles.test.ts). So the planner is named on Automatic, which
-         resolves the main model to DeepSeek and its planner to OpenRouter. */
+      /* Roles are Automatic's: a named provider answers with itself every round
+         (server/state.ts, and tests/roles.test.ts). */
       provider: "auto",
       models: { deepseek: BUILDER },
       base_urls: { deepseek: app.modelUrl, openrouter: app.modelUrl },
+      background_providers: { deepseek: "openrouter" },
+      background_models: { deepseek: BACKGROUND },
+      /* What an older client still sends: no planner is kept. */
       planner_providers: { deepseek: "openrouter" },
-      planner_models: { deepseek: PLANNER },
+      planner_models: { deepseek: "planner-x" },
     });
     assert.equal(set.status, 200, JSON.stringify(set.body));
     const card = set.body.catalog.find((c: { id: string }) => c.id === "deepseek");
-    assert.equal(card.planner_provider, "openrouter");
-    assert.equal(card.planner_model, PLANNER);
-    assert.match(set.body.active.planner, /planner-x \(OpenRouter\)/);
+    assert.equal(card.background_provider, "openrouter");
+    assert.equal(card.background_model, BACKGROUND);
+    assert.equal(card.planner_model, undefined, "there is no planner to report");
+    assert.equal(set.body.active.planner, undefined);
 
-    await test("an Agent chat plans on the other vendor's planner and builds on the main model", async () => {
+    await test("an Agent chat plans and builds on the one main model", async () => {
       app.seen.length = 0;
-      app.decide = (req: Seen) => req.model === PLANNER
+      app.decide = (req: Seen) => req.model === BUILDER && app.seen.length === 1
         ? { tools: [{ name: "set_mode", args: { to: "build", reason: "plan is ready" } }] }
         : { text: "Built it." };
       const s = await app.newSession("Roles", "agent");
       const events = await app.turn(s, "Make the thing.");
       const models = app.seen.map((r) => r.model);
-      assert.equal(models[0], PLANNER, "the turn opens planning, on the planner");
-      assert.ok(models.includes(BUILDER), "and builds on the main model");
-      assert.ok(models.lastIndexOf(PLANNER) < models.indexOf(BUILDER), "planner first, then builder");
+      assert.equal(models[0], BUILDER, "the turn opens planning, on the main model");
+      assert.ok(models.every((m) => m === BUILDER || m === BACKGROUND), models.join(", "));
 
       const chips = events.filter((e) => e.kind === "mode.switch");
-      assert.match(String(chips[0]?.payload.model), /planner-x \(OpenRouter\)/, "the planning chip names the planner");
-      assert.equal(chips.find((e) => e.payload.to === "build")?.payload.model, BUILDER);
+      assert.ok(chips.length > 0, "the switch is still said in the thread");
+      assert.ok(chips.every((e) => e.payload.model === undefined), "no chip names another model");
 
-      /* Each call billed to its own vendor. */
       const usage = events.filter((e) => e.kind === "usage.turn").map((e) => `${e.payload.provider}/${e.payload.model}`);
-      assert.ok(usage.includes(`openrouter/${PLANNER}`), usage.join(", "));
       assert.ok(usage.includes(`deepseek/${BUILDER}`), usage.join(", "));
       assert.equal(events.some((e) => e.kind === "system.error"), false);
-    });
-
-    await test("a planner that will not answer leaves the turn to the main model, and says so", async () => {
-      app.seen.length = 0;
-      app.decide = (req: Seen) => req.model === PLANNER
-        ? { status: 401, error: "key refused" }
-        : { text: "Done on the main model." };
-      const s = await app.newSession("Roles fallback", "agent");
-      const events = await app.turn(s, "Make the other thing.");
-      const models = app.seen.map((r) => r.model);
-      assert.equal(models.filter((m) => m === PLANNER).length, 1, "the planner is asked once, not retried");
-      assert.ok(models.includes(BUILDER));
-      const said = events.filter((e) => e.kind === "system.log").map((e) => String(e.payload.message ?? ""));
-      assert.ok(said.some((m) => /OpenRouter \(planner-x\) did not answer.*carries on with deepseek-flash/.test(m)), said.join("\n"));
-      assert.equal(events.some((e) => e.kind === "system.error"), false, "the turn did not fail");
-      assert.ok(events.some((e) => e.kind === "agent.reply" || e.kind === "turn.agent.done"));
     });
   } finally {
     await app.stop();

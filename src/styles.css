@@ -3033,6 +3033,12 @@ label + .jf-hint { margin-top: -5px; }
 .prov-body .jf-hint { margin-top: -6px; }
 .prov-body a { color: var(--accent-2); }
 .prov-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+/* Quiet buttons with no outline read as loose text; in a provider's actions they keep a hairline. */
+.prov-actions .btn.ghost { --btn-border: var(--border); }
+/* A role's provider and model, side by side; stacked when there is no room. */
+.role-pick { display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; }
+.role-pick .mp-open { flex: 1 1 200px; min-width: 0; width: auto; }
+.role-pick select.set-select { flex: 0 1 auto; width: auto; max-width: 100%; }
 .prov-ok { margin: 0; font-size: var(--fs-sm); line-height: 1.5; color: var(--live); }
 .prov-price {
   margin: 0; font-size: var(--fs-xs); line-height: 1.5; color: var(--text-3);
@@ -3047,6 +3053,14 @@ label + .jf-hint { margin-top: -5px; }
   background: var(--s2); border: 1px solid var(--border); color: var(--text);
   font-family: inherit; font-size: var(--fs-base); line-height: 1.5;
   appearance: none; cursor: pointer;
+}
+/* A native select has no chevron once its own is turned off, so it read as plain text: drawn from tokens. */
+select.set-select {
+  padding-right: 30px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-3) 50%), linear-gradient(135deg, var(--text-3) 50%, transparent 50%);
+  background-position: calc(100% - 17px) 50%, calc(100% - 12px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
 }
 
 /* The model row is this control too, so it opens the app's own list rather
