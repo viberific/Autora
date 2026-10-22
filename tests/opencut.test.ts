@@ -86,6 +86,17 @@ try {
     assert.deepEqual((await kv({ op: "list", ns: "files/media-files-p1" })).body.value, []);
   });
 
+  await test("a file that cannot be read fails that request, not the server", async () => {
+    const q = new URLSearchParams({ ns: "files/media-files-p9", key: "m9", name: "x.mp4", type: "video/mp4" });
+    assert.equal((await fetch(`${base}/api/opencut/file?${q}`, { method: "PUT", body: Buffer.from([1]) })).status, 200);
+    // Found by the check, unreadable by the stream: an unhandled stream error used to exit the process.
+    const bin = (fs.readdirSync(dir, { recursive: true }) as string[]).find((f) => f.endsWith("m9.bin"))!;
+    fs.rmSync(path.join(dir, bin));
+    fs.mkdirSync(path.join(dir, bin));
+    await fetch(`${base}/api/opencut/file?ns=files%2Fmedia-files-p9&key=m9`).then((r) => r.arrayBuffer()).catch(() => undefined);
+    assert.equal((await kv({ op: "list", ns: "files/media-files-p9" })).status, 200, "the server is still up");
+  });
+
   console.log("commands");
   await test("a command waits for the editor, is sent, claimed once and answered", async () => {
     pushes.length = 0;

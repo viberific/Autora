@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import http from "node:http";
 import https from "node:https";
+import net from "node:net";
 import path from "node:path";
 import type { Duplex } from "node:stream";
 import express, { type Request, type Response } from "express";
@@ -40,7 +41,8 @@ import {
 } from "./server/requirements";
 import { replyStyle, standingBlock, standingReminder } from "./server/prompt";
 import { WebPush } from "./server/webpush";
-import { allowSocket, refuseRequest } from "./server/crosssite";
+import { allowSocket, refuseHost, refuseRequest } from "./server/crosssite";
+import { peerGate } from "./server/peers";
 import { certificateSource, tlsSettings } from "./server/tls";
 import {
   connect as connectMcp, disconnect as disconnectMcp, mcpToolsGeneration, mcpTools,
@@ -6182,6 +6184,13 @@ async function startServer() {
   app.use((req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "same-origin");
+    /* A name nobody can point at this machine from outside, first: a
+       rebinding page sends `same-origin` and is only told apart by its Host. */
+    const misnamed = refuseHost(req.headers.host);
+    if (misnamed) {
+      log("warn", "http", `${req.method} ${req.path} refused: addressed to ${req.headers.host}`);
+      return res.status(403).json({ error: misnamed });
+    }
     const refused = refuseRequest(req.method, req.headers);
     if (refused) {
       log("warn", "http", `${req.method} ${req.path} refused: sent from another site`);
@@ -7013,6 +7022,14 @@ async function startServer() {
     },
   });
   const upgrade = (req: http.IncomingMessage, socket: Duplex, head: Buffer) => {
+    /* Every socket, the editors' and the terminal's included: one opened from
+       another site, or under a name a rebinding page could have used, reads
+       whole threads and documents, and the terminal's is a shell. */
+    if (refuseHost(req.headers.host) || !allowSocket(req.headers)) {
+      log("warn", "http", `websocket ${req.url ?? ""} refused: opened from another site or addressed to ${req.headers.host ?? "no host"}`);
+      socket.destroy();
+      return;
+    }
     // Spectra's editor has a socket of its own for a page opened on its own;
     // it takes the connection here or leaves it to the app's own sockets.
     if (spectraUpgrade(req, socket, head)) return;
@@ -7376,12 +7393,29 @@ async function startServer() {
   setTimeout(tidy, 5 * 60_000).unref();
   setInterval(tidy, 24 * 3600_000).unref();
 
-  server.listen(PORT, HOST, () => {
+  const listening = () => {
     console.log(`Autora ${VERSION} running on http://${HOST}:${PORT}`);
     if (HOST === "127.0.0.1" && !process.env.AUTORA_HOST) {
       console.log("[server] listening on this machine only; set AUTORA_HOST=0.0.0.0 to reach it from others");
     }
-  });
+  };
+  /* Only the peers the deployment names (server/peers.ts): on Umbrel, the
+     app's own proxy, so another app on Docker's shared network cannot reach
+     this port past the login. A peer is checked before the server reads a
+     byte from it; the socket waits, paused, while a name is looked up. */
+  const gate = peerGate(process.env.AUTORA_TRUSTED_PEERS, (line) => log("warn", "http", line));
+  if (gate) {
+    const gated = net.createServer({ pauseOnConnect: true }, (socket) => {
+      gate.allows(socket.remoteAddress).then((ok) => {
+        if (!ok || socket.destroyed) return void socket.destroy();
+        server.emit("connection", socket);
+        socket.resume();
+      }, () => socket.destroy());
+    });
+    gated.listen(PORT, HOST, listening);
+  } else {
+    server.listen(PORT, HOST, listening);
+  }
 
   /* The https copy, beside the plain port rather than instead of it. A
      failure here is said in the log and on the Voice check, and never takes

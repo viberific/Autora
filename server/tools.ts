@@ -1194,10 +1194,16 @@ async function runHttpRequest(args: {
   }
   const has = (name: string) => Object.keys(headers).some((k) => k.toLowerCase() === name);
 
+  /* Whether the request goes out with something of the person's in it: a
+     saved token added here or a placeholder filled below. Such a request
+     follows a redirect only to the same host (see the fetch below). */
+  let carriesSecret = false;
+
   // If calling GitHub API and GITHUB_TOKEN exists in secret store, inject Authorization
   if (isGitHubApi(url) && !has("authorization")) {
     const ghToken = secretFor("GITHUB_TOKEN") || secretFor("GH_TOKEN");
     if (ghToken) {
+      carriesSecret = true;
       headers["Authorization"] = `Bearer ${ghToken}`;
       if (!has("user-agent")) headers["User-Agent"] = "Autora-Agent";
       if (!has("accept")) headers["Accept"] = "application/vnd.github.v3+json";
@@ -1216,6 +1222,7 @@ async function runHttpRequest(args: {
      so a sign-in saved for one site cannot be spent on another. */
   let target = url;
   let body = args.body;
+  const unfilled = JSON.stringify([url, headers, body]);
   try {
     target = fillPlaceholders(url, url);
     for (const [name, value] of Object.entries(headers)) {
@@ -1225,14 +1232,46 @@ async function runHttpRequest(args: {
   } catch (err: unknown) {
     return { ok: false, summary: `http_request: ${err instanceof Error ? err.message : String(err)}` };
   }
+  if (JSON.stringify([target, headers, body]) !== unfilled) carriesSecret = true;
 
   try {
-    const res = await fetch(target, {
-      method,
+    /* fetch follows redirects on its own and, on a 307 or 308, sends the
+       same headers and body to wherever the Location points: a sign-in
+       checked against github.com would then be handed to any host an open
+       redirect names. With the person's details in it, a redirect is
+       followed here, by hand, and only to the same host (never down from
+       https to http). */
+    let at = target;
+    let verb = method;
+    let sent = body;
+    const send = () => fetch(at, {
+      method: verb,
       headers,
-      body: ["GET", "HEAD"].includes(method) ? undefined : body,
+      body: ["GET", "HEAD"].includes(verb) ? undefined : sent,
+      redirect: carriesSecret ? "manual" : "follow",
       signal: requestSignal(ctx, REQUEST_TIMEOUT_MS),
     });
+    let res = await send();
+    for (let hops = 0; carriesSecret && res.status >= 300 && res.status < 400 && res.headers.get("location"); hops++) {
+      const from = new URL(at);
+      const next = new URL(res.headers.get("location")!, at);
+      await res.body?.cancel().catch(() => undefined);
+      if (hops >= 5 || next.hostname !== from.hostname || (from.protocol === "https:" && next.protocol !== "https:")) {
+        return {
+          ok: false,
+          summary: redactForModel(
+            `http_request: not following the redirect from ${from.host} to ${next.protocol}//${next.host}: ` +
+            `the request carries the person's saved details, which only go to ${from.hostname}.`,
+          ),
+        };
+      }
+      if (res.status === 303 || ((res.status === 301 || res.status === 302) && verb === "POST")) {
+        verb = "GET";
+        sent = undefined;
+      }
+      at = next.href;
+      res = await send();
+    }
 
     const status = res.status;
     const statusText = res.statusText;

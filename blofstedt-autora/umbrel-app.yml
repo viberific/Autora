@@ -188,5 +188,8 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  Standing agreements (the calls the guard no longer asks about) now live in Settings, as a card on the Model & tools
-  tab, instead of under Scheduled tasks. You can still read each one and revoke it or all of them.
+  Security and stability fixes. On Umbrel only the app's own login proxy may now connect to Autora: other apps on the
+  box can no longer reach it directly, past the login. Autora also refuses requests addressed to a name a hostile
+  web page could point at it (DNS rebinding); if you reach Autora through a domain of your own, add it to
+  AUTORA_ALLOWED_HOSTS. A web request that carries your saved sign-ins no longer follows a redirect to another
+  site, and a media file that vanishes while it is being served no longer restarts the server.

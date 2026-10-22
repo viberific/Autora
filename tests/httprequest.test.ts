@@ -106,5 +106,39 @@ assert.equal(unknown.ok, false);
 assert.match(unknown.summary, /no credential called/i);
 console.log("  ok  a placeholder with no credential says so instead of sending it");
 
+/* A redirect with the person's details in the request: followed on the same
+   host, refused to another, where a 307 would have re-sent the body. */
+const elsewhereSeen: string[] = [];
+const other = http.createServer((req, res) => {
+  let b = "";
+  req.on("data", (c) => (b += c));
+  req.on("end", () => { elsewhereSeen.push(b); res.end("got it"); });
+});
+await new Promise<void>((resolve) => other.listen(0, "127.0.0.1", () => resolve()));
+const otherPort = (other.address() as { port: number }).port;
+const landed: string[] = [];
+const hops = http.createServer((req, res) => {
+  if (req.url === "/away") { res.writeHead(307, { location: `http://localhost:${otherPort}/` }); return res.end(); }
+  if (req.url === "/here") { res.writeHead(307, { location: "/landed" }); return res.end(); }
+  let b = "";
+  req.on("data", (c) => (b += c));
+  req.on("end", () => { landed.push(b); res.end("landed"); });
+});
+await new Promise<void>((resolve) => hops.listen(0, "127.0.0.1", () => resolve()));
+const hopBase = `http://127.0.0.1:${(hops.address() as { port: number }).port}`;
+
+const away = await runTool(http_request, { url: `${hopBase}/away`, method: "POST", body: "{{cred:email}}" }, ctx);
+assert.equal(away.ok, false, away.summary);
+assert.match(away.summary, /not following the redirect/);
+assert.deepEqual(elsewhereSeen, [], "the details never reached the other host");
+const here = await runTool(http_request, { url: `${hopBase}/here`, method: "POST", body: "{{cred:email}}" }, ctx);
+assert.equal(here.ok, true, here.summary);
+assert.deepEqual(landed, ["jq@example.com"], "a 307 on the same host re-sends the filled body");
+const plain = await runTool(http_request, { url: `${hopBase}/away`, method: "POST", body: "nothing secret" }, ctx);
+assert.equal(plain.ok, true, "a request with nothing of the person's follows redirects as before");
+console.log("  ok  a request carrying saved details follows a redirect only on the same host");
+other.close();
+hops.close();
+
 server.close();
 console.log("httprequest: all passed");
