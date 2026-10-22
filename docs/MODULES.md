@@ -316,6 +316,16 @@ Spectra's fetched renderer is most of what is on disk.
     folders the turn changed files in. A found check runs only when the agent says it is done (never after a to-do item), at most twice, and
     tells the agent pre-existing failures are not its to chase. `verify.auto`
     turns the looking off.
+  - `failedcmds.ts`: a terminal command that failed is not run again unchanged (`standingFailure`, checked in the
+    loop just before a terminal call runs; refused calls log `tool.error {repeat}`) while nothing has changed since: a
+    file edit or card (not one the failing command wrote itself), another command that is not read-only (unless it
+    never started: exit 126/127, not found), `edit_file`, `run_background`, or `FORGET_AFTER_MS`. A failure that often
+    passes (timeout, network, rate limit) gets one more try; `retry: "<why>"` on the call lets one through. Read from
+    the log, so it holds across turns and restarts; a failed result says so at once (`FAILED_NOTE`) and the turn note
+    lists what still fails (`failuresBriefing`).
+  - Quiet nudges: the console's "keep going" messages (open to-dos, unmet asks, a cut-off or empty reply) are
+    `system.log {quiet, activity}`: on the Logs page and the line under the thread (`lib/activity.ts`), never a note
+    in the thread (`derive`).
   - `syntaxcheck.ts`: whether a file still parses, answered by `edit_file` in
     the same result (`syntaxNote`), only for a break the edit made. Best parser
     on the machine: TypeScript's (the project's or Autora's; not in the

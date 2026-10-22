@@ -124,6 +124,7 @@ import type { AutoraEvent, Notice, PreviewRun, Session, SessionOrigin } from "./
 import { Workspace, type DiffLine, type FileChange as CodeChange } from "./server/codediff";
 import { runSubagent, type SubagentDeps } from "./server/subagent";
 import { projectMap } from "./server/projectmap";
+import { FAILED_NOTE, failuresBriefing, repeatRefusal, standingFailure } from "./server/failedcmds";
 import { historyFor, pastToolCalls } from "./server/history";
 import { DataUrlSieve } from "./server/datasieve";
 import { autoEffort, type Effort } from "./server/modelprofile";
@@ -2431,6 +2432,10 @@ async function systemInstructionFor(
 
   const unloaded = own ? unloadedIndex(loadedTools(own), mcpTools()) : null;
   if (unloaded) notes.push(unloaded);
+
+  /* Commands that failed and would fail again: a new turn starts knowing it rather than trying them once more. */
+  const stillFailing = own ? failuresBriefing(own.events) : null;
+  if (stillFailing) notes.push(stillFailing);
 
   const done = pastToolCalls(sessions.get(sessionId), recapAfter);
   if (done.length > 0) {
@@ -5250,8 +5255,11 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
                 );
               }
               context.append({ role: "user", text: open }, session.seqCounter);
+              /* In the background: the Logs page has it, the thread does not, and the line under the thread says what
+                 is happening. Nobody has to answer it, so it is not a bubble. */
               emitEvent(session, "system.log", "system", {
                 message: "The to-do list still had open items as the turn ended; asked the agent to bring it up to date.",
+                quiet: true, activity: "Finishing the to-do list",
               });
               continue;
             }
@@ -5272,6 +5280,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
               context.append({ role: "user", text: audit }, session.seqCounter);
               emitEvent(session, "system.log", "system", {
                 message: "Some of what was asked was not marked done as the turn ended; asked the agent to account for it.",
+                quiet: true, activity: "Checking every ask is done",
               });
               continue;
             }
@@ -5353,6 +5362,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
             message: turn.cutOff
               ? "The model's reply hit the output limit; asked it to carry on."
               : "The model returned an empty reply mid-task; asked it to carry on.",
+            quiet: true, activity: "Carrying on where it stopped",
           });
           continue;
         }
@@ -5677,6 +5687,17 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
             continue;
           }
 
+          /* The same command, failed, with nothing changed since that could make it pass: not run again, and the agent
+             is told why and what would (server/failedcmds.ts). `retry` with a reason lets it through. */
+          if (spec.name === "terminal" && !String(use.args?.retry ?? "").trim()) {
+            const standing = standingFailure(session.events, String(use.args?.command ?? ""), String(use.args?.cwd ?? ""));
+            if (standing) {
+              emitEvent(session, "tool.error", "agent", { repeat: true, error: "Not run again: it failed, and nothing has changed since." }, span);
+              reply(false, repeatRefusal(standing));
+              continue;
+            }
+          }
+
           const started = Date.now();
           ranSomething = true;
           const willWrite = (spec.name === "terminal" && !readOnlyCommand(String(use.args?.command ?? ""))) || spec.name === "edit_file";
@@ -5690,6 +5711,8 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
             const gone = missingPathIn(outcome.summary);
             const near = gone ? pathHint(terminalDir(), gone) : "";
             if (near) outcome.summary += `\n[Autora:${near}]`;
+            // Learned on the first failure: it will not be run again unchanged (server/failedcmds.ts).
+            outcome.summary += `\n${FAILED_NOTE}`;
           }
           const durationMs = Date.now() - started;
           const wrote = willWrite;

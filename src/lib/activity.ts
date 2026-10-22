@@ -51,6 +51,9 @@ export function readActivity(events: AutoraEvent[]): Reading {
   let lastKind: string | null = null;
   let asking = false;
   let steps = 0;
+  /* What the console is doing to keep the turn going (a quiet system.log: finishing the list, carrying on), until the
+     next step replaces it. */
+  let background: string | null = null;
 
   for (let i = start + 1; i < events.length; i++) {
     const e = events[i];
@@ -77,6 +80,12 @@ export function readActivity(events: AutoraEvent[]): Reading {
       case Kind.AgentText:
         lastKind = e.kind;
         break;
+      case Kind.Log:
+        if (e.payload?.quiet && typeof e.payload?.activity === "string") {
+          background = e.payload.activity;
+          lastKind = e.kind;
+        }
+        break;
       case Kind.AskRequest:
         asking = true;
         break;
@@ -101,6 +110,7 @@ export function readActivity(events: AutoraEvent[]): Reading {
     return { text: doing(String(running.payload?.name ?? "tool"), running.payload?.args ?? {}), phase: "building", since, steps, lastAt };
   }
   if (lastKind === Kind.AgentText) return { text: "Writing the reply", phase: "thinking", since, steps, lastAt };
+  if (lastKind === Kind.Log && background) return { text: background, phase: "thinking", since, steps, lastAt };
   if (last) {
     return {
       text: last.failed

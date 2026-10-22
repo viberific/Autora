@@ -40,6 +40,12 @@ export const terminalSPECS: ToolSpec[] = [
             "Optional directory to run in. Defaults to the configured working " +
             "directory.",
         },
+        retry: {
+          type: "string",
+          description:
+            "Only to run a command again that failed with nothing changed since (Autora refuses that): why it will go " +
+            "differently now.",
+        },
       },
       required: ["command"],
     },
