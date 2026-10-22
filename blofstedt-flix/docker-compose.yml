@@ -16,7 +16,7 @@ services:
     # Built by viberific/Flix's own workflow from the repo's package.json
     # version. Bump this tag (and `version` above) only once that tag exists
     # in the registry, or an update will fail with "manifest unknown".
-    image: ghcr.io/viberific/flix:0.3.64
+    image: ghcr.io/viberific/flix:0.3.65
     restart: unless-stopped
     # The GPU, for Quick Sync, is granted by umbrelOS, not here: it strips a
     # hand-written `devices: /dev/dri` when it patches this file at install
@@ -48,6 +48,19 @@ services:
       # (Settings > Network in umbrelOS shows it); casting is the only thing
       # that uses it. Empty means the Cast button never appears.
       LAN_URL: "http://10.0.0.247:8096"
+      # Deletion policy: "delete on release" is off. A finished, fully seeded
+      # download is held -- still seeding, still counted -- and deleted only when
+      # the Downloads volume actually runs short: below PRUNE_FREE_PCT the oldest
+      # deletable ones go, one at a time, until PRUNE_TARGET_PCT is free again.
+      # 5% of the 6.4 TB pool is about 320 GB, so this fires when the pool is
+      # nearly full, not while there is plenty of room.
+      PRUNE_FREE_PCT: "5"
+      PRUNE_TARGET_PCT: "10"
+      # Flix refuses new downloads below MIN_FREE_PCT, so that floor has to sit
+      # under the prune trigger or the trigger is unreachable: with the floor at
+      # 10, downloads alone can never take free space down to 5% for the prune to
+      # see it. At 4 the cleanup acts first and the refusal stays the backstop.
+      MIN_FREE_PCT: "4"
     volumes:
       # The sqlite database (users, library, saved keys), an optional .env
       # and qBittorrent's config — everything that survives an update.
@@ -56,6 +69,7 @@ services:
       # the same path inside the container for both, which it is: /downloads.
       # It is Umbrel's own Downloads folder, so everything Flix fetches shows
       # up in the Files app next to anything else you download. UmbrelOS will
-      # not let an app move, rename or delete a folder it was given this way --
-      # Flix never deletes anything it downloaded anyway.
+      # not let an app move or rename the folder it was given this way. What
+      # Flix removes is chosen by the policy above, and only files of torrents it
+      # downloaded itself.
       - "${UMBREL_ROOT}/home/Downloads:/downloads"

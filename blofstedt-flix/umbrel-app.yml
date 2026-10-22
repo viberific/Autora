@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.64"
+version: "0.3.65"
 port: 8096
 # umbrelOS only hands a container the GPU when the manifest says so: with this
 # permission it adds /dev/dri plus the render/video groups those nodes belong
@@ -60,10 +60,13 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  The home Queue is two rails now: Continue and Ready to Watch sit on
-  top, Your list and suggestions under them. Episodes that have downloaded
-  and are ready play instantly from the top rail instead of waiting behind
-  whatever you were watching.
+  Downloads are deleted for space now, not on release. A finished, fully
+  seeded download used to go the moment nothing was waiting on it; it now
+  stays, still seeding, until the disk is actually short: below 5% free the
+  oldest ones that can go are deleted, one at a time, until 10% is free
+  again. Nothing is deleted mid-playback, a torrent still owed to BTN is
+  never touched, and if the free space cannot be read nothing happens at
+  all. The refuse line drops to 4% so the cleanup gets a turn before new
+  downloads are blocked.
 
-  The app shell cache is refreshed, so installed copies pick this build up on
-  their own instead of holding the old one.
+  Upgrading keeps whatever is on disk: only future deletions change.
