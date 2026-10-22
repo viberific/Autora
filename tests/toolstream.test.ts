@@ -5,7 +5,7 @@
  *   npx tsx tests/toolstream.test.ts
  */
 import assert from "node:assert/strict";
-import { addToolDelta, parseArgs, type BuildingCall } from "../server/llm";
+import { addToolDelta, capTools, OPENAI_MAX_TOOLS, omittedNote, openAiCallId, openAiSchema, openAiTools, parseArgs, type BuildingCall } from "../server/llm";
 
 const fold = (parts: any[]) => {
   const m = new Map<number, BuildingCall>();
@@ -40,5 +40,33 @@ assert.equal(r[0].args, '{"action":"list"}');
 assert.deepEqual(parseArgs(JSON.stringify('{"action":"list"}')), { action: "list" });
 assert.deepEqual(parseArgs('```json\n{"action":"list"}\n```'), { action: "list" });
 assert.deepEqual(parseArgs("{broken"), {});
+
+// OpenAI refuses more than 128 tools; other vendors are sent the whole list.
+const named = (names: string[]) => names.map((name) => ({ name }));
+const many = named([
+  ...Array.from({ length: 100 }, (_, i) => `t${i}`),
+  ...Array.from({ length: 50 }, (_, i) => `mcp__s__m${i}`),
+]);
+const capped = capTools(many, true);
+assert.equal(capped.length, OPENAI_MAX_TOOLS);
+assert.ok(capped.slice(0, 100).every((t, i) => t.name === `t${i}`), "built-ins all kept, in order");
+// An MCP tool the chat already called outranks built-ins that were not.
+const heavy = named([...Array.from({ length: 128 }, (_, i) => `t${i}`), "mcp__s__used"]);
+const kept = capTools(heavy, true, new Set(["mcp__s__used"])).map((t) => t.name);
+assert.equal(kept.length, OPENAI_MAX_TOOLS);
+assert.ok(kept.includes("mcp__s__used") && !kept.includes("t127"));
+assert.equal(omittedNote([]), "");
+assert.match(omittedNote(["mcp__s__a", "mcp__s__b"]), /2 are not in your list.*mcp__s__a, mcp__s__b/);
+assert.match(omittedNote(Array.from({ length: 70 }, (_, i) => `x${i}`)), /and 10 more/);
+assert.equal(capTools(many, false).length, 150);
+assert.equal(capTools(named(["a", "b"]), true).length, 2);
+
+assert.deepEqual(openAiSchema({ type: "object", properties: { a: { type: "array" } } }).properties.a, { type: "array", items: {} });
+assert.deepEqual(openAiSchema({ type: "object", properties: { a: { type: "array", items: { type: "string" } } } }).properties.a.items, { type: "string" });
+assert.deepEqual(openAiSchema(undefined), { type: "object", properties: {} });
+assert.deepEqual(openAiSchema({ type: "object", properties: { type: { type: "string", enum: ["array"] } }, required: ["type"] }).required, ["type"]);
+assert.deepEqual(openAiTools([{ name: "a" }, { name: "a" }, { name: "b" }] as any).map((t) => t.name), ["a", "b"]);
+const long = "toolu_" + "x".repeat(60);
+assert.ok(openAiCallId(long).length <= 40 && openAiCallId(long) === openAiCallId(long) && openAiCallId("call_1") === "call_1");
 
 console.log("toolstream: ok");

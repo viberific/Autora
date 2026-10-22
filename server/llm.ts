@@ -373,6 +373,7 @@ export function openAiMessages(call: ChatCall): any[] {
   // DeepSeek thinks by default, and with tools on it wants that thinking back
   // on every assistant message. Other vendors reject a field they do not know.
   const deepseek = call.provider === "deepseek" || /api\.deepseek\.com/.test(call.baseUrl);
+  const openai = call.provider === "openai" || /(^|\/\/)api\.openai\.com/.test(call.baseUrl ?? "");
   const used = new Set<string>();
 
   for (let i = 0; i < call.messages.length; i += 1) {
@@ -382,8 +383,9 @@ export function openAiMessages(call: ChatCall): any[] {
 
     if (message.role === "assistant") {
       const calls = (message.calls ?? []).map((c) => {
-        let id = c.id || "call";
-        while (used.has(id)) id = `${c.id || "call"}_${used.size}`;
+        const base = openai ? openAiCallId(c.id || "call") : c.id || "call";
+        let id = base;
+        while (used.has(id)) id = `${base}_${used.size}`.slice(-40);
         used.add(id);
         return { use: c, id };
       });
@@ -469,7 +471,66 @@ function modernOpenAi(call: ChatCall): boolean {
   return openai && /^(gpt-5|gpt-6|o[1-9])/i.test(call.model ?? "");
 }
 
+/** OpenAI refuses a request with more than 128 tools ("array too long"). What stays, in order: tools this chat has already
+    called (the history names them), the built-in tools, tools the agent wrote, and last the connected-server tools, which
+    are the many and the least often needed. Within a tier the order it was built in is kept. */
+export const OPENAI_MAX_TOOLS = 128;
+export function capTools<T extends { name: string }>(tools: readonly T[], openai: boolean, called: ReadonlySet<string> = new Set()): T[] {
+  if (!openai || tools.length <= OPENAI_MAX_TOOLS) return [...tools];
+  const tier = (t: T) => (called.has(t.name) ? 0 : t.name.startsWith("mcp__") ? 3 : t.name.startsWith("my_") ? 2 : 1);
+  const keep = new Set(
+    tools.map((t, i) => ({ t, i, k: tier(t) })).sort((x, y) => x.k - y.k || x.i - y.i).slice(0, OPENAI_MAX_TOOLS).map((x) => x.t),
+  );
+  return tools.filter((t) => keep.has(t));
+}
+
+/** The line that tells the model which tools this request had no room for. They still run when called by name (the server
+    runs any tool it knows), so the model is given the names rather than left to think they do not exist. */
+export function omittedNote(left: readonly string[]): string {
+  if (left.length === 0) return "";
+  const shown = left.slice(0, 60).join(", ");
+  return `\n\nThis model takes at most ${OPENAI_MAX_TOOLS} tools in a request, so ${left.length} are not in your list. ` +
+    `They still work: call one by its exact name, with arguments as its name suggests. Not in your list: ${shown}` +
+    `${left.length > 60 ? `, and ${left.length - 60} more` : ""}.`;
+}
+
+/** A tool schema OpenAI will accept. It 400s on an array with no `items`, and on a root that is not an object with
+    `properties`; MCP servers send both. Only the wrong parts are put right, and the input is not changed. */
+export function openAiSchema(schema: any): any {
+  const fix = (s: any): any => {
+    if (Array.isArray(s)) return s.map(fix);
+    if (!s || typeof s !== "object") return s;
+    const out: Record<string, any> = {};
+    for (const [k, v] of Object.entries(s)) out[k] = k === "enum" || k === "required" || k === "default" || k === "const" || k === "examples" ? v : fix(v);
+    const t = out.type;
+    if ((t === "array" || (Array.isArray(t) && t.includes("array"))) && !out.items) out.items = {};
+    return out;
+  };
+  const root = fix(schema ?? {});
+  return root.type === "object" && root.properties ? root : { ...root, type: "object", properties: root.properties ?? {} };
+}
+
+/** OpenAI rejects a repeated tool name, and a tool-call id over 40 characters (ids minted by other vendors can be longer). */
+export function openAiTools(tools: readonly ToolDef[]): ToolDef[] {
+  const seen = new Set<string>();
+  return tools.filter((t) => !seen.has(t.name) && Boolean(seen.add(t.name)));
+}
+export const openAiCallId = (id: string): string => (id.length <= 40 ? id : id.slice(0, 31) + "_" + (hash(id) % 1e7).toString(36));
+function hash(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i += 1) h = (Math.imul(h, 31) + s.charCodeAt(i)) >>> 0;
+  return h;
+}
+
 async function streamOpenAi(call: ChatCall, onDelta: (text: string) => void): Promise<ChatTurn> {
+  const isOpenAi = call.provider === "openai" || /(^|\/\/)api\.openai\.com/.test(call.baseUrl ?? "");
+  const called = new Set(call.messages.flatMap((m) => (m.calls ?? []).map((c) => c.name)));
+  const tools = capTools(isOpenAi ? openAiTools(call.tools ?? []) : call.tools ?? [], isOpenAi, called);
+  if (tools.length < (call.tools?.length ?? 0)) {
+    console.warn(`[llm] ${call.model}: sent ${tools.length} of ${call.tools!.length} tools (OpenAI allows ${OPENAI_MAX_TOOLS})`);
+  }
+  const sent = new Set(tools.map((t) => t.name));
+  const system = (call.system ?? "") + omittedNote([...new Set((call.tools ?? []).map((t) => t.name))].filter((n) => !sent.has(n)));
   const deepseek = (call.provider ?? "") === "deepseek" || /api\.deepseek\.com/.test(call.baseUrl ?? "");
   /* OpenRouter is a router: one model is served from several endpoints, and
      without being told which, it may answer a turn from a different one --
@@ -506,15 +567,15 @@ async function streamOpenAi(call: ChatCall, onDelta: (text: string) => void): Pr
          whatever the model does by default. */
       ...(!deepseek && call.thinking === "off" && /glm/i.test(call.model) && off ? { thinking: { type: "disabled" } } : {}),
       ...(call.thinking === "off" && openrouter && off ? { reasoning: { enabled: false } } : {}),
-      messages: openAiMessages(call),
-      ...(call.tools?.length
+      messages: openAiMessages({ ...call, system }),
+      ...(tools.length
         ? {
-            tools: call.tools.map((t) => ({
+            tools: tools.map((t) => ({
               type: "function",
               function: {
                 name: t.name,
                 description: t.description,
-                parameters: t.parameters,
+                parameters: isOpenAi ? openAiSchema(t.parameters) : t.parameters,
               },
             })),
             tool_choice: "auto",
