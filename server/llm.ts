@@ -471,11 +471,17 @@ function modernOpenAi(call: ChatCall): boolean {
   return openai && /^(gpt-5|gpt-6|o[1-9])/i.test(call.model ?? "");
 }
 
-/** OpenAI refuses a request with more than 128 tools ("array too long"). The list is kept in the order it was built (core
-    tools first, connected-server tools last), so the tail is what goes; nothing else is changed. */
+/** OpenAI refuses a request with more than 128 tools ("array too long"). What stays, in order: tools this chat has already
+    called (the history names them), the built-in tools, tools the agent wrote, and last the connected-server tools, which
+    are the many and the least often needed. Within a tier the order it was built in is kept. */
 export const OPENAI_MAX_TOOLS = 128;
-export function capTools<T>(tools: readonly T[], openai: boolean): T[] {
-  return openai && tools.length > OPENAI_MAX_TOOLS ? tools.slice(0, OPENAI_MAX_TOOLS) : [...tools];
+export function capTools<T extends { name: string }>(tools: readonly T[], openai: boolean, called: ReadonlySet<string> = new Set()): T[] {
+  if (!openai || tools.length <= OPENAI_MAX_TOOLS) return [...tools];
+  const tier = (t: T) => (called.has(t.name) ? 0 : t.name.startsWith("mcp__") ? 3 : t.name.startsWith("my_") ? 2 : 1);
+  const keep = new Set(
+    tools.map((t, i) => ({ t, i, k: tier(t) })).sort((x, y) => x.k - y.k || x.i - y.i).slice(0, OPENAI_MAX_TOOLS).map((x) => x.t),
+  );
+  return tools.filter((t) => keep.has(t));
 }
 
 /** A tool schema OpenAI will accept. It 400s on an array with no `items`, and on a root that is not an object with
@@ -508,7 +514,8 @@ function hash(s: string): number {
 
 async function streamOpenAi(call: ChatCall, onDelta: (text: string) => void): Promise<ChatTurn> {
   const isOpenAi = call.provider === "openai" || /(^|\/\/)api\.openai\.com/.test(call.baseUrl ?? "");
-  const tools = capTools(isOpenAi ? openAiTools(call.tools ?? []) : call.tools ?? [], isOpenAi);
+  const called = new Set(call.messages.flatMap((m) => (m.calls ?? []).map((c) => c.name)));
+  const tools = capTools(isOpenAi ? openAiTools(call.tools ?? []) : call.tools ?? [], isOpenAi, called);
   if (tools.length < (call.tools?.length ?? 0)) {
     console.warn(`[llm] ${call.model}: sent ${tools.length} of ${call.tools!.length} tools (OpenAI allows ${OPENAI_MAX_TOOLS})`);
   }
