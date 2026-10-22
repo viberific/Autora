@@ -506,3 +506,27 @@ What is already right and should stay: the system text is kept stable within a
 turn (per-turn facts go in the note, not `pinned`), the system block and the last
 message each carry a cache breakpoint, tool output over 3,000 tokens goes to the
 vault, and research runs in a worker whose reading never enters the main context.
+
+---
+
+# Follow-up, October 2026 (0.9.296): AI-driven development
+
+A pass over what an agent working on Autora pays for, beyond the code itself, and what the in-app agent pays per
+coding task. Ids continue (F = for agents).
+
+| Id | Finding | Done |
+|---|---|---|
+| F1 | Before a push an agent had to run `npm run lint`, which typechecks every embedded editor and needs GDevelop's ~2.5-minute install even when nothing there changed, then guess which of 220 test files matter. | `npm run check` (`scripts/check.ts`): root typechecks, an editor's only when something it uses changed, ESLint, knip, the release check, then `npm test -- --changed` (`tests/affected.ts`: the import graph, server.ts reached through the e2e harness). About 90 s for the static half. |
+| F2 | Docs named files that no longer exist (`office/shim/cursor.js`, `spectra-editor/src/autora/phone.tsx`), and `MODULES.md` said every tool is shown by default (the short list is the default since 0.9.278). | Fixed, and `tests/docs.test.ts` fails when a doc names a file that is not there. |
+| F3 | 26 prose lines in `MODULES.md`, `MAP.md`, `TOOL-RAIL.md` were over 200 characters (one 4,300): a grep hit returned the whole paragraph. | Re-wrapped at 116 columns, code spans kept whole; renders the same. |
+| F4 | The history the model is sent was built inside `server.ts` and could only be tested through a running server. | `server/history.ts` (`historyFor`, `pastToolCalls`) and `server/datasieve.ts`, with unit tests (`tests/history.test.ts`). |
+| F5 | A model's quirks were special cases scattered through `llm.ts`'s request builders. | `server/modelprofile.ts`, with the rule in `CLAUDE.md`; a 400 that names a field it added is learned. |
+
+Open, in order of payoff:
+
+- **C1 (still):** `runTurn` is ~1,950 lines of closures in `server.ts`. The next cut is the end-of-turn checks (finish
+  audit, project check, preview console: one function taking `{ context, session, turn, state }` and returning the
+  note to append or null), then `askModel` with its retries. Each is testable alone once out.
+- **C5 (still):** a typed `EventPayloads` map for `emitEvent` and `derive()`.
+- `tests/affected.ts` is coarse for `server/tools.ts` and `server.ts` (both reach most tests); a per-tool split of
+  `runTool` would make `--changed` sharper.

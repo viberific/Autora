@@ -12,7 +12,8 @@
  *
  * With no command set, the project's own check is looked for (detectCheck): the
  * scripts in its package.json, its tsconfig, pytest, cargo, go. Found that way it
- * runs fewer times, and the agent is told it was not the person's choice, so a
+ * runs only when the agent says it is done (not after each to-do item), at most
+ * twice a turn, and the agent is told it was not the person's choice, so a
  * suite that was already failing is reported rather than chased. Settings can turn
  * the looking off.
  */
@@ -80,15 +81,16 @@ export function detectCheck(dir: string): string | null {
     const scripts: Record<string, string> = pkg.scripts && typeof pkg.scripts === "object" ? pkg.scripts : {};
     const usable = (name: string) => typeof scripts[name] === "string" && !LONG_RUNNING.test(scripts[name]) && !NO_TEST.test(scripts[name]);
     const runner = exists(dir, "pnpm-lock.yaml") && has("pnpm") ? "pnpm" : exists(dir, "yarn.lock") && has("yarn") ? "yarn" : "npm";
-    const run = (name: string) => (runner === "npm" ? `npm run -s ${name}` : `${runner} -s ${name}`);
+    /* CI=1 on each command: test runners that watch by default (jest, vitest, react-scripts) run once with it. */
+    const run = (name: string) => `CI=1 ${runner === "npm" ? `npm run -s ${name}` : `${runner} -s ${name}`}`;
     const whole = SCRIPT_ORDER.slice(0, 2).find(usable);
-    if (whole) return `CI=1 ${run(whole)}`;
+    if (whole) return run(whole);
     // Types and tests together when both exist: each catches what the other does not.
     const picked = SCRIPT_ORDER.slice(2, 5).filter(usable).filter((n, i, all) => !(n === "type-check" && all.includes("typecheck")));
-    if (picked.length) return `CI=1 ${picked.map(run).join(" && ")}`;
+    if (picked.length) return picked.map(run).join(" && ");
     if (exists(dir, "tsconfig.json") && exists(dir, "node_modules/.bin/tsc")) return "npx --no-install tsc --noEmit -p .";
     const rest = SCRIPT_ORDER.slice(5).find(usable);
-    if (rest) return `CI=1 ${run(rest)}`;
+    if (rest) return run(rest);
   }
   if (!pkg && exists(dir, "tsconfig.json") && exists(dir, "node_modules/.bin/tsc")) return "npx --no-install tsc --noEmit -p .";
   if (exists(dir, "Cargo.toml") && has("cargo")) return "cargo check -q --message-format short";

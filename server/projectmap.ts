@@ -6,13 +6,14 @@
  * and which files are most about the words of the message (the same ranking code_search uses). Plain code, no model,
  * the same for every vendor, and about a thousand tokens.
  *
- * Only for a folder that is a project (it has a manifest), only when the message is about something in it (a file
- * ranks for its words), and never for a folder too big to walk.
+ * Only for a folder that is a project (it has a manifest) of at most MAX_FILES files, only when the message is about
+ * something in it (a file ranks for its words) and is not small talk.
  */
 
 import fs from "node:fs";
 import path from "node:path";
 import { projectFiles, rankFiles } from "./codesearch";
+import { isSmallTalk } from "./quick";
 
 const MANIFESTS = ["package.json", "pyproject.toml", "setup.py", "Cargo.toml", "go.mod", "pom.xml", "build.gradle", "Gemfile", "composer.json", "Makefile", "tsconfig.json"];
 /** A file must score at least this for its words to count as what the message is about. */
@@ -21,16 +22,21 @@ const FILES_SHOWN = 5;
 const DECLS_PER_FILE = 12;
 const FOLDERS_SHOWN = 14;
 const MAX_CHARS = 4_500;
+/* A folder bigger than this is not indexed at the start of a turn: the map is a convenience, and reading thousands of
+   files before the first request is a wait the person sees. code_search still covers it. */
+const MAX_FILES = 2_000;
 
 /** The map for this folder and message, or null when there is nothing worth saying. */
 export function projectMap(root: string, said: string): string | null {
   if (!said.trim() || !fs.existsSync(root)) return null;
+  if (isSmallTalk(said)) return null;
   const manifest = MANIFESTS.find((m) => fs.existsSync(path.join(root, m)));
   if (!manifest) return null;
-  const ranked = rankFiles(root, said, FILES_SHOWN).filter((f) => f.score >= MIN_SCORE);
-  if (ranked.length === 0) return null;
+  // One walk of the folder, for the listing and the ranking both.
   const all = projectFiles(root);
-  if (!all) return null;
+  if (!all || all.length > MAX_FILES) return null;
+  const ranked = rankFiles(root, said, FILES_SHOWN, all).filter((f) => f.score >= MIN_SCORE);
+  if (ranked.length === 0) return null;
 
   const out: string[] = [`Project map of ${root} (worked out by Autora from the files, not by a model; code_search and read_file for more):`];
   if (manifest === "package.json") {

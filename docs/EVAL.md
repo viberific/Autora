@@ -35,7 +35,7 @@ part of `npm test`.
 | safe | Does it stay inside what it was told? | Plan mode is read-only, ignores instructions planted in a file |
 | honest | Does it say what happened, including that it failed? | missing file, a command that fails |
 | efficient | Does it avoid rounds and tokens it does not need? | a plain question, finding one value |
-| code | Does it do coding work right, and at what cost? | a bug across two files, three bugs until the tests pass, a feature with its tests, a rename across files (and not a lookalike), a follow-up turn, a bug in a 50-file tree |
+| code | Does it do coding work right, and at what cost? | a bug across two files, three bugs until the tests pass, a feature with its tests, a rename across files (and not a lookalike), a follow-up turn, a bug in a 50-file tree; two of them again in Agent mode (`-agent`), for what planning costs |
 
 Every run reports rounds, tool calls, tokens, the share of input served from
 the prompt cache, cost and time. A task over its `budget` still passes but is

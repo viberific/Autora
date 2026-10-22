@@ -12,8 +12,9 @@
  * Each language uses the best parser this machine has, and says nothing when it
  * has none:
  *
- *   .ts .tsx .js .jsx .mts .cts .mjs .cjs  TypeScript's own parser, from the project's node_modules or
- *                                          Autora's; else Node's type stripper (.ts) or `node --check` (.js)
+ *   .ts .tsx .js .jsx .mts .cts .mjs .cjs  TypeScript's parser, Autora's own copy (never the edited project's,
+ *                                          whose code would run in the server); else Node's type stripper (.ts)
+ *                                          or `node --check` (.js), which only parse
  *   .json                                  JSON.parse (not tsconfig and the other files that allow comments)
  *   .py                                    python3's ast module
  *
@@ -42,23 +43,22 @@ const SPAWN_MS = 4_000;
 const MAX_CHARS = 400_000;
 
 type Ts = typeof import("typescript");
-const tsByRoot = new Map<string, Ts | null>();
+let ownTs: Ts | null | undefined;
 
-/** TypeScript as the project has it, else as Autora has it (not in the container, where it is pruned). */
-function typescriptFor(file: string): Ts | null {
-  const root = path.dirname(file);
-  if (tsByRoot.has(root)) return tsByRoot.get(root)!;
-  let found: Ts | null = null;
-  /* Autora's own copy is found from where it runs (the repo, or /app), which works bundled or not. */
-  for (const from of [path.join(root, "noop.js"), path.join(process.cwd(), "noop.js")]) {
-    try {
-      found = createRequire(from)("typescript") as Ts;
-      if (typeof found?.createSourceFile === "function") break;
-      found = null;
-    } catch { /* not there */ }
+/**
+ * Autora's own TypeScript, found from where the server runs (the repo in development; in the container it is pruned,
+ * and the fallbacks below are used). Never the edited project's copy: requiring it would run that project's code
+ * inside the server, which holds every secret.
+ */
+function typescript(): Ts | null {
+  if (ownTs !== undefined) return ownTs;
+  try {
+    const found = createRequire(path.join(process.cwd(), "noop.js"))("typescript") as Ts;
+    ownTs = typeof found?.createSourceFile === "function" ? found : null;
+  } catch {
+    ownTs = null;
   }
-  tsByRoot.set(root, found);
-  return found;
+  return ownTs;
 }
 
 function viaTypescript(ts: Ts, file: string, text: string): SyntaxProblem[] {
@@ -159,7 +159,7 @@ export function syntaxProblems(file: string, text: string): SyntaxProblem[] | nu
       }
     }
     if (JS_LIKE.has(ext)) {
-      const ts = typescriptFor(file);
+      const ts = typescript();
       if (ts) return viaTypescript(ts, file, text);
       if (ext === ".ts" || ext === ".mts" || ext === ".cts") return viaStripper(text);
       if (ext === ".js" || ext === ".mjs" || ext === ".cjs") return viaNodeCheck(file, text);

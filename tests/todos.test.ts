@@ -218,6 +218,13 @@ test("items are ticked off by position without writing the list again", () => {
   assert.deepEqual(applyTodos(r.list!, { done: 3 }).list!.items.map((i) => i.status), ["completed", "in-progress", "completed"], "one number works too");
 });
 
+test("ticking an item off finishes its steps, and two items in progress are pointed out", () => {
+  const list = applyTodos(null, { todos: [{ title: "a", status: "in-progress", subtasks: ["x", "y"] }, "b"] }).list!;
+  const done = applyTodos(list, { done: [1] });
+  assert.deepEqual(done.list!.items[0].subtasks!.map((s) => s.status), ["completed", "completed"]);
+  assert.match(applyTodos(list, { start: 2 }).summary, /2 items are in progress/);
+});
+
 test("ticking off with no list, or a position that is not there, says so", () => {
   assert.match(applyTodos(null, { done: [1] }).summary, /no list to tick off/);
   const list = applyTodos(null, { todos: ["a"] }).list!;

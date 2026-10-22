@@ -14,7 +14,7 @@
  */
 
 import { GoogleGenAI } from "@google/genai";
-import { type Effort, effectiveProfile, learnRefusal, learnResponsesApi, usesResponsesApi } from "./modelprofile";
+import { type Effort, effectiveProfile, isOpenAiReasoningModel, learnRefusal, learnResponsesApi, usesResponsesApi } from "./modelprofile";
 import { type ModelSpec, providerSpec } from "./providers";
 
 /** A tool the model may call, in the one shape all three vendors accept once
@@ -480,7 +480,7 @@ const refusesThinkingOff = (message: string) => /reasoning is mandatory|cannot b
    so those requests are untouched. */
 function modernOpenAi(call: ChatCall): boolean {
   const openai = call.provider === "openai" || /(^|\/\/)api\.openai\.com/.test(call.baseUrl ?? "");
-  return openai && /^(gpt-5|gpt-6|o[1-9])/i.test(call.model ?? "");
+  return openai && isOpenAiReasoningModel(call.model ?? "");
 }
 
 /** OpenAI refuses a request with more than 128 tools ("array too long"). What stays, in order: tools this chat has already
@@ -751,7 +751,9 @@ async function streamResponses(call: ChatCall, onDelta: (text: string) => void):
       ...(call.effort && profile.effort === "openai" ? { reasoning: { effort: call.effort } } : {}),
       ...(tools.length
         ? {
-            tools: tools.map((t) => ({ type: "function", name: t.name, description: t.description, parameters: openAiSchema(t.parameters) })),
+            /* Strict is the Responses API's default, and it takes only schemas that list every property as required
+               and forbid others; ours (and connected servers') are ordinary JSON Schema. */
+            tools: tools.map((t) => ({ type: "function", name: t.name, description: t.description, parameters: openAiSchema(t.parameters), strict: false })),
             tool_choice: "auto",
           }
         : {}),

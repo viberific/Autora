@@ -75,7 +75,7 @@ console.log("project check, found");
 test("an npm project with installed dependencies: type check and tests, in CI mode", () => {
   write("web/package.json", JSON.stringify({ scripts: { dev: "vite", typecheck: "tsc --noEmit", test: "vitest", lint: "eslint ." } }));
   fs.mkdirSync(at("web/node_modules"), { recursive: true });
-  assert.equal(detectCheck(at("web")), "CI=1 npm run -s typecheck && npm run -s test");
+  assert.equal(detectCheck(at("web")), "CI=1 npm run -s typecheck && CI=1 npm run -s test");
 });
 
 test("a whole check script wins; watchers, servers and npm's placeholder test never count", () => {

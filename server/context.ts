@@ -511,6 +511,9 @@ export class ContextEngine {
     // A turn stopped between asking for calls and their answers: those calls have no results, which a vendor refuses.
     const last = this.active[this.active.length - 1];
     if (last.role === "assistant" && (last.calls?.length ?? 0) > 0) return null;
+    /* Pictures go with the turn they belong to and no later one (historyFor): a photo, a live-view frame or a
+       screenshot carried on would be sent again with every request after it. Such a turn starts from words. */
+    if (this.active.some((m) => (m.images?.length ?? 0) > 0 || (m.replies ?? []).some((r) => (r.images?.length ?? 0) > 0))) return null;
     return l.seq;
   }
 
@@ -794,8 +797,8 @@ export class ContextEngine {
         {
           role: "user",
           text:
-            "(Earlier turns were condensed into the anchored working memory in " +
-            "your instructions. Carry on from where the conversation below " +
+            "(Earlier turns were condensed into the anchored working memory " +
+            `${opts.anchorInMessages && this.anchored ? "above" : "in your instructions"}. Carry on from where the conversation below ` +
             "picks up.)",
         },
         ...out,
@@ -806,7 +809,9 @@ export class ContextEngine {
       if (!this.noteOn || !this.active.includes(this.noteOn)) {
         this.noteOn = [...this.active].reverse().find((m) => m.role === "user") ?? null;
       }
-      const i = this.noteOn ? out.indexOf(this.noteOn) : -1;
+      let i = this.noteOn ? out.indexOf(this.noteOn) : -1;
+      // Left out of this request by the overflow backstop: the latest user message still in it takes the note.
+      if (i < 0) i = out.map((m) => m.role).lastIndexOf("user");
       if (i >= 0) out[i] = { ...out[i], text: `${out[i].text ?? ""}\n\n${this.turnNote}` };
     }
     /* Frame 1 at the head of the history rather than in the system text, when the caller sends the system text

@@ -47,6 +47,8 @@ await test("OpenAI's reasoning models take reasoning effort; everything else get
   assert.deepEqual(modelProfile("openai", "gpt-5-mini"), { effort: "openai", temperature: false });
   assert.deepEqual(modelProfile("openai", "o4-mini"), { effort: "openai", temperature: false });
   assert.deepEqual(modelProfile("openai", "gpt-4o-mini"), { effort: null, temperature: true });
+  assert.deepEqual(modelProfile("openai", "gpt-7"), { effort: "openai", temperature: false }, "later generations too");
+  assert.deepEqual(modelProfile("openai", "gpt-6-luna"), { effort: "openai", temperature: false });
   assert.deepEqual(modelProfile("deepseek", "deepseek-flash"), { effort: null, temperature: true });
   assert.deepEqual(modelProfile("openrouter", "openai/gpt-5"), { effort: null, temperature: true }, "a gateway is not assumed to pass it on");
 });

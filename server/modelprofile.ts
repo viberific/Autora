@@ -39,8 +39,10 @@ export function claudeVersion(model: string): { family: string; version: number 
   return { family: m[1].toLowerCase(), version: Number(m[2]) + (m[3] ? Number(m[3]) / 10 : 0) };
 }
 
-/** OpenAI's reasoning models: GPT-5 and later, and the o-series. */
-const OPENAI_REASONING = /^(gpt-5|gpt-6|o[1-9])/i;
+/** OpenAI's reasoning models: GPT-5 and later, and the o-series. They take `max_completion_tokens` and reasoning
+    effort, and refuse a temperature. The one rule for it: llm.ts asks here too. */
+const OPENAI_REASONING = /^(gpt-(?:[5-9]|\d{2,})|o[1-9])/i;
+export const isOpenAiReasoningModel = (model: string): boolean => OPENAI_REASONING.test(model);
 
 /** What `model`, reached through `provider` (and `baseUrl`), takes. */
 export function modelProfile(provider: string, model: string, baseUrl = ""): ModelProfile {

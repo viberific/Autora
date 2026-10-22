@@ -697,3 +697,19 @@ export const TASKS: Task[] = [
     ],
   },
 ];
+
+/* Agent mode is what a person gets by default, and it plans before it builds. The same two tasks there say what the
+   planning costs, per vendor, against their Build-mode runs. */
+for (const id of ["code-multifile-bug", "code-find-in-larger-tree"]) {
+  const base = TASKS.find((t) => t.id === id)!;
+  const [first, ...rest] = base.reference ?? [];
+  TASKS.push({
+    ...base,
+    id: `${id}-agent`,
+    mode: "agent",
+    budget: { ...base.budget, rounds: (base.budget?.rounds ?? 8) + 2 },
+    // Switching to build in the same step as the work, as the mode's own instructions say for a small task.
+    reference: first ? [{ ...first, tools: [{ name: "set_mode", args: { to: "build" } }, ...(first.tools ?? [])] }, ...rest] : undefined,
+    violation: undefined,
+  });
+}

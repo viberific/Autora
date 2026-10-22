@@ -384,11 +384,13 @@ export function searchCode(opts: SearchOptions): SearchResult {
  * The files most about some words, best first, with their declarations: what the project map (server/projectmap.ts)
  * shows. Plain BM25 over the same windows as a ranked search; at most `n` files, each with its best score.
  */
-export function rankFiles(root: string, query: string, n: number): { rel: string; score: number; decls: Decl[]; lines: number }[] {
+export function rankFiles(root: string, query: string, n: number, only?: readonly string[]): { rel: string; score: number; decls: Decl[]; lines: number }[] {
   const terms = [...new Set(words(query))];
   if (terms.length === 0) return [];
-  const { files, truncated } = selected(path.resolve(root));
-  if (truncated) return [];
+  const top = path.resolve(root);
+  const walked = only ? null : selected(top);
+  if (walked?.truncated) return [];
+  const files = only ? only.map((rel) => ({ rel, full: path.join(top, rel) })) : walked!.files;
   const entries = new Map<string, Indexed>();
   const chunks: Chunk[] = [];
   for (const f of files) {

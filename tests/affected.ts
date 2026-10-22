@@ -52,6 +52,22 @@ export function importedBy(root: string): Map<string, Set<string>> {
   return back;
 }
 
+/** The files `entries` import, directly or not, themselves included: what a change to any of them can break there. */
+export function dependsOn(root: string, entries: readonly string[]): Set<string> {
+  const seen = new Set<string>();
+  const queue = [...entries];
+  while (queue.length) {
+    const f = queue.shift()!;
+    if (seen.has(f) || !fs.existsSync(path.join(root, f))) continue;
+    seen.add(f);
+    for (const m of fs.readFileSync(path.join(root, f), "utf8").matchAll(IMPORT)) {
+      const to = resolve(root, f, m[1]);
+      if (to) queue.push(to);
+    }
+  }
+  return seen;
+}
+
 /** The test files (names, as tests/run.ts lists them) that `changed` files can reach. */
 export function affectedTests(root: string, changed: readonly string[]): string[] {
   const back = importedBy(root);

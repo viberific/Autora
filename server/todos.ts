@@ -169,15 +169,6 @@ export function describeTodos(list: TodoList): string {
   return [`To-do list -- ${done} of ${list.items.length} done:`, ...lines].join("\n");
 }
 
-/**
- * What the agent asked for, done to the list.
- *
- * `todos` is the whole list as it now stands. Nothing throws: a call that
- * cannot be carried out comes back as a sentence saying why, which is what the
- * model has to work with either way. More than one item in progress is kept
- * (it may be true) but mentioned, because a list that says three things are
- * happening at once has stopped saying where the work is.
- */
 /** Positions (1-based) out of a field that may be one number or a list of them. */
 function positions(value: unknown): number[] {
   const list = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
@@ -199,15 +190,29 @@ function patchTodos(current: TodoList | null, action: Record<string, any>): Todo
     return { ok: false, summary: `There is no item ${bad}: the list has ${current.items.length}.\n\n${describeTodos(current)}` };
   }
   const items = current.items.map((item, i) => {
-    if (done.includes(i + 1)) return { ...item, status: "completed" as const };
+    // A finished item's steps are finished with it, as a whole list written out says (readSubtasks).
+    if (done.includes(i + 1)) {
+      return { ...item, status: "completed" as const, ...(item.subtasks ? { subtasks: item.subtasks.map((s) => ({ ...s, status: "completed" as const })) } : {}) };
+    }
     if (start.includes(i + 1)) return { ...item, status: "in-progress" as const };
     return item;
   });
   const list = { items };
   const finished = items.filter((i) => i.status === "completed").length;
-  return { ok: true, list, summary: describeTodos(list), preview: `${finished} of ${items.length} done` };
+  const doing = items.filter((i) => i.status === "in-progress").length;
+  const note = doing > 1 ? `\n\nNote: ${doing} items are in progress. Mark the one you finished done when you start the next.` : "";
+  return { ok: true, list, summary: `${describeTodos(list)}${note}`, preview: `${finished} of ${items.length} done` };
 }
 
+/**
+ * What the agent asked for, done to the list.
+ *
+ * `todos` is the whole list as it now stands. Nothing throws: a call that
+ * cannot be carried out comes back as a sentence saying why, which is what the
+ * model has to work with either way. More than one item in progress is kept
+ * (it may be true) but mentioned, because a list that says three things are
+ * happening at once has stopped saying where the work is.
+ */
 export function applyTodos(current: TodoList | null, action: Record<string, any>): TodoResult {
   const raw = action?.todos ?? action?.items ?? action?.tasks ?? action?.todoList;
   if (raw === undefined && (action?.done !== undefined || action?.start !== undefined)) return patchTodos(current, action);

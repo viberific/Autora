@@ -68,6 +68,36 @@ test("no carrying on to another model, after the cache has gone, or past a stop 
   assert.equal(stopped.canCarry(MODEL, MIN), null);
 });
 
+test("a history with a picture in it is not carried, so the picture is not sent again", () => {
+  const withPhoto = new ContextEngine();
+  withPhoto.load([{ message: { role: "user", text: "what is this", images: [{ mime: "image/png", data: "AAA" }] }, seq: 1 }]);
+  withPhoto.setTurnNote("[n]");
+  withPhoto.messagesFor("s");
+  withPhoto.endTurn(MODEL);
+  assert.equal(withPhoto.canCarry(MODEL, MIN), null);
+  const withShot = aTurn();
+  withShot.append({ role: "assistant", text: "", calls: [{ id: "c9", name: "browser_screenshot", args: {} }] }, 4);
+  withShot.append({ role: "tool", replies: [{ id: "c9", name: "browser_screenshot", ok: true, result: "shot", images: [{ mime: "image/png", data: "B" }] }] }, 5);
+  withShot.endTurn(MODEL);
+  assert.equal(withShot.canCarry(MODEL, MIN), null);
+});
+
+test("a note whose message the backstop left out of a request goes on the latest user message still in it", () => {
+  const engine = new ContextEngine();
+  engine.setWindow(4_000);
+  engine.load([{ message: { role: "user", text: "start" }, seq: 1 }]);
+  engine.setTurnNote("[the note]");
+  engine.messagesFor("s");
+  for (let i = 0; i < 12; i += 1) {
+    engine.append({ role: "assistant", text: "", calls: [{ id: `c${i}`, name: "read_file", args: {} }] }, 2 + i * 2);
+    engine.append({ role: "tool", replies: [{ id: `c${i}`, name: "read_file", ok: true, result: "x".repeat(2_000) }] }, 3 + i * 2);
+  }
+  engine.append({ role: "user", text: "(Autora: carry on.)" }, 40);
+  const out = engine.messagesFor("s");
+  assert.ok(!out.some((m) => m.text === "start" || m.text?.startsWith("start\n")), "the first message was left out");
+  assert.ok(out.some((m) => m.role === "user" && /\[the note\]/.test(m.text ?? "")), "the note is still sent");
+});
+
 test("loading the history from words forgets what could have been carried", () => {
   const engine = aTurn();
   engine.endTurn(MODEL);
@@ -81,6 +111,11 @@ test("the anchored record goes at the head of the history when asked, and in the
   assert.match(engine.systemFor("pinned"), /ANCHORED WORKING MEMORY/, "sizes are still reckoned with it");
   const sent: ChatMessage[] = engine.messagesFor(engine.systemFor("pinned"), { anchorInMessages: true });
   assert.match(sent[0].text!, /^=== ANCHORED WORKING MEMORY ===[\s\S]*- the goal[\s\S]*fix the bug/);
+  const folded = new ContextEngine();
+  folded.load([{ message: { role: "assistant", text: "earlier words" }, seq: 5 }]);
+  (folded as unknown as { anchored: string }).anchored = "- the goal";
+  assert.match(folded.messagesFor("s", { anchorInMessages: true })[0].text!, /anchored working memory above/);
+  assert.match(folded.messagesFor("s")[0].text!, /anchored working memory in your instructions/);
   assert.equal(sent[0].role, "user");
 });
 

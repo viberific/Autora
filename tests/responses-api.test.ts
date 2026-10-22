@@ -73,7 +73,7 @@ await test("gpt-6-luna goes to /v1/responses, with tools, reasoning effort, noth
   const b = hits[0].body;
   assert.equal(b.instructions, "Be brief.");
   assert.deepEqual(b.input, [{ role: "user", content: "hi" }]);
-  assert.deepEqual(b.tools[0], { type: "function", name: "read_file", description: "Read a file.", parameters: TOOLS[0].parameters });
+  assert.deepEqual(b.tools[0], { type: "function", name: "read_file", description: "Read a file.", parameters: TOOLS[0].parameters, strict: false });
   assert.deepEqual(b.reasoning, { effort: "low" });
   assert.equal(b.store, false);
   assert.deepEqual(b.include, ["reasoning.encrypted_content"]);

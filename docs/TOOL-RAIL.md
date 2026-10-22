@@ -46,7 +46,7 @@ Live copy of the first version: https://claude.ai/artifact/A5vaGaNwJ8EFLA35jv3gD
     change its dimensions. Dragging over an area still draws a box, for anything that is not text. The text is
     removed from the file, not covered. In the real editor this means hit-testing pdf.js text items at the tap.
 12. **Signatures are Sign (draw) or Type only. No image.** Then tap the page to place it.
-13. Keep the editor's own commands underneath (as `spectra-editor/src/autora/phone.tsx` does with
+13. Keep the editor's own commands underneath (as `spectra-editor/src/autora/rail.tsx` does with
    `invokeCommand`): restyle and re-arrange, do not re-implement.
 
 ## Sizes (every app's bar, the same numbers)
@@ -61,11 +61,20 @@ make the change in `docs/autora-3d-tool-rail.patch` before the next sync), `phot
 ## Retrofit order
 
 PDF first, then Music (done, 0.9.196: the first user of the shared host-side component below), 3D (0.9.199), Pages, Sheets and
-Slides (0.9.200: `office/shim/rail.js`, inside the editors' frame; every ribbon command is a tool, the ribbon is never shown), Video (0.9.201: `opencut-editor/src/autora/rail.tsx`, which builds the app's own `ToolRail` into the editor; the tab strip and
-the timeline's toolbar are gone from the page, a phone's timeline gives its track switches 38px instead of 112), Photo (0.9.202: `photo/overlay/autora.rs`, in Rust/egui: the same bar, the same grid built from the editor's own tools and menu catalogue, the editor's menu bar, toolbox, options bar, status bar and dock away), Games (0.9.254: host-side `src/components/game/GameRail.tsx` driving the editor through `gdevelop-editor/overlay/.../Autora/rail.js`; the tab strip, toolbar, Share and Home are hidden, Play runs in the window, the Rules sheet sits under Advanced). Autora Games is the last app. Autora 3D (done, 0.9.199) wears the rail in its own build (`autora-3d/src/components/Rail.tsx`, Tailwind, same colours and
+Slides (0.9.200: `office/shim/rail.js`, inside the editors' frame; every ribbon command is a tool, the ribbon is
+never shown), Video (0.9.201: `opencut-editor/src/autora/rail.tsx`, which builds the app's own `ToolRail` into the
+editor; the tab strip and
+the timeline's toolbar are gone from the page, a phone's timeline gives its track switches 38px instead of 112),
+Photo (0.9.202: `photo/overlay/autora.rs`, in Rust/egui: the same bar, the same grid built from the editor's own
+tools and menu catalogue, the editor's menu bar, toolbox, options bar, status bar and dock away), Games (0.9.254:
+host-side `src/components/game/GameRail.tsx` driving the editor through
+`gdevelop-editor/overlay/.../Autora/rail.js`; the tab strip, toolbar, Share and Home are hidden, Play runs in the
+window, the Rules sheet sits under Advanced). Autora Games is the last app. Autora 3D (done, 0.9.199) wears the rail
+in its own build (`autora-3d/src/components/Rail.tsx`, Tailwind, same colours and
 rules): its bottom bar of text pills and the menus of its top bar are gone, the top bar is undo, redo and what is selected, and
 every tool is on the bar or in All tools. It is a copy of blofstedt/3D-Modeling, and the change was made in the copy
-(`docs/autora-3d-tool-rail.patch` is the same change; apply it upstream with `git apply -p2` before the next `scripts/sync-autora-3d.mjs`, which would otherwise undo it). Browser is a navigation bar, not a palette.
+(`docs/autora-3d-tool-rail.patch` is the same change; apply it upstream with `git apply -p2` before the next
+`scripts/sync-autora-3d.mjs`, which would otherwise undo it). Browser is a navigation bar, not a palette.
 
 **No repeats.** When an app takes the rail, everything the rail now does is removed from the old chrome in the same change:
 a tool that is on the bar is not also a button in a toolbar, a tab, a row of chips or a form. Music dropped its tempo/key row,

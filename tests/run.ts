@@ -17,6 +17,7 @@
  *                             file changed against origin/main (or --changed <ref>),
  *                             committed or not (tests/affected.ts). The quick check
  *                             before a push; CI still runs everything.
+ *   npm test -- --no-ui       leave out the ui-* files, which drive the built app
  */
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -28,10 +29,12 @@ const here = import.meta.dirname ?? path.dirname(new URL(import.meta.url).pathna
 const args = process.argv.slice(2);
 let jobs = 1;
 let changedAgainst: string | null = null;
+let noUi = false;
 const filters: string[] = [];
 for (let i = 0; i < args.length; i += 1) {
   if (args[i] === "-j" || args[i] === "--jobs") jobs = Math.max(1, Number(args[++i]) || 1);
   else if (args[i] === "--changed") changedAgainst = args[i + 1] && !args[i + 1].startsWith("-") ? args[++i] : "origin/main";
+  else if (args[i] === "--no-ui") noUi = true;
   else filters.push(args[i]);
 }
 
@@ -42,6 +45,7 @@ const files = fs
   .filter((name) => name.endsWith(".test.ts"))
   .filter((name) => filters.length === 0 || filters.some((f) => name.includes(f)))
   .filter((name) => !reached || reached.has(name))
+  .filter((name) => !noUi || !name.startsWith("ui-"))
   .sort();
 if (reached) console.log(`${files.length} test files reach what changed against ${changedAgainst}.`);
 
