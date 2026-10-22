@@ -5,7 +5,7 @@
  *   npx tsx tests/toolstream.test.ts
  */
 import assert from "node:assert/strict";
-import { addToolDelta, capTools, OPENAI_MAX_TOOLS, parseArgs, type BuildingCall } from "../server/llm";
+import { addToolDelta, capTools, OPENAI_MAX_TOOLS, openAiCallId, openAiSchema, openAiTools, parseArgs, type BuildingCall } from "../server/llm";
 
 const fold = (parts: any[]) => {
   const m = new Map<number, BuildingCall>();
@@ -47,5 +47,13 @@ assert.equal(capTools(many, true).length, OPENAI_MAX_TOOLS);
 assert.deepEqual(capTools(many, true), many.slice(0, OPENAI_MAX_TOOLS));
 assert.equal(capTools(many, false).length, 150);
 assert.equal(capTools([1, 2], true).length, 2);
+
+assert.deepEqual(openAiSchema({ type: "object", properties: { a: { type: "array" } } }).properties.a, { type: "array", items: {} });
+assert.deepEqual(openAiSchema({ type: "object", properties: { a: { type: "array", items: { type: "string" } } } }).properties.a.items, { type: "string" });
+assert.deepEqual(openAiSchema(undefined), { type: "object", properties: {} });
+assert.deepEqual(openAiSchema({ type: "object", properties: { type: { type: "string", enum: ["array"] } }, required: ["type"] }).required, ["type"]);
+assert.deepEqual(openAiTools([{ name: "a" }, { name: "a" }, { name: "b" }] as any).map((t) => t.name), ["a", "b"]);
+const long = "toolu_" + "x".repeat(60);
+assert.ok(openAiCallId(long).length <= 40 && openAiCallId(long) === openAiCallId(long) && openAiCallId("call_1") === "call_1");
 
 console.log("toolstream: ok");

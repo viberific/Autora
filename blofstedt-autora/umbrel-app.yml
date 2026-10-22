@@ -189,4 +189,6 @@ support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
   Fixes OpenAI models (such as gpt-6 Luna) failing with "Invalid 'tools': array too long". OpenAI accepts at most 128
-  tools per request, so when more are switched on, only the first 128 are sent and the rest stay out of that request.
+  tools per request, so when more are switched on, only the first 128 are sent. Requests to OpenAI also now repair what it
+  rejects from connected (MCP) servers: arrays in a tool's inputs with no item type, a repeated tool name, and a
+  tool-call id over 40 characters. Other providers are sent exactly what they were before.

@@ -373,6 +373,7 @@ export function openAiMessages(call: ChatCall): any[] {
   // DeepSeek thinks by default, and with tools on it wants that thinking back
   // on every assistant message. Other vendors reject a field they do not know.
   const deepseek = call.provider === "deepseek" || /api\.deepseek\.com/.test(call.baseUrl);
+  const openai = call.provider === "openai" || /(^|\/\/)api\.openai\.com/.test(call.baseUrl ?? "");
   const used = new Set<string>();
 
   for (let i = 0; i < call.messages.length; i += 1) {
@@ -382,8 +383,9 @@ export function openAiMessages(call: ChatCall): any[] {
 
     if (message.role === "assistant") {
       const calls = (message.calls ?? []).map((c) => {
-        let id = c.id || "call";
-        while (used.has(id)) id = `${c.id || "call"}_${used.size}`;
+        const base = openai ? openAiCallId(c.id || "call") : c.id || "call";
+        let id = base;
+        while (used.has(id)) id = `${base}_${used.size}`.slice(-40);
         used.add(id);
         return { use: c, id };
       });
@@ -476,9 +478,37 @@ export function capTools<T>(tools: readonly T[], openai: boolean): T[] {
   return openai && tools.length > OPENAI_MAX_TOOLS ? tools.slice(0, OPENAI_MAX_TOOLS) : [...tools];
 }
 
+/** A tool schema OpenAI will accept. It 400s on an array with no `items`, and on a root that is not an object with
+    `properties`; MCP servers send both. Only the wrong parts are put right, and the input is not changed. */
+export function openAiSchema(schema: any): any {
+  const fix = (s: any): any => {
+    if (Array.isArray(s)) return s.map(fix);
+    if (!s || typeof s !== "object") return s;
+    const out: Record<string, any> = {};
+    for (const [k, v] of Object.entries(s)) out[k] = k === "enum" || k === "required" || k === "default" || k === "const" || k === "examples" ? v : fix(v);
+    const t = out.type;
+    if ((t === "array" || (Array.isArray(t) && t.includes("array"))) && !out.items) out.items = {};
+    return out;
+  };
+  const root = fix(schema ?? {});
+  return root.type === "object" && root.properties ? root : { ...root, type: "object", properties: root.properties ?? {} };
+}
+
+/** OpenAI rejects a repeated tool name, and a tool-call id over 40 characters (ids minted by other vendors can be longer). */
+export function openAiTools(tools: readonly ToolDef[]): ToolDef[] {
+  const seen = new Set<string>();
+  return tools.filter((t) => !seen.has(t.name) && Boolean(seen.add(t.name)));
+}
+export const openAiCallId = (id: string): string => (id.length <= 40 ? id : id.slice(0, 31) + "_" + (hash(id) % 1e7).toString(36));
+function hash(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i += 1) h = (Math.imul(h, 31) + s.charCodeAt(i)) >>> 0;
+  return h;
+}
+
 async function streamOpenAi(call: ChatCall, onDelta: (text: string) => void): Promise<ChatTurn> {
   const isOpenAi = call.provider === "openai" || /(^|\/\/)api\.openai\.com/.test(call.baseUrl ?? "");
-  const tools = capTools(call.tools ?? [], isOpenAi);
+  const tools = capTools(isOpenAi ? openAiTools(call.tools ?? []) : call.tools ?? [], isOpenAi);
   if (tools.length < (call.tools?.length ?? 0)) {
     console.warn(`[llm] ${call.model}: sent ${tools.length} of ${call.tools!.length} tools (OpenAI allows ${OPENAI_MAX_TOOLS})`);
   }
@@ -526,7 +556,7 @@ async function streamOpenAi(call: ChatCall, onDelta: (text: string) => void): Pr
               function: {
                 name: t.name,
                 description: t.description,
-                parameters: t.parameters,
+                parameters: isOpenAi ? openAiSchema(t.parameters) : t.parameters,
               },
             })),
             tool_choice: "auto",
