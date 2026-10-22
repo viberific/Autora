@@ -73,12 +73,12 @@ task is about the PDF editor's shim or overlay.
 
 | Job | Files |
 |---|---|
-| Model calls | `llm.ts` (one call, any vendor), `providers.ts` (vendors, prices), `billing.ts`, `vendor-money.ts` |
+| Model calls | `llm.ts` (one call, any vendor), `modelprofile.ts` (per-model fields: effort, temperature, learned refusals), `providers.ts` (vendors, prices), `roles.ts` (which model does which job), `billing.ts`, `vendor-money.ts` |
 | The prompt | `prompt.ts`, `guides.ts` (the `*_GUIDE` texts), `tools.ts` `capabilityBriefing`, `server.ts` `systemInstructionFor`, `COLLABORATION` |
 | Tool schemas | `specs/{browser,computer,files,memory,person,schedule,skills,studio,terminal,video,voice}.ts` (`pdf_*` and `office_*` live in `specs/files.ts`) |
 | Tool execution | `tools.ts` `runTool` (the big switch), `argcheck.ts`, `guard.ts`, `modes.ts`, `toolload.ts` (which families are shown) |
 | Context | `context.ts` (compaction, vault), `pages.ts` (page re-reads), `readfile.ts`, `hints.ts` |
-| Loop safety | `loopwatch.ts`, `errorbudget.ts`, `budgetstore.ts`, `toolhealth.ts`, `resume.ts`, `verify.ts` |
+| Loop safety | `loopwatch.ts`, `errorbudget.ts`, `budgetstore.ts`, `toolhealth.ts`, `resume.ts`, `verify.ts` (the project check, found or set) |
 | Quick turns | `quick.ts` (`isSmallTalk`: a hello or thanks skips the plan and the thinking; `startTurn` sets `opts.quick`), `fastpath.ts` (a few exact questions, time, date and which model, answered with no model call; fails open, logged) |
 | Working notes | `todos.ts`, `ledger.ts`, `requirements.ts` |
 | Sub-agent | `subagent.ts` (+ `researchFor` in `runTurn`) |
@@ -88,7 +88,7 @@ task is about the PDF editor's shim or overlay.
 | Cost per task | `taskledger.ts` (a record per turn: kind of work, cost of every call it made, how it went; `routes/tasks.ts`; the Usage page's `TaskCosts.tsx`) |
 | Browser | `browser.ts` (4.5k: `LiveBrowser`), `human.ts`, `captcha*.ts`, `pagedescribe.ts`, `browsedata.ts`, `extensions.ts`, `cookies.ts`, `signins.ts`, `liveview.ts` |
 | App window | `preview.ts`, `pick.ts`, `domdiff.ts`, `snapshots.ts` |
-| Code | `codediff.ts` (`Workspace`), `codesearch.ts`, `editfile.ts`, `merge3.ts`, `background.ts` (long jobs) |
+| Code | `codediff.ts` (`Workspace`), `codesearch.ts`, `editfile.ts`, `syntaxcheck.ts` (does it still parse), `merge3.ts`, `background.ts` (long jobs) |
 | Video | `opencut.ts` (the project store, the window's state, commands to the editor, the `video_*` tools), `specs/video.ts` |
 | PDF | `pdf.ts` (3k: every `pdf_*` tool), `pdftext.ts`, `pdfrender.ts`, `compose.ts`, `pdfdesk.ts` (window state), `spectra.ts` + `spectra/{engine,commands}.ts` (the window's editor and its Python engine) |
 | Music | `studio.ts` (the song per chat, routes, commands to the window, `runStudioTool`), `specs/studio.ts`, `src/lib/studio/model.ts` (the song and the theory: shared with the page) |

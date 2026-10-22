@@ -94,5 +94,19 @@ test("a missing folder and an empty query are said plainly", () => {
   assert.match(searchCode({ root: dir, query: "  " }).text, /Say what to search for/);
 });
 
+test("the best places come with the short function they are in, so no read is needed after", () => {
+  const ranked = searchCode({ root: dir, query: "fetch user" }).text;
+  assert.match(ranked, /--- function fetchUserById, src\/users.ts lines 1-3 ---/);
+  assert.match(ranked, /2 {2}\s*return db\.query/, "the body, numbered");
+  const exact = searchCode({ root: dir, query: "gateway.charge", mode: "exact" }).text;
+  assert.match(exact, /--- function chargeCard, src\/billing.ts lines 1-3 ---/);
+});
+
+test("a function too long to show, or many matches, keep the short form", () => {
+  put("src/long.ts", `export function longOne() {\n${"  step();\n".repeat(80)}  findMeHere();\n}\n`);
+  assert.doesNotMatch(searchCode({ root: dir, query: "findMeHere", mode: "exact" }).text, /---/);
+  assert.doesNotMatch(searchCode({ root: dir, query: "filler", mode: "exact" }).text, /---/, "over six matching lines: places only");
+});
+
 fs.rmSync(dir, { recursive: true, force: true });
 console.log(`${passed} passed`);

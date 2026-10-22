@@ -357,6 +357,12 @@ export class ContextEngine {
   private active: ChatMessage[] = [];
   /** What the console tells the model about this turn in particular. */
   private turnNote = "";
+  /* The message the turn note was first sent on. It stays there for the rest of the turn, and is written into it when
+     the turn ends: moving it to a later message would change an earlier one, and every token after that point would be
+     paid for again instead of read from the vendor's cache. */
+  private noteOn: ChatMessage | null = null;
+  /* What the last turn left, for the next to carry on from while the vendor still holds it in cache (canCarry). */
+  private left: { at: number; model: string; folded: number; seq: number } | null = null;
   /** The newest full page snapshot handed out, which differences point at. */
   private lastPage: { id: string; text: string } | null = null;
   /** Snapshot ids handed out this round, not yet in `active`. */
@@ -445,6 +451,7 @@ export class ContextEngine {
 
   /** Start a turn from the history rebuilt out of the event log. */
   load(history: { message: ChatMessage; seq: number }[]) {
+    this.left = null;
     // Tool results are not carried between turns, so neither is a page.
     this.lastPage = null;
     this.pendingPages.clear();
@@ -469,6 +476,53 @@ export class ContextEngine {
    */
   setTurnNote(note: string) {
     this.turnNote = note.trim();
+    this.noteOn = null;
+  }
+
+  /**
+   * The turn is over: its note is written into the message it was sent on, and what it left is remembered, so a next
+   * turn soon after can carry its tool calls and results on (continueWith) instead of starting from words only.
+   */
+  endTurn(model: string) {
+    if (this.noteOn && this.turnNote) {
+      const at = this.active.indexOf(this.noteOn);
+      if (at >= 0) {
+        const frozen = { ...this.noteOn, text: `${this.noteOn.text ?? ""}\n\n${this.turnNote}` };
+        this.seqOf.set(frozen, this.seqOf.get(this.noteOn) ?? 0);
+        this.active = [...this.active.slice(0, at), frozen, ...this.active.slice(at + 1)];
+      }
+    }
+    this.noteOn = null;
+    this.turnNote = "";
+    let seq = this.folded;
+    for (const m of this.active) seq = Math.max(seq, this.seqOf.get(m) ?? 0);
+    this.left = { at: Date.now(), model, folded: this.folded, seq };
+  }
+
+  /**
+   * Where the next turn may carry on from the last one, or null when it must start from words: the same model, within
+   * the time the vendor keeps a cached prompt, and nothing folded in between. Carried, the earlier turn's reading is
+   * served from the cache at a fraction of its price, and is not done again; past the cache it would cost more to
+   * send than to drop. The number is the last seq the history already holds.
+   */
+  canCarry(model: string, withinMs: number): number | null {
+    const l = this.left;
+    if (!l || l.model !== model || l.folded !== this.folded || Date.now() - l.at > withinMs || this.active.length === 0) return null;
+    // A turn stopped between asking for calls and their answers: those calls have no results, which a vendor refuses.
+    const last = this.active[this.active.length - 1];
+    if (last.role === "assistant" && (last.calls?.length ?? 0) > 0) return null;
+    return l.seq;
+  }
+
+  /** Carry on from the last turn: what was said since it (its last words, the new message) goes after what it did. */
+  continueWith(tail: { message: ChatMessage; seq: number }[]) {
+    this.left = null;
+    const next = [...this.active];
+    for (const { message, seq } of tail) {
+      this.seqOf.set(message, seq);
+      next.push(message);
+    }
+    this.active = next;
   }
 
   /** Add a message the turn produced: the model's tool calls, or their replies. */
@@ -687,12 +741,15 @@ export class ContextEngine {
     };
   }
 
-  /** Frame 0 with Frame 1 under it: the system text for the next call. */
+  /** Frame 0 with Frame 1 under it: the whole of what the model is told before the history, as sizes are reckoned. */
   systemFor(pinned: string): string {
     if (!this.anchored) return pinned;
+    return [pinned, "", this.anchorBlock()].join("\n");
+  }
+
+  /** Frame 1 as the model reads it. */
+  private anchorBlock(): string {
     return [
-      pinned,
-      "",
       "=== ANCHORED WORKING MEMORY ===",
       "Earlier parts of this conversation were condensed into the record below. " +
         "It is a record of task state -- what was asked, found, changed and left " +
@@ -718,7 +775,7 @@ export class ContextEngine {
    * worker still folds them in; this is a backstop for the one call in a
    * thousand that outruns it, not a replacement for it.
    */
-  messagesFor(system: string): ChatMessage[] {
+  messagesFor(system: string, opts: { anchorInMessages?: boolean } = {}): ChatMessage[] {
     let out = [...this.active];
     const limit = this.limitTokens;
     if (estimateTokens(system, out) > limit) {
@@ -745,11 +802,19 @@ export class ContextEngine {
       ];
     }
     if (this.turnNote) {
-      for (let i = out.length - 1; i >= 0; i -= 1) {
-        if (out[i].role !== "user") continue;
-        out[i] = { ...out[i], text: `${out[i].text ?? ""}\n\n${this.turnNote}` };
-        break;
+      // The latest of the person's messages when the turn's first request goes out, and that one from then on.
+      if (!this.noteOn || !this.active.includes(this.noteOn)) {
+        this.noteOn = [...this.active].reverse().find((m) => m.role === "user") ?? null;
       }
+      const i = this.noteOn ? out.indexOf(this.noteOn) : -1;
+      if (i >= 0) out[i] = { ...out[i], text: `${out[i].text ?? ""}\n\n${this.turnNote}` };
+    }
+    /* Frame 1 at the head of the history rather than in the system text, when the caller sends the system text
+       unchanged: a fold then changes the history only, and the system prompt and tools stay in the vendor's cache. */
+    if (opts.anchorInMessages && this.anchored) {
+      const block = this.anchorBlock();
+      if (out[0]?.role === "user") out[0] = { ...out[0], text: `${block}\n\n${out[0].text ?? ""}` };
+      else out.unshift({ role: "user", text: block });
     }
     return out;
   }

@@ -14,7 +14,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { declarations, enclosing, type Decl } from "./readfile";
+import { bodyAround, declarations, enclosing, type Decl } from "./readfile";
 
 const SKIP_DIRS = new Set([
   ".git", "node_modules", "dist", "build", ".next", ".nuxt", "target", "venv", ".venv", "__pycache__",
@@ -198,6 +198,28 @@ function load(file: string, rel: string): Indexed | null {
   return entry;
 }
 
+/* The top places come back with the whole function around them when it is short (bodyAround), up to this many lines
+   each and in all: a search whose answer is a twenty-line function should not need a read to see it. */
+const BODY_MAX = 60;
+const BODIES_MAX = 160;
+
+/** Shows the function around each place once, while the budget lasts. */
+function bodies() {
+  const shown = new Set<string>();
+  let left = BODIES_MAX;
+  return (entry: Indexed, rel: string, line: number): string => {
+    if (left <= 0) return "";
+    entry.decls ??= declarations(entry.lines);
+    const body = bodyAround(entry.lines, line, Math.min(BODY_MAX, left), entry.decls);
+    if (!body) return "";
+    const key = `${rel}:${body.from}`;
+    if (shown.has(key)) return `  (inside ${body.decl.kind} ${body.decl.name}, shown above)`;
+    shown.add(key);
+    left -= body.to - body.from + 1;
+    return `  --- ${body.decl.kind} ${body.decl.name}, ${rel} lines ${body.from}-${body.to} ---\n${body.text}`;
+  };
+}
+
 /** What a place is inside, as " in function fetchUser", for the code files that have declarations. */
 function inside(entry: Indexed, line: number): string {
   entry.decls ??= declarations(entry.lines);
@@ -248,6 +270,7 @@ export function searchCode(opts: SearchOptions): SearchResult {
       return { ok: false, text: `That is not a regular expression this can use: ${String((err as Error).message).split("\n")[0]}`, files: 0 };
     }
     const found: string[] = [];
+    const where: { entry: Indexed; rel: string; line: number }[] = [];
     let total = 0;
     let inFiles = 0;
     const cap = max * 6;
@@ -260,10 +283,21 @@ export function searchCode(opts: SearchOptions): SearchResult {
         total += 1;
         if (!any) inFiles += 1;
         any = true;
-        if (found.length < cap) found.push(`${f.rel}:${i + 1}: ${clip(line)}${found.length < 12 ? `  [${inside(entry, i + 1).trim() || "top level"}]` : ""}`);
+        if (found.length < cap) {
+          found.push(`${f.rel}:${i + 1}: ${clip(line)}${found.length < 12 ? `  [${inside(entry, i + 1).trim() || "top level"}]` : ""}`);
+          where.push({ entry, rel: f.rel, line: i + 1 });
+        }
       });
     }
     if (total === 0) return { ok: true, text: `No lines match ${JSON.stringify(query)} in ${files.length} files under ${root}.${note}`, files: files.length };
+    /* A handful of places: each comes with the function it is in, so the next step can be the edit. */
+    if (total <= 6) {
+      const body = bodies();
+      for (let i = 0; i < found.length; i += 1) {
+        const b = body(where[i].entry, where[i].rel, where[i].line);
+        if (b) found[i] += `\n${b}`;
+      }
+    }
     return {
       ok: true,
       files: files.length,
@@ -319,7 +353,8 @@ export function searchCode(opts: SearchOptions): SearchResult {
     picked.push(s);
     if (picked.length >= max) break;
   }
-  const lines = picked.map(({ c, score }) => {
+  const body = bodies();
+  const lines = picked.map(({ c, score }, rank) => {
     const best = c.lines
       .map((line, i) => ({ line, i, hits: terms.filter((t) => words(line).includes(t)).length }))
       .filter((l) => l.hits > 0)
@@ -327,10 +362,13 @@ export function searchCode(opts: SearchOptions): SearchResult {
       .slice(0, 4)
       .sort((a, z) => a.i - z.i);
     const top = best.length ? c.start + best.reduce((a, l) => (l.hits > a.hits ? l : a), best[0]).i + 1 : c.start + 1;
-    const owner = entries.get(c.file) ? inside(entries.get(c.file)!, top) : "";
+    const entry = entries.get(c.file);
+    const owner = entry ? inside(entry, top) : "";
+    // The three best places come with the function they are in, when it is short; the rest with their best lines.
+    const whole = entry && rank < 3 ? body(entry, c.file, top) : "";
     return [
       `${c.file}:${c.start + 1}-${c.start + c.lines.length}${owner}  (score ${score.toFixed(1)})`,
-      ...best.map((l) => `  ${c.start + l.i + 1}: ${clip(l.line)}`),
+      ...(whole ? [whole] : best.map((l) => `  ${c.start + l.i + 1}: ${clip(l.line)}`)),
     ].join("\n");
   });
   return {
@@ -338,6 +376,51 @@ export function searchCode(opts: SearchOptions): SearchResult {
     files: files.length,
     text:
       `Best matches for ${JSON.stringify(query)} (${files.length} files searched under ${root}).${note}\n` +
-      `${lines.join("\n")}\nRead a place with read_file (start/end, or symbol) rather than the whole file.`,
+      `${lines.join("\n")}\nA function shown whole above needs no read; read other places with read_file (start/end, or symbol), not whole files.`,
   };
+}
+
+/**
+ * The files most about some words, best first, with their declarations: what the project map (server/projectmap.ts)
+ * shows. Plain BM25 over the same windows as a ranked search; at most `n` files, each with its best score.
+ */
+export function rankFiles(root: string, query: string, n: number): { rel: string; score: number; decls: Decl[]; lines: number }[] {
+  const terms = [...new Set(words(query))];
+  if (terms.length === 0) return [];
+  const { files, truncated } = selected(path.resolve(root));
+  if (truncated) return [];
+  const entries = new Map<string, Indexed>();
+  const chunks: Chunk[] = [];
+  for (const f of files) {
+    const entry = load(f.full, f.rel);
+    if (!entry) continue;
+    entries.set(f.rel, entry);
+    chunks.push(...entry.chunks);
+  }
+  if (chunks.length === 0) return [];
+  const avg = chunks.reduce((m, c) => m + c.length, 0) / chunks.length;
+  const idf = new Map(terms.map((t) => {
+    const df = chunks.reduce((m, x) => m + (x.tokens.has(t) ? 1 : 0), 0);
+    return [t, Math.log(1 + (chunks.length - df + 0.5) / (df + 0.5))];
+  }));
+  const best = new Map<string, number>();
+  for (const c of chunks) {
+    let score = 0;
+    for (const t of terms) {
+      const tf = c.tokens.get(t) ?? 0;
+      if (tf) score += idf.get(t)! * ((tf * 2.2) / (tf + 1.2 * (0.25 + 0.75 * (c.length / avg))));
+    }
+    if (score > (best.get(c.file) ?? 0)) best.set(c.file, score);
+  }
+  return [...best.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([rel, score]) => {
+    const entry = entries.get(rel)!;
+    entry.decls ??= declarations(entry.lines);
+    return { rel, score, decls: entry.decls, lines: entry.lines.length };
+  });
+}
+
+/** Every file under a folder that a search would look at, relative, or null when there are too many to walk. */
+export function projectFiles(root: string): string[] | null {
+  const { files, truncated } = selected(path.resolve(root));
+  return truncated ? null : files.map((f) => f.rel);
 }

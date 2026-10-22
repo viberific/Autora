@@ -1296,7 +1296,7 @@ export function resolveProvider(): Resolved {
            price race -- and a forgotten Ollama on :8000 would quietly take
            every turn. It is the answer when nothing priced is connected, not
            a racer (the old order kept it last for the same reason). */
-        const avg = p.id === "local" ? Infinity : rows.length > 0 ? spent / rows.length : (autoPriceOf(p.id) ?? 0);
+        const avg = p.id === "local" ? Infinity : rows.length > 0 ? spent / rows.length : (autoPriceOf(p.id, state.models[p.id]) ?? 0);
         return { id: p.id, avg, calls: rows.length };
       })
       .sort((a, b) => a.avg - b.avg || b.calls - a.calls);

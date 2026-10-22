@@ -112,7 +112,7 @@ import {
   type Permissions, type WorkMode,
 } from "./server/modes";
 import {
-  agentModelFor, backgroundTarget, conversationTargets, mainTarget, type Target,
+  agentModelFor, backgroundTarget, conversationTargets, mainTarget, workerTarget, type Target,
 } from "./server/roles";
 import { LoopWatch, describe as describeCall } from "./server/loopwatch";
 import { ErrorBudget } from "./server/errorbudget";
@@ -122,8 +122,10 @@ import { editFile, type EditArgs } from "./server/editfile";
 import { diffDom } from "./server/domdiff";
 import type { AutoraEvent, Notice, PreviewRun, Session, SessionOrigin } from "./server/session-types";
 import { Workspace, type DiffLine, type FileChange as CodeChange } from "./server/codediff";
-import { runSubagent } from "./server/subagent";
-import { checkLine, failedNote, itemCheckNote, previewNote, previewProblems, type CheckResult } from "./server/verify";
+import { runSubagent, type SubagentDeps } from "./server/subagent";
+import { projectMap } from "./server/projectmap";
+import type { Effort } from "./server/modelprofile";
+import { checkLine, failedNote, itemCheckNote, previewNote, previewProblems, projectCheck, type CheckResult, type ProjectCheck } from "./server/verify";
 import { buildTrace, traceText } from "./server/trace";
 import { keepBudget, loadBudget } from "./server/budgetstore";
 import { interruptedWork, resumeNote, type InterruptedWork, type ResumeEvent } from "./server/resume";
@@ -2188,6 +2190,18 @@ const MAX_OUTPUT_TOKENS = (() => {
   return Number.isFinite(n) && n >= 256 ? n : 8192;
 })();
 const FALLBACK_OUTPUT_TOKENS = 2048;
+/* How long after a turn the next may carry its tool work on: inside the vendor's prompt-cache lifetime (five minutes,
+   or the hour with AUTORA_CACHE_TTL=1h), with a margin so the first request still lands while the cache holds. */
+const CARRY_MS = ((process.env.AUTORA_CACHE_TTL || "").trim() === "1h" ? 60 : 5) * 60_000 - 45_000;
+/** Tools that keep the work's records rather than do the work: a round of only these is told so (see the loop). */
+const BOOKKEEPING = new Set(["todo", "requirements", "ledger", "set_mode"]);
+/* How hard the main model thinks, for a model that takes the hint (Claude's effort, OpenAI's reasoning effort; see
+   server/modelprofile.ts). Unset, each model's own default stands; AUTORA_EFFORT=low|medium|high sets it. Unwatched work
+   (a research worker, folding old turns, a remark) always asks for low. */
+const MAIN_EFFORT: Effort | undefined = (() => {
+  const v = (process.env.AUTORA_EFFORT || "").trim().toLowerCase();
+  return v === "low" || v === "medium" || v === "high" ? v : undefined;
+})();
 
 /** A 400 that is the vendor saying the output limit asked for is too high. */
 const OUTPUT_LIMIT_REFUSED = /max_tokens|max_completion_tokens|maxOutputTokens|max_output_tokens|output token/i;
@@ -2410,6 +2424,8 @@ async function systemInstructionFor(
   recalled: MemoryRecord[],
   active?: Resolved | null,
   said = "",
+  /** The history already holds every call up to this seq (a carried turn): the recap starts after it. */
+  recapAfter = 0,
 ): Promise<{ pinned: string; note: string }> {
   const lines = [DEFAULT_PROMPT];
   const notes: string[] = [];
@@ -2526,6 +2542,13 @@ async function systemInstructionFor(
      out of date. */
   const machine = inventoryBriefing(sessionId);
   if (machine) notes.push(machine);
+
+  /* Where the work is in the working folder, when the message is about something in it: saves the opening rounds of
+     listing and searching (server/projectmap.ts). Only where the terminal is, since that is how the agent reaches it. */
+  if (said && toolSettings().terminal.enabled) {
+    const map = projectMap(terminalDir(), said);
+    if (map) notes.push(map);
+  }
 
 
   /* Which vendor is answering, said plainly.
@@ -2661,7 +2684,7 @@ async function systemInstructionFor(
   const unloaded = own ? unloadedIndex(loadedTools(own), mcpTools()) : null;
   if (unloaded) notes.push(unloaded);
 
-  const done = pastToolCalls(sessionId);
+  const done = pastToolCalls(sessionId, recapAfter);
   if (done.length > 0) {
     notes.push([
       "What you have already done in this session, oldest first:",
@@ -3652,6 +3675,8 @@ async function backgroundCall(sessionId: string, system: string, prompt: string,
     maxTokens: tokens,
     thinkingBudget: 0,
     thinking: "off",
+    // Nobody watches it: the least thinking a model that takes the hint will do (server/modelprofile.ts).
+    effort: "low",
     /* Unwatched work must not wait for ever: Threads holds `lifeBusy` across this call, so one
        hung request would silence the whole forum until a restart. */
     signal: AbortSignal.timeout(BACKGROUND_CALL_MS),
@@ -4311,6 +4336,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
     let rounds = 0;
     const skillsFollowed = new Set<string>();
     let budgetSaid = false;
+    let bookkeepingSaid = false;
     /* One per turn, and outside the retry loop on purpose: a retry only
        happens when nothing has been said yet, so the sieve is empty, and
        a fresh one per attempt would be the same object with more steps. */
@@ -4337,7 +4363,14 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
          reasoning model is the one that does the work: both hold this same
          conversation, so the smaller window is the one that binds. */
       applyWindow(context, conversationTargets(active, talkFast ? voice : undefined));
-      context.load(historyFor(session, context.foldedThroughSeq));
+      /* Carried on from the last turn when it ended moments ago on the same model and the vendor still holds it in
+         cache: what it read and ran is then a cheap cache read, not reading done again. Otherwise the history is
+         rebuilt from words (historyFor), as it always was. */
+      const carryKey = () => `${worker().provider}/${worker().model}`;
+      /* Not for a local server: it bills nothing for a prompt, cached or not, and its window is usually small. */
+      const carriedThrough = worker().provider === "local" ? null : context.canCarry(carryKey(), CARRY_MS);
+      if (carriedThrough !== null) context.continueWith(historyFor(session, carriedThrough));
+      else context.load(historyFor(session, context.foldedThroughSeq));
       const canReadVault = tools.some((t) => t.name === "vault_read");
 
       /** An image inlined into the reply becomes a card where it was
@@ -4407,6 +4440,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
             maxTokens,
             /* Never a thought: this is the model whose job is to talk now. */
             thinking: "off",
+            effort: "low",
             signal: running.get(session.id)?.signal,
           }, (piece) => {
             if (running.get(session.id)?.stopped) return;
@@ -4522,6 +4556,9 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
                per attempt, so a retry picks up a compaction that landed in
                the meantime, and a copy, so one landing mid-request cannot
                touch the request. */
+            /* The pinned instructions go as the system text, unchanged all session; anchored memory (Frame 1) rides at
+               the head of the history, so a fold leaves the system prompt and the tools in the vendor's cache. The size
+               of both together is what messagesFor keeps inside the window. */
             const system = context.systemFor(pinned);
             const turn = await streamChat({
               provider: answering.provider,
@@ -4529,11 +4566,12 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
               key: answering.key,
               baseUrl: answering.baseUrl,
               endpoint: endpointPinFor(answering.provider, answering.model),
-              system,
-              messages: context.messagesFor(system),
+              system: pinned,
+              messages: context.messagesFor(system, { anchorInMessages: true }),
               temperature: 0.7,
               maxTokens: outputTokens,
               thinkingBudget: THINKING_BUDGET,
+              ...(MAIN_EFFORT ? { effort: MAIN_EFFORT } : {}),
               /* No thinking while talk mode's fast model holds the turn --
                  that is the whole of the wait it saves. The moment it hands
                  over, the reasoning model thinks as it likes. */
@@ -4700,18 +4738,31 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
         const offeredNow = (await availableTools()).filter((t) => WORKER_TOOLS.has(t.name));
         if (offeredNow.length === 0) return "No read-only tools are available for a worker right now.";
         const span = `span-${session.id}-${session.seqCounter}-${spans++}`;
+        /* A cheaper model of the same provider when there is one (server/roles.ts workerTarget): the worker's reading
+           never enters this conversation, so it shares no cache with it. One the key cannot reach falls back to the main
+           model rather than failing the lookup. */
+        let target = workerTarget(active, process.env.AUTORA_WORKER_MODEL, cheaperSibling(active.provider, active.model));
+        const askWorker = (system: string, messages: ChatMessage[], list: Parameters<SubagentDeps["ask"]>[2]) => streamChat({
+          provider: target.provider, model: target.model, key: target.key, baseUrl: target.baseUrl,
+          endpoint: endpointPinFor(target.provider, target.model),
+          system, messages, temperature: 0.2, maxTokens: 2000, thinking: "off", effort: "low",
+          signal: running.get(session.id)?.signal,
+          tools: list.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters })),
+        }, () => undefined);
         const out = await runSubagent(question, {
           tools: offeredNow,
           cancelled: () => Boolean(running.get(session.id)?.stopped),
           ask: async (system, messages, list) => {
-            const turn = await streamChat({
-              provider: active.provider, model: active.model, key: active.key, baseUrl: active.baseUrl,
-              endpoint: endpointPinFor(active.provider, active.model),
-              system, messages, temperature: 0.2, maxTokens: 2000, thinking: "off",
-              signal: running.get(session.id)?.signal,
-              tools: list.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters })),
-            }, () => undefined);
-            charge(active.model, turn.usage);
+            let turn: ChatTurn;
+            try {
+              turn = await askWorker(system, messages, list);
+            } catch (err) {
+              if (target.model === active.model || running.get(session.id)?.stopped) throw err;
+              log("warn", "research", `the worker model ${target.model} failed (${(err as Error).message}); using ${active.model}`);
+              target = mainTarget(active);
+              turn = await askWorker(system, messages, list);
+            }
+            charge(target.model, turn.usage);
             return turn;
           },
           run: async (name, args) => {
@@ -4725,7 +4776,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
           },
         });
         emitEvent(session, "system.log", "system", {
-          message: `A research worker looked into it: ${out.calls} lookups in ${out.steps} steps (${out.ended}).`,
+          message: `A research worker (${target.model}) looked into it: ${out.calls} lookups in ${out.steps} steps (${out.ended}).`,
         });
         return `${out.report}\n\n(Worker: ${out.calls} lookups in ${out.steps} steps. Its searching and reading did not enter this conversation.)`;
       };
@@ -5118,7 +5169,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
       /* Once per turn, not per round: the instructions must open every
          round's request identically for the provider's cache to serve
          them, and so must everything the note is attached ahead of. */
-      const { pinned, note } = await systemInstructionFor(session.id, uniqueAccessed, active, text);
+      const { pinned, note } = await systemInstructionFor(session.id, uniqueAccessed, active, text, carriedThrough ?? 0);
       context.setTurnNote(note);
       const watch = new LoopWatch(state.loop);
       /* Failures that say the same thing however the arguments were varied,
@@ -5227,12 +5278,16 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
       /* Sites this turn was sent to read up on before acting, and how often. */
       const groundingTold = new Map<string, number>();
       /** Run the person's project check as a visible terminal call and read what it printed. */
-      const execCheck = async (command: string): Promise<CheckResult> => {
+      const execCheck = async (check: ProjectCheck): Promise<CheckResult> => {
+        const { command } = check;
         const span = `span-${session.id}-${session.seqCounter}-${spans++}`;
-        emitEvent(session, "system.log", "system", { message: `Running the project's check: ${command}` });
-        emitEvent(session, "tool.call", "agent", { name: "terminal", args: { command } }, span);
+        emitEvent(session, "system.log", "system", {
+          message: `Running the project's ${check.auto ? "own check (found in it; Settings can turn this off)" : "check"}: ${command}`,
+        });
+        const args = check.cwd === terminalDir() ? { command } : { command, cwd: check.cwd };
+        emitEvent(session, "tool.call", "agent", { name: "terminal", args }, span);
         const started = Date.now();
-        const outcome = await runTool(findTool("terminal")!, { command }, contextFor(span));
+        const outcome = await runTool(findTool("terminal")!, args, contextFor(span));
         const durationMs = Date.now() - started;
         if (outcome.exitCode !== undefined) {
           emitEvent(session, "pty.exit", "agent", { exit_code: outcome.exitCode ?? null, duration_ms: durationMs }, span);
@@ -5244,7 +5299,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
           ...(outcome.exitCode !== undefined ? { display: { exit_code: outcome.exitCode } } : {}),
         }, span);
         const checked: CheckResult = {
-          command, exitCode: outcome.exitCode ?? null, ok: outcome.ok,
+          command, auto: check.auto, exitCode: outcome.exitCode ?? null, ok: outcome.ok,
           output: context.ingest("terminal", outcome.summary, canReadVault),
         };
         noteCheck(checked.ok);
@@ -5264,6 +5319,14 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
           check last did, and how many times that check has run this turn. */
       let changedSinceCheck = false;
       let checkRuns = 0;
+      /* The files this turn wrote, newest last: where a check is looked for when the person set none. */
+      const changedFiles: string[] = [];
+      /* The check for this turn, worked out once the agent has changed something (server/verify.ts projectCheck). */
+      let check: ProjectCheck | null | undefined;
+      const checkNow = (): ProjectCheck | null => {
+        if (check === undefined || (check === null && changedFiles.length > 0)) check = projectCheck(state.verify, terminalDir(), changedFiles);
+        return check;
+      };
       /* When the code last changed with the app window open, and how many times
          the page's console has been looked at since: see previewProblems. */
       let previewSince = 0;
@@ -5311,6 +5374,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
           log("debug", "codediff", `${workspace.root} has too many files to follow; code written there is not shown as diff cards.`);
         }
         if (files.length > 0) codeTouched.add(session.id);
+        for (const f of files) if (f.kind !== "removed") changedFiles.push(path.join(workspace.root, f.path));
         for (const f of files.slice(0, MAX_CHANGE_CARDS)) {
           emitEvent(session, "file.edit", "agent", {
             path: f.path,
@@ -5465,14 +5529,14 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
              here, in plain code, and what it printed goes back to the agent:
              "done" is not the model's word to give. A failure sends it back
              to fix it, up to the number of runs the person allowed. */
-          if (!stalled && changedSinceCheck && state.verify.command && checkRuns < state.verify.tries &&
+          const endCheck = !stalled && changedSinceCheck ? checkNow() : null;
+          if (endCheck && checkRuns < endCheck.tries &&
               !running.get(session.id)?.stopped && !opts.spoken &&
               phaseFor(workMode(session.mode), session.phase) === "build" && tools.some((t) => t.name === "terminal")) {
-            const command = state.verify.command;
             changedSinceCheck = false;
             checkRuns += 1;
-            const checked = await execCheck(command);
-            emitEvent(session, "system.log", "system", { message: checkLine(checked, checkRuns, state.verify.tries) });
+            const checked = await execCheck(endCheck);
+            emitEvent(session, "system.log", "system", { message: checkLine(checked, checkRuns, endCheck.tries) });
             if (!checked.ok && !running.get(session.id)?.stopped) {
               if (!empty) {
                 context.append(
@@ -5482,7 +5546,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
               }
               context.append({
                 role: "user",
-                text: failedNote(checked, checkRuns, state.verify.tries, lastCheckOutput),
+                text: failedNote(checked, checkRuns, endCheck.tries, lastCheckOutput),
               }, session.seqCounter);
               lastCheckOutput = checked.output;
               continue;
@@ -5543,7 +5607,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
         nudges = 0;
 
         context.append(
-          { role: "assistant", text: turn.text, calls: turn.calls, reasoning: turn.reasoning },
+          { role: "assistant", text: turn.text, calls: turn.calls, reasoning: turn.reasoning, ...(turn.carry ? { carry: turn.carry } : {}) },
           session.seqCounter,
         );
         const replies: ToolReply[] = [];
@@ -5877,6 +5941,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
           }
           const durationMs = Date.now() - started;
           const wrote = willWrite;
+          if (spec.name === "edit_file" && outcome.ok) changedFiles.push(path.resolve(terminalDir(), String(use.args?.path ?? "")));
           if (wrote) {
             changedSinceCheck = true;
             if (previews.get(session.id)?.opened) previewSince = Date.now();
@@ -5967,18 +6032,25 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
         if (!loopStop) loopStop = watch.stallStop();
         const last = replies[replies.length - 1];
         if (checkpoint && last) last.result += `\n\n${checkpoint}`;
+        /* A round of nothing but bookkeeping (the to-do list, the asks, notes, the mode) is the whole prompt again for no
+           work. Said once a turn, plainly, where the model reads it. */
+        if (!bookkeepingSaid && last && turn.calls.length > 0 && turn.calls.every((c) => BOOKKEEPING.has(c.name))) {
+          bookkeepingSaid = true;
+          last.result += "\n\n(Autora: that response was only bookkeeping, and each response costs a whole round. " +
+            "From here, send updates to the list, the asks, your notes or the mode in the same response as your next real call.)";
+        }
         const pace = !budgetSaid && skillsFollowed.size ? overBudget(skillsFollowed, rounds) : null;
         if (pace && last) { budgetSaid = true; last.result += `\n\n${pace}`; }
         /* An item was finished this round and code changed since the check last
            ran: the check runs now, while the change is fresh, instead of at the
            end when a failure has to be traced back through everything. */
-        if (last && doneCount() > finishedBefore && changedSinceCheck && state.verify.command &&
-            itemChecks < Math.max(3, state.verify.tries * 2) && !loopStop && !opts.spoken &&
+        const itemCheck = last && doneCount() > finishedBefore && changedSinceCheck ? checkNow() : null;
+        if (last && itemCheck && itemChecks < Math.max(3, itemCheck.tries * 2) && !loopStop && !opts.spoken &&
             !running.get(session.id)?.stopped &&
             phaseFor(workMode(session.mode), session.phase) === "build" && tools.some((t) => t.name === "terminal")) {
           itemChecks += 1;
           changedSinceCheck = false;
-          const checked = await execCheck(state.verify.command);
+          const checked = await execCheck(itemCheck);
           emitEvent(session, "system.log", "system", {
             message: checked.ok
               ? `The project's check passed after an item was finished (${checked.command}).`
@@ -6058,6 +6130,9 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
           context.endWriting();
         }
       }
+      /* What this turn did stays with the engine, so a next turn soon after on the same model carries it on (see the
+         turn's start); the note is written into the message it went with. */
+      context.endTurn(carryKey());
     }
 
     // Nothing came back -- no provider configured, or the call failed. Say

@@ -476,6 +476,15 @@ Lint (`npm run lint`) and build pass clean.
 Read-only pass over the turn loop for tokens the in-app agent spends without
 getting anything for them. Ids continue the scheme above (E = efficiency).
 
+**Status (0.9.296):** E3 done in a new form: the note stays on the message it was
+first sent with (a user message the loop adds mid-turn no longer moves it, which had
+re-billed the whole turn's history), and a turn within the cache lifetime on the same
+model carries the last one's tool work on, its note written in (`ContextEngine.endTurn`,
+`canCarry`); E2 follows from it (the recap skips carried calls). The anchored record
+moved out of the system text. Coding: a parse check on every edit, the project's own
+check found when none is set, search that returns whole short functions, several reads
+in one call, a project map in the note; see `evals/` (area `code`) for the measure.
+
 **Status (0.9.266):** E1 done (`ContextEngine.messageLimit`). E2, E3 and E4 were
 wrong as first written, on a closer look at `historyFor`: tool calls and their
 results are not carried from one turn to the next, only the person's messages and

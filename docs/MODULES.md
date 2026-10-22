@@ -186,6 +186,10 @@ Spectra's fetched renderer is most of what is on disk.
     `{mode: "interrupt"}` (Alt/Ctrl/Cmd+Enter), files, voice and `/commands`
     stop the turn first. The project check also runs when a to-do or ask is
     marked done mid-turn (`itemCheckNote`, capped per turn).
+    `todo` takes `done`/`start` positions to tick items off without the whole
+    list again (`patchTodos`). A round of nothing but bookkeeping (`BOOKKEEPING`
+    in `server.ts`: todo, requirements, ledger, set_mode) is told once a turn to
+    ride along with the next real call instead.
   - `office.ts` (`office_guide|read|edit|check|create|convert`, family `office` in
     `toolload.ts`): Word, Excel and PowerPoint files, read and edited without a
     window by running GenOffice's command line (Apache-2.0, github.com/genspark-ai/genoffice)
@@ -260,14 +264,42 @@ Spectra's fetched renderer is most of what is on disk.
     the same rules.
   - `argcheck.ts`: every call is checked against its tool's own schema before
     anything else sees it.
-  - `verify.ts`: the person's project check (Settings), run by the loop when the
-    agent says it is finished after changing something; a failure goes back to
-    the agent with the raw output, up to `tries` runs a turn.
+  - `verify.ts`: the project check, run by the loop when the agent says it is
+    finished after changing something (and when it finishes a to-do item); a
+    failure goes back to the agent with the raw output, up to `tries` runs a
+    turn. The person's command (Settings) wins; with none, `projectCheck` /
+    `detectCheck` find the project's own (package.json scripts once
+    `node_modules` exists, tsconfig, cargo, go, pytest), searched from the
+    folders the turn changed files in. A found check runs at most twice and
+    tells the agent pre-existing failures are not its to chase. `verify.auto`
+    turns the looking off.
+  - `syntaxcheck.ts`: whether a file still parses, answered by `edit_file` in
+    the same result (`syntaxNote`), only for a break the edit made. Best parser
+    on the machine: TypeScript's (the project's or Autora's; not in the
+    container), else Node's type stripper / `node --check`, python3's `ast`,
+    `JSON.parse`. No model, no setting.
   - `subagent.ts` (`research`): a worker with a fresh context and read-only
     tools (`looksOnly` judges every call), its own loop watch and schema check,
     a step limit; only its short report reaches the main thread. It is given
     the model and tools by `researchFor` in `server.ts`, so it is tested with a
-    script.
+    script. Its model is `workerTarget` (`roles.ts`): `AUTORA_WORKER_MODEL`
+    (`main` keeps the main model), else the provider's cheaper sibling, else
+    the main model; a failure falls back to the main model. It shares no cache
+    with the chat, so a cheaper model costs nothing there.
+  - `modelprofile.ts`: what one model takes beyond the common fields. Callers
+    say `effort` (`low` for unwatched work; `AUTORA_EFFORT` for the main loop);
+    Claude gets `output_config.effort`, OpenAI's reasoning models
+    `reasoning_effort`, others nothing. The newest Claude models are sent no
+    temperature. A 400 that names one of these fields is learned
+    (`learnRefusal`): asked again without it, never sent it again. Add a
+    model's quirk here, not in `llm.ts`'s request builders.
+    `usesResponsesApi` sends OpenAI's GPT-6 and later (and any OpenAI model
+    whose chat-completions refusal says to, learned by `learnResponsesApi`)
+    through `/v1/responses` (`streamResponses` in `llm.ts`): those models take
+    function tools with reasoning on only there. `responsesInput` builds the
+    input from `openAiMessages`, so call/result pairing lives in one place;
+    reasoning comes back encrypted (`store: false`) and rides on the assistant
+    message as `carry`, sent back to the same model only.
   - `codediff.ts`: the working folder, watched. After a command that changes
     things the loop scans it (stat first, read what changed, small source
     files kept to compare) and emits `file.edit` cards -- lines added, removed
@@ -317,16 +349,34 @@ Spectra's fetched renderer is most of what is on disk.
     command runs, which also writes files.
   - `codesearch.ts` (`code_search`): exact, regex and BM25-ranked search over a
     folder in plain code; walks afresh each time, caches only per-file indexes.
+    The three best ranked places (and every place, when six lines or fewer
+    match) come with the whole function around them when it is at most 60
+    lines (`bodyAround` in `readfile.ts`, 160 lines a search), so finding and
+    reading are one call. `rankFiles` / `projectFiles` feed the project map.
+  - `projectmap.ts`: the "Project map" in a turn's note (`systemInstructionFor`)
+    when the working folder is a project (it has a manifest) and a file ranks
+    for the message's words: scripts, folders, and the outlines of the five
+    files most about the message. Saves the opening rounds of looking.
+  - `context.ts` and the prompt cache (not for the `local` provider): the turn note stays on the message it was
+    first sent with (`noteOn`), so a user message the loop adds mid-turn (a
+    failed check, the finish audit) does not change an earlier one. At the end of
+    a turn `endTurn` writes the note into that message; the next turn on the same
+    model within `CARRY_MS` (the cache lifetime, less a margin) carries the last
+    turn's calls and results on (`canCarry` / `continueWith`) instead of
+    rebuilding from words, and its recap skips them. The anchored record goes at
+    the head of the history (`messagesFor(..., { anchorInMessages })`), not in
+    the system text, so a fold keeps the system prompt and tools cached.
   - `ledger.ts` (`ledger` tool): the agent's working notes (goal, decisions,
     facts, next) in the log as `ledger.update`, plus what it touched, read off
     its calls; said every turn so interrupts and restarts lose nothing.
-  - `readfile.ts` (`read_file`: range / outline / symbol) and `hints.ts` (the
+  - `readfile.ts` (`read_file`: range / outline / symbol, or several of them in
+    `files`, at most eight a call) and `hints.ts` (the
     nearest paths and page text said inside a failure). A long result's vault
     id is logged as `tool.stored` and named in the recap.
   - `toolload.ts` (`tools_enable`): specialist tool sets (pdf, widgets, mcp,
     schedule, notebooks, organization) are out of the model's list until a message, a PDF, a
     call or a request brings them in (`tools.enable` in the log).
-    Every tool is shown by default; `AUTORA_LAZY_TOOLS=1` goes back to the short list that grows as it is wanted. A new tool in one of those families is
+    The short list is the default and grows as tools are wanted; `AUTORA_ALL_TOOLS=1` shows every set from the start (the e2e harness does, the eval does not). A new tool in one of those families is
     covered by its `match`; a new family goes in `FAMILIES`.
     **Connected MCP servers are separate and always lazy** (`AUTORA_ALL_MCP=1` undoes it): their tools are loaded
     one at a time, as `mcpt:<name>` in the log. A message preloads the best matches (`preloadMcp`: name hits count

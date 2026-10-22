@@ -69,8 +69,8 @@ await test("background work keeps its old rule unless told otherwise", () => {
 
 await test("the cheaper sibling is the provider's priced default, only when it costs at most half the main model", async () => {
   const { cheaperSibling } = await import("../server/providers");
-  assert.equal(cheaperSibling("anthropic", "claude-opus-4-1"), "claude-haiku-4-5");
-  assert.equal(cheaperSibling("anthropic", "claude-haiku-4-5"), null, "already the cheap one");
+  assert.equal(cheaperSibling("anthropic", "claude-opus-4-1"), "claude-haiku-5-5");
+  assert.equal(cheaperSibling("anthropic", "claude-haiku-5-5"), null, "already the cheap one");
   assert.equal(cheaperSibling("openai", "gpt-4o-mini"), null);
   assert.equal(cheaperSibling("openai", "some-unlisted-model"), null, "never a guess against an unpriced model");
   assert.equal(cheaperSibling("local", "llama3"), null);

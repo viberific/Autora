@@ -209,4 +209,21 @@ test("steps past the cap are dropped, and the item stays an item", () => {
   assert.equal(item.subtasks!.length, 20);
 });
 
+test("items are ticked off by position without writing the list again", () => {
+  const list = applyTodos(null, { todos: [{ title: "a", status: "in-progress" }, "b", "c"] }).list!;
+  const r = applyTodos(list, { done: [1], start: 2 });
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.list!.items.map((i) => i.status), ["completed", "in-progress", "not-started"]);
+  assert.equal(r.preview, "1 of 3 done");
+  assert.deepEqual(applyTodos(r.list!, { done: 3 }).list!.items.map((i) => i.status), ["completed", "in-progress", "completed"], "one number works too");
+});
+
+test("ticking off with no list, or a position that is not there, says so", () => {
+  assert.match(applyTodos(null, { done: [1] }).summary, /no list to tick off/);
+  const list = applyTodos(null, { todos: ["a"] }).list!;
+  const r = applyTodos(list, { done: [4] });
+  assert.equal(r.ok, false);
+  assert.match(r.summary, /There is no item 4: the list has 1/);
+});
+
 console.log(`\n${passed} passed`);

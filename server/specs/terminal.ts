@@ -241,8 +241,9 @@ export const terminalSPECS: ToolSpec[] = [
       "Read a text file, or part of one, with line numbers -- without the terminal. By default the first 200 " +
       "lines; start and end read a range. outline lists the file's functions, classes and headings with their " +
       "line numbers, so a large file costs a few lines to understand; symbol returns the whole body of one " +
-      "function, class or heading by name. Prefer outline then symbol to cat-ing a big file. Paths are from the " +
-      "terminal's directory. Reads only: use edit_file to change a file.",
+      "function, class or heading by name. Prefer outline then symbol to cat-ing a big file. To read several " +
+      "files or places, give them all in files, in one call. Paths are from the terminal's directory. Reads " +
+      "only: use edit_file to change a file.",
     parameters: {
       type: "object",
       properties: {
@@ -251,8 +252,19 @@ export const terminalSPECS: ToolSpec[] = [
         end: { type: "number", description: "Last line, inclusive. At most 600 lines at a time." },
         outline: { type: "boolean", description: "List declarations and headings with line numbers." },
         symbol: { type: "string", description: "Return the body of the declaration with this name." },
+        files: {
+          type: "array",
+          description: "Several reads in one call, each with its own path and optional start, end, outline or symbol. Instead of path.",
+          items: {
+            type: "object",
+            properties: {
+              path: { type: "string" }, start: { type: "number" }, end: { type: "number" },
+              outline: { type: "boolean" }, symbol: { type: "string" },
+            },
+            required: ["path"],
+          },
+        },
       },
-      required: ["path"],
     },
   },
 

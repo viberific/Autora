@@ -85,7 +85,7 @@ export async function runSubagent(task: string, deps: SubagentDeps, opts: Subage
       ended = report ? "answered" : "empty";
       break;
     }
-    messages.push({ role: "assistant", text: turn.text, calls: turn.calls, reasoning: turn.reasoning });
+    messages.push({ role: "assistant", text: turn.text, calls: turn.calls, reasoning: turn.reasoning, ...(turn.carry ? { carry: turn.carry } : {}) });
     const replies: ToolReply[] = [];
     let loop: string | null = null;
     for (const use of turn.calls as ToolUse[]) {

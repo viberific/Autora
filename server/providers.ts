@@ -29,6 +29,9 @@ export interface ModelSpec {
       Left out where we have not checked it, and those tokens are then
       priced as ordinary input: overstated, never under. */
   cachedInput?: number;
+  /** Dearer prices for a prompt longer than `tokens` (Haiku 5.5 past 100K): every token of that request is billed at
+      them, cached input at the same fraction of the input price as below the line. */
+  over?: { tokens: number; input: number; output: number };
   /** One short line: what this model is for, shown beside it in the picker. */
   note?: string;
   /** How much this model actually holds, in tokens, where the vendor publishes
@@ -167,12 +170,18 @@ export const PROVIDERS: ProviderSpec[] = [
     keyHint: "sk-ant-...",
     keysUrl: "https://console.anthropic.com/settings/keys",
     baseUrl: "https://api.anthropic.com",
-    defaultModel: "claude-haiku-4-5",
+    defaultModel: "claude-haiku-5-5",
     listable: true,
+    /* The 5.5 family read from Anthropic's model table in October 2026. Cache reads are a twentieth of the input price on
+       Opus 5.5 and Sonnet 5.5 ($0.20), a tenth on Haiku 5.5; cache writes are the usual multiple (costParts). Haiku 5.5
+       costs five times as much for a prompt past 100K tokens. The older ones stay listed for installs that chose them. */
     models: [
-      { window: 200_000, id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5", input: 3, output: 15, note: "Balanced" },
-      { window: 200_000, id: "claude-haiku-4-5", label: "Claude Haiku 4.5", input: 1, output: 5, note: "Fast and cheap" },
-      { window: 200_000, id: "claude-opus-4-1", label: "Claude Opus 4.1", input: 15, output: 75, note: "Most capable, priciest" },
+      { window: 1_000_000, id: "claude-opus-5-5", label: "Claude Opus 5.5", input: 4, output: 20, cachedInput: 0.2, note: "Most capable; hardest work" },
+      { window: 1_000_000, id: "claude-sonnet-5-5", label: "Claude Sonnet 5.5", input: 2, output: 10, cachedInput: 0.2, note: "Balanced; everyday coding and agent work" },
+      { window: 1_000_000, id: "claude-haiku-5-5", label: "Claude Haiku 5.5", input: 0.1, output: 0.5, cachedInput: 0.01, over: { tokens: 100_000, input: 0.5, output: 2.5 }, note: "Fast and very cheap" },
+      { window: 200_000, id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5", input: 3, output: 15, note: "Previous Sonnet" },
+      { window: 200_000, id: "claude-haiku-4-5", label: "Claude Haiku 4.5", input: 1, output: 5, note: "Previous Haiku" },
+      { window: 200_000, id: "claude-opus-4-1", label: "Claude Opus 4.1", input: 15, output: 75, note: "Older Opus, priciest" },
     ],
   },
   {
@@ -283,13 +292,16 @@ export const PROVIDERS: ProviderSpec[] = [
 export const AUTO_ROUTERS = ["orcarouter", "openrouter"];
 
 /** What a call on this provider costs at list price, in $/Mtok added
-    input+output, for the model Automatic would call on it (its default, or
-    the first listed). Null when the provider has no priced model -- which is
+    input+output, for the model Automatic would call on it (the one picked for
+    that vendor, else its default, else the first listed). Null when the provider has no priced model -- which is
     how a local server says "I cost nothing you can predict". */
-export function autoPriceOf(providerId: string): number | null {
+export function autoPriceOf(providerId: string, chosen?: string): number | null {
   const spec = providerSpec(providerId);
   if (!spec) return null;
-  const m = spec.models.find((x) => x.id === spec.defaultModel) ?? spec.models[0];
+  /* The model the person picked for this vendor is what a call would use, so it is what is priced; the vendor's
+     default only when none is picked (or the picked one is not in the list). */
+  const m = (chosen ? spec.models.find((x) => x.id === chosen) : undefined) ??
+    spec.models.find((x) => x.id === spec.defaultModel) ?? spec.models[0];
   if (!m || typeof m.input !== "number" || typeof m.output !== "number") return null;
   return m.input + m.output;
 }
@@ -444,15 +456,18 @@ export function costParts(
   if (!spec || spec.priced === false) return { fresh: 0, cached: 0, output: 0 };
   const read = Math.min(cache.read ?? 0, inputTokens);
   const write = Math.min(cache.write ?? 0, inputTokens - read);
-  // Anthropic publishes its cache prices as multiples of the input price:
-  // a tenth to read, a quarter more to write (the five-minute cache).
-  const readPrice = spec.cachedInput ?? (providerId === "anthropic" ? spec.input * 0.1 : spec.input);
-  const writePrice = providerId === "anthropic" ? spec.input * 1.25 : spec.input;
+  // A long prompt on a model with dearer prices past a length is billed at those, all of it.
+  const long = spec.over && inputTokens > spec.over.tokens ? spec.over : null;
+  const input = long ? long.input : spec.input;
+  // Anthropic publishes its cache prices as multiples of the input price: a tenth to read (less on some models,
+  // which say so in cachedInput), a quarter more to write the five-minute cache and twice the price for the hour.
+  const readPrice = spec.cachedInput !== undefined ? spec.cachedInput * (input / spec.input) : providerId === "anthropic" ? input * 0.1 : input;
+  const writePrice = providerId === "anthropic" ? input * ((process.env.AUTORA_CACHE_TTL || "").trim() === "1h" ? 2 : 1.25) : input;
   const scale = (providerId === "deepseek" && deepseekOffPeak(at) ? 0.5 : 1) / 1_000_000;
   return {
-    fresh: (inputTokens - read - write) * spec.input * scale,
+    fresh: (inputTokens - read - write) * input * scale,
     cached: (read * readPrice + write * writePrice) * scale,
-    output: outputTokens * spec.output * scale,
+    output: outputTokens * (long ? long.output : spec.output) * scale,
   };
 }
 

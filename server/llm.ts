@@ -14,6 +14,7 @@
  */
 
 import { GoogleGenAI } from "@google/genai";
+import { type Effort, effectiveProfile, learnRefusal, learnResponsesApi, usesResponsesApi } from "./modelprofile";
 import { type ModelSpec, providerSpec } from "./providers";
 
 /** A tool the model may call, in the one shape all three vendors accept once
@@ -76,6 +77,10 @@ export interface ChatMessage {
       history with tools in it unless each assistant message carries this
       back. */
   reasoning?: string;
+  /** Assistant only: what the vendor asked to be sent back unchanged with this message, and for which model -- OpenAI's
+      Responses API returns its reasoning as encrypted items that carry the model's thinking from one tool call to the
+      next. Sent back only to the model that made them. */
+  carry?: { model: string; items: unknown[] };
   /** User only: pictures that came with the message. Sent with the turn they
       belong to and no later one -- see server/attach.ts. */
   images?: ChatImage[];
@@ -99,6 +104,11 @@ export interface ChatCall {
    * answer and nothing else -- reading a picture, for one.
    */
   thinking?: "on" | "off";
+  /**
+   * How hard the model should think, for a model that takes it (./modelprofile): Claude's effort, OpenAI's reasoning
+   * effort. Left out, the model's own default stands; a model with no such knob is sent nothing either way.
+   */
+  effort?: Effort;
   /** What the model may call this turn. Omitted or empty means text only, and
       the request then carries no tool field at all -- some local servers 400
       on an empty array. */
@@ -139,6 +149,8 @@ export interface ChatTurn {
   cutOff?: boolean;
   /** The thinking that came before the reply, when the vendor streams it. */
   reasoning?: string;
+  /** Items to send back with this turn's message (see ChatMessage.carry). */
+  carry?: { model: string; items: unknown[] };
 }
 
 /** An error with the HTTP status kept, so the caller can tell a busy vendor
@@ -523,6 +535,7 @@ function hash(s: string): number {
 }
 
 async function streamOpenAi(call: ChatCall, onDelta: (text: string) => void): Promise<ChatTurn> {
+  if (usesResponsesApi(call.provider ?? "", call.model, call.baseUrl ?? "")) return streamResponses(call, onDelta);
   const isOpenAi = call.provider === "openai" || /(^|\/\/)api\.openai\.com/.test(call.baseUrl ?? "");
   const called = new Set(call.messages.flatMap((m) => (m.calls ?? []).map((c) => c.name)));
   const tools = capTools(isOpenAi ? openAiTools(call.tools ?? []) : call.tools ?? [], isOpenAi, called);
@@ -545,6 +558,9 @@ async function streamOpenAi(call: ChatCall, onDelta: (text: string) => void): Pr
   const pin = (call.endpoint ?? "").trim();
   const openrouter = Boolean(providerSpec(call.provider)?.pinnable) || /(^|\.)openrouter\.ai/.test(call.baseUrl ?? "");
   const forcedKey = `${call.provider ?? ""}|${call.baseUrl ?? ""}|${call.model}`;
+  /* What this model takes beyond the common fields, read per request so a refusal learned below holds from the next. */
+  const profileNow = () => effectiveProfile(call.provider ?? "", call.model, call.baseUrl ?? "");
+  let profile = profileNow();
   const send = (off: boolean) => request(`${trimSlash(call.baseUrl)}/chat/completions`, {
     method: "POST",
     signal: call.signal,
@@ -556,7 +572,8 @@ async function streamOpenAi(call: ChatCall, onDelta: (text: string) => void): Pr
       stream_options: { include_usage: true },
       ...(modernOpenAi(call)
         ? { max_completion_tokens: call.maxTokens ?? 2048 }
-        : { temperature: call.temperature ?? 0.7, max_tokens: call.maxTokens ?? 2048 }),
+        : { ...(profile.temperature ? { temperature: call.temperature ?? 0.7 } : {}), max_tokens: call.maxTokens ?? 2048 }),
+      ...(call.effort && profile.effort === "openai" ? { reasoning_effort: call.effort } : {}),
       // Only DeepSeek takes this, and only when the caller asked either way:
       // left alone, its own default stands.
       ...(deepseek && call.thinking ? { thinking: { type: call.thinking === "off" ? "disabled" : "enabled" } } : {}),
@@ -587,8 +604,19 @@ async function streamOpenAi(call: ChatCall, onDelta: (text: string) => void): Pr
   /* A model whose reasoning is mandatory refuses the off switch outright. Asked once, it is told so and the call is
      made again without the switch; the next call to that model does not ask. Thinking off is a wish, not a need. */
   let res = await send(!thinkingForced.has(forcedKey));
-  if (!res.ok) {
-    const refused = await failure(res);
+  let refused = res.ok ? null : await failure(res);
+  /* An OpenAI model that takes tools only through the Responses API says so: it is asked there now, and from now on. */
+  if (refused && learnResponsesApi(call.provider ?? "", call.model, call.baseUrl ?? "", refused.status, refused.message)) {
+    return streamResponses(call, onDelta);
+  }
+  /* A field this model's profile added, refused by name: once more without it, and not sent to it again (./modelprofile). */
+  const extras = { effort: Boolean(call.effort) && profile.effort === "openai", temperature: !modernOpenAi(call) && profile.temperature };
+  if (refused && learnRefusal(call.provider ?? "", call.model, call.baseUrl ?? "", refused.status, refused.message, extras)) {
+    profile = profileNow();
+    res = await send(!thinkingForced.has(forcedKey));
+    refused = res.ok ? null : await failure(res);
+  }
+  if (refused) {
     if (call.thinking === "off" && !thinkingForced.has(forcedKey) && refusesThinkingOff(refused.message)) {
       thinkingForced.add(forcedKey);
       res = await send(false);
@@ -662,6 +690,142 @@ async function streamOpenAi(call: ChatCall, onDelta: (text: string) => void): Pr
     calls,
     cutOff,
     ...(reasoning ? { reasoning } : {}),
+  };
+}
+
+// ------------------------------------------------------- openai responses --
+
+/**
+ * The history as OpenAI's Responses API takes it, built from the chat-completions shape so the pairing of calls and
+ * results (and the id repairs) are made in one place: system becomes `instructions`, each assistant tool call a
+ * `function_call` item, each result a `function_call_output`, pictures `input_image` parts. The reasoning items a
+ * model returned go back in front of the calls they led to, to that model only.
+ */
+export function responsesInput(call: ChatCall): { instructions: string; input: any[] } {
+  const chat = openAiMessages(call);
+  const assistants = call.messages.filter((m) => m.role === "assistant");
+  let nth = 0;
+  let instructions = "";
+  const input: any[] = [];
+  const parts = (content: any): any => (typeof content === "string" ? content : (content as any[]).map((p) =>
+    p.type === "image_url" ? { type: "input_image", image_url: p.image_url.url } : { type: "input_text", text: p.text ?? "" }));
+  for (const m of chat) {
+    if (m.role === "system") { instructions = m.content; continue; }
+    if (m.role === "user") { input.push({ role: "user", content: parts(m.content) }); continue; }
+    if (m.role === "tool") { input.push({ type: "function_call_output", call_id: m.tool_call_id, output: m.content }); continue; }
+    // assistant
+    const source = assistants[nth++];
+    if (source?.carry && source.carry.model === call.model) input.push(...source.carry.items);
+    if (m.content) input.push({ role: "assistant", content: m.content });
+    for (const tc of m.tool_calls ?? []) {
+      input.push({ type: "function_call", call_id: tc.id, name: tc.function.name, arguments: tc.function.arguments });
+    }
+  }
+  return { instructions, input };
+}
+
+/**
+ * One call through OpenAI's Responses API, for the models that take tools with reasoning on only there (see
+ * usesResponsesApi). Nothing is stored on OpenAI's side (`store: false`); the reasoning comes back encrypted and is
+ * returned with the next request instead, so the model keeps its thread of thought between tool calls.
+ */
+async function streamResponses(call: ChatCall, onDelta: (text: string) => void): Promise<ChatTurn> {
+  const called = new Set(call.messages.flatMap((m) => (m.calls ?? []).map((c) => c.name)));
+  const tools = capTools(openAiTools(call.tools ?? []), true, called);
+  const sent = new Set(tools.map((t) => t.name));
+  const system = (call.system ?? "") + omittedNote([...new Set((call.tools ?? []).map((t) => t.name))].filter((n) => !sent.has(n)));
+  const { instructions, input } = responsesInput({ ...call, system });
+  const profile = effectiveProfile(call.provider ?? "openai", call.model, call.baseUrl ?? "");
+  const res = await request(`${trimSlash(call.baseUrl)}/responses`, {
+    method: "POST",
+    signal: call.signal,
+    headers: openAiHeaders(call),
+    body: JSON.stringify({
+      model: call.model,
+      stream: true,
+      store: false,
+      include: ["reasoning.encrypted_content"],
+      ...(instructions ? { instructions } : {}),
+      input,
+      max_output_tokens: call.maxTokens ?? 2048,
+      ...(call.effort && profile.effort === "openai" ? { reasoning: { effort: call.effort } } : {}),
+      ...(tools.length
+        ? {
+            tools: tools.map((t) => ({ type: "function", name: t.name, description: t.description, parameters: openAiSchema(t.parameters) })),
+            tool_choice: "auto",
+          }
+        : {}),
+    }),
+  });
+  if (!res.ok) throw await failure(res);
+
+  let reply = "";
+  let usage: ChatUsage | null = null;
+  let cutOff = false;
+  const carried: unknown[] = [];
+  /* Calls by output position: the item opens with its id and name, its arguments stream in, and the finished item
+     carries them whole. */
+  const building = new Map<number, { id: string; name: string; args: string }>();
+  for await (const payload of sse(res)) {
+    let ev: any;
+    try { ev = JSON.parse(payload); } catch { continue; }
+    switch (ev.type) {
+      case "response.output_text.delta":
+        if (typeof ev.delta === "string" && ev.delta) { reply += ev.delta; onDelta(ev.delta); }
+        break;
+      case "response.output_item.added":
+        if (ev.item?.type === "function_call") {
+          building.set(ev.output_index ?? building.size, { id: ev.item.call_id ?? ev.item.id ?? "", name: ev.item.name ?? "", args: ev.item.arguments ?? "" });
+        }
+        break;
+      case "response.function_call_arguments.delta": {
+        const b = building.get(ev.output_index);
+        if (b && typeof ev.delta === "string") b.args += ev.delta;
+        break;
+      }
+      case "response.output_item.done":
+        if (ev.item?.type === "function_call") {
+          building.set(ev.output_index ?? building.size, { id: ev.item.call_id ?? ev.item.id ?? "", name: ev.item.name ?? "", args: ev.item.arguments ?? "" });
+        } else if (ev.item?.type === "reasoning" && ev.item.encrypted_content) {
+          carried.push({ type: "reasoning", id: ev.item.id, encrypted_content: ev.item.encrypted_content, summary: ev.item.summary ?? [] });
+        }
+        break;
+      case "response.completed":
+      case "response.incomplete": {
+        const r = ev.response ?? {};
+        if (ev.type === "response.incomplete" || r.incomplete_details?.reason === "max_output_tokens") cutOff = true;
+        if (r.usage) {
+          usage = {
+            input: r.usage.input_tokens ?? 0,
+            output: r.usage.output_tokens ?? 0,
+            cached: r.usage.input_tokens_details?.cached_tokens ?? 0,
+            estimated: false,
+          };
+        }
+        break;
+      }
+      case "response.failed":
+        throw new ProviderError(ev.response?.error?.message ?? "the response failed", null);
+      case "error":
+        throw new ProviderError(ev.message ?? ev.error?.message ?? "stream failed", null);
+    }
+  }
+
+  const calls: ToolUse[] = [...building.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .filter(([, found]) => found.name)
+    .map(([slot, found]) => ({
+      id: found.id || `call_${slot}`,
+      name: found.name,
+      args: parseArgs(found.args),
+      ...(brokenArgs(found.args) ? { incomplete: true } : {}),
+    }));
+  return {
+    usage: usage ?? estimate(call, reply),
+    text: reply,
+    calls,
+    cutOff,
+    ...(carried.length ? { carry: { model: call.model, items: carried } } : {}),
   };
 }
 
@@ -755,7 +919,9 @@ const CACHE_CONTROL: { type: "ephemeral"; ttl?: "1h" } =
   (process.env.AUTORA_CACHE_TTL || "").trim() === "1h" ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" };
 
 async function streamAnthropic(call: ChatCall, onDelta: (text: string) => void): Promise<ChatTurn> {
-  const res = await request(`${trimSlash(call.baseUrl)}/v1/messages`, {
+  /* The newest Claude models refuse a temperature and take an effort; older ones the other way round (./modelprofile). */
+  let profile = effectiveProfile(call.provider ?? "anthropic", call.model, call.baseUrl ?? "");
+  const send = () => request(`${trimSlash(call.baseUrl)}/v1/messages`, {
     method: "POST",
     signal: call.signal,
     headers: {
@@ -767,7 +933,8 @@ async function streamAnthropic(call: ChatCall, onDelta: (text: string) => void):
       model: call.model,
       stream: true,
       max_tokens: call.maxTokens ?? 2048,
-      temperature: call.temperature ?? 0.7,
+      ...(profile.temperature ? { temperature: call.temperature ?? 0.7 } : {}),
+      ...(call.effort && profile.effort === "anthropic" ? { output_config: { effort: call.effort } } : {}),
       system: call.system
         ? [{ type: "text", text: call.system, cache_control: { ...CACHE_CONTROL } }]
         : undefined,
@@ -784,7 +951,15 @@ async function streamAnthropic(call: ChatCall, onDelta: (text: string) => void):
     }),
   });
 
-  if (!res.ok) throw await failure(res);
+  let res = await send();
+  if (!res.ok) {
+    const refused = await failure(res);
+    const sent = { effort: Boolean(call.effort) && profile.effort === "anthropic", temperature: profile.temperature };
+    if (!learnRefusal(call.provider ?? "anthropic", call.model, call.baseUrl ?? "", refused.status, refused.message, sent)) throw refused;
+    profile = effectiveProfile(call.provider ?? "anthropic", call.model, call.baseUrl ?? "");
+    res = await send();
+    if (!res.ok) throw await failure(res);
+  }
 
   let reply = "";
   const usage: ChatUsage = { input: 0, output: 0, estimated: false };

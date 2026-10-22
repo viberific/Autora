@@ -46,6 +46,10 @@ const free = () => new Promise<number>((resolve) => {
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Whether a request is the first of its turn: it ends on the person's message, not on tool results. Not "the history
+    has no tool messages": a chat may carry an earlier turn's tool work on (ContextEngine.canCarry). */
+export const turnStart = (req: Seen): boolean => req.messages[req.messages.length - 1]?.role !== "tool";
+
 export interface App {
   base: string;
   /** The scripted model's OpenAI-style root, for a test that points another provider at it. */

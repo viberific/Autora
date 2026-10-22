@@ -15,7 +15,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { chromium, type Page } from "playwright-core";
-import { sleep, startApp } from "./e2e-harness";
+import { turnStart, sleep, startApp } from "./e2e-harness";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -58,7 +58,7 @@ async function main() {
   const browser = await chromium.launch({ executablePath: exe, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
   try {
     const s = await app.newSession("A photo", "build");
-    app.decide = (req) => req.messages.filter((m) => m.role === "tool").length === 0
+    app.decide = (req) => turnStart(req)
       ? { tools: [{ name: "photo_open", args: { new: { width: 400, height: 300, background: "white" } } }] }
       : { text: "Made a canvas." };
     await app.turn(s, "touch up a photo, start with a blank canvas");

@@ -178,8 +178,39 @@ export function describeTodos(list: TodoList): string {
  * (it may be true) but mentioned, because a list that says three things are
  * happening at once has stopped saying where the work is.
  */
+/** Positions (1-based) out of a field that may be one number or a list of them. */
+function positions(value: unknown): number[] {
+  const list = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
+  return list.map((v) => Math.floor(Number(v))).filter((n) => Number.isFinite(n));
+}
+
+/**
+ * Ticking items off by position, without writing the list out again: `done` marks those completed, `start` marks
+ * that one in progress. What a step costs in output is what changed, not the whole plan once more.
+ */
+function patchTodos(current: TodoList | null, action: Record<string, any>): TodoResult {
+  if (!current || current.items.length === 0) {
+    return { ok: false, summary: "There is no list to tick off yet: write it with todos first." };
+  }
+  const done = positions(action.done);
+  const start = positions(action.start);
+  const bad = [...done, ...start].find((n) => n < 1 || n > current.items.length);
+  if (bad !== undefined) {
+    return { ok: false, summary: `There is no item ${bad}: the list has ${current.items.length}.\n\n${describeTodos(current)}` };
+  }
+  const items = current.items.map((item, i) => {
+    if (done.includes(i + 1)) return { ...item, status: "completed" as const };
+    if (start.includes(i + 1)) return { ...item, status: "in-progress" as const };
+    return item;
+  });
+  const list = { items };
+  const finished = items.filter((i) => i.status === "completed").length;
+  return { ok: true, list, summary: describeTodos(list), preview: `${finished} of ${items.length} done` };
+}
+
 export function applyTodos(current: TodoList | null, action: Record<string, any>): TodoResult {
   const raw = action?.todos ?? action?.items ?? action?.tasks ?? action?.todoList;
+  if (raw === undefined && (action?.done !== undefined || action?.start !== undefined)) return patchTodos(current, action);
   if (raw === undefined && !action?.clear) {
     return {
       ok: true,

@@ -13,6 +13,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { merge3 } from "./merge3";
+import { syntaxNote } from "./syntaxcheck";
 
 export interface TextEdit {
   old: string;
@@ -175,6 +176,8 @@ export function editFile(args: EditArgs, deps: EditDeps): EditResult {
   } catch (err) {
     return { ok: false, summary: `Could not write ${given}: ${String((err as Error).message).split("\n")[0]}` };
   }
+  /* Whether the file still parses, said now rather than a round later (server/syntaxcheck.ts). */
+  note += syntaxNote(full, disk, write);
   const was = (disk ?? "").split("\n").length, now = write.split("\n").length;
   return {
     ok: true,

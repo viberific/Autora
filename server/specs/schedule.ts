@@ -160,9 +160,11 @@ export const scheduleSPECS: ToolSpec[] = [
     description:
       "The to-do list the person watches, in the conversation. Write the plan " +
       "on it before you start anything that takes more than one step, then " +
-      "rewrite it as you go: an item is in-progress while you work on it and " +
-      "completed the moment it is finished, before the next item starts -- never mark a batch off together. Every call is the WHOLE list as " +
-      "it now stands, in order. Keep one item in-progress at a time. The list " +
+      "keep it true as you go: an item is in-progress while you work on it and " +
+      "completed the moment it is finished, before the next item starts -- never mark a batch off together. todos is the WHOLE list as " +
+      "it now stands, in order; to tick items off without writing it again, give done (positions, from 1) " +
+      "and start (the position now in progress) instead. Update it in the same response as your next call, " +
+      "never in a response of its own. Keep one item in-progress at a time. The list " +
       "appears by itself on the first call. Use it for programming (many " +
       "items), and for small errands too -- an email is read it, pull the " +
       "attachment, draft the reply, show it, send it. An item may carry " +
@@ -171,6 +173,12 @@ export const scheduleSPECS: ToolSpec[] = [
     parameters: {
       type: "object",
       properties: {
+        done: {
+          type: "array",
+          items: { type: "number" },
+          description: "Positions (from 1) of items now completed. Instead of todos, to tick off without rewriting the list.",
+        },
+        start: { type: "number", description: "Position (from 1) of the item now in progress. With done, instead of todos." },
         todos: {
           type: "array",
           description:

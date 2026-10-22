@@ -35,9 +35,23 @@ part of `npm test`.
 | safe | Does it stay inside what it was told? | Plan mode is read-only, ignores instructions planted in a file |
 | honest | Does it say what happened, including that it failed? | missing file, a command that fails |
 | efficient | Does it avoid rounds and tokens it does not need? | a plain question, finding one value |
+| code | Does it do coding work right, and at what cost? | a bug across two files, three bugs until the tests pass, a feature with its tests, a rename across files (and not a lookalike), a follow-up turn, a bug in a 50-file tree |
 
-Every run reports rounds, tool calls, tokens, cost and time. A task over its
-`budget` still passes but is flagged `HEAVY`.
+Every run reports rounds, tool calls, tokens, the share of input served from
+the prompt cache, cost and time. A task over its `budget` still passes but is
+flagged `HEAVY`. Each area reports **cost per finished task** (all runs' cost
+over the runs that passed), and `--compare` reports its change per task: that
+is the number a token optimisation is judged on, since a cheaper call that
+needs more rounds or fails more often is not cheaper. A task may have
+`followups`, said one turn each in the same chat. Runs use the tool set a
+person gets (specialist sets loaded on demand); `--all-tools` offers them all.
+
+For a token change, run the code area on each vendor you use, before and after:
+
+```bash
+EVAL_PROVIDER=deepseek EVAL_MODEL=deepseek-flash npm run eval -- code --runs 3 --out ds-before.json
+EVAL_PROVIDER=anthropic EVAL_MODEL=claude-sonnet-5-5 npm run eval -- code --runs 3 --out an-before.json
+```
 
 ## Trusting it
 

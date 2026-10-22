@@ -2096,6 +2096,9 @@ function gaveUpNote(spec: ToolSpec, ms: number, repeatable: boolean): string {
   );
 }
 
+/** Places read_file reads in one call (files). */
+const MAX_READS = 8;
+
 export async function runTool(
   spec: ToolSpec,
   args: Record<string, any>,
@@ -2304,10 +2307,22 @@ async function runToolUnredacted(
       }
 
       case "read_file": {
-        const r = readFile(
-          { path: String(args.path ?? ""), start: args.start, end: args.end, outline: args.outline === true, symbol: typeof args.symbol === "string" ? args.symbol : undefined },
+        const one = (a: Record<string, any>) => readFile(
+          { path: String(a?.path ?? ""), start: a?.start, end: a?.end, outline: a?.outline === true, symbol: typeof a?.symbol === "string" ? a.symbol : undefined },
           { root: terminalDir(), protect: ctx.protectedPaths ?? [] },
         );
+        /* Several places in one call: one round instead of one per file. Each says its own failure; at most eight. */
+        if (Array.isArray(args.files) && args.files.length > 0) {
+          const asked = args.files.slice(0, MAX_READS);
+          const read = asked.map(one);
+          const left = args.files.length - asked.length;
+          return {
+            ok: read.some((r) => r.ok),
+            summary: read.map((r) => r.text).join("\n\n") + (left > 0 ? `\n\n(${left} more not read: at most ${MAX_READS} in one call.)` : ""),
+            preview: `${read.filter((r) => r.ok).length} of ${asked.length} read`,
+          };
+        }
+        const r = one(args);
         return { ok: r.ok, summary: r.text, preview: r.ok ? String(args.path ?? "") : "not read" };
       }
 
