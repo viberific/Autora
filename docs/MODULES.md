@@ -330,7 +330,8 @@ Spectra's fetched renderer is most of what is on disk.
     the main model; a failure falls back to the main model. It shares no cache
     with the chat, so a cheaper model costs nothing there.
   - `modelprofile.ts`: what one model takes beyond the common fields. Callers
-    say `effort` (`low` for unwatched work; `AUTORA_EFFORT` for the main loop);
+    say `effort` (`low` for unwatched work; for the main loop `autoEffort` picks it
+    per model and turn, `AUTORA_EFFORT` overrides);
     Claude gets `output_config.effort`, OpenAI's reasoning models
     `reasoning_effort`, others nothing. The newest Claude models are sent no
     temperature. A 400 that names one of these fields is learned

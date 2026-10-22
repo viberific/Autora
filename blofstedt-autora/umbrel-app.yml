@@ -196,6 +196,7 @@ releaseNotes: >-
   (Settings can turn this off); a search shows the whole short function it found; several files are read in one
   step; a short map of the project comes with each coding message; and a follow-up sent within a few minutes keeps
   what the agent already read instead of reading it again. Research lookups run on a cheaper model of the same
-  provider, and unwatched work asks for less thinking where a model supports it. Adds Claude Opus 5.5, Sonnet 5.5
+  provider, and how much a model thinks is now set automatically per model (less for small talk and unwatched
+  work, the efficient level for each model's real work). Adds Claude Opus 5.5, Sonnet 5.5
   and Haiku 5.5 (now Anthropic's default) and stops sending the newest Claude models a setting they refuse.
   Automatic provider choice now prices the model you picked for each provider.

@@ -96,6 +96,17 @@ const openai = (model: string, effort?: "low") => streamChat({
   temperature: 0.2, ...(effort ? { effort } : {}),
 }, () => undefined);
 
+await test("effort is picked per model when nobody set it: low for small talk, medium for Sonnet's work, else the model's own", async () => {
+  const { autoEffort } = await import("../server/modelprofile");
+  assert.equal(autoEffort("anthropic", "claude-sonnet-5-5", "work"), "medium");
+  assert.equal(autoEffort("anthropic", "claude-sonnet-5-5", "chat"), "low");
+  assert.equal(autoEffort("anthropic", "claude-opus-5-5", "work"), undefined, "its default is already medium");
+  assert.equal(autoEffort("openai", "gpt-6-luna", "chat"), "low");
+  assert.equal(autoEffort("openai", "gpt-6-luna", "work"), undefined);
+  assert.equal(autoEffort("deepseek", "deepseek-flash", "chat"), undefined, "a model with no such knob is sent nothing");
+  assert.equal(autoEffort("anthropic", "claude-haiku-4-5", "chat"), undefined);
+});
+
 console.log("on the wire");
 
 await test("Opus 5.5 is sent effort and no temperature", async () => {

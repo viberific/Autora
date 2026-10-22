@@ -60,6 +60,21 @@ export function modelProfile(provider: string, model: string, baseUrl = ""): Mod
   return { effort: null, temperature: true };
 }
 
+/**
+ * The effort a turn's own calls ask for when the person set none (AUTORA_EFFORT overrides): picked per model, so the
+ * best work per token is the default and nobody has to know the knob exists. Small talk thinks least on any model that
+ * takes the hint. For work, a model whose default is already the efficient level keeps it (Opus 5.5, Haiku 5.5 and
+ * OpenAI's reasoning models default to medium); Sonnet 5 and later default to high, and medium is where Anthropic
+ * finds agentic coding holds its quality for fewer tokens. Undefined: send nothing, the model's default stands.
+ */
+export function autoEffort(provider: string, model: string, turn: "chat" | "work", baseUrl = ""): Effort | undefined {
+  if (!effectiveProfile(provider, model, baseUrl).effort) return undefined;
+  if (turn === "chat") return "low";
+  const claude = claudeVersion(model);
+  if (provider === "anthropic" && claude?.family === "sonnet" && claude.version >= 5) return "medium";
+  return undefined;
+}
+
 /** Request fields a model refused, by "provider|baseUrl|model". */
 const refused = new Map<string, Set<"effort" | "temperature">>();
 const keyOf = (provider: string, baseUrl: string, model: string) => `${provider}|${baseUrl}|${model}`;

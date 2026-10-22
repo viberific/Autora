@@ -126,7 +126,7 @@ import { runSubagent, type SubagentDeps } from "./server/subagent";
 import { projectMap } from "./server/projectmap";
 import { historyFor, pastToolCalls } from "./server/history";
 import { DataUrlSieve } from "./server/datasieve";
-import type { Effort } from "./server/modelprofile";
+import { autoEffort, type Effort } from "./server/modelprofile";
 import { checkLine, failedNote, itemCheckNote, previewNote, previewProblems, projectCheck, type CheckResult, type ProjectCheck } from "./server/verify";
 import { buildTrace, traceText } from "./server/trace";
 import { keepBudget, loadBudget } from "./server/budgetstore";
@@ -2093,9 +2093,9 @@ const FALLBACK_OUTPUT_TOKENS = 2048;
 const CARRY_MS = ((process.env.AUTORA_CACHE_TTL || "").trim() === "1h" ? 60 : 5) * 60_000 - 45_000;
 /** Tools that keep the work's records rather than do the work: a round of only these is told so (see the loop). */
 const BOOKKEEPING = new Set(["todo", "requirements", "ledger", "set_mode"]);
-/* How hard the main model thinks, for a model that takes the hint (Claude's effort, OpenAI's reasoning effort; see
-   server/modelprofile.ts). Unset, each model's own default stands; AUTORA_EFFORT=low|medium|high sets it. Unwatched work
-   (a research worker, folding old turns, a remark) always asks for low. */
+/* How hard the main model thinks, for a model that takes the hint (Claude's effort, OpenAI's reasoning effort).
+   Unset, it is chosen per model and per turn (autoEffort in server/modelprofile.ts); AUTORA_EFFORT=low|medium|high
+   overrides that for every turn. Unwatched work (a research worker, folding old turns, a remark) always asks for low. */
 const MAIN_EFFORT: Effort | undefined = (() => {
   const v = (process.env.AUTORA_EFFORT || "").trim().toLowerCase();
   return v === "low" || v === "medium" || v === "high" ? v : undefined;
@@ -4319,7 +4319,11 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
               temperature: 0.7,
               maxTokens: outputTokens,
               thinkingBudget: THINKING_BUDGET,
-              ...(MAIN_EFFORT ? { effort: MAIN_EFFORT } : {}),
+              /* The person's setting, else the level picked for this model and this kind of turn (modelprofile.ts). */
+              ...((): { effort?: Effort } => {
+                const effort = MAIN_EFFORT ?? autoEffort(answering.provider, answering.model, opts.quick ? "chat" : "work", answering.baseUrl);
+                return effort ? { effort } : {};
+              })(),
               /* No thinking while talk mode's fast model holds the turn --
                  that is the whole of the wait it saves. The moment it hands
                  over, the reasoning model thinks as it likes. */
