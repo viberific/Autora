@@ -190,6 +190,7 @@ gallery: []
 releaseNotes: >-
   Fixes OpenAI models (such as gpt-6 Luna) failing with "Invalid 'tools': array too long". OpenAI accepts at most 128
   tools per request, so when more are switched on, 128 are sent: tools the chat has already used first, then the built-in
-  ones, then ones the agent wrote, and connected-server tools last. Requests to OpenAI also now repair what it
+  ones, then ones the agent wrote, and connected-server tools last. The model is
+  told the names of any left out, and can still call them by name. Requests to OpenAI also now repair what it
   rejects from connected (MCP) servers: arrays in a tool's inputs with no item type, a repeated tool name, and a
   tool-call id over 40 characters. Other providers are sent exactly what they were before.

@@ -5,7 +5,7 @@
  *   npx tsx tests/toolstream.test.ts
  */
 import assert from "node:assert/strict";
-import { addToolDelta, capTools, OPENAI_MAX_TOOLS, openAiCallId, openAiSchema, openAiTools, parseArgs, type BuildingCall } from "../server/llm";
+import { addToolDelta, capTools, OPENAI_MAX_TOOLS, omittedNote, openAiCallId, openAiSchema, openAiTools, parseArgs, type BuildingCall } from "../server/llm";
 
 const fold = (parts: any[]) => {
   const m = new Map<number, BuildingCall>();
@@ -55,6 +55,9 @@ const heavy = named([...Array.from({ length: 128 }, (_, i) => `t${i}`), "mcp__s_
 const kept = capTools(heavy, true, new Set(["mcp__s__used"])).map((t) => t.name);
 assert.equal(kept.length, OPENAI_MAX_TOOLS);
 assert.ok(kept.includes("mcp__s__used") && !kept.includes("t127"));
+assert.equal(omittedNote([]), "");
+assert.match(omittedNote(["mcp__s__a", "mcp__s__b"]), /2 are not in your list.*mcp__s__a, mcp__s__b/);
+assert.match(omittedNote(Array.from({ length: 70 }, (_, i) => `x${i}`)), /and 10 more/);
 assert.equal(capTools(many, false).length, 150);
 assert.equal(capTools(named(["a", "b"]), true).length, 2);
 

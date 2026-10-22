@@ -484,6 +484,16 @@ export function capTools<T extends { name: string }>(tools: readonly T[], openai
   return tools.filter((t) => keep.has(t));
 }
 
+/** The line that tells the model which tools this request had no room for. They still run when called by name (the server
+    runs any tool it knows), so the model is given the names rather than left to think they do not exist. */
+export function omittedNote(left: readonly string[]): string {
+  if (left.length === 0) return "";
+  const shown = left.slice(0, 60).join(", ");
+  return `\n\nThis model takes at most ${OPENAI_MAX_TOOLS} tools in a request, so ${left.length} are not in your list. ` +
+    `They still work: call one by its exact name, with arguments as its name suggests. Not in your list: ${shown}` +
+    `${left.length > 60 ? `, and ${left.length - 60} more` : ""}.`;
+}
+
 /** A tool schema OpenAI will accept. It 400s on an array with no `items`, and on a root that is not an object with
     `properties`; MCP servers send both. Only the wrong parts are put right, and the input is not changed. */
 export function openAiSchema(schema: any): any {
@@ -519,6 +529,8 @@ async function streamOpenAi(call: ChatCall, onDelta: (text: string) => void): Pr
   if (tools.length < (call.tools?.length ?? 0)) {
     console.warn(`[llm] ${call.model}: sent ${tools.length} of ${call.tools!.length} tools (OpenAI allows ${OPENAI_MAX_TOOLS})`);
   }
+  const sent = new Set(tools.map((t) => t.name));
+  const system = (call.system ?? "") + omittedNote([...new Set((call.tools ?? []).map((t) => t.name))].filter((n) => !sent.has(n)));
   const deepseek = (call.provider ?? "") === "deepseek" || /api\.deepseek\.com/.test(call.baseUrl ?? "");
   /* OpenRouter is a router: one model is served from several endpoints, and
      without being told which, it may answer a turn from a different one --
@@ -555,7 +567,7 @@ async function streamOpenAi(call: ChatCall, onDelta: (text: string) => void): Pr
          whatever the model does by default. */
       ...(!deepseek && call.thinking === "off" && /glm/i.test(call.model) && off ? { thinking: { type: "disabled" } } : {}),
       ...(call.thinking === "off" && openrouter && off ? { reasoning: { enabled: false } } : {}),
-      messages: openAiMessages(call),
+      messages: openAiMessages({ ...call, system }),
       ...(tools.length
         ? {
             tools: tools.map((t) => ({
