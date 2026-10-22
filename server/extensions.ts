@@ -13,7 +13,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { unzipSync } from "fflate";
+import { unzipCapped } from "./unzip";
 import { stateFilePath } from "./state";
 
 interface ExtensionInfo {
@@ -120,9 +120,14 @@ function zipOf(bytes: Buffer): Buffer {
 /** Unpack a package into a folder of its own. */
 export function installPackage(bytes: Buffer, source: "store" | "file", key: string): ExtensionInfo {
   if (bytes.byteLength > MAX_BYTES) throw new Error("That extension is too large.");
-  const files = unzipSync(new Uint8Array(zipOf(bytes)));
+  // Sizes are read from the archive before anything is inflated (server/unzip.ts).
+  const files = unzipCapped(new Uint8Array(zipOf(bytes)));
   if (!files["manifest.json"]) throw new Error("That is not a Chrome extension: it has no manifest.json.");
-  const slug = key.replace(/[^a-z0-9._-]/gi, "_").slice(0, 60) || crypto.randomBytes(6).toString("hex");
+  /* The folder's name comes from a file name the person (or a page) chose.
+     Dots are allowed in it, but not leading ones: ".." made the folder the
+     one above the extensions, and installing replaces the folder, which
+     deleted settings, keys and every chat. */
+  const slug = key.replace(/[^a-z0-9._-]/gi, "_").replace(/^\.+/, "").slice(0, 60) || crypto.randomBytes(6).toString("hex");
   const dir = path.join(root(), slug);
   const pkg = path.join(dir, "pkg");
   fs.rmSync(dir, { recursive: true, force: true });

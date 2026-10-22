@@ -31,6 +31,8 @@ test("the commands nothing can undo are held", () => {
     "rm -rf /",
     "sudo rm -rf /*",
     "rm -fr ~",
+    // In the container the host is at /host and Autora's own state is in /data.
+    "rm -rf /host", "rm -rf /host/*", "rm -rf /host/etc/", "rm -rf /data", "rm -rf /etc", "rm -rf //host//home",
     "rm --recursive --force --no-preserve-root /",
     "ls -la && rm -rf /",
     "dd if=/dev/zero of=/dev/sda bs=1M",
@@ -50,6 +52,7 @@ test("ordinary work is not", () => {
     "rm -rf node_modules",
     "rm -f /tmp/scratch.txt",
     "rm -rf /tmp/build",
+    "rm -rf /host/home/umbrel/project/build", "rm -rf /data/exports/old", "rm -rf /home/user/project", "rm -f /etc/hosts.bak",
     "ls -la",
     "docker compose down",
     "docker volume ls",

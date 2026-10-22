@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import http from "node:http";
 import https from "node:https";
+import crypto from "node:crypto";
 import net from "node:net";
 import path from "node:path";
 import type { Duplex } from "node:stream";
@@ -478,6 +479,13 @@ function forgetSession(id: string) {
   dropTerm(id);
   dropStudio(id);
   presenceSent.delete(id);
+  for (const timers of [presenceTimers, termTimers]) {
+    const timer = timers.get(id);
+    if (timer) clearTimeout(timer);
+    timers.delete(id);
+  }
+  amendments.delete(id);
+  resuming.delete(id);
   const remarkTimer = remarkTimers.get(id);
   if (remarkTimer) clearTimeout(remarkTimer);
   remarkTimers.delete(id);
@@ -828,6 +836,9 @@ function socketBacklog(sessionId: string): number {
   return most;
 }
 
+/** Events per message when a socket is caught up on connect. */
+const BACKLOG_CHUNK = 500;
+
 function sendEphemeral(sessionId: string, message: Record<string, unknown>) {
   const sockets = sessionSockets.get(sessionId);
   if (!sockets || sockets.size === 0) return;
@@ -947,8 +958,9 @@ function browserFor(session: Session): LiveBrowser {
       recordVisit(url, title);
       emitEvent(session, "browser.nav", "agent", { url, title });
     },
-    onDownload: ({ name, bytes, url }) => {
+    onDownload: ({ name, bytes, url, error }) => {
       try {
+        if (error) throw new Error(error);
         const artifact = saveArtifact({ origin: "user", name, data: bytes, session: session.id, note: `Downloaded from ${url.slice(0, 200)}` });
         recordDownload({ artifact: artifact.id, name: artifact.name, url, size: artifact.size, ts: Date.now() });
         emitEvent(session, "browser.download", "agent", { artifact: artifact.id, name: artifact.name, size: artifact.size, url });
@@ -2682,7 +2694,7 @@ function isDefaultTitle(title: string): boolean {
 function newSession(title: string, incognito = false, origin: SessionOrigin = "person"): Session {
   const id = incognito
     ? ephemeralId()
-    : `session-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    : `session-${Date.now().toString(36)}-${crypto.randomBytes(8).toString("hex")}`;
   const session: Session = {
     id,
     title,
@@ -7120,9 +7132,17 @@ async function startServer() {
 
       // Replay backlog
       const fromSeq = parseInt(url.searchParams.get("from_seq") || "0", 10) || 0;
-      const backlog = session.events.filter((e) => e.seq >= fromSeq);
-      if (backlog.length > 0) {
-        ws.send(JSON.stringify({ type: "batch", events: backlog }));
+      /* In pieces: a long thread as one message is one huge string built in
+         memory at once, on every reconnect. Events are in seq order, so the
+         start is found, not filtered for. */
+      const log = session.events;
+      let lo = 0, hi = log.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (log[mid].seq < fromSeq) lo = mid + 1; else hi = mid;
+      }
+      for (let at = lo; at < log.length; at += BACKLOG_CHUNK) {
+        ws.send(JSON.stringify({ type: "batch", events: log.slice(at, at + BACKLOG_CHUNK) }));
       }
 
       // Live announcement

@@ -33,7 +33,7 @@ function isLoopback(address: string): boolean {
   return address === "::1" || address.startsWith("127.");
 }
 
-export interface PeerGate {
+interface PeerGate {
   /** Whether a connection from `address` may go ahead. */
   allows(address: string | undefined): Promise<boolean>;
   /** The addresses currently trusted (for tests and the log). */

@@ -24,7 +24,8 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
+import { strFromU8, strToU8, zipSync } from "fflate";
+import { unzipCapped } from "./unzip";
 import { stateDir } from "./state";
 
 type SkillStatus = "live" | "draft";
@@ -631,7 +632,7 @@ export function skillForUse(name: string): { ok: true; text: string; skill: Skil
 export function importSkills(bytes: Uint8Array, by: SkillAuthor = { kind: "person" }): { imported: SkillInfo[]; skipped: { where: string; error: string }[] } {
   if (bytes.byteLength > TOTAL_MAX * 4) throw new SkillError("That file is too large to be a skill.");
   let entries: Record<string, Uint8Array>;
-  try { entries = unzipSync(bytes); } catch { throw new SkillError("That is not a zip file. Export a skill folder as a .zip, or paste its SKILL.md."); }
+  try { entries = unzipCapped(bytes, { max: TOTAL_MAX * 8 }); } catch { throw new SkillError("That is not a zip file. Export a skill folder as a .zip, or paste its SKILL.md."); }
   const roots = Object.keys(entries)
     .filter((p) => !p.startsWith("__MACOSX/") && (p === "SKILL.md" || p.endsWith("/SKILL.md")))
     .map((p) => p.slice(0, -"SKILL.md".length));

@@ -29,10 +29,8 @@ const WEBCLAW_PKG = "@webclaw/mcp";
 const WEBCLAW_REPO = "0xMassi/webclaw";
 /** The variable @webclaw/mcp checks before it downloads anything. */
 const WEBCLAW_BIN_VAR = "WEBCLAW_MCP_BIN";
-/** Used when neither the person nor GitHub says which release to take. */
+/** Used when the person does not name a release. */
 const WEBCLAW_DEFAULT_TAG = "v0.6.23";
-/** How long a release lookup is trusted. */
-const TAG_TTL_MS = 6 * 60 * 60 * 1000;
 const DOWNLOAD_TIMEOUT_MS = 180_000;
 
 /** The data directory the binary belongs in: not /root, which a container
@@ -93,33 +91,11 @@ export function untarEntry(tar: Buffer, base: string): Buffer | null {
   return null;
 }
 
-/** The release to take: what the person pinned, else the newest, else a pin. */
-async function releaseTag(dir: string): Promise<string> {
-  const pinned = (process.env.WEBCLAW_MCP_VERSION || "").trim();
-  if (pinned) return pinned;
-
-  const cache = path.join(dir, "latest.json");
-  try {
-    const cached = JSON.parse(fs.readFileSync(cache, "utf8"));
-    if (typeof cached?.tag === "string" && Date.now() - Number(cached.at) < TAG_TTL_MS) return cached.tag;
-  } catch { /* nothing cached yet */ }
-
-  try {
-    const res = await fetch(`https://api.github.com/repos/${WEBCLAW_REPO}/releases/latest`, {
-      headers: { accept: "application/vnd.github+json", "user-agent": "autora" },
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (res.ok) {
-      const tag = String(((await res.json()) as any)?.tag_name ?? "").trim();
-      if (/^v?\d+\.\d+/.test(tag)) {
-        fs.mkdirSync(dir, { recursive: true, mode: 0o755 });
-        fs.writeFileSync(cache, JSON.stringify({ tag, at: Date.now() }));
-        return tag;
-      }
-    }
-  } catch { /* offline, or rate-limited: the pin will do */ }
-
-  return WEBCLAW_DEFAULT_TAG;
+/** The release to take: what the person named, else the one this version of Autora was written against.
+    Never "whatever is newest": that is a program fetched from the internet and run with this app's reach, so
+    which one is a decision (WEBCLAW_MCP_VERSION), not something a release made yesterday can change. */
+function releaseTag(): string {
+  return (process.env.WEBCLAW_MCP_VERSION || "").trim() || WEBCLAW_DEFAULT_TAG;
 }
 
 /** The musl build of the webclaw CLI, fetching it if this machine has not
@@ -128,7 +104,7 @@ async function ensureWebclawBinary(): Promise<string> {
   const triple = targetTriple();
   if (!triple) throw new Error(`no musl build is published for ${process.arch}`);
   const dir = path.join(binRoot(), "webclaw");
-  const tag = await releaseTag(dir);
+  const tag = releaseTag();
   const file = path.join(dir, tag, "webclaw-mcp");
   if (isRunnable(file)) return file;
 

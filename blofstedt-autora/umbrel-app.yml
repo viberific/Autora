@@ -191,5 +191,12 @@ releaseNotes: >-
   Security and stability fixes. On Umbrel only the app's own login proxy may now connect to Autora: other apps on the
   box can no longer reach it directly, past the login. Autora also refuses requests addressed to a name a hostile
   web page could point at it (DNS rebinding); if you reach Autora through a domain of your own, add it to
-  AUTORA_ALLOWED_HOSTS. A web request that carries your saved sign-ins no longer follows a redirect to another
-  site, and a media file that vanishes while it is being served no longer restarts the server.
+  AUTORA_ALLOWED_HOSTS. Installing a browser extension from a file named "...zip" no longer deletes Autora's settings,
+  keys and chats, and a zip that unpacks to far more than it claims (an extension, a skill, a document) is refused
+  instead of exhausting memory. Plan and Ask modes no longer treat a few commands that write files or run programs
+  (pdftotext with an output file, uniq, rg --pre) as read-only, and deleting /host, /data or a system folder is held
+  for your yes like deleting everything already was. A web request that carries your saved sign-ins no longer follows
+  a redirect to another site, a media file that vanishes while it is served no longer restarts the server, a large
+  browser download is refused before it is read into memory, new chats get unguessable ids, a chat that reconnects
+  is caught up in pieces, and a log line cut short by a crash no longer swallows the next event. The webclaw
+  integration now uses a fixed release (WEBCLAW_MCP_VERSION to choose another) instead of fetching the newest.

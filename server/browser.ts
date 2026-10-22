@@ -39,6 +39,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { stateFilePath } from "./state";
+import { MAX_ARTIFACT_BYTES } from "./artifacts";
 import type { BrowserCookie } from "./cookies";
 import { humanClick, humanMove, humanPath, humanType, pointIn, wander, type Point } from "./human";
 import { DEFAULT_CAPTCHA, findChallenge, findPageCheckbox, solveChallenge, type CaptchaSettings, type SolveReport } from "./captcha";
@@ -474,8 +475,8 @@ interface BrowserHooks {
   onFields: () => void;
   /** The page wrote an error or a warning to its console. */
   onConsole?: () => void;
-  /** The page downloaded a file. `bytes` is the whole of it. */
-  onDownload?: (file: { name: string; bytes: Buffer; url: string }) => void;
+  /** The page downloaded a file. `bytes` is the whole of it, or empty with `error` saying why it was not kept. */
+  onDownload?: (file: { name: string; bytes: Buffer; url: string; error?: string }) => void;
   /** Whether anyone is watching. The screencast is stopped while nobody is,
       because encoding JPEGs for an empty room is just heat. */
   watchers: () => number;
@@ -2364,8 +2365,16 @@ export class LiveBrowser {
         try {
           const tmp = await download.path();
           if (!tmp) return;
-          const bytes = fs.readFileSync(tmp);
-          this.hooks.onDownload?.({ name: String(download.suggestedFilename?.() ?? "download"), bytes, url: String(download.url?.() ?? "") });
+          const name = String(download.suggestedFilename?.() ?? "download");
+          const url = String(download.url?.() ?? "");
+          /* Looked at before it is read: a page can offer a download of any
+             size, and reading it whole to find out it is too big is how the
+             container runs out of memory. */
+          if (fs.statSync(tmp).size > MAX_ARTIFACT_BYTES) {
+            this.hooks.onDownload?.({ name, bytes: Buffer.alloc(0), url, error: `Too large: downloads are capped at ${MAX_ARTIFACT_BYTES / 1024 / 1024} MB.` });
+            return;
+          }
+          this.hooks.onDownload?.({ name, bytes: fs.readFileSync(tmp), url });
         } catch {
           // Cancelled or failed; nothing to keep.
         }

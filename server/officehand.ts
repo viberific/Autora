@@ -17,7 +17,8 @@
  */
 import crypto from "node:crypto";
 import express, { type Express, type Request, type Response } from "express";
-import { unzipSync, strFromU8 } from "fflate";
+import { strFromU8 } from "fflate";
+import { unzipCapped } from "./unzip";
 import { docxParagraphs, handing, officeState } from "./officedesk";
 
 type Kind = "docx" | "xlsx" | "pptx";
@@ -90,7 +91,7 @@ type Look = { b: boolean; i: boolean; u: boolean };
     properties: a style that makes a whole paragraph bold is not a run's formatting, and is not typed by hand). */
 function docxLooks(data: Buffer): Array<{ text: string; looks: Look[] }> | null {
   try {
-    const zip = unzipSync(new Uint8Array(data), { filter: (f) => f.name === "word/document.xml" });
+    const zip = unzipCapped(new Uint8Array(data), { only: (n) => n === "word/document.xml" });
     const xml = zip["word/document.xml"] ? strFromU8(zip["word/document.xml"]) : "";
     if (!xml) return null;
     const on = (rpr: string, tag: string) => {
@@ -141,7 +142,7 @@ function formatChanges(was: { text: string; looks: Look[] }, now: { text: string
 /** Each filled cell: what a person types to get it (its formula, or its value). */
 function cellsOf(data: Buffer): Map<string, { sheet: string; ref: string; input: string }> | null {
   try {
-    const zip = unzipSync(new Uint8Array(data), { filter: (f) => /^xl\/(workbook|sharedStrings)\.xml$|^xl\/worksheets\/sheet\d+\.xml$/.test(f.name) });
+    const zip = unzipCapped(new Uint8Array(data), { only: (n) => /^xl\/(workbook|sharedStrings)\.xml$|^xl\/worksheets\/sheet\d+\.xml$/.test(n) });
     const book = zip["xl/workbook.xml"] ? strFromU8(zip["xl/workbook.xml"]) : "";
     const names = [...book.matchAll(/<sheet\b[^>]*\bname="([^"]*)"/g)].map((m) => unxml(m[1]));
     const shared: string[] = [];
@@ -192,7 +193,7 @@ function xlsxSteps(before: Buffer, after: Buffer): HandStep[] {
 
 function slideSize(data: Buffer): [number, number] {
   try {
-    const zip = unzipSync(new Uint8Array(data), { filter: (f) => f.name === "ppt/presentation.xml" });
+    const zip = unzipCapped(new Uint8Array(data), { only: (n) => n === "ppt/presentation.xml" });
     const xml = zip["ppt/presentation.xml"] ? strFromU8(zip["ppt/presentation.xml"]) : "";
     const m = /<p:sldSz\b[^>]*\bcx="(\d+)"[^>]*\bcy="(\d+)"/.exec(xml);
     if (m) return [Number(m[1]) / 12700, Number(m[2]) / 12700];

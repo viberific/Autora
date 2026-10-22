@@ -102,6 +102,17 @@ test("a vault id cannot be made to point at a file", () => {
   assert.equal(engine.vault.get("art_../x"), null);
 });
 
+test("an event after a torn last line is not lost with it", () => {
+  const log = path.join(dir, "sessions", "session-torn", "events.jsonl");
+  fs.mkdirSync(path.dirname(log), { recursive: true });
+  // The process died halfway through writing the second event.
+  fs.writeFileSync(log, `${JSON.stringify(event(1, "a"))}\n{"seq":2,"ki`);
+  store.appendEvent("session-torn", event(3, "c"));
+  store.flushStore();
+  assert.deepEqual(store.loadSessionEvents<{ seq: number }>("session-torn").map((e) => e.seq), [1, 3]);
+  fs.rmSync(path.dirname(log), { recursive: true });
+});
+
 test("deleting a session takes its log and its vault with it", () => {
   store.deleteSession("session-a");
   assert.equal(fs.existsSync(path.join(dir, "sessions", "session-a")), false);

@@ -129,6 +129,31 @@ let lineTimer: NodeJS.Timeout | null = null;
    always what the app is showing. */
 const countsCache = new Map<string, SessionCounts>();
 
+/** Logs whose end has been checked since this process started. */
+const tailChecked = new Set<string>();
+
+/** "\n" when the log's last line was cut short (the process died mid-write),
+    so the next event starts a line of its own instead of being glued onto the
+    torn one and lost with it. Looked at once per log per run. */
+function tornTail(file: string, id: string): string {
+  if (tailChecked.has(id)) return "";
+  tailChecked.add(id);
+  try {
+    const fd = fs.openSync(file, "r");
+    try {
+      const size = fs.fstatSync(fd).size;
+      if (size === 0) return "";
+      const last = Buffer.alloc(1);
+      fs.readSync(fd, last, 0, 1, size - 1);
+      return last[0] === 0x0a ? "" : "\n";
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return "";
+  }
+}
+
 function flushLines() {
   if (lineTimer) clearTimeout(lineTimer);
   lineTimer = null;
@@ -136,7 +161,8 @@ function flushLines() {
     try {
       const dir = path.join(SESSIONS(), id);
       fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-      fs.appendFileSync(path.join(dir, "events.jsonl"), lines.join(""), { mode: 0o600 });
+      const file = path.join(dir, "events.jsonl");
+      fs.appendFileSync(file, tornTail(file, id) + lines.join(""), { mode: 0o600 });
       persistCounts(id);
     } catch (err) {
       warn(`could not save events for ${id}`, err);
