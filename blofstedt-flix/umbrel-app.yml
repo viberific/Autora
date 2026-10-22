@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.57"
+version: "0.3.58"
 port: 8096
 # umbrelOS only hands a container the GPU when the manifest says so: with this
 # permission it adds /dev/dri plus the render/video groups those nodes belong
@@ -60,13 +60,17 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  A quality choice for slow connections. The player's new quality button offers Auto,
-  Original, 720p and 480p. Auto plays the original and drops to a smaller size by itself
-  when the picture keeps stalling, so a phone on mobile data or Tailscale keeps playing
-  instead of buffering. The choice is saved per device, and casting always gets the
-  original.
+  Dark mode, everywhere. Flix is now dark only, with a tinted health strip and
+  accent-tinted rating pills.
 
-  Conversions run on the GPU. Flix now asks umbrelOS for the GPU and the image carries
-  Intel's media driver, so the smaller sizes (and 4K, HDR, or a picture the player cannot
-  decode) are encoded by Quick Sync instead of on the CPU's four cores. Settings shows
-  which encoder is in use; if the GPU cannot open a session, Flix falls back to the CPU.
+  A round of TV fixes from living with it on a big screen: the remote reaches the top
+  bar, menus open on the entry you chose, loading and failure controls are ringed and
+  reachable, and admin panels keep their highlight when they redraw.
+
+  The health strip now pushes the page down instead of covering the first heading, the
+  offline screen updates in place with a countdown, and search no longer flashes on
+  every keystroke. Captions are smaller with a faded outline, and episode sound is
+  levelled so quiet mixes are audible at normal volume.
+
+  The app shell cache is refreshed, so installed copies pick this build up on their own
+  instead of holding the old one.
