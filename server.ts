@@ -1713,7 +1713,7 @@ async function modelGuard(
       if (made.rule) {
         log("info", "guard", `standing agreement added: ${made.rule.id} (${spec.name})`);
         emitEvent(session, "context.note", "system", {
-          text: `You let the guard's hold on "${made.rule.match}" through, so calls like it no longer stop to ask. It is listed under Standing agreements in Scheduled tasks, where you can revoke it.`,
+          text: `You let the guard's hold on "${made.rule.match}" through, so calls like it no longer stop to ask. It is listed under Standing agreements in Settings, where you can revoke it.`,
         });
       }
     }
@@ -5821,7 +5821,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
               });
               emitEvent(session, "context.note", "system", {
                 text: made.rule
-                  ? `Standing agreement saved: ${spec.name} calls like "${made.rule.match}" now run without asking. It is listed in Scheduled tasks, where it can be revoked.`
+                  ? `Standing agreement saved: ${spec.name} calls like "${made.rule.match}" now run without asking. It is listed under Standing agreements in Settings, where it can be revoked.`
                   : `That could not be saved as a standing agreement (${made.error ?? "unknown reason"}). This call still ran.`,
               });
             }

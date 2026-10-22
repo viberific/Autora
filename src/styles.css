@@ -5290,12 +5290,9 @@ span.learned-open { cursor: default; }
 .job-run-what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .job-run:hover:not(:disabled) .job-run-what { color: var(--text); }
 
-/* Standing agreements: what the guard no longer asks about. Same list as
-   schedules, because both are things that happen without you, and both need
-   somewhere to be read and taken back. */
-.agree { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 14px; }
+/* Standing agreements: what the guard no longer asks about, a card in Settings. */
 .agree-top { display: flex; align-items: center; gap: 9px; }
-.agree-top b { font-size: var(--fs-base); }
+.agree-top h3 { margin: 0; }
 .agree-why { margin: 8px 0 10px; font-size: var(--fs-sm); color: var(--text-3); line-height: 1.5; }
 .rule {
   display: flex; flex-direction: column; gap: 6px;

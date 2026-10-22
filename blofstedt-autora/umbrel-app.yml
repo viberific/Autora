@@ -188,5 +188,5 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  The message box no longer locks up with "This session is a recording." (most often on a phone, after the
-  connection dropped): it stays open so you can keep typing, and Send and the attach buttons stay available.
+  Standing agreements (the calls the guard no longer asks about) now live in Settings, as a card on the Model & tools
+  tab, instead of under Scheduled tasks. You can still read each one and revoke it or all of them.

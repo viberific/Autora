@@ -170,6 +170,6 @@ export function autonomyBriefing(): string {
       `- ${r.tool}: anything containing "${r.match}"${r.note ? ` (${r.note})` : ""}` +
       `${r.used > 0 ? `, used ${r.used} time${r.used === 1 ? "" : "s"}` : ""}.`),
     "They cover the guard only. Nothing that cannot be undone is ever covered: that is still asked about every time.",
-    "You may add one yourself with pre_authorise when you meet the same question twice; the person adds them by pressing \"Always allow this kind\" on an approval card. They are listed under Standing agreements in Scheduled tasks, where either of you can take one back.",
+    "You may add one yourself with pre_authorise when you meet the same question twice; the person adds them by pressing \"Always allow this kind\" on an approval card. They are listed under Standing agreements in Settings, where either of you can take one back.",
   ].join("\n");
 }

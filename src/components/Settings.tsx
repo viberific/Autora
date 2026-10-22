@@ -9,6 +9,7 @@ import { VoiceCheck } from "./VoiceCheck";
 import { VoiceCard } from "./VoiceCard";
 import { CaptchaCard } from "./CaptchaCard";
 import { AutomationCard } from "./AutomationCard";
+import { AgreementsCard } from "./AgreementsCard";
 import { QuietCard } from "./QuietCard";
 import { TimeZoneCard } from "./TimeZoneCard";
 import { NotifyCard } from "./NotifyCard";
@@ -874,6 +875,7 @@ export function Settings({
         {shows("config") && <QuietCard />}
         {shows("config") && <NotifyCard />}
         {shows("config") && <AutomationCard />}
+        {shows("config") && <AgreementsCard />}
 
         {shows("keys") && voiceKeys.length > 0 && (
           <section className="set-card">
