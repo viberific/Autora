@@ -203,4 +203,7 @@ releaseNotes: >-
   Interface fixes: with a window open beside the chat, the permissions pill (Yolo / Ask) is no longer hidden under it
   and a long chat name shortens with an ellipsis; on tablets and other touch screens wider than a phone the small
   controls (filters, chips, the Activity rows, the mode pill) get a finger-sized target; the zoom label on the
-  Organization chart no longer clips; and removing an agent says Remove on its button.
+  Organization chart no longer clips; and removing an agent says Remove on its button. On phones: a long message can
+  no longer fill the screen when the keyboard is up or the phone is on its side (it scrolls, and Send stays visible),
+  tables keep their words whole and scroll sideways instead of breaking them mid-word, and buttons and dialogs are
+  finger-sized on a phone held sideways and on tablets too.
