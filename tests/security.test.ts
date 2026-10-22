@@ -24,7 +24,8 @@ process.env.OPENROUTER_API_KEY = "sk-or-v1-abcdefabcdef";
 process.env.DEEPGRAM_API_KEY = "dg-secret-key-99887766";
 
 const stateMod = await import("../server/state");
-const { allowSocket, fromAnotherSite, refuseRequest } = await import("../server/crosssite");
+const { allowSocket, allowedHost, fromAnotherSite, refuseHost, refuseRequest } = await import("../server/crosssite");
+const { peerGate, plainAddress } = await import("../server/peers");
 const { certificateSource, issueCertificate, pem, publicKeyId, tlsSettings } = await import("../server/tls");
 const { isGitHubApi } = await import("../server/tools");
 const { addressFor } = await import("../server/browser");
@@ -63,6 +64,46 @@ await test("a websocket from another website is refused, the relay is not", () =
   assert.equal(allowSocket({}), true);
   assert.equal(allowSocket({ "sec-fetch-site": "cross-site" }), false);
   assert.equal(fromAnotherSite({ "sec-fetch-site": "same-site" }), true);
+});
+
+await test("a request under a name a rebinding page could use is refused", () => {
+  for (const ok of [undefined, "", "localhost:8817", "127.0.0.1:8817", "[::1]:8817", "192.168.1.20:8817", "umbrel.local",
+    "umbrel:8817", "blofstedt-autora_app_1:8817", "box.tail1234.ts.net:8443", "nas.lan", "app.localhost", "Umbrel.Local."]) {
+    assert.equal(allowedHost(ok, ""), true, String(ok));
+  }
+  for (const bad of ["evil.example", "evil.example:8817", "127.0.0.1.nip.io", "rebind.attacker.com"]) {
+    assert.equal(allowedHost(bad, ""), false, bad);
+  }
+  // A domain of the person's own, named in AUTORA_ALLOWED_HOSTS.
+  assert.equal(allowedHost("autora.example.com", "autora.example.com"), true);
+  assert.equal(allowedHost("a.example.com", " .example.com "), true);
+  assert.equal(allowedHost("example.com", ".example.com"), true);
+  assert.equal(allowedHost("notexample.com", ".example.com"), false);
+  assert.equal(allowedHost("anything.example", "*"), true);
+  assert.match(refuseHost("evil.example") ?? "", /AUTORA_ALLOWED_HOSTS/);
+});
+
+await test("only the named peers reach the plain port, loopback always", async () => {
+  assert.equal(peerGate("", () => undefined), null, "nothing configured: no gate");
+  assert.equal(plainAddress("::ffff:172.18.0.5"), "172.18.0.5");
+  let proxy = ["172.18.0.5"];
+  const said: string[] = [];
+  let clock = 0;
+  const gate = peerGate("proxy", (l) => said.push(l), async () => proxy, () => clock)!;
+  assert.equal(await gate.allows("::ffff:172.18.0.5"), true);
+  assert.equal(await gate.allows("127.0.0.1"), true);
+  assert.equal(await gate.allows("::1"), true);
+  assert.equal(await gate.allows("172.18.0.9"), false, "another app on the network");
+  // The proxy recreated on a new address: looked up again when it knocks.
+  proxy = ["172.18.0.7"];
+  clock += 10_000;
+  assert.equal(await gate.allows("172.18.0.7"), true);
+  assert.equal(await gate.allows("172.18.0.5"), false);
+  // A name that never resolves leaves the gate open, and says so once.
+  const open = peerGate("misspelt", (l) => said.push(l), async () => { throw new Error("ENOTFOUND"); }, () => 0)!;
+  assert.equal(await open.allows("10.0.0.1"), true);
+  assert.equal(await open.allows("10.0.0.2"), true);
+  assert.equal(said.filter((l) => l.includes("did not resolve")).length, 1);
 });
 
 await test("an unreadable settings file is kept aside, not overwritten", () => {

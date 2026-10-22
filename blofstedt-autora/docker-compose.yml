@@ -58,6 +58,13 @@ services:
       # Network
       AUTORA_HOST: "0.0.0.0"
       AUTORA_PORT: "8817"
+      # Only Umbrel's proxy (the login) may connect to 8817. Every app on the
+      # box shares Docker's network with this one, so without this any of
+      # them could reach the port directly, past the login, and run commands
+      # with the host's filesystem mounted. See server/peers.ts. Loopback
+      # (the agent opening its own app) is always let in; the https port 8818
+      # is not gated.
+      AUTORA_TRUSTED_PEERS: "blofstedt-autora_app_proxy_1"
       # Off, and staying off, because the better answer costs one command.
       #
       # Dictation and live voice chat need a secure page -- browsers will not

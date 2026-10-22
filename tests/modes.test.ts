@@ -195,6 +195,7 @@ async function main() {
     for (const command of [
       "cat /data/out/report.txt", "ls -la ~/project", "head -n 20 notes.md | grep todo", "cd app && ls && git status",
       "git log --oneline -5", "find . -name '*.pdf'", "pdftotext out.pdf - 2>&1 | head", "wc -l a b 2>/dev/null",
+      "uniq -c words.txt", "sort -u list.txt", "date +%s", "rg -n todo src",
     ]) {
       assert.equal(m.planRefusal("plan", undefined, "terminal", { command }), null, command);
       assert.equal(m.planRefusal("agent", "plan", "terminal", { command }), null, command);
@@ -203,6 +204,9 @@ async function main() {
       "", "rm x", "cat a > b", "echo hi >> log", "ls $(rm x)", "ls `id`", "cat a | tee b", "sed -i s/a/b/ f", "sort -o out in",
       "find . -delete", "find . -exec rm {} ;", "git commit -m x", "git push", "ls & rm x", "cat a; rm b", "curl example.com",
       "npm install", "python -c 'open(1)'", "cat <(rm x)",
+      // Readers that write to a second file, or run something, when asked the right way.
+      "pdftotext in.pdf /etc/cron.d/x", "pdftotext in.pdf", "uniq in.txt out.txt", "rg --pre ./evil.sh x .",
+      "sort --compress-program=sh -S 1k f", "identify ephemeral:photo.jpg", "date -s '2000-01-01'", "file -C -m magic",
     ]) {
       assert.match(m.planRefusal("plan", undefined, "terminal", { command }) ?? "", /Not run/, command);
     }

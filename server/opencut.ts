@@ -371,7 +371,8 @@ export function opencutRoutes(app: Express, opts: OpencutOptions): void {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Opencut-Meta", encodeURIComponent(JSON.stringify({ name: meta.name ?? key, type: meta.type ?? "", lastModified: meta.lastModified ?? 0 })));
     res.setHeader("Access-Control-Expose-Headers", "X-Opencut-Meta");
-    fs.createReadStream(file).pipe(res);
+    // A file deleted since the check above must not take the server down (an unhandled stream error exits the process).
+    fs.createReadStream(file).on("error", () => res.destroy()).pipe(res);
   });
 
   // The window's own state.
@@ -470,7 +471,7 @@ export function opencutRoutes(app: Express, opts: OpencutOptions): void {
     res.setHeader("Content-Type", found.mime || "application/octet-stream");
     res.setHeader("Content-Security-Policy", "sandbox");
     res.setHeader("X-Content-Type-Options", "nosniff");
-    fs.createReadStream(found.file).pipe(res);
+    fs.createReadStream(found.file).on("error", () => res.destroy()).pipe(res);
   });
 
   app.get("/api/opencut/projects", (_req: Request, res: Response) => {

@@ -1659,16 +1659,8 @@ button.hint.voice-note:hover { text-decoration: underline; }
   /* Thumb-sized, and given a surface: at this size the glyph alone did not
      read as the way out. */
 
-  /* ── touch targets ── */
-  /* 31px is a comfortable mouse target and a poor thumb one. Grow the controls
-     that are tapped rather than every button, so the header does not swell. */
-  .btn { height: 40px; padding: 0 15px; }
-  .btn.icon { width: 40px; }
-  .job-switch { width: 46px; height: 28px; }
-  .job-knob { width: 22px; height: 22px; }
-  .job-switch.on .job-knob { transform: translateX(18px); }
-  .reason-toggle { padding: 6px 0; }
-
+  /* Touch targets (buttons, switches) are in the pointer-keyed block further down: a landscape phone and a tablet are
+     wider than this and still driven by a thumb. */
 }
 
 /* --------------------------------------------------------- knowledge web -- */
@@ -3970,6 +3962,9 @@ input.shot-where[readonly] { cursor: default; }
 .md table { width: 100%; border-collapse: collapse; font-size: 0.92em; }
 .md th, .md td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
 .md th { background: var(--s2); color: var(--text-2); font-weight: 600; white-space: nowrap; }
+/* A cell breaks at spaces, not inside a word: the message's break-anywhere would otherwise squeeze the columns to a
+   letter wide on a phone. A word that does not fit makes the table wider, and .md-table scrolls sideways. */
+.md td, .md th { overflow-wrap: normal; word-break: normal; }
 .md tr:last-child td { border-bottom: 0; }
 
 /* A ```detail fence: the short words stay on screen and the dense material
@@ -6374,6 +6369,15 @@ button.dock-card:hover { border-color: var(--border-strong); }
   max-width: calc(100% - 320px);
   border-left: 0;
 }
+/* The column beside the chat starts above the header and covers its right part, so what the header holds -- the
+   session's name and the permissions pill -- has to fit in the chat column's width, not the page's. Without this the
+   title ran on under the window and the Yolo/Ask pill, unreachable, was beneath it. The name is the one thing that
+   gives way. The 320px is the room .chat-view.has-app > .page leaves the window. */
+.shell:has(.chat-view:not([hidden]) > .side-stack) > .top {
+  padding-right: calc(100% - min(var(--chat-w, clamp(330px, 26vw, 430px)), 100% - 320px) + 8px);
+}
+.shell:has(.chat-view:not([hidden]) > .side-stack) > .top .session-btn { flex-shrink: 1; min-width: 0; }
+.shell:has(.chat-view:not([hidden]) > .side-stack) > .top .session-name { max-width: none; }
 .app-pane {
   flex: 1; min-width: 0; min-height: 0; display: flex;
   border-left: 1px solid var(--border-strong); background: var(--bg);
@@ -7814,8 +7818,12 @@ body.is-resizing iframe { pointer-events: none; }
    each is given that much to hit, which for the switches and the check boxes is
    an invisible margin around the same picture.
    ========================================================================== */
-@media (max-width: 680px) {
-  .badge.mode-pill, .mode-sel-pill, .art-chip, .jump-pill { min-height: 36px; }
+/* Keyed to the pointer as well as the width: a tablet in landscape, or a laptop with a touch screen, is wide and still
+   driven by a finger, and was left with 26px controls. */
+@media (max-width: 680px), (pointer: coarse) {
+  .badge.mode-pill, .mode-sel-pill, .art-chip, .jump-pill, .th-sort, .pane-follow { min-height: 36px; }
+  /* The header row of a group of steps is a button the whole width of the thread. */
+  .steps-top { min-height: 36px; }
   .composer textarea { min-height: 44px; }
   .msg-tool { width: 38px; height: 38px; }
   .page-search, .art-find, .art-select select, .art-find input { min-height: 40px; font-size: 16px; }
@@ -7823,13 +7831,28 @@ body.is-resizing iframe { pointer-events: none; }
   .seg button, .tabs-seg button, .page-tabs button, .set-tabs button, [role="tablist"] button { min-height: 40px; }
   .btn.tiny, .cell-act, .setup-more, .bill-row { min-height: 40px; }
   .task-mark { width: 36px; height: 36px; }
-  /* A switch is drawn small and hit large. */
+  /* 31px is a comfortable mouse target and a poor thumb one. Grow the controls that are tapped rather than every
+     button, so the header does not swell. */
+  .btn { height: 40px; padding: 0 15px; }
+  .btn.icon { width: 40px; }
+  .job-switch { width: 46px; height: 28px; }
+  .job-knob { width: 22px; height: 22px; }
+  .job-switch.on .job-knob { transform: translateX(18px); }
+  .reason-toggle { padding: 6px 0; }
+  /* The drawer's rows: 39px came out of the padding, and the aim was 41. */
+  .rail.is-drawer .rail-nav-item { min-height: 41px; }
+  /* A short screen (a phone on its side, or with the keyboard up) must not be filled by what is being typed: the
+     message grows to a third of the height and then scrolls, so the send button stays on the screen. */
+  .composer textarea { max-height: clamp(66px, 34dvh, 240px); }
   .job-switch { position: relative; }
   .job-switch::after { content: ""; position: absolute; inset: -10px -6px; }
   input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
   /* A widget's header is a window bar like the others. */
   .cell.widget .cell-top { min-height: var(--pt-bar); gap: 4px; }
   .cell.widget .cell-top .btn.icon { width: var(--pt-hit); height: var(--pt-hit); border-radius: var(--pt-r); }
+}
+
+@media (max-width: 680px) {
   .cell.widget.is-expanded .cell-top { padding-right: 56px; }
 }
 
@@ -7881,7 +7904,8 @@ body.is-resizing iframe { pointer-events: none; }
 .orgchart-wrap { position: relative; min-width: 0; }
 .orgchart-zoom { display: flex; justify-content: flex-end; align-items: center; gap: 4px; margin-bottom: 4px; }
 .orgchart-zoom .rail-icon-btn { min-width: 28px; font-size: var(--fs-sm); }
-.orgchart-zoom .org-fit { padding: 0 8px; }
+/* A percentage, not an icon: the 30px square it borrows is narrower than "100%". */
+.orgchart-zoom .org-fit { width: auto; min-width: 44px; padding: 0 8px; font-variant-numeric: tabular-nums; }
 .orgchart-sizer { margin: 0 auto; }
 .orgchart-inner { width: max-content; transform-origin: top left; }
 .orgchart { --org-line: color-mix(in srgb, var(--text-3) 60%, transparent); overflow-x: auto; padding: 8px 4px 18px; text-align: center; }

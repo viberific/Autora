@@ -1295,6 +1295,8 @@ guard's standing agreements and the irrecoverable tier ask whatever they say.
 | `GEMINI_THINKING_BUDGET` | Thinking tokens (default `0` for a responsive console; `-1` lets the model decide) |
 | `AUTORA_STATE_DIR` | Where settings, keys and the spend ledger are written (default: `$AUTORA_HOME/settings`, else `.autora/` beside the app) |
 | `AUTORA_PORT` / `AUTORA_HOST` | Where to listen (default `3000` on `127.0.0.1`, this machine only; set `AUTORA_HOST=0.0.0.0` to reach it from other devices. The container uses `8817` on `0.0.0.0`) |
+| `AUTORA_ALLOWED_HOSTS` | Names Autora may be addressed by beyond addresses, `localhost`, single-label names, `.local`/`.lan`/`.internal`/`.home.arpa` and Tailscale's `.ts.net`, comma separated (`.example.com` allows a domain and everything under it; `*` turns the check off). A request under any other name is refused, which stops a DNS-rebinding page from talking to Autora. Set it when Autora is behind your own domain |
+| `AUTORA_TRUSTED_PEERS` | Hostnames or addresses, comma separated, that alone may connect to the plain port (loopback always may). The Umbrel app sets its own proxy, so another app on Docker's shared network cannot reach Autora past the login. A name that never resolves leaves the port open and says so in the log |
 | `AUTORA_WORKDIR` | Where the agent's commands run when Settings names no directory (the Umbrel app sets `/host`, the host's filesystem) |
 | `AUTORA_TLS` | `1` also serves https on the next port up, with a certificate Autora issues from its own authority (download it at `/autora-ca.crt`) |
 | `AUTORA_TLS_PORT` | Where the https listener goes (default: `AUTORA_PORT` + 1) |

@@ -15,7 +15,8 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { strFromU8, unzipSync } from "fflate";
+import { strFromU8 } from "fflate";
+import { unzipCapped } from "./unzip";
 import { readArtifact, type Artifact } from "./artifacts";
 import { rendererMissing, withBrowserContext, withPdf } from "./pdfrender";
 import { stateDir } from "./state";
@@ -236,7 +237,7 @@ function pptxLines(data: Buffer): string[] {
 
 function entry(data: Buffer, name: string): string | null {
   try {
-    const files = unzipSync(new Uint8Array(data));
+    const files = unzipCapped(new Uint8Array(data), { only: (n) => n === name, max: 32 * 1024 * 1024 });
     const found = files[name];
     return found ? strFromU8(found) : null;
   } catch {

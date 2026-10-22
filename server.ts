@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import http from "node:http";
 import https from "node:https";
+import crypto from "node:crypto";
+import net from "node:net";
 import path from "node:path";
 import type { Duplex } from "node:stream";
 import express, { type Request, type Response } from "express";
@@ -40,7 +42,8 @@ import {
 } from "./server/requirements";
 import { replyStyle, standingBlock, standingReminder } from "./server/prompt";
 import { WebPush } from "./server/webpush";
-import { allowSocket, refuseRequest } from "./server/crosssite";
+import { allowSocket, refuseHost, refuseRequest } from "./server/crosssite";
+import { peerGate } from "./server/peers";
 import { certificateSource, tlsSettings } from "./server/tls";
 import {
   connect as connectMcp, disconnect as disconnectMcp, mcpToolsGeneration, mcpTools,
@@ -476,6 +479,13 @@ function forgetSession(id: string) {
   dropTerm(id);
   dropStudio(id);
   presenceSent.delete(id);
+  for (const timers of [presenceTimers, termTimers]) {
+    const timer = timers.get(id);
+    if (timer) clearTimeout(timer);
+    timers.delete(id);
+  }
+  amendments.delete(id);
+  resuming.delete(id);
   const remarkTimer = remarkTimers.get(id);
   if (remarkTimer) clearTimeout(remarkTimer);
   remarkTimers.delete(id);
@@ -826,6 +836,9 @@ function socketBacklog(sessionId: string): number {
   return most;
 }
 
+/** Events per message when a socket is caught up on connect. */
+const BACKLOG_CHUNK = 500;
+
 function sendEphemeral(sessionId: string, message: Record<string, unknown>) {
   const sockets = sessionSockets.get(sessionId);
   if (!sockets || sockets.size === 0) return;
@@ -945,8 +958,9 @@ function browserFor(session: Session): LiveBrowser {
       recordVisit(url, title);
       emitEvent(session, "browser.nav", "agent", { url, title });
     },
-    onDownload: ({ name, bytes, url }) => {
+    onDownload: ({ name, bytes, url, error }) => {
       try {
+        if (error) throw new Error(error);
         const artifact = saveArtifact({ origin: "user", name, data: bytes, session: session.id, note: `Downloaded from ${url.slice(0, 200)}` });
         recordDownload({ artifact: artifact.id, name: artifact.name, url, size: artifact.size, ts: Date.now() });
         emitEvent(session, "browser.download", "agent", { artifact: artifact.id, name: artifact.name, size: artifact.size, url });
@@ -2680,7 +2694,7 @@ function isDefaultTitle(title: string): boolean {
 function newSession(title: string, incognito = false, origin: SessionOrigin = "person"): Session {
   const id = incognito
     ? ephemeralId()
-    : `session-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    : `session-${Date.now().toString(36)}-${crypto.randomBytes(8).toString("hex")}`;
   const session: Session = {
     id,
     title,
@@ -6182,6 +6196,13 @@ async function startServer() {
   app.use((req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "same-origin");
+    /* A name nobody can point at this machine from outside, first: a
+       rebinding page sends `same-origin` and is only told apart by its Host. */
+    const misnamed = refuseHost(req.headers.host);
+    if (misnamed) {
+      log("warn", "http", `${req.method} ${req.path} refused: addressed to ${req.headers.host}`);
+      return res.status(403).json({ error: misnamed });
+    }
     const refused = refuseRequest(req.method, req.headers);
     if (refused) {
       log("warn", "http", `${req.method} ${req.path} refused: sent from another site`);
@@ -7013,6 +7034,14 @@ async function startServer() {
     },
   });
   const upgrade = (req: http.IncomingMessage, socket: Duplex, head: Buffer) => {
+    /* Every socket, the editors' and the terminal's included: one opened from
+       another site, or under a name a rebinding page could have used, reads
+       whole threads and documents, and the terminal's is a shell. */
+    if (refuseHost(req.headers.host) || !allowSocket(req.headers)) {
+      log("warn", "http", `websocket ${req.url ?? ""} refused: opened from another site or addressed to ${req.headers.host ?? "no host"}`);
+      socket.destroy();
+      return;
+    }
     // Spectra's editor has a socket of its own for a page opened on its own;
     // it takes the connection here or leaves it to the app's own sockets.
     if (spectraUpgrade(req, socket, head)) return;
@@ -7103,9 +7132,17 @@ async function startServer() {
 
       // Replay backlog
       const fromSeq = parseInt(url.searchParams.get("from_seq") || "0", 10) || 0;
-      const backlog = session.events.filter((e) => e.seq >= fromSeq);
-      if (backlog.length > 0) {
-        ws.send(JSON.stringify({ type: "batch", events: backlog }));
+      /* In pieces: a long thread as one message is one huge string built in
+         memory at once, on every reconnect. Events are in seq order, so the
+         start is found, not filtered for. */
+      const log = session.events;
+      let lo = 0, hi = log.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (log[mid].seq < fromSeq) lo = mid + 1; else hi = mid;
+      }
+      for (let at = lo; at < log.length; at += BACKLOG_CHUNK) {
+        ws.send(JSON.stringify({ type: "batch", events: log.slice(at, at + BACKLOG_CHUNK) }));
       }
 
       // Live announcement
@@ -7376,12 +7413,29 @@ async function startServer() {
   setTimeout(tidy, 5 * 60_000).unref();
   setInterval(tidy, 24 * 3600_000).unref();
 
-  server.listen(PORT, HOST, () => {
+  const listening = () => {
     console.log(`Autora ${VERSION} running on http://${HOST}:${PORT}`);
     if (HOST === "127.0.0.1" && !process.env.AUTORA_HOST) {
       console.log("[server] listening on this machine only; set AUTORA_HOST=0.0.0.0 to reach it from others");
     }
-  });
+  };
+  /* Only the peers the deployment names (server/peers.ts): on Umbrel, the
+     app's own proxy, so another app on Docker's shared network cannot reach
+     this port past the login. A peer is checked before the server reads a
+     byte from it; the socket waits, paused, while a name is looked up. */
+  const gate = peerGate(process.env.AUTORA_TRUSTED_PEERS, (line) => log("warn", "http", line));
+  if (gate) {
+    const gated = net.createServer({ pauseOnConnect: true }, (socket) => {
+      gate.allows(socket.remoteAddress).then((ok) => {
+        if (!ok || socket.destroyed) return void socket.destroy();
+        server.emit("connection", socket);
+        socket.resume();
+      }, () => socket.destroy());
+    });
+    gated.listen(PORT, HOST, listening);
+  } else {
+    server.listen(PORT, HOST, listening);
+  }
 
   /* The https copy, beside the plain port rather than instead of it. A
      failure here is said in the log and on the Voice check, and never takes

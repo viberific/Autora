@@ -61,6 +61,27 @@ async function main() {
     assert.equal(ext.listExtensions().length, 1);
     assert.ok(ext.launchArgs().some((a) => a.startsWith("--load-extension=")));
   });
+  await test("a file name cannot point the install at the folders above, and a zip bomb is refused", () => {
+    const stateDir = path.join(home, "settings");
+    fs.writeFileSync(path.join(stateDir, "credentials.enc"), "keep me");
+    const small = Buffer.from(zipSync({ "manifest.json": strToU8(JSON.stringify({ manifest_version: 3, name: "x", version: "1" })) }));
+    // "...zip" minus its extension is ".." : the folder above the extensions, which an install replaces.
+    for (const key of ["..", ".", "...", "../.."]) {
+      try { ext.installPackage(small, "file", key); } catch { /* may or may not unpack; must not delete */ }
+      assert.equal(fs.readFileSync(path.join(stateDir, "credentials.enc"), "utf8"), "keep me", `key ${key}`);
+    }
+    // Those installs went in under safe names; the later cases expect just the marker.
+    for (const e of ext.listExtensions().filter((e) => e.name !== "Marker")) ext.removeExtension(e.id);
+    const before = ext.listExtensions().length;
+    // A few kilobytes that claim far more once inflated.
+    const bomb = Buffer.from(zipSync({
+      "manifest.json": strToU8("{}"),
+      "big.bin": new Uint8Array(320 * 1024 * 1024),
+    }, { level: 9 }));
+    assert.ok(bomb.length < 2 * 1024 * 1024, "the bomb is small on the wire");
+    assert.throws(() => ext.installPackage(bomb, "file", "bomb"), /too large once unpacked/);
+    assert.equal(ext.listExtensions().length, before, "and nothing of it was installed");
+  });
   await test("a store address or id is understood, anything else is not", () => {
     const id = "ddkjiahejlhfcafbddmgiahcphecmpfh";
     assert.equal(ext.storeIdOf(id), id);

@@ -120,6 +120,32 @@ async function main() {
       await p2.getByRole("button", { name: "Show the whole menu" }).click();
     });
 
+    await test("with a window open beside the chat, the header's name and permissions pill are not under it", async () => {
+      /* The window beside the chat starts above the header and covers its right part, so what the header holds has to fit
+         in the chat column: the name gives way with an ellipsis, and the pill (Yolo / Ask) stays where it can be clicked.
+         A fresh browser, so no pane has been dragged to a width that hides the overlap. */
+      const t = await app.newSession("A fairly long session title to see how it truncates in the header", "build");
+      app.decide = (req) => {
+        if (/You check one action/.test(req.system)) return { text: '{"destructive": false, "requested": true}' };
+        if (req.tools.length === 0) return { text: "SKIP" };
+        return req.messages.some((m) => m.role === "tool") ? { text: "Done." } : { tools: [{ name: "terminal", args: { command: "echo hi" } }] };
+      };
+      await app.turn(t, "run it", 120_000);
+      const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+      const p3 = await ctx.newPage();
+      await p3.goto(`${app.base}/?session=${t}`);
+      await p3.waitForSelector(".chat-view.has-app > .side-stack", { timeout: 30_000 });
+      for (const sel of [".top .session-btn", ".top .badge.mode-pill"]) {
+        const reached = await p3.locator(sel).first().evaluate((el) => {
+          const r = el.getBoundingClientRect();
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return hit === el || el.contains(hit);
+        });
+        assert.ok(reached, `${sel} is under the window beside the chat`);
+      }
+      await ctx.close();
+    });
+
     await test("the menu folds to icons, with the context as one bar under the last icon, and comes back whole", async () => {
       await page.getByRole("button", { name: "Fold the menu to icons" }).click();
       await sleep(300);

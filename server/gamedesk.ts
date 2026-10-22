@@ -1247,7 +1247,8 @@ export function gameRoutes(app: Express, opts: { exists: (session: string) => bo
     // A game running in a box of its own asks for these across origins.
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Cache-Control", "private, max-age=3600");
-    fs.createReadStream(full).pipe(res);
+    // A file removed since the check above must not take the server down (an unhandled stream error exits the process).
+    fs.createReadStream(full).on("error", () => res.destroy()).pipe(res);
   });
 }
 

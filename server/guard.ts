@@ -170,6 +170,23 @@ const WHOLE = new Set([
   "${HOME}/", "$HOME/*", "*", "/..", "\\/",
 ]);
 
+/** The top of the machine's own tree, or of this app's: deleting any of these ends the machine or the install. In the
+    container the host's filesystem is at /host (so /host/etc is the host's /etc) and Autora's settings, keys and chats
+    are in /data. */
+const SYSTEM_ROOTS = new Set([
+  "etc", "usr", "var", "bin", "sbin", "lib", "lib32", "lib64", "boot", "opt", "srv", "root", "home", "dev", "proc", "sys",
+  "mnt", "media", "data",
+]);
+
+/** A path that is the whole of the filesystem, a system folder or this app's data, said in any of the ways a shell
+    lets you say it (`/etc/`, `/etc/*`, `/host//etc`, `/host`). */
+function isSystemPath(token: string): boolean {
+  const path = token.replace(/\/+/g, "/").replace(/(\/\.?\*?)+$/, "");
+  if (path === "/host") return true;
+  const m = /^(?:\/host)?\/([a-z0-9]+)$/.exec(path);
+  return !!m && SYSTEM_ROOTS.has(m[1]);
+}
+
 function words(segment: string): string[] {
   return segment
     .split(/\s+/)
@@ -209,7 +226,7 @@ function wholeTreeDelete(segment: string): string | null {
       continue;
     }
     if (!recursive || (!force && token !== "--no-preserve-root")) return null;
-    return WHOLE.has(token) ? token : null;
+    return WHOLE.has(token) || isSystemPath(token) ? token : null;
   }
   return null;
 }

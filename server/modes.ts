@@ -220,6 +220,18 @@ export function readOnlyCommand(command: string): boolean {
     if (!READ_COMMANDS.has(cmd)) return false;
     if (cmd === "find" && rest.some((w) => /^-(exec|execdir|ok|okdir|delete|fprint\w*|fls)$/.test(w))) return false;
     if (cmd === "sort" && rest.some((w) => /^-\w*o|^--output/.test(w))) return false;
+    /* Commands that read, but take a second file to write to, or a flag that
+       runs something: `pdftotext in.pdf out`, `uniq in out`, `rg --pre sh`. */
+    const files = rest.filter((w) => w === "-" || !w.startsWith("-"));
+    // With no output named it writes <input>.txt beside the PDF: only "-" (standard output) reads.
+    if (cmd === "pdftotext" && files[1] !== "-") return false;
+    if (cmd === "uniq" && files.length > 1) return false;
+    if ((cmd === "rg" || cmd === "grep" || cmd === "egrep" || cmd === "fgrep") && rest.some((w) => /^--(pre|pre-glob|hostname-bin)(=|$)/.test(w))) return false;
+    if (cmd === "sort" && rest.some((w) => /^--(compress-program|files0-from)/.test(w))) return false;
+    if (cmd === "date" && rest.some((w) => /^(-\w*s|--set)/.test(w))) return false;
+    if (cmd === "file" && rest.some((w) => /^(-\w*C|--compile)/.test(w))) return false;
+    // ImageMagick reads "ephemeral:" and "msl:" names as instructions (the first deletes the file it reads).
+    if (cmd === "identify" && rest.some((w) => /^(-write|-script)|^[a-z]+:/i.test(w) && !/^[a-z]:[\\/]/i.test(w))) return false;
     if (cmd === "git" && (!READ_GIT.has(rest.find((w) => !w.startsWith("-")) ?? "") || rest.some((w) => /^--(output|ext-diff|textconv)/.test(w)))) return false;
   }
   return true;
