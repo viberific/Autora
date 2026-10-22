@@ -19,8 +19,8 @@ export const WORK_MODES: { id: WorkMode; label: string; blurb: string }[] = [
 ];
 
 export const PERMISSIONS: { id: Permissions; label: string; blurb: string }[] = [
-  { id: "yolo", label: "Yolo", blurb: "Calls run as they come. Only what nothing can undo stops to ask." },
-  { id: "ask", label: "Ask", blurb: "Looking is free. Changes wait for your yes -- all of them, or only the ones you name." },
+  { id: "yolo", label: "Yolo", blurb: "Everything runs without asking. Only what can't be undone still stops to ask." },
+  { id: "ask", label: "Ask", blurb: "Looking is free. Changes wait for your OK: all of them, or only the ones you name." },
 ];
 
 export const ASK_SUGGESTIONS: { id: string; label: string; rule: string }[] = [

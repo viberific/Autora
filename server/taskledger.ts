@@ -124,12 +124,11 @@ interface TaskRecord {
   /** The model the turn was run on. The cost is everything it took, including
       what a cheaper model did for it (compaction, the look back). */
   model: string;
-  /** The planner, when a different model planned part of it (server/roles.ts):
-      the task was the pair's work, and is priced as the pair. Absent otherwise,
-      and on every task recorded before roles existed. */
+  /** History only: a task recorded while Settings could name a separate planner
+      model. Nothing writes it now; it is read so those tasks keep the pair they
+      were priced as. Absent on every other task. */
   planner?: string;
-  /** The main model answered a round itself. With a planner, false means the
-      planner did all of it (a Plan-mode chat), and the task is the planner's alone. */
+  /** History only, with `planner`: the main model answered a round itself. */
   built?: boolean;
   /** Which build of Autora ran it: a model is only comparable against the same
       harness, and the harness changes. */
@@ -249,16 +248,6 @@ export function noteCall(name: string, args: Record<string, any> = {}) {
   if (!kind) return;
   rec.tally[kind] = (rec.tally[kind] ?? 0) + 1;
   rec.kind = kindOfTally(rec.tally);
-  save();
-}
-
-/** A round of the task's own work ran: on the planner (a model other than the
-    main one), or on the main model. The voice and background calls are not rounds. */
-export function noteRound(model: string, planner: boolean) {
-  const rec = current();
-  if (!rec || !model) return;
-  if (planner ? rec.planner === model : rec.built) return;
-  if (planner) rec.planner = model; else rec.built = true;
   save();
 }
 

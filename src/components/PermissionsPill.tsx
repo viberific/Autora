@@ -206,8 +206,8 @@ export function PermissionsPill({
 
             {error && <p className="mode-menu-error">{error}</p>}
             <p className="mode-menu-foot">
-              Set for this chat, and saved with it. The guard's standing agreements and anything
-              that cannot be undone still ask, whatever this says.
+              Applies to this chat and is saved with it. Standing agreements and anything
+              that can't be undone still ask, whatever this says.
             </p>
           </div>
         );

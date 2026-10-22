@@ -72,13 +72,13 @@ export const PERMISSION_INFO: Record<Permissions, ModeInfo<Permissions>> = {
     id: "yolo",
     short: "Yolo",
     label: "Yolo",
-    blurb: "Calls run as they come. Only what nothing can undo stops to ask.",
+    blurb: "Everything runs without asking. Only what can't be undone still stops to ask.",
   },
   ask: {
     id: "ask",
     short: "Ask",
     label: "Ask",
-    blurb: "Looking is free. Changes wait for your yes -- all of them, or only the ones you name.",
+    blurb: "Looking is free. Changes wait for your OK: all of them, or only the ones you name.",
   },
 };
 

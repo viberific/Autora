@@ -68,12 +68,9 @@ type ProviderCard = {
   model: string;
   /** Talk mode's own model for this provider; empty means the one above. */
   fast_model: string;
-  /** Roles: the planner and the background model; empty means the defaults.
-      Absent on an older server. */
-  planner_model?: string;
+  /** Roles: the background model; empty means the default. Absent on an older server. */
   background_model?: string;
   /** Which provider each of those is on (this one unless another is named). */
-  planner_provider?: string;
   background_provider?: string;
   models: ModelOption[];
   /** True where this vendor serves one model from several endpoints, so the
@@ -159,8 +156,6 @@ type SettingsState = {
   tools: { config: ToolConfig; groups: ToolGroupState[] };
   active: {
     model: string | null;
-    /** The planner, when Roles names one. Absent on an older server. */
-    planner?: string | null;
     /** A role named on a provider with no key now: its work went to the main model. */
     role_problems?: string[];
     endpoint: string | null;
@@ -240,10 +235,8 @@ export function Settings({
   const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({});
   const [modelDrafts, setModelDrafts] = useState<Record<string, string>>({});
   const [fastDrafts, setFastDrafts] = useState<Record<string, string>>({});
-  const [plannerDrafts, setPlannerDrafts] = useState<Record<string, string>>({});
   const [backgroundDrafts, setBackgroundDrafts] = useState<Record<string, string>>({});
-  /* Which provider a role is on, per main provider; drafts like the rest. */
-  const [plannerVendorDrafts, setPlannerVendorDrafts] = useState<Record<string, string>>({});
+  /* Which provider the background model is on, per main provider; drafts like the rest. */
   const [backgroundVendorDrafts, setBackgroundVendorDrafts] = useState<Record<string, string>>({});
   const [urlDrafts, setUrlDrafts] = useState<Record<string, string>>({});
   const [endpointDrafts, setEndpointDrafts] = useState<Record<string, string>>({});
@@ -275,9 +268,7 @@ export function Settings({
     setKeyDrafts({});
     setModelDrafts({});
     setFastDrafts({});
-    setPlannerDrafts({});
     setBackgroundDrafts({});
-    setPlannerVendorDrafts({});
     setBackgroundVendorDrafts({});
     setUrlDrafts({});
   }, []);
@@ -333,9 +324,7 @@ export function Settings({
     provider,
     models: modelDrafts,
     fast_models: fastDrafts,
-    planner_models: plannerDrafts,
     background_models: backgroundDrafts,
-    planner_providers: plannerVendorDrafts,
     background_providers: backgroundVendorDrafts,
     base_urls: urlDrafts,
     endpoint_pins: endpointDrafts,
@@ -346,7 +335,7 @@ export function Settings({
     ...(loop ? { loop } : {}),
     ...(verify ? { verify } : {}),
     ...(keep ? { retention: keep } : {}),
-  }), [provider, modelDrafts, fastDrafts, plannerDrafts, backgroundDrafts, plannerVendorDrafts, backgroundVendorDrafts, urlDrafts, endpointDrafts, prompt, budget, topUp, topUpProvider, loop, verify, keep]);
+  }), [provider, modelDrafts, fastDrafts, backgroundDrafts, backgroundVendorDrafts, urlDrafts, endpointDrafts, prompt, budget, topUp, topUpProvider, loop, verify, keep]);
 
   const save = useCallback(async (sent: typeof body) => {
     setSaving(true);
@@ -370,9 +359,7 @@ export function Settings({
         Object.fromEntries(Object.entries(drafts).filter(([k, v]) => was[k] !== v));
       setModelDrafts((d) => settle(d, sent.models));
       setFastDrafts((d) => settle(d, sent.fast_models));
-      setPlannerDrafts((d) => settle(d, sent.planner_models));
       setBackgroundDrafts((d) => settle(d, sent.background_models));
-      setPlannerVendorDrafts((d) => settle(d, sent.planner_providers));
       setBackgroundVendorDrafts((d) => settle(d, sent.background_providers));
       setUrlDrafts((d) => settle(d, sent.base_urls));
       setEndpointDrafts((d) => settle(d, sent.endpoint_pins));
@@ -449,9 +436,7 @@ export function Settings({
   const dirty = !!state && (
     Object.keys(modelDrafts).length > 0 ||
     Object.keys(fastDrafts).length > 0 ||
-    Object.keys(plannerDrafts).length > 0 ||
     Object.keys(backgroundDrafts).length > 0 ||
-    Object.keys(plannerVendorDrafts).length > 0 ||
     Object.keys(backgroundVendorDrafts).length > 0 ||
     Object.keys(urlDrafts).length > 0 ||
     Object.keys(endpointDrafts).length > 0 ||
@@ -548,9 +533,7 @@ export function Settings({
       keyDraft={keyDrafts[card.id]}
       modelDraft={modelDrafts[card.id]}
       fastDraft={fastDrafts[card.id]}
-      plannerDraft={plannerDrafts[card.id]}
       backgroundDraft={backgroundDrafts[card.id]}
-      plannerVendorDraft={plannerVendorDrafts[card.id]}
       backgroundVendorDraft={backgroundVendorDrafts[card.id]}
       connected={connectedCards}
       urlDraft={urlDrafts[card.id]}
@@ -560,13 +543,8 @@ export function Settings({
       onKeySave={(v) => void saveKey(card.id, v)}
       onModel={(v) => setModelDrafts((d) => ({ ...d, [card.id]: v }))}
       onFast={(v) => setFastDrafts((d) => ({ ...d, [card.id]: v }))}
-      onPlanner={(v) => setPlannerDrafts((d) => ({ ...d, [card.id]: v }))}
       onBackground={(v) => setBackgroundDrafts((d) => ({ ...d, [card.id]: v }))}
       /* A model id is a vendor's own, so a new provider starts with no model chosen. */
-      onPlannerVendor={(v) => {
-        setPlannerVendorDrafts((d) => ({ ...d, [card.id]: v }));
-        setPlannerDrafts((d) => ({ ...d, [card.id]: "" }));
-      }}
       onBackgroundVendor={(v) => {
         setBackgroundVendorDrafts((d) => ({ ...d, [card.id]: v }));
         setBackgroundDrafts((d) => ({ ...d, [card.id]: "" }));
@@ -635,9 +613,6 @@ export function Settings({
             <code>{state.active.model ?? "—"}</code>
             <span>{state.active.provider ?? "nothing connected"}</span>
           </div>
-          {state.active.planner && (
-            <p className="jf-hint">Plans with <code>{state.active.planner}</code>, builds with the model above.</p>
-          )}
           {state.active.role_problems?.map((p) => <p key={p} className="set-warn">{p}</p>)}
           {state.active.hint && (
             <p className={state.active.model ? "jf-hint" : "set-warn"}>{state.active.hint}</p>
@@ -654,9 +629,8 @@ export function Settings({
             >
               <b>Automatic</b>
               <span>
-                Decides among the connected ones: the cheapest per call here
-                (your own usage, then list prices), never a router, and it
-                switches only when the work asks for it.
+                Picks the cheapest connected provider, by your own usage first and
+                then list prices. It never picks a router.
               </span>
             </button>
             {choiceCards.map((card) => (
@@ -916,9 +890,9 @@ export function Settings({
  * chosen.
  */
 function ProviderRow({
-  card, selected, inUse, keyDraft, modelDraft, fastDraft, plannerDraft, backgroundDraft, plannerVendorDraft, backgroundVendorDraft,
+  card, selected, inUse, keyDraft, modelDraft, fastDraft, backgroundDraft, backgroundVendorDraft,
   connected, urlDraft, endpointDraft,
-  onKey, onKeyCancel, onKeySave, onModel, onFast, onPlanner, onBackground, onPlannerVendor, onBackgroundVendor,
+  onKey, onKeyCancel, onKeySave, onModel, onFast, onBackground, onBackgroundVendor,
   onUrl, onEndpoint, onModels, onUse,
 }: {
   card: ProviderCard;
@@ -927,9 +901,7 @@ function ProviderRow({
   keyDraft: string | undefined;
   modelDraft: string | undefined;
   fastDraft: string | undefined;
-  plannerDraft: string | undefined;
   backgroundDraft: string | undefined;
-  plannerVendorDraft: string | undefined;
   backgroundVendorDraft: string | undefined;
   /** Every provider with a key: a role may be on any of them. */
   connected: ProviderCard[];
@@ -941,9 +913,7 @@ function ProviderRow({
   onKeySave: (v: string) => void;
   onModel: (v: string) => void;
   onFast: (v: string) => void;
-  onPlanner: (v: string) => void;
   onBackground: (v: string) => void;
-  onPlannerVendor: (v: string) => void;
   onBackgroundVendor: (v: string) => void;
   onUrl: (v: string) => void;
   onEndpoint: (v: string) => void;
@@ -968,10 +938,8 @@ function ProviderRow({
   const [picking, setPicking] = useState(false);
   const chosen = card.models.find((m) => m.id === model);
   const fast = fastDraft ?? card.fast_model;
-  const planner = plannerDraft ?? card.planner_model ?? "";
   const background = backgroundDraft ?? card.background_model ?? "";
-  /* The card whose models a role picks from: this one, or the provider it is on. */
-  const plannerOn = connected.find((c) => c.id === (plannerVendorDraft || card.planner_provider || card.id)) ?? card;
+  /* The card whose models the background role picks from: this one, or the provider it is on. */
   const backgroundOn = connected.find((c) => c.id === (backgroundVendorDraft || card.background_provider || card.id)) ?? card;
   /* Other providers a role can be on: connected ones, this one listed first. */
   const vendors = [card, ...connected.filter((c) => c.id !== card.id)];
@@ -1098,23 +1066,6 @@ function ProviderRow({
             )}
           </label>
 
-          {/* Roles (server/roles.ts): which of this vendor's models does which
-              part of the work. Each left empty keeps the rule from before:
-              the model above plans, speaks and does the background work. */}
-          <RoleRow
-            card={plannerOn}
-            home={card}
-            vendors={vendors}
-            onVendor={onPlannerVendor}
-            role="Planner"
-            value={planner}
-            busy={busy}
-            onPick={onPlanner}
-            onRefresh={() => void refresh()}
-            hint={planner
-              ? "Plans with this one and builds with the model above. When the work gets stuck, it comes back here."
-              : "The model above plans too. Name a smarter one to plan, and let the one above do the building."}
-          />
           {/* Talk mode's other model. A spoken question is answered by this
               one without thinking, so the first word arrives now, and it
               hands the turn to the model above the moment the question turns
@@ -1127,23 +1078,23 @@ function ProviderRow({
             onPick={onFast}
             onRefresh={() => void refresh()}
             hint={fast
-              ? "Voice answers with this one at once, then hands over to the model above for anything needing thought or tools."
-              : "Voice uses the model above. Name a faster one to answer aloud at once and hand harder questions over."}
+              ? "Voice answers with this one right away, then hands over to the model above for anything that needs thought or tools."
+              : "Voice uses the model above. Pick a faster one to answer aloud right away and hand harder questions over."}
           />
           <RoleRow
             card={backgroundOn}
             home={card}
             vendors={vendors}
             onVendor={onBackgroundVendor}
-            role="Background"
+            role="Background tasks"
             value={background}
             busy={busy}
             onPick={onBackground}
             onRefresh={() => void refresh()}
             same={fast ? "Same as talk mode" : undefined}
             hint={background
-              ? "Condenses old turns, learns and makes remarks. A cheap model is fine here."
-              : "Condensing old turns, learning and remarks use talk mode's model, or the model above. A cheap one is fine here."}
+              ? "Used to condense old turns, learn from them and make remarks. A cheap model is fine here."
+              : "Condensing old turns, learning and remarks use talk mode's model, or else the model above. A cheap model is fine here."}
           />
 
           <div className="prov-actions">
@@ -1545,29 +1496,31 @@ function RoleRow({
   const elsewhere = home && card.id !== home.id;
   return (
     <>
-      <label className="jf-row">
+      <div className="jf-row">
         <span>{role}</span>
-        {vendors && vendors.length > 1 && onVendor && (
-          <select
-            className="set-select"
-            value={card.id}
-            onChange={(e) => onVendor(e.target.value)}
-            aria-label={`Provider for ${role.toLowerCase()}`}
+        <div className="role-pick">
+          {vendors && vendors.length > 1 && onVendor && (
+            <select
+              className="set-select"
+              value={card.id}
+              onChange={(e) => onVendor(e.target.value)}
+              aria-label={`Provider for ${role.toLowerCase()}`}
+            >
+              {vendors.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
+            </select>
+          )}
+          <button
+            type="button"
+            className="set-select mp-open"
+            onClick={() => setPicking(true)}
+            aria-haspopup="dialog"
+            aria-label={`${card.label} model for ${role.toLowerCase()}`}
           >
-            {vendors.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
-          </select>
-        )}
-        <button
-          type="button"
-          className="set-select mp-open"
-          onClick={() => setPicking(true)}
-          aria-haspopup="dialog"
-          aria-label={`${card.label} model for ${role.toLowerCase()}`}
-        >
-          <span>{value ? chosen?.label ?? value : elsewhere ? "Choose a model…" : empty}</span>
-          <IconChevron size={13} />
-        </button>
-      </label>
+            <span>{value ? chosen?.label ?? value : elsewhere ? "Choose a model…" : empty}</span>
+            <IconChevron size={13} />
+          </button>
+        </div>
+      </div>
       <p className="jf-hint">
         {elsewhere && `On ${card.label}, with its own key. `}
         {hint}

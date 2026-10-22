@@ -288,7 +288,7 @@ export type Cell =
   /** Agent mode moving between planning and building: said in the thread,
       where it happened, and nowhere else. */
   | { kind: "mode"; seq: number; to: "plan" | "build"; reason: string;
-      /** The model taking over, when Settings names a planner (server/roles.ts). */
+      /** The model taking over: only on switches logged when Settings could name a planner. */
       model?: string }
   /** The app window was opened here: a preview of what is being built. The
       window itself is live state (lib/preview.ts); this marks where. */
