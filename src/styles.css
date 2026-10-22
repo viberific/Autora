@@ -6374,6 +6374,15 @@ button.dock-card:hover { border-color: var(--border-strong); }
   max-width: calc(100% - 320px);
   border-left: 0;
 }
+/* The column beside the chat starts above the header and covers its right part, so what the header holds -- the
+   session's name and the permissions pill -- has to fit in the chat column's width, not the page's. Without this the
+   title ran on under the window and the Yolo/Ask pill, unreachable, was beneath it. The name is the one thing that
+   gives way. The 320px is the room .chat-view.has-app > .page leaves the window. */
+.shell:has(.chat-view:not([hidden]) > .side-stack) > .top {
+  padding-right: calc(100% - min(var(--chat-w, clamp(330px, 26vw, 430px)), 100% - 320px) + 8px);
+}
+.shell:has(.chat-view:not([hidden]) > .side-stack) > .top .session-btn { flex-shrink: 1; min-width: 0; }
+.shell:has(.chat-view:not([hidden]) > .side-stack) > .top .session-name { max-width: none; }
 .app-pane {
   flex: 1; min-width: 0; min-height: 0; display: flex;
   border-left: 1px solid var(--border-strong); background: var(--bg);
@@ -7814,8 +7823,12 @@ body.is-resizing iframe { pointer-events: none; }
    each is given that much to hit, which for the switches and the check boxes is
    an invisible margin around the same picture.
    ========================================================================== */
-@media (max-width: 680px) {
-  .badge.mode-pill, .mode-sel-pill, .art-chip, .jump-pill { min-height: 36px; }
+/* Keyed to the pointer as well as the width: a tablet in landscape, or a laptop with a touch screen, is wide and still
+   driven by a finger, and was left with 26px controls. */
+@media (max-width: 680px), (pointer: coarse) {
+  .badge.mode-pill, .mode-sel-pill, .art-chip, .jump-pill, .th-sort, .pane-follow { min-height: 36px; }
+  /* The header row of a group of steps is a button the whole width of the thread. */
+  .steps-top { min-height: 36px; }
   .composer textarea { min-height: 44px; }
   .msg-tool { width: 38px; height: 38px; }
   .page-search, .art-find, .art-select select, .art-find input { min-height: 40px; font-size: 16px; }
@@ -7830,6 +7843,9 @@ body.is-resizing iframe { pointer-events: none; }
   /* A widget's header is a window bar like the others. */
   .cell.widget .cell-top { min-height: var(--pt-bar); gap: 4px; }
   .cell.widget .cell-top .btn.icon { width: var(--pt-hit); height: var(--pt-hit); border-radius: var(--pt-r); }
+}
+
+@media (max-width: 680px) {
   .cell.widget.is-expanded .cell-top { padding-right: 56px; }
 }
 
@@ -7881,7 +7897,8 @@ body.is-resizing iframe { pointer-events: none; }
 .orgchart-wrap { position: relative; min-width: 0; }
 .orgchart-zoom { display: flex; justify-content: flex-end; align-items: center; gap: 4px; margin-bottom: 4px; }
 .orgchart-zoom .rail-icon-btn { min-width: 28px; font-size: var(--fs-sm); }
-.orgchart-zoom .org-fit { padding: 0 8px; }
+/* A percentage, not an icon: the 30px square it borrows is narrower than "100%". */
+.orgchart-zoom .org-fit { width: auto; min-width: 44px; padding: 0 8px; font-variant-numeric: tabular-nums; }
 .orgchart-sizer { margin: 0 auto; }
 .orgchart-inner { width: max-content; transform-origin: top left; }
 .orgchart { --org-line: color-mix(in srgb, var(--text-3) 60%, transparent); overflow-x: auto; padding: 8px 4px 18px; text-align: center; }

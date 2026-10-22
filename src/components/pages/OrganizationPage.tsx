@@ -291,7 +291,7 @@ function AgentEditor({
   };
 
   const remove = async () => {
-    if (!agent || !(await sure(`Remove ${agent.name}? Agents that report to it move up a level.`))) return;
+    if (!agent || !(await sure(`Remove ${agent.name}? Agents that report to it move up a level.`, "Remove"))) return;
     try {
       await deleteAgent(agent.id);
       onDeleted();

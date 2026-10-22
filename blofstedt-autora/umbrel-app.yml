@@ -200,3 +200,7 @@ releaseNotes: >-
   browser download is refused before it is read into memory, new chats get unguessable ids, a chat that reconnects
   is caught up in pieces, and a log line cut short by a crash no longer swallows the next event. The webclaw
   integration now uses a fixed release (WEBCLAW_MCP_VERSION to choose another) instead of fetching the newest.
+  Interface fixes: with a window open beside the chat, the permissions pill (Yolo / Ask) is no longer hidden under it
+  and a long chat name shortens with an ellipsis; on tablets and other touch screens wider than a phone the small
+  controls (filters, chips, the Activity rows, the mode pill) get a finger-sized target; the zoom label on the
+  Organization chart no longer clips; and removing an agent says Remove on its button.
