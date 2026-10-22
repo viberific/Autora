@@ -21,7 +21,7 @@ import path from "node:path";
 
 process.env.AUTORA_STATE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "autora-vendor-money-"));
 
-const { realSpend, creditOf, vendorMoneyFor, vendorMoneyAll, readBalance, forgetVendorMoney } =
+const { realSpend, creditOf, vendorMoneyFor, vendorMoneyAll, readBalance, forgetVendorMoney, setTopUp } =
   await import("../server/vendor-money");
 const { recordUsage, clearUsage, state } = await import("../server/state");
 const { billingSummary } = await import("../server/billing");
@@ -63,6 +63,7 @@ function clearVendors() {
   for (const key of Object.keys(state.balances)) delete state.balances[key];
   for (const key of Object.keys(state.topUps)) delete state.topUps[key];
   for (const key of Object.keys(state.balanceAts)) delete state.balanceAts[key];
+  for (const key of Object.keys(state.creditDraws)) delete state.creditDraws[key];
 }
 
 /** Set one vendor's figures without disturbing the others. A key goes in with
@@ -498,6 +499,67 @@ test("the vendor record and the API both carry what is left", () => {
      a zero fraction would draw an empty bar for money that is plainly there. */
   vendor(12, null);
   assert.equal(vendorMoneyFor("deepseek")!.credit, null);
+});
+
+/* OpenAI publishes no balance to an API key, so its credit was never shown:
+   the Settings box was hidden for it and the bar only said what the month had
+   cost. The credit its billing page shows is typed in instead, and what the
+   ledger counts at OpenAI from then on draws it down. */
+test("a vendor with no balance shows the credit typed in, less what was counted since", () => {
+  clearUsage();
+  clearVendors();
+  state.keys.openai = "test-key-openai";
+  const openaiCall = (cost: number) =>
+    recordUsage({
+      ts: now, session: "t", provider: "openai", model: "gpt-5-mini",
+      input: 1000, output: 100, cost, priced: true, estimated: false,
+    });
+  /* Spend before a credit is entered is not drawn from it. */
+  openaiCall(3);
+  assert.equal(vendorMoneyFor("openai"), null);
+
+  setTopUp("openai", 10);
+  openaiCall(1.5);
+  openaiCall(0.25);
+  /* Another vendor's turn is nobody's draw on OpenAI's credit. */
+  call(now, 2);
+  const money = vendorMoneyFor("openai");
+  assert.ok(money);
+  assert.equal(money.counted, true);
+  near(money.topped_up_usd, 10);
+  near(money.balance_usd, 8.25);
+  near(money.credit!.left_usd, 8.25);
+  near(money.credit!.spent_usd, 1.75);
+
+  /* Settings sends the same figure back on every save: that is not a new
+     credit, and must not wipe what has been drawn from it. */
+  setTopUp("openai", 10);
+  near(vendorMoneyFor("openai")!.balance_usd, 8.25);
+
+  /* In /api/usage it is a line with a credit, flagged as counted, and it never
+     stands in for the ledger's all-time total. */
+  const b = billingSummary();
+  const line = b.vendors.find((v) => v.provider === "openai");
+  assert.ok(line);
+  assert.equal(line.counted, true);
+  assert.equal(line.headline, false);
+  near(line.credit!.left_usd, 8.25);
+  assert.ok(!b.vendors_without_till.some((v) => v.provider === "openai"));
+  near(b.lifetime.cost, 6.75);
+
+  /* A fresh figure from the billing page starts the count again. */
+  setTopUp("openai", 7.9);
+  near(vendorMoneyFor("openai")!.balance_usd, 7.9);
+  /* More spent than was entered leaves nothing, not a negative balance. */
+  openaiCall(9);
+  near(vendorMoneyFor("openai")!.balance_usd, 0);
+
+  /* Clearing the box takes the line away. */
+  setTopUp("openai", null);
+  assert.equal(vendorMoneyFor("openai"), null);
+  assert.ok(!vendorMoneyAll().some((v) => v.provider === "openai"));
+  delete state.keys.openai;
+  clearUsage();
 });
 
 console.log(`\n${passed} passed`);

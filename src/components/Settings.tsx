@@ -448,14 +448,14 @@ export function Settings({
     JSON.stringify(loop) !== JSON.stringify(state.loop ?? null) ||
     JSON.stringify(verify) !== JSON.stringify(state.verify ?? null) ||
     JSON.stringify(keep) !== JSON.stringify(state.retention ?? null));
-  /* Whose "paid in" figure the box holds. Only a vendor that publishes a
-     balance can turn one into a spend, so for the rest the box is not offered
-     at all rather than collecting a number nothing can use. */
-  const topUpLabel = (() => {
-    if (!state || !topUpProvider) return null;
-    const card = state.catalog.find((p) => p.id === topUpProvider);
-    return card?.balance_endpoints ? card.label : null;
-  })();
+  /* Whose credit figure the box holds. A vendor that publishes a balance takes
+     the total paid in, and spend is that less the balance it reports. One that
+     publishes none (OpenAI, Gemini, Anthropic) takes the credit its billing
+     page shows now, drawn down here by what is counted. A local server costs
+     nothing, so it gets no box. */
+  const topUpCard = state && topUpProvider ? state.catalog.find((p) => p.id === topUpProvider) : undefined;
+  const topUpLabel = topUpCard?.needs_key ? topUpCard.label : null;
+  const topUpCounted = Boolean(topUpCard && !topUpCard.balance_endpoints);
   const budgetOk = budget.trim() === "" || (Number.isFinite(Number(budget)) && Number(budget) >= 0);
   const topUpOk = topUp.trim() === "" || (Number.isFinite(Number(topUp)) && Number(topUp) >= 0);
   /* Both money fields are saved by the same rules: a half-typed number is not
@@ -733,6 +733,7 @@ export function Settings({
             topUp={topUp}
             onTopUp={setTopUp}
             topUpLabel={topUpLabel}
+            topUpCounted={topUpCounted}
           />
         )}
 

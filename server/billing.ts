@@ -178,6 +178,7 @@ export function billingSummary() {
       month_since: null,
       auto_top_ups: [],
       credit: null,
+      counted: false,
     });
   }
   /* The account the next turn will call, if any: a bar that shows one vendor's
@@ -185,7 +186,7 @@ export function billingSummary() {
   const active = resolveProvider().provider;
   /* Only a line that knows what was paid in can speak for the total: a balance
      alone says what is left, not what has gone. */
-  const spendable = vendors.filter((entry) => entry.lifetime_usd !== null);
+  const spendable = vendors.filter((entry) => entry.lifetime_usd !== null && !entry.counted);
   const onlyOneVendor = spendable.length === 1;
   const onlyThatVendor =
     byProvider.size === 0 ||
@@ -343,6 +344,10 @@ export function billingSummary() {
       /* False when nobody has said what was paid into this one, so the page can
          report the balance as a balance rather than as spend. */
       spent_known: entry.lifetime_usd !== null,
+      /* True when the vendor publishes no balance and this line is the credit
+         typed in for it, less what was counted there since: worked out, not
+         read, so the page says so. */
+      counted: entry.counted,
     })),
     budget: {
       monthly_usd: budget,

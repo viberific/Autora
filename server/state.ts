@@ -295,6 +295,11 @@ interface PersistedState {
   /** Paid in (topped up) in total per provider, in USD. What came before the
       first reading is entered by hand; a later rise is folded in by itself. */
   topUps: Record<string, number>;
+  /** For a vendor that publishes no balance (OpenAI, Gemini, Anthropic), what
+      the ledger has counted against the credit typed in for it since it was
+      typed: that credit less this is what is left there. Kept as a running
+      sum rather than read back off the ledger, which trims its oldest rows. */
+  creditDraws: Record<string, number>;
   /** A balance reading that would need explaining -- a rise that looks like a
       payment, or a drop to nothing -- held until a later reading agrees. Per
       provider. See ./vendor-money. */
@@ -578,6 +583,7 @@ function blank(): PersistedState {
     balances: {},
     balanceAts: {},
     topUps: {},
+    creditDraws: {},
     pendingReadings: {},
     autoTopUps: {},
     monthBases: {},
@@ -681,6 +687,7 @@ function read(): PersistedState {
     if (raw.balances && typeof raw.balances === "object") state.balances = { ...raw.balances };
     if (raw.balanceAts && typeof raw.balanceAts === "object") state.balanceAts = { ...raw.balanceAts };
     if (raw.topUps && typeof raw.topUps === "object") state.topUps = { ...raw.topUps };
+    if (raw.creditDraws && typeof raw.creditDraws === "object") state.creditDraws = { ...raw.creditDraws };
     if (raw.pendingReadings && typeof raw.pendingReadings === "object") state.pendingReadings = { ...raw.pendingReadings };
     if (raw.autoTopUps && typeof raw.autoTopUps === "object") state.autoTopUps = { ...raw.autoTopUps };
     if (raw.monthBases && typeof raw.monthBases === "object") state.monthBases = { ...raw.monthBases };
@@ -1381,6 +1388,11 @@ export function recordUsage(entry: UsageEntry) {
      altogether would make the spend wrong. Nothing else about the chat is in
      the row: no text, no title, only what was spent. */
   state.usage.push(isEphemeral(entry.session) ? { ...entry, session: "incognito" } : entry);
+  /* A vendor with no balance to read has its credit drawn down by the count,
+     which is the only figure there is for what has gone out of it. */
+  if (typeof state.creditDraws[entry.provider] === "number" && Number.isFinite(entry.cost)) {
+    state.creditDraws[entry.provider] += Math.max(0, entry.cost);
+  }
   while (state.usage.length > MAX_USAGE) {
     const dropped = state.usage.shift()!;
     carried.cost += dropped.cost;

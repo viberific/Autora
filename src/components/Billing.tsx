@@ -82,6 +82,9 @@ export type Usage = {
     /** False when there is no paid-in figure, so the line is a balance rather
         than a spend. */
     spent_known: boolean;
+    /** True when the vendor publishes no balance: the line is the credit typed
+        in for it, less what was counted there since. */
+    counted?: boolean;
     /** What this vendor's own turns cost this month, nobody else's in it. */
     month_usd?: number;
     /** True for the account the console is spending right now. */
@@ -164,6 +167,7 @@ export function Billing({
   topUp,
   onTopUp,
   topUpLabel,
+  topUpCounted = false,
 }: {
   budget: string;
   onBudget: (value: string) => void;
@@ -174,6 +178,9 @@ export function Billing({
   /** Which vendor that figure belongs to, for the label. Null while the server
       has not said, or the selected provider publishes no balance at all. */
   topUpLabel?: string | null;
+  /** True when that vendor publishes no balance, so the figure is the credit
+      its billing page shows now rather than the total ever paid in. */
+  topUpCounted?: boolean;
 }) {
   const [usage, setUsage] = useState<Usage | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -280,7 +287,15 @@ export function Billing({
             vendor: a balance is the only figure that cannot be wrong, so it is
             what the total is built on -- and whose money each line is, because
             one vendor's balance is never anybody else's. */}
-        {usage.vendors?.map((vendor) => (
+        {usage.vendors?.map((vendor) => vendor.counted ? (
+        <p className="jf-hint bill-real" key={vendor.provider}>
+          {vendor.label} publishes no balance, so this is counted here:{" "}
+          {money(vendor.topped_up_usd ?? 0)} of credit entered {when(vendor.at)}, less{" "}
+          {money(vendor.lifetime_usd ?? 0)} spent since, leaves {money(vendor.balance_usd)}.
+          {" "}Calls that never reported their tokens are not in it, so enter the figure
+          from {vendor.label}'s billing page again now and then to keep it right.
+        </p>
+      ) : (
         <p className="jf-hint bill-real" key={vendor.provider}>
           {vendor.spent_known
             ? vendor.headline
@@ -376,20 +391,24 @@ export function Billing({
             for once. A payment made later needs no hand -- the balance jumping
               up is how one is noticed.
 
-              Shown only for a vendor that publishes a balance, since
-              without one the figure could never be turned into a spend,
-              and named for the vendor it belongs to: it is one account's
+              A vendor that publishes no balance takes the credit its billing
+              page shows instead, and what is counted here draws it down. Named
+              for the vendor it belongs to either way: it is one account's
               money. */}
         {topUpLabel && (
           <label className="jf-row">
-            <span>Paid in to {topUpLabel}</span>
+            <span>{topUpCounted ? `Credit at ${topUpLabel} now` : `Paid in to ${topUpLabel}`}</span>
             <input
               value={topUp}
               onChange={(e) => onTopUp(e.target.value)}
               placeholder="e.g. 30"
               inputMode="decimal"
               spellCheck={false}
-              aria-label={`Total paid in to ${topUpLabel}, in dollars`}
+              aria-label={
+                topUpCounted
+                  ? `Credit left at ${topUpLabel} as its billing page shows it now, in dollars`
+                  : `Total paid in to ${topUpLabel}, in dollars`
+              }
             />
           </label>
         )}

@@ -203,7 +203,7 @@ export function SpendPeek({
               {usage.vendors?.map((vendor) =>
                 vendor.spent_known
                   ? row(
-                      `Paid in to ${vendor.label}`,
+                      vendor.counted ? `Credit entered at ${vendor.label}` : `Paid in to ${vendor.label}`,
                       money(vendor.topped_up_usd ?? 0),
                       `${money(vendor.balance_usd)} left there`,
                     )

@@ -60,6 +60,10 @@ type VendorMoney = {
   /** What is left of the money paid in, and what share of it that is. Null
       while there is no paid-in figure to measure a balance against. */
   credit: Credit | null;
+  /** True when the vendor publishes no balance and this line is the credit the
+      person typed in, drawn down by what the ledger counted since: the balance
+      is worked out here, not read from the vendor. */
+  counted: boolean;
 };
 
 /**
@@ -238,6 +242,7 @@ export function forgetVendorMoney(id: string): void {
  */
 export function vendorMoneyFor(id: string): VendorMoney | null {
   const label = providerSpec(id)?.label ?? id;
+  if (providerSpec(id) && !providerSpec(id)?.balance) return countedMoneyFor(id, label);
   const { usd, at } = balanceFor(id);
   if (usd === null) return null;
   const toppedUp = topUpFor(id);
@@ -255,6 +260,39 @@ export function vendorMoneyFor(id: string): VendorMoney | null {
     month_since: thisMonth ? base.since : null,
     auto_top_ups: (state.autoTopUps[id] ?? []).map(({ at: when, usd: amount }) => ({ at: when, usd: amount })),
     credit: creditOf(usd, toppedUp),
+    counted: false,
+  };
+}
+
+/**
+ * A vendor with no balance to read, and a credit typed in for it.
+ *
+ * OpenAI, Gemini and Anthropic say nothing about money to an API key, so the
+ * only way to show what is left there is the figure the person reads off the
+ * vendor's billing page, less what the ledger has counted at that vendor since
+ * it was typed. Counting can only come out low, so this can read a little
+ * high; typing the figure in again from the billing page puts it right.
+ *
+ * Null when no credit has been typed in for it: nothing is guessed.
+ */
+function countedMoneyFor(id: string, label: string): VendorMoney | null {
+  const credit = topUpFor(id);
+  if (credit === null || credit <= 0) return null;
+  const draw = state.creditDraws[id];
+  const spent = typeof draw === "number" && Number.isFinite(draw) ? Math.max(0, draw) : 0;
+  const left = Math.max(0, credit - spent);
+  return {
+    provider: id,
+    label,
+    balance_usd: left,
+    topped_up_usd: credit,
+    at: state.balanceAts[id] ?? Math.floor(Date.now() / 1000),
+    lifetime_usd: spent,
+    month_real_usd: null,
+    month_since: null,
+    auto_top_ups: [],
+    credit: creditOf(left, credit),
+    counted: true,
   };
 }
 
@@ -272,6 +310,22 @@ function shiftMonthBase(id: string, change: number): void {
 /** Set what has been paid in at one vendor by hand. */
 export function setTopUp(id: string, amount: number | null): void {
   const before = state.topUps[id];
+  /* A vendor with no balance: the figure is the credit left there as its
+     billing page shows it now, so the count drawn against it starts again from
+     nothing whenever a new one is typed in -- and only then, since Settings
+     sends the same figure back on every save. */
+  if (providerSpec(id) && !providerSpec(id)?.balance) {
+    if (amount === null || amount <= 0) {
+      delete state.topUps[id];
+      delete state.creditDraws[id];
+      delete state.balanceAts[id];
+    } else if (amount !== before || typeof state.creditDraws[id] !== "number") {
+      state.topUps[id] = amount;
+      state.creditDraws[id] = 0;
+      state.balanceAts[id] = Math.floor(Date.now() / 1000);
+    }
+    return;
+  }
   if (amount === null) {
     delete state.topUps[id];
     delete state.monthBases[id];
@@ -342,8 +396,10 @@ function vendorMoney(id = resolveProvider().provider): VendorMoney | null {
     shown as zero: nothing here is guessed, and an absent line means "not
     known", never "nothing". */
 export function vendorMoneyAll(): VendorMoney[] {
+  /* A vendor with no balance endpoint is listed too once a credit has been
+     typed in for it: that line is the typed credit less what was counted. */
   return PROVIDERS.filter(
-    (spec) => spec.balance && keyFor(spec.id) && vendorMoneyFor(spec.id) !== null,
+    (spec) => keyFor(spec.id) && vendorMoneyFor(spec.id) !== null,
   ).map((spec) => vendorMoneyFor(spec.id) as VendorMoney);
 }
 
