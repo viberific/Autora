@@ -5,7 +5,7 @@
  *   npx tsx tests/toolstream.test.ts
  */
 import assert from "node:assert/strict";
-import { addToolDelta, parseArgs, type BuildingCall } from "../server/llm";
+import { addToolDelta, capTools, OPENAI_MAX_TOOLS, parseArgs, type BuildingCall } from "../server/llm";
 
 const fold = (parts: any[]) => {
   const m = new Map<number, BuildingCall>();
@@ -40,5 +40,12 @@ assert.equal(r[0].args, '{"action":"list"}');
 assert.deepEqual(parseArgs(JSON.stringify('{"action":"list"}')), { action: "list" });
 assert.deepEqual(parseArgs('```json\n{"action":"list"}\n```'), { action: "list" });
 assert.deepEqual(parseArgs("{broken"), {});
+
+// OpenAI refuses more than 128 tools; other vendors are sent the whole list.
+const many = Array.from({ length: 150 }, (_, i) => i);
+assert.equal(capTools(many, true).length, OPENAI_MAX_TOOLS);
+assert.deepEqual(capTools(many, true), many.slice(0, OPENAI_MAX_TOOLS));
+assert.equal(capTools(many, false).length, 150);
+assert.equal(capTools([1, 2], true).length, 2);
 
 console.log("toolstream: ok");

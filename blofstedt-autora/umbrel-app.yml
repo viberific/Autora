@@ -188,12 +188,5 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  Settings no longer has a separate Planner model. Planning and building now always run on the one model you chose, so
-  a task keeps a single conversation and a single prompt cache instead of re-reading the whole chat each time the work
-  moved between two models (which cost extra and could change how the history was understood). A planner you had
-  saved is ignored, and past tasks still show the pair they ran on. Talk mode and Background tasks keep their own model
-  pickers; the Background provider and model now sit on one line, and the provider dropdown shows its arrow. Quick
-  questions the app can answer itself (what time it is, today's date, which model is running) are now answered
-  instantly without calling the model, and anything slower than three seconds, or anything more than that exact
-  question, goes to the model as before. Wording tidied in the Yolo / Ask menu, the Automatic provider card, the Tools
-  window and the /triggers command, and the provider buttons now have an outline so they read as buttons.
+  Fixes OpenAI models (such as gpt-6 Luna) failing with "Invalid 'tools': array too long". OpenAI accepts at most 128
+  tools per request, so when more are switched on, only the first 128 are sent and the rest stay out of that request.

@@ -469,7 +469,19 @@ function modernOpenAi(call: ChatCall): boolean {
   return openai && /^(gpt-5|gpt-6|o[1-9])/i.test(call.model ?? "");
 }
 
+/** OpenAI refuses a request with more than 128 tools ("array too long"). The list is kept in the order it was built (core
+    tools first, connected-server tools last), so the tail is what goes; nothing else is changed. */
+export const OPENAI_MAX_TOOLS = 128;
+export function capTools<T>(tools: readonly T[], openai: boolean): T[] {
+  return openai && tools.length > OPENAI_MAX_TOOLS ? tools.slice(0, OPENAI_MAX_TOOLS) : [...tools];
+}
+
 async function streamOpenAi(call: ChatCall, onDelta: (text: string) => void): Promise<ChatTurn> {
+  const isOpenAi = call.provider === "openai" || /(^|\/\/)api\.openai\.com/.test(call.baseUrl ?? "");
+  const tools = capTools(call.tools ?? [], isOpenAi);
+  if (tools.length < (call.tools?.length ?? 0)) {
+    console.warn(`[llm] ${call.model}: sent ${tools.length} of ${call.tools!.length} tools (OpenAI allows ${OPENAI_MAX_TOOLS})`);
+  }
   const deepseek = (call.provider ?? "") === "deepseek" || /api\.deepseek\.com/.test(call.baseUrl ?? "");
   /* OpenRouter is a router: one model is served from several endpoints, and
      without being told which, it may answer a turn from a different one --
@@ -507,9 +519,9 @@ async function streamOpenAi(call: ChatCall, onDelta: (text: string) => void): Pr
       ...(!deepseek && call.thinking === "off" && /glm/i.test(call.model) && off ? { thinking: { type: "disabled" } } : {}),
       ...(call.thinking === "off" && openrouter && off ? { reasoning: { enabled: false } } : {}),
       messages: openAiMessages(call),
-      ...(call.tools?.length
+      ...(tools.length
         ? {
-            tools: call.tools.map((t) => ({
+            tools: tools.map((t) => ({
               type: "function",
               function: {
                 name: t.name,
