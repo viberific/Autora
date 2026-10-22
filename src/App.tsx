@@ -935,12 +935,6 @@ export function App() {
   /** The to-do list docked above the message box (lib/stage.ts says which):
       only in a live session -- a recorded one keeps its list in the thread. */
   const dockPlan = useMemo(() => (live ? dockedPlan(view.buckets) : null), [live, view.buckets]);
-  /* Only a session that can never take a turn again is read-only. A socket
-     that is reconnecting -- a phone waking up, a network blip, the server
-     restarting -- used to count too, and that disabled the box (and threw
-     away its focus) mid-sentence, at random as far as anyone typing could
-     tell. Messages go over a plain request anyway, not the socket. */
-  const readOnly = status.state === "recorded" || status.state === "closed";
   const nothingAttached = attached.length === 0 && attachedBooks.length === 0 && attachedFolders.length === 0;
 
   // Whether a turn is running now, read from the tail of the log so a reload
@@ -1163,8 +1157,8 @@ export function App() {
   const [slashAt, setSlashAt] = useState(0);
   const [slashDismissed, setSlashDismissed] = useState(false);
   const slashOffered = useMemo(
-    () => (readOnly ? [] : suggestCommands(draft, live && running)),
-    [draft, live, running, readOnly],
+    () => suggestCommands(draft, live && running),
+    [draft, live, running],
   );
   const slashOpen = slashOffered.length > 0 && !slashDismissed;
   const slashActive = Math.min(slashAt, Math.max(slashOffered.length - 1, 0));
@@ -1175,7 +1169,7 @@ export function App() {
   const [caret, setCaret] = useState(0);
   const [mentionAtIndex, setMentionAtIndex] = useState(0);
   const [mentionDismissed, setMentionDismissed] = useState(false);
-  const typing = useMemo(() => (readOnly ? null : mentionAt(draft, caret)), [draft, caret, readOnly]);
+  const typing = useMemo(() => mentionAt(draft, caret), [draft, caret]);
   useEffect(() => {
     if (!typing || mentionable) return;
     let alive = true;
@@ -2296,12 +2290,9 @@ export function App() {
                     value={draft}
                     rows={1}
                     aria-label="Task"
-                    placeholder={readOnly
-                      ? "This session is a recording."
-                      : modelReady === false
-                        ? "Connect a model to start…"
-                        : "What should I do?"}
-                    disabled={readOnly}
+                    placeholder={modelReady === false
+                      ? "Connect a model to start…"
+                      : "What should I do?"}
                     onChange={(e) => {
                       setDraft(e.target.value);
                       setCaret(e.target.selectionStart ?? e.target.value.length);
@@ -2515,7 +2506,6 @@ export function App() {
                           same idea. */}
                       <DictateButton
                         onText={appendDictation}
-                        disabled={readOnly}
                         onTrouble={setNotice}
                       />
                       {/* Beside the two voices, at every width: the two things you can
@@ -2524,20 +2514,17 @@ export function App() {
                           nothing is lost if Send comes later. */}
                       <AttachButton
                         onFiles={(files) => void addFiles(files)}
-                        disabled={readOnly}
                         busy={attaching > 0}
                         onTrouble={setNotice}
                       />
                       <CameraButton
                         onFiles={(files) => void addFiles(files)}
-                        disabled={readOnly}
                         onTrouble={setNotice}
                       />
                       <button
                         type="button"
                         className="btn ghost icon attach-btn"
                         onClick={() => setLibraryOpen(true)}
-                        disabled={readOnly}
                         title="Add a notebook or a saved file"
                         aria-label="Add a notebook or a saved file"
                       >
@@ -2548,7 +2535,6 @@ export function App() {
                         type="button"
                         className="btn ghost icon attach-btn"
                         onClick={() => setArtifactsOpen(true)}
-                        disabled={readOnly}
                         title="Add a saved file or a project folder from Artifacts"
                         aria-label="Add a saved file or a project folder from Artifacts"
                       >
@@ -2561,7 +2547,6 @@ export function App() {
                         type="button"
                         className={`btn ghost icon attach-btn${toolsOpen ? " is-on" : ""}`}
                         onClick={() => setToolsOpen((v) => !v)}
-                        disabled={readOnly}
                         title="Tools: open an app with a new blank file"
                         aria-label="Tools"
                         aria-expanded={toolsOpen}
@@ -2618,7 +2603,7 @@ export function App() {
                           className={`composer-send${running && !draft.trim() && nothingAttached ? " is-stop" : ""}`}
                           // Without a model a message can only fail; a slash
                           // command (/settings) still goes.
-                          disabled={readOnly || (!(running && !draft.trim() && nothingAttached)
+                          disabled={(!(running && !draft.trim() && nothingAttached)
                             && ((!draft.trim() && nothingAttached)
                               || (modelReady === false && !draft.trim().startsWith("/"))))}
                           onClick={running && !draft.trim() && nothingAttached ? () => void stopTurn() : () => submit()}
