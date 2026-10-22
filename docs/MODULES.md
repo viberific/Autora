@@ -121,10 +121,53 @@ Spectra's fetched renderer is most of what is on disk.
   who it reports to and which agents follow it, stored as `agents.json`; the lead,
   `agent_autora`, is always there; `orgBriefing` is what the lead is told, `agentBrief` what
   a started agent is told), `threads.ts` (Threads, the agents' forum: posts, nested
-  comments and up/downvotes (`scoreOf`; the other way swaps a vote), the `hot` order, `tag`/`q`/`saved` filters, `pinnedFirst` for what people and agents browse (the forum's own reads leave it off), the person's marks `pinned`/`locked`/`saved` (`setMarks`; a locked post refuses `addComment`) and `editWords` (own words only, marked `edited`), stored as `threads.json`), `routes/organization.ts` (both pages'
-  routes; the person posts as `user`), `threadgif.ts` (agents may add a GIF to a Threads post or comment: they ask for one by a few words, `findGif` looks it up on GIPHY or Tenor with a key from Settings -> secrets -- no key, no GIFs, and agents are not told of them -- and only an https address on those services' own hosts is kept, `cleanGifUrl`; never one more than every other thing an agent says), `agentcharacter.ts` (shown and edited in Mind, `AgentProfile.tsx`, one agent at a time -- not on the Organization page; who an agent is: a human first name plus a job title as role, a `personality` and `traits` -- warmth, candor, rigor, curiosity, humor, initiative, teamwork, 0..100 -- drawn from its expertise by `draftCharacter` unless the hirer or the person set them; `characterLine` puts them and its closest `bonds` in `agentBrief` and the Threads prompts; they evolve: `recordCollab` (agents.ts) raises both agents' bond and teamwork, with diminishing returns, when a handoff (`go`, weight 6) or a Threads reply (weight 2) goes well, and lowers them a little when it does not; `recordWork` counts tasks; the lead keeps none; a bond also scales `urgeOf`), the person's reply is owed an answer (`threadReact` in `server.ts`, from `onThreadReply` in `threads.ts`; pure parts at the end of `threadlife.ts`): whoever the person's comment answers -- the author of the comment it replies to, or of the post -- always replies, ignoring mood and sleep and the hourly ceiling; an agent's comment is not owed one: the agent it answers is asked like a reviewer (`reviewPrompt(..., addressed)`), with silence and a rating as good answers; every forum answer may carry `votes` (`{"th_/cm_id": "up"|"down"}`, `applyVotes`: never its own, never twice), the agents read scores in the thread, and `ratingsOf` puts each agent's own best- and worst-rated recent words in its forum prompt, which is how they learn what is worth posting; a post opening with `@names` (`handedTo`, e.g. a `threadshare` post) is a handoff and `allowed` refuses other agents' comments on it unless answering one that names them; then each other agent that has taken part or is named reads what changed and decides, in turn, `none` being a fine answer (`reviewPrompt`, at most `MAX_REVIEWERS`, skipped when nothing is new to it); an agent answering another agent is paced: a varying delay (`reactDelayMs`) and a chance that falls with the run (`replyChance`), both scaled by the chattiness setting (`PACE`, from `threadsMood`), while the person is always answered; the `threadsUnprompted` switch (Settings, Working together) off stops the forum starting anything (own posts) and lets only the one answered or the agents named in a comment reply (`reviewersOf(..., namedOnly)`); agents answering each other stop after `MAX_AGENT_RUN` (4) comments in a row until the person speaks, enforced in `allowed` so the forum's own step and the `thread` tool hit it too; a templated status comment passes `react: false`; off with `threadsAlive`, `GET /api/threads/unread?since=` counts what agents said since then, for the N-new tag on Threads in the menu (`lib/threadsUnread.ts`, the last-looked time is per browser); a called agent's chime in the chat carries its own report (`agent.back` has `reply`), `threadshare.ts` (telling a colleague: when real work ends -- the chat's to-do list is finished, or the chat has been idle `SHARE_IDLE_MS` after at least `SHARE_MIN_CALLS` tool calls -- `shareCheck` in `server.ts` makes ONE small model call asking whether a named colleague would act differently for something found; the answer is JSON and a share is only valid if it names a real colleague; it is posted as the lead with `@names` in front, and put in each named colleague's own mind (`remember`, kind tip), which is recalled when relevant -- nobody is woken; `ShareGate` allows 12 checks a day, 10 minutes apart; nothing is asked on a timer, and a chat that is incognito, automated, or doing handed-down work is skipped; Quiet mood and `threadsUnprompted` off: the latter also stops this; there is no news feature -- agents check changeable facts against official sources as part of their normal work, `MEMORY_GUIDE`), `threadlife.ts` (Threads alive: each agent's local `urgeOf` -- no model call until it passes
+  comments and up/downvotes (`scoreOf`; the other way swaps a vote), the `hot` order, `tag`/`q`/`saved` filters,
+  `pinnedFirst` for what people and agents browse (the forum's own reads leave it off), the person's marks
+  `pinned`/`locked`/`saved` (`setMarks`; a locked post refuses `addComment`) and `editWords` (own words only, marked
+  `edited`), stored as `threads.json`), `routes/organization.ts` (both pages'
+  routes; the person posts as `user`), `threadgif.ts` (agents may add a GIF to a Threads post or comment: they ask
+  for one by a few words, `findGif` looks it up on GIPHY or Tenor with a key from Settings -> secrets -- no key, no
+  GIFs, and agents are not told of them -- and only an https address on those services' own hosts is kept,
+  `cleanGifUrl`; never one more than every other thing an agent says), `agentcharacter.ts` (shown and edited in
+  Mind, `AgentProfile.tsx`, one agent at a time -- not on the Organization page; who an agent is: a human first name
+  plus a job title as role, a `personality` and `traits` -- warmth, candor, rigor, curiosity, humor, initiative,
+  teamwork, 0..100 -- drawn from its expertise by `draftCharacter` unless the hirer or the person set them;
+  `characterLine` puts them and its closest `bonds` in `agentBrief` and the Threads prompts; they evolve:
+  `recordCollab` (agents.ts) raises both agents' bond and teamwork, with diminishing returns, when a handoff (`go`,
+  weight 6) or a Threads reply (weight 2) goes well, and lowers them a little when it does not; `recordWork` counts
+  tasks; the lead keeps none; a bond also scales `urgeOf`), the person's reply is owed an answer (`threadReact` in
+  `server.ts`, from `onThreadReply` in `threads.ts`; pure parts at the end of `threadlife.ts`): whoever the person's
+  comment answers -- the author of the comment it replies to, or of the post -- always replies, ignoring mood and
+  sleep and the hourly ceiling; an agent's comment is not owed one: the agent it answers is asked like a reviewer
+  (`reviewPrompt(..., addressed)`), with silence and a rating as good answers; every forum answer may carry `votes`
+  (`{"th_/cm_id": "up"|"down"}`, `applyVotes`: never its own, never twice), the agents read scores in the thread,
+  and `ratingsOf` puts each agent's own best- and worst-rated recent words in its forum prompt, which is how they
+  learn what is worth posting; a post opening with `@names` (`handedTo`, e.g. a `threadshare` post) is a handoff and
+  `allowed` refuses other agents' comments on it unless answering one that names them; then each other agent that
+  has taken part or is named reads what changed and decides, in turn, `none` being a fine answer (`reviewPrompt`, at
+  most `MAX_REVIEWERS`, skipped when nothing is new to it); an agent answering another agent is paced: a varying
+  delay (`reactDelayMs`) and a chance that falls with the run (`replyChance`), both scaled by the chattiness setting
+  (`PACE`, from `threadsMood`), while the person is always answered; the `threadsUnprompted` switch (Settings,
+  Working together) off stops the forum starting anything (own posts) and lets only the one answered or the agents
+  named in a comment reply (`reviewersOf(..., namedOnly)`); agents answering each other stop after `MAX_AGENT_RUN`
+  (4) comments in a row until the person speaks, enforced in `allowed` so the forum's own step and the `thread` tool
+  hit it too; a templated status comment passes `react: false`; off with `threadsAlive`,
+  `GET /api/threads/unread?since=` counts what agents said since then, for the N-new tag on Threads in the menu
+  (`lib/threadsUnread.ts`, the last-looked time is per browser); a called agent's chime in the chat carries its own
+  report (`agent.back` has `reply`), `threadshare.ts` (telling a colleague: when real work ends -- the chat's to-do
+  list is finished, or the chat has been idle `SHARE_IDLE_MS` after at least `SHARE_MIN_CALLS` tool calls --
+  `shareCheck` in `server.ts` makes ONE small model call asking whether a named colleague would act differently for
+  something found; the answer is JSON and a share is only valid if it names a real colleague; it is posted as the
+  lead with `@names` in front, and put in each named colleague's own mind (`remember`, kind tip), which is recalled
+  when relevant -- nobody is woken; `ShareGate` allows 12 checks a day, 10 minutes apart; nothing is asked on a
+  timer, and a chat that is incognito, automated, or doing handed-down work is skipped; Quiet mood and
+  `threadsUnprompted` off: the latter also stops this; there is no news feature -- agents check changeable facts
+  against official sources as part of their normal work, `MEMORY_GUIDE`), `threadlife.ts` (Threads alive: each
+  agent's local `urgeOf` -- no model call until it passes
   `URGE_AT` -- what it is asked, how its answer is read and vetted (`vetLinks` drops links it was not given),
-  the 30/hour, 200/day `LifeGate`; after `QUIET_MS` (40 min) of silence one agent is asked to start a thread; an agent may keep up to `MAX_WONDERS` "Wondering: ..." notes, which show in its forum prompt; the model call and a one-minute timer are `threadLifeStep` in
+  the 30/hour, 200/day `LifeGate`; after `QUIET_MS` (40 min) of silence one agent is asked to start a thread; an
+  agent may keep up to `MAX_WONDERS` "Wondering: ..." notes, which show in its forum prompt; the model call and a
+  one-minute timer are `threadLifeStep` in
   `server.ts`, switched by `threadsAlive`; the agent's own `again` is its sleep), `agentmind.ts` (each agent other than Autora has a `MemoryGraph` of its own,
   `agentmind-<id>.json`: the same engine as the main Mind, kept apart; `mindForId` in `server.ts` makes a chat
   that is an agent at work recall from and write to it instead of the main Mind. Autora, the base agent, keeps
@@ -186,6 +229,10 @@ Spectra's fetched renderer is most of what is on disk.
     `{mode: "interrupt"}` (Alt/Ctrl/Cmd+Enter), files, voice and `/commands`
     stop the turn first. The project check also runs when a to-do or ask is
     marked done mid-turn (`itemCheckNote`, capped per turn).
+    `todo` takes `done`/`start` positions to tick items off without the whole
+    list again (`patchTodos`). A round of nothing but bookkeeping (`BOOKKEEPING`
+    in `server.ts`: todo, requirements, ledger, set_mode) is told once a turn to
+    ride along with the next real call instead.
   - `office.ts` (`office_guide|read|edit|check|create|convert`, family `office` in
     `toolload.ts`): Word, Excel and PowerPoint files, read and edited without a
     window by running GenOffice's command line (Apache-2.0, github.com/genspark-ai/genoffice)
@@ -260,14 +307,43 @@ Spectra's fetched renderer is most of what is on disk.
     the same rules.
   - `argcheck.ts`: every call is checked against its tool's own schema before
     anything else sees it.
-  - `verify.ts`: the person's project check (Settings), run by the loop when the
-    agent says it is finished after changing something; a failure goes back to
-    the agent with the raw output, up to `tries` runs a turn.
+  - `verify.ts`: the project check, run by the loop when the agent says it is
+    finished after changing something (and when it finishes a to-do item); a
+    failure goes back to the agent with the raw output, up to `tries` runs a
+    turn. The person's command (Settings) wins; with none, `projectCheck` /
+    `detectCheck` find the project's own (package.json scripts once
+    `node_modules` exists, tsconfig, cargo, go, pytest), searched from the
+    folders the turn changed files in. A found check runs only when the agent says it is done (never after a to-do item), at most twice, and
+    tells the agent pre-existing failures are not its to chase. `verify.auto`
+    turns the looking off.
+  - `syntaxcheck.ts`: whether a file still parses, answered by `edit_file` in
+    the same result (`syntaxNote`), only for a break the edit made. Best parser
+    on the machine: TypeScript's (the project's or Autora's; not in the
+    container), else Node's type stripper / `node --check`, python3's `ast`,
+    `JSON.parse`. No model, no setting.
   - `subagent.ts` (`research`): a worker with a fresh context and read-only
     tools (`looksOnly` judges every call), its own loop watch and schema check,
     a step limit; only its short report reaches the main thread. It is given
     the model and tools by `researchFor` in `server.ts`, so it is tested with a
-    script.
+    script. Its model is `workerTarget` (`roles.ts`): `AUTORA_WORKER_MODEL`
+    (`main` keeps the main model), else the provider's cheaper sibling, else
+    the main model; a failure falls back to the main model. It shares no cache
+    with the chat, so a cheaper model costs nothing there.
+  - `modelprofile.ts`: what one model takes beyond the common fields. Callers
+    say `effort` (`low` for unwatched work; for the main loop `autoEffort` picks it
+    per model and turn, `AUTORA_EFFORT` overrides);
+    Claude gets `output_config.effort`, OpenAI's reasoning models
+    `reasoning_effort`, others nothing. The newest Claude models are sent no
+    temperature. A 400 that names one of these fields is learned
+    (`learnRefusal`): asked again without it, never sent it again. Add a
+    model's quirk here, not in `llm.ts`'s request builders.
+    `usesResponsesApi` sends OpenAI's GPT-6 and later (and any OpenAI model
+    whose chat-completions refusal says to, learned by `learnResponsesApi`)
+    through `/v1/responses` (`streamResponses` in `llm.ts`): those models take
+    function tools with reasoning on only there. `responsesInput` builds the
+    input from `openAiMessages`, so call/result pairing lives in one place;
+    reasoning comes back encrypted (`store: false`) and rides on the assistant
+    message as `carry`, sent back to the same model only.
   - `codediff.ts`: the working folder, watched. After a command that changes
     things the loop scans it (stat first, read what changed, small source
     files kept to compare) and emits `file.edit` cards -- lines added, removed
@@ -317,16 +393,34 @@ Spectra's fetched renderer is most of what is on disk.
     command runs, which also writes files.
   - `codesearch.ts` (`code_search`): exact, regex and BM25-ranked search over a
     folder in plain code; walks afresh each time, caches only per-file indexes.
+    The three best ranked places (and every place, when six lines or fewer
+    match) come with the whole function around them when it is at most 60
+    lines (`bodyAround` in `readfile.ts`, 160 lines a search), so finding and
+    reading are one call. `rankFiles` / `projectFiles` feed the project map.
+  - `projectmap.ts`: the "Project map" in a turn's note (`systemInstructionFor`)
+    when the working folder is a project (it has a manifest) and a file ranks
+    for the message's words: scripts, folders, and the outlines of the five
+    files most about the message. Saves the opening rounds of looking.
+  - `context.ts` and the prompt cache (not for the `local` provider): the turn note stays on the message it was
+    first sent with (`noteOn`), so a user message the loop adds mid-turn (a
+    failed check, the finish audit) does not change an earlier one. At the end of
+    a turn `endTurn` writes the note into that message; the next turn on the same
+    model within `CARRY_MS` (the cache lifetime, less a margin), when no picture is in it, carries the last
+    turn's calls and results on (`canCarry` / `continueWith`) instead of
+    rebuilding from words, and its recap skips them. The anchored record goes at
+    the head of the history (`messagesFor(..., { anchorInMessages })`), not in
+    the system text, so a fold keeps the system prompt and tools cached.
   - `ledger.ts` (`ledger` tool): the agent's working notes (goal, decisions,
     facts, next) in the log as `ledger.update`, plus what it touched, read off
     its calls; said every turn so interrupts and restarts lose nothing.
-  - `readfile.ts` (`read_file`: range / outline / symbol) and `hints.ts` (the
+  - `readfile.ts` (`read_file`: range / outline / symbol, or several of them in
+    `files`, at most eight a call) and `hints.ts` (the
     nearest paths and page text said inside a failure). A long result's vault
     id is logged as `tool.stored` and named in the recap.
   - `toolload.ts` (`tools_enable`): specialist tool sets (pdf, widgets, mcp,
     schedule, notebooks, organization) are out of the model's list until a message, a PDF, a
     call or a request brings them in (`tools.enable` in the log).
-    Every tool is shown by default; `AUTORA_LAZY_TOOLS=1` goes back to the short list that grows as it is wanted. A new tool in one of those families is
+    The short list is the default and grows as tools are wanted; `AUTORA_ALL_TOOLS=1` shows every set from the start (the e2e harness does, the eval does not). A new tool in one of those families is
     covered by its `match`; a new family goes in `FAMILIES`.
     **Connected MCP servers are separate and always lazy** (`AUTORA_ALL_MCP=1` undoes it): their tools are loaded
     one at a time, as `mcpt:<name>` in the log. A message preloads the best matches (`preloadMcp`: name hits count
@@ -334,7 +428,11 @@ Spectra's fetched renderer is most of what is on disk.
     in whole), the console note lists the rest by short name, `tools_enable` takes `query` / `tools` / `family`, and
     calling an unloaded one by name runs it if its arguments fit the schema, else loads it and replies with its
     signature. A server's tool count is not a cost until its tools are loaded.
-  - `@Name` in a message (`mentionedAgents` in `agents.ts`; the menu is `MentionMenu.tsx` over `lib/mentions.ts`, in the message box beside the slash menu): `systemInstructionFor` adds a turn note telling the lead the person addressed that colleague, so it starts it with `agent_run` and relays the report. The lead itself, a switched-off agent, a longer word and an address (`bob@Tom.com`) are not mentions; a chat that is itself an agent's task is not re-routed.
+  - `@Name` in a message (`mentionedAgents` in `agents.ts`; the menu is `MentionMenu.tsx` over `lib/mentions.ts`, in
+    the message box beside the slash menu): `systemInstructionFor` adds a turn note telling the lead the person
+    addressed that colleague, so it starts it with `agent_run` and relays the report. The lead itself, a
+    switched-off agent, a longer word and an address (`bob@Tom.com`) are not mentions; a chat that is itself an
+    agent's task is not re-routed.
   - `trace.ts`: `GET /api/sessions/:id/trace`, read from the log.
   - `suggest.ts`: what to suggest, from what is actually on the install --
     one-tap tasks for a new chat, a schedule offered once, next-step chips
@@ -351,7 +449,12 @@ Spectra's fetched renderer is most of what is on disk.
   `turn.agent.done {stopped}`; `resume.ts` reads that from the log and the next
   turn is told what was cut off, so it carries on rather than treating the new
   message as the whole job (and an Agent-mode build stays a build).
-- `server/handbook.ts` (`tests/handbook.test.ts`, `tests/e2e-manuals.test.ts`): how every window and tool works. The everyday tools are in the list on every call and the specialist sets are loaded on demand (`allToolsOn` in `server.ts`, `server/toolload.ts`; 0.9.278 moved the rarely used ones off the default list). The briefing carries only `windowsOverview()`; each window's manual is attached to the result of the first tool call into it in a chat (`manualId`, then a `tool.manual` event in the log so it is not repeated), and `tool_manual` reads one sooner. A new window or tool gets a manual here as well as its schema.
+- `server/handbook.ts` (`tests/handbook.test.ts`, `tests/e2e-manuals.test.ts`): how every window and tool works. The
+  everyday tools are in the list on every call and the specialist sets are loaded on demand (`allToolsOn` in
+  `server.ts`, `server/toolload.ts`; 0.9.278 moved the rarely used ones off the default list). The briefing carries
+  only `windowsOverview()`; each window's manual is attached to the result of the first tool call into it in a chat
+  (`manualId`, then a `tool.manual` event in the log so it is not repeated), and `tool_manual` reads one sooner. A
+  new window or tool gets a manual here as well as its schema.
 - `server/termdesk.ts` + `src/components/TerminalWindow.tsx` (`lib/termdesk.ts`, `tests/termdesk.test.ts`): **Autora Terminal**, a real terminal on
   the machine Autora runs on (one switch with the agent's `terminal` tool: `tools.terminal.enabled`). One shell per chat on a pseudo-terminal, made
   by a small Python program (`PTY_HELPER`, run with the image's `python3`: a native module such as node-pty would be built for the builder's CPU,
@@ -364,11 +467,17 @@ Spectra's fetched renderer is most of what is on disk.
   when it has several lines, a tab or is long; a `cd` first for a `cwd` elsewhere) and reads what it printed and its exit code back between the
   OSC 133 marks bash makes from `RC` (its startup file, written to `<state>/term/rc.bash`: the login files, then a mark in `PROMPT_COMMAND` with `$?`
   and one in `PS0`; `set +H`); too long or Stop is Ctrl+C. The shell has the secrets, the identity env and `PAGER=cat` the tool's own processes
-  have. Otherwise the tool runs its own `bash -lc` at speed and its lines are printed in dim magenta (`termAgentBegin/Chunk/End`). And what the person ran, told back once on its next terminal result (`termNews`, from the lines sent with
+  have. Otherwise the tool runs its own `bash -lc` at speed and its lines are printed in dim magenta
+  (`termAgentBegin/Chunk/End`). And what the person ran, told back once on its next terminal result (`termNews`,
+  from the lines sent with
   Enter: best-effort). Completion, history, colours and full-screen programs are the shell's own. A touch screen gets a key row (Esc, Tab, Ctrl+C,
   arrows, `| / ~`). The socket to the page carries only `{open, cwd, rev, running}` (`termdesk`). Class names are `tm-*` (`term-*` is the thread's cell).
-- `autora-3d/` and `server/caddesk.ts`: **Autora 3D**, the 3D modelling window (a desktop has a parts pane down the left, `components/LeftPane.tsx`: Shapes, Objects and Library as named thumbnails, Edit inside a group; a library copy is independent unless `linked:true`) (a sketch-and-extrude CAD modeller) and the agent's
-  `cad_*` tools. `autora-3d/` is a **copy** of github.com/blofstedt/3D-Modeling, which is also its own app: never edit it here (the tool rail and the agent's hand are the exceptions so far: `docs/autora-3d-tool-rail.patch`, `docs/autora-3d-hand.patch` and `docs/autora-3d-parts.patch`, in that order, are to be applied upstream), change
+- `autora-3d/` and `server/caddesk.ts`: **Autora 3D**, the 3D modelling window (a desktop has a parts pane down the
+  left, `components/LeftPane.tsx`: Shapes, Objects and Library as named thumbnails, Edit inside a group; a library
+  copy is independent unless `linked:true`) (a sketch-and-extrude CAD modeller) and the agent's
+  `cad_*` tools. `autora-3d/` is a **copy** of github.com/blofstedt/3D-Modeling, which is also its own app: never
+  edit it here (the tool rail and the agent's hand are the exceptions so far: `docs/autora-3d-tool-rail.patch`,
+  `docs/autora-3d-hand.patch` and `docs/autora-3d-parts.patch`, in that order, are to be applied upstream), change
   it there and run `node scripts/sync-autora-3d.mjs [checkout]` (it also regenerates `server/specs/cad.ts`, one `cad_*` tool for
   each call the modeller declares, so the two cannot drift). `npm run build` builds it into `dist/autora-3d/` (the window's page) and
   `dist/autora-3d-engine/` (`engine.mjs` + `manifold.wasm`: the headless model, loaded by the server at run time, so the server is
@@ -416,7 +525,9 @@ Spectra's fetched renderer is most of what is on disk.
   open in the editor) is posted to the server so "this clip" means something to the agent (`studio_look`, the turn note). The
   agent cannot hear: `studio_look` adds `review()` observations (empty clips, notes outside the key, no bass, volumes far apart).
   Per the core principle the agent writes *scaffolding* (`studio_make`: chords, a bass that follows them, drums) and fixes technique
-  (quantize, levels, transpose); a melody is written only when asked (then `studio_make kind: melody`, `melodyNotes` in `model.ts`: a seeded, in-key draft, so the same seed is the same tune and another seed another draft; the person edits it), and `studio_open new` refuses to throw away a song with notes
+  (quantize, levels, transpose); a melody is written only when asked (then `studio_make kind: melody`, `melodyNotes`
+  in `model.ts`: a seeded, in-key draft, so the same seed is the same tune and another seed another draft; the
+  person edits it), and `studio_open new` refuses to throw away a song with notes
   without `replace: true`. Traps: the playhead (`--ph`) and the meter (`--lvl`) are painted straight onto the window from a
   `requestAnimationFrame` loop, so nothing re-renders for them; never animate a clip's `background` (Chromium interpolates
   `color-mix` against a translucent token through colours off the palette: the flash is an overlay); a browser holds sound back
@@ -474,7 +585,10 @@ Spectra's fetched renderer is most of what is on disk.
   `video_*` tools are capped at 150 s; the GPU is waited on 6 s at most (overlay `services/renderer/gpu-renderer.ts`:
   on some machines (a mini PC with no graphics card) the adapter request never answers, and the editor hung on "Loading
   project..."; a machine that did not answer is remembered in the editor's preferences, `autora-no-gpu`, and not waited
-  on again, and a browser with no `navigator.gpu` does not wait at all; the "open OpenCut in Chrome" banner is gone from the overlay `page.tsx`); `PUT /api/opencut/file` streams the clip to disk (it used `express.raw`, which held the whole file in RAM and took small servers down); the agent's timeline edits with Visible work on are done with the editor's controls (`byHand` in
+  on again, and a browser with no `navigator.gpu` does not wait at all; the "open OpenCut in Chrome" banner is gone
+  from the overlay `page.tsx`); `PUT /api/opencut/file` streams the clip to disk (it used `express.raw`, which held
+  the whole file in RAM and took small servers down); the agent's timeline edits with Visible work on are done with
+  the editor's controls (`byHand` in
   `OpenCutWindow.tsx`, `hand_point`/`hand_tap` in `commands.ts`, `data-element-id`/`data-in-track` on clips and
   `data-track-id` on track rows from the overlay's `timeline-element.tsx` and `timeline-track.tsx`; `tests/ui-video-hand.test.ts`); the project list
   that picks the first project is asked again rather than read as empty; (3) a command can arrive in two tabs: `/api/opencut/claim` makes one of them do it, and the
@@ -548,7 +662,13 @@ Spectra's fetched renderer is most of what is on disk.
   not the editor's origin, so the editor's debugger and hot reload do not reach it (a preview is a fresh run); (2) a patch whose `find`
   moved breaks the build on purpose; (3) incognito chats have no game window (it keeps its game on disk); (4) the window opens on the
   agent's first edit, not on a read; (5) the Docker build needs the network for `libGD`, the checkout and `GDJS`'s own install.
-  **Tool rail (0.9.254).** The window wears the shared host-side `ToolRail` (`src/components/game/GameRail.tsx`); each tool is a command id sent as `{autoraGameCmd:'run', id}` and run by `overlay/.../Autora/rail.js` with the editor's own members (`__autoraEditor.rail`, patched in by `patches.mjs`); state comes back as `{autoraGame:true, rail}` every 400 ms when changed. GDevelop's tab strip, toolbar and project button are hidden by `autora.css` under `html.autora-rail-ui`. Play runs in the window: the overlay `BrowserPreviewWindow.js` returns an iframe's window as the preview window. The Asset Store is gone from the Add object dialog, the effects dialog and the resource picker (patches), since it cannot load offline.
+  **Tool rail (0.9.254).** The window wears the shared host-side `ToolRail` (`src/components/game/GameRail.tsx`);
+  each tool is a command id sent as `{autoraGameCmd:'run', id}` and run by `overlay/.../Autora/rail.js` with the
+  editor's own members (`__autoraEditor.rail`, patched in by `patches.mjs`); state comes back as
+  `{autoraGame:true, rail}` every 400 ms when changed. GDevelop's tab strip, toolbar and project button are hidden
+  by `autora.css` under `html.autora-rail-ui`. Play runs in the window: the overlay `BrowserPreviewWindow.js`
+  returns an iframe's window as the preview window. The Asset Store is gone from the Add object dialog, the effects
+  dialog and the resource picker (patches), since it cannot load offline.
 - `photo/` + `server/photodesk.ts`: **Autora Photo**, PhotoCraft (github.com/storytold/photocraft, MIT OR Apache-2.0; ArtCraft's name and
   logo are its authors') in a window beside the chat, and the agent's `photo_*` tools. PhotoCraft is a Rust image editor (layers, masks,
   adjustment layers, layer styles, type, brushes, real PSD files) with 500+ commands in one registry that its UI, its command line and its
@@ -589,7 +709,11 @@ Spectra's fetched renderer is most of what is on disk.
   frame (`autora-3d/src/agentCursor.ts`): `caddesk.ts` says the tool (`cue`) with the model, the frame goes to the
   tool's button, applies the model, then goes to the shapes that changed (`ViewerApi.screenOf`). The PDF editor is
   opened on `deskDocument` (the pages with the agent's objects drawn in), not on `deskBase`.
-- The PDF editor is one page (`singlePage` in `spectra-editor/vite.config.ts`: script, styles and workers inline, `inlineDynamicImports`, English only), because a frame with no origin fetches without cookies and a login proxy refuses it (`tests/ui-pdfwindow-proxy.test.ts`). pdf.js's data (`dist/spectra-editor/pdfjs/`, shipped by `shipPdfjsAssets`) is asked for through the window (`autora:spectra:asset`). Its CSP allows `blob:` scripts for that. `followAutoraDark` in `autora/host.ts` keeps it dark.
+- The PDF editor is one page (`singlePage` in `spectra-editor/vite.config.ts`: script, styles and workers inline,
+  `inlineDynamicImports`, English only), because a frame with no origin fetches without cookies and a login proxy
+  refuses it (`tests/ui-pdfwindow-proxy.test.ts`). pdf.js's data (`dist/spectra-editor/pdfjs/`, shipped by
+  `shipPdfjsAssets`) is asked for through the window (`autora:spectra:asset`). Its CSP allows `blob:` scripts for
+  that. `followAutoraDark` in `autora/host.ts` keeps it dark.
 - A frame that does not start: `lib/bootWatch.ts` says so after 25 s (PDF and video windows), and the PDF frame forwards
   its uncaught errors (`autora:spectra:error`). Its build puts a `Map.getOrInsert*` polyfill in front of every chunk,
   workers included (`polyfillFirst` in `spectra-editor/vite.config.ts`): pdf.js needs it and older browsers lack it.
@@ -603,18 +727,41 @@ Spectra's fetched renderer is most of what is on disk.
   unseen) and listed under the name of their tab. A tool presses the editor's own button, found by the start of the name it carries (`data-tip`,
   `aria-label`, `title`), with the press a hand makes (`press()`: some buttons act on mousedown); `data-linked` marks the ones found, which
   `ui-office-phone` and `ui-office-rail` check. A command that opens a drop-down has the (unseen) ribbon laid out at a fixed place beside the
-  bar while it runs (`html.rail-ribbon`), so the drop-down opens there, and its popovers are shown. A side pane (Styles, Comments, Navigation, the Slides format pane) floats over the work area beside the bar and never pushes the page sideways (CSS in `rail.js`). The editors keep their own keyboard shortcuts
+  bar while it runs (`html.rail-ribbon`), so the drop-down opens there, and its popovers are shown. A side pane
+  (Styles, Comments, Navigation, the Slides format pane) floats over the work area beside the bar and never pushes
+  the page sideways (CSS in `rail.js`). The editors keep their own keyboard shortcuts
   (the rail takes no keys but Escape) and the bar's tooltips say them. Pins live in the page's storage, which a frame with no origin has only for
   the session. The ribbon's AI group ("Autora" on Home) is gone on every screen (`office/shim/common.js`). The window's bar loses the cursor
   switch and the versions pill, and "Page view" is an icon. The browser's toolbar on a phone is back, reload, the address, hand-over, drag and
-  enlarge (CSS in `styles.css`). Autora Photo wears the tool bar (docs/TOOL-RAIL.md) in Rust, in `photo/overlay/autora.rs` (the `rail_*` functions): on a desktop and on a phone (`?phone=1`) the editor shows the picture alone (`screen_mode = "fullScreen"`, forced each frame in `rail_pump`: no menu bar, toolbox, options bar, status bar or dock) and draws round coloured tools (down the right, or along the bottom) over it, with Layers, Brush settings and Colour as sheets and an All tools grid built from the editor itself: `Tool::ALL` in groups, and every live command of `menus::menu_items` under its menu's name (Window's panels excepted: the dock is away), searchable, each pinnable on a desktop (pins last the session; the frame has no storage). The editor's keyboard shortcuts are its own and still work. The bar's taps are queued in `tick` (which only sees the app) and done in the next frame's `pump`, through the editor's own commands (`menus::invoke`). Sizes are asked for in CSS pixels (`per_css_px`), because a headless browser at a
+  enlarge (CSS in `styles.css`). Autora Photo wears the tool bar (docs/TOOL-RAIL.md) in Rust, in
+  `photo/overlay/autora.rs` (the `rail_*` functions): on a desktop and on a phone (`?phone=1`) the editor shows the
+  picture alone (`screen_mode = "fullScreen"`, forced each frame in `rail_pump`: no menu bar, toolbox, options bar,
+  status bar or dock) and draws round coloured tools (down the right, or along the bottom) over it, with Layers,
+  Brush settings and Colour as sheets and an All tools grid built from the editor itself: `Tool::ALL` in groups, and
+  every live command of `menus::menu_items` under its menu's name (Window's panels excepted: the dock is away),
+  searchable, each pinnable on a desktop (pins last the session; the frame has no storage). The editor's keyboard
+  shortcuts are its own and still work. The bar's taps are queued in `tick` (which only sees the app) and done in
+  the next frame's `pump`, through the editor's own commands (`menus::invoke`). Sizes are asked for in CSS pixels
+  (`per_css_px`), because a headless browser at a
   device ratio above 1 reports an editor canvas half the page's resolution and a pointer the editor mis-maps: test the phone at
-  1:1 (`tests/ui-photo.test.ts`). `build-photo.mjs` adds `serde_json` to the web app for it. No GPU: `build-photo.mjs` patches out PhotoCraft's "Switched to CPU rendering" window (`gpu_status::show_fallback`) and skips the GPU canvas on a software adapter. The pin never moves. The All tools catalogue (`menus::menu_items`, ~800 commands each checked for live/enabled/ticked) is costly: it is kept in `Rail::catalogue` and made again only when All tools opens or after a command ran, never per frame (it made every scroll and pan stutter); the bar asks its own few items' enabled state live. **Visible work** (docs/VISIBLE-WORK.md): with it on and the window open, `photo_edit` is handed to the window (`byHand` in `photodesk.ts`: a `photodesk.hand` message, claimed by the first window, answered with the picture and each command's result) and done by the overlay's hand (`hand_*` in `autora.rs`): its own cursor, real egui input through a `raw_input_hook` patched into `web.rs`, All tools -> search -> tile -> the command's dialog -> OK (the OK's rect and its result come from two patches in `widgets.rs` and `dialogs.rs`). Nobody claims it within 4 s -> the CLI does it. The state's `hand` is the revision the window made, so it does not reload it. Test: `tests/photo-hand.test.ts`.
+  1:1 (`tests/ui-photo.test.ts`). `build-photo.mjs` adds `serde_json` to the web app for it. No GPU:
+  `build-photo.mjs` patches out PhotoCraft's "Switched to CPU rendering" window (`gpu_status::show_fallback`) and
+  skips the GPU canvas on a software adapter. The pin never moves. The All tools catalogue (`menus::menu_items`,
+  ~800 commands each checked for live/enabled/ticked) is costly: it is kept in `Rail::catalogue` and made again only
+  when All tools opens or after a command ran, never per frame (it made every scroll and pan stutter); the bar asks
+  its own few items' enabled state live. **Visible work** (docs/VISIBLE-WORK.md): with it on and the window open,
+  `photo_edit` is handed to the window (`byHand` in `photodesk.ts`: a `photodesk.hand` message, claimed by the first
+  window, answered with the picture and each command's result) and done by the overlay's hand (`hand_*` in
+  `autora.rs`): its own cursor, real egui input through a `raw_input_hook` patched into `web.rs`, All tools ->
+  search -> tile -> the command's dialog -> OK (the OK's rect and its result come from two patches in `widgets.rs`
+  and `dialogs.rs`). Nobody claims it within 4 s -> the CLI does it. The state's `hand` is the revision the window
+  made, so it does not reload it. Test: `tests/photo-hand.test.ts`.
 - Second pass on a phone: the pages (Sessions, Artifacts, Tools, Settings, Mind...), the drawer, the composer and the thread were already
   one column and needed only a thumb's size on their controls (`styles.css`, "Everything else on a phone": 36-40px pills, filters and
   selects, switches and check boxes with an invisible margin, 16px fields so the browser does not zoom). The terminal's bar names it and
   its key row sits above the full-screen strip; widgets' headers are window bars; the app window's bar fits its close button and Music's
-  settings sit tempo and bars side by side with the key under them. Games and the browser got their own pass (next item). Method: open every surface at 390px, screenshot it, and list the controls under 38px.
+  settings sit tempo and bars side by side with the key under them. Games and the browser got their own pass (next
+  item). Method: open every surface at 390px, screenshot it, and list the controls under 38px.
 - Games and the browser on a phone. Games: `gdevelop-editor/overlay/.../Autora/session.js` puts `autora-phone` on the editor's `<html>`
   when the window adds `?phone=1`, and `autora.css` hides what a phone does not do with a game (Home, the Events tabs, Share, history,
   the 2D/3D switch, the project manager, the preview menu), leaving the scene, what is in it, undo, save and Play, with GDevelop's own
@@ -641,7 +788,12 @@ Spectra's fetched renderer is most of what is on disk.
   button that opens every tool in a centred modal (a pin on each tile on a desktop), a tray for the open tool (a one-row strip above
   the bar on a phone, a card beside it on a desktop; Highlight, Pen highlight, Text, Draw, Shapes, Note and Callout: three colours, a
   wheel and, for Draw, Shapes and Pen highlight, a thickness slider; Shapes steps through the figures with one button on a phone and
-  shows all seven on a desktop; Redact has A word / A line), and, on a desktop only, the left side: Spectra's nav pane with its own icon strip put away, a file menu of nine tiles (Open, Save, Save as, Merge = `document.combineFiles`, Add pages, Split, Compress, Password, Export) and a row of buttons that switch its panel (Pages, Bookmarks, Search, Signatures, Attachments, Layers, Tags, Articles) put at the top of the pane by a portal (`LeftPanel` in rail.tsx), with Spectra's own Pages thumbnails below; the pane is opened once and a button in the top bar shows or hides it; and a slim bar along the top: the menu (Spectra's own menu tree,
+  shows all seven on a desktop; Redact has A word / A line), and, on a desktop only, the left side: Spectra's nav
+  pane with its own icon strip put away, a file menu of nine tiles (Open, Save, Save as, Merge =
+  `document.combineFiles`, Add pages, Split, Compress, Password, Export) and a row of buttons that switch its panel
+  (Pages, Bookmarks, Search, Signatures, Attachments, Layers, Tags, Articles) put at the top of the pane by a portal
+  (`LeftPanel` in rail.tsx), with Spectra's own Pages thumbnails below; the pane is opened once and a button in the
+  top bar shows or hides it; and a slim bar along the top: the menu (Spectra's own menu tree,
   `commands/menus.ts`, as an accordion), Undo, Redo and Find. Every button calls Spectra's `invokeCommand`; the colour and
   thickness go through `spectra-editor/overlay/renderer/autora-style.ts` (which the canvas view and `PageCell` read, and which
   answers "no preference" until the tray sets something). `autora-tap.ts` answers a Redact tap or click from the page's text layer,
@@ -650,20 +802,32 @@ Spectra's fetched renderer is most of what is on disk.
   has no image door. A tool with no tray (Stamps, Measure...) keeps Spectra's own strip (restyled: a card beside the bar on a
   desktop); a tool with a pane (Protect, Compress...) opens it as the dock's window in the middle on a desktop and as a sheet on a
   phone. The agent has every tool regardless of what is shown, and its manual (`server/handbook.ts`) describes this window. Pinned (a frame under 520px tall) it is
-  for looking only. Video wears the tool bar (docs/TOOL-RAIL.md): `opencut-editor/src/autora/rail.tsx` (`VideoRail`) builds `src/components/ToolRail.tsx` (and `src/rail.css`, with `--s1`... named from the editor's `--a-*` tokens in `autora.css`) into the editor; a tool runs one of OpenCut's own actions (`invokeAction`, the keyboard shortcuts' registry), opens an assets-panel tab (`useAssetsPanelStore`) or flips a timeline switch; the overlay of `panels/assets/index.tsx` has no tab strip and the overlay of `timeline-toolbar.tsx` keeps only curves, scenes and the zoom slider (`zoomApi` is how the bar zooms); the overlay of `timeline/components/layout.ts` makes the track-switch column 38px on a phone, and the overlay of `timeline/components/index.tsx` gives each track on a phone one button (its type icon) that a tap steps through on, muted and hidden (`PhoneTrackMenu`), in place of three icons. Video, before that: `opencut-editor/overlay/web/app/editor/[project_id]/page.tsx` is a whole-file copy of OpenCut's
+  for looking only. Video wears the tool bar (docs/TOOL-RAIL.md): `opencut-editor/src/autora/rail.tsx` (`VideoRail`)
+  builds `src/components/ToolRail.tsx` (and `src/rail.css`, with `--s1`... named from the editor's `--a-*` tokens in
+  `autora.css`) into the editor; a tool runs one of OpenCut's own actions (`invokeAction`, the keyboard shortcuts'
+  registry), opens an assets-panel tab (`useAssetsPanelStore`) or flips a timeline switch; the overlay of
+  `panels/assets/index.tsx` has no tab strip and the overlay of `timeline-toolbar.tsx` keeps only curves, scenes and
+  the zoom slider (`zoomApi` is how the bar zooms); the overlay of `timeline/components/layout.ts` makes the
+  track-switch column 38px on a phone, and the overlay of `timeline/components/index.tsx` gives each track on a
+  phone one button (its type icon) that a tap steps through on, muted and hidden (`PhoneTrackMenu`), in place of
+  three icons. Video, before that: `opencut-editor/overlay/web/app/editor/[project_id]/page.tsx` is a whole-file
+  copy of OpenCut's
   page with a `PhoneLayout` (preview, timeline, Media and Edit sheets over the timeline slot, Export beside them, no header row)
   and an overlay of `timeline/components/timeline-toolbar.tsx` whose phone branch is six buttons; keep it in step with the
   pin's page, which never moves. Pages, Sheets and Slides were already pictures of the pages with tap-to-point
   (`OfficePages`), and Autora 3D was already built for touch (its own bottom bar). The bar at the top of every window on
   a phone is the name and round icon buttons (`TakeControl`, download, full screen), not text pills. Games are not
-  done yet. Music wears the shared rail (`src/components/ToolRail.tsx`, `src/lib/toolrail.ts`; docs/TOOL-RAIL.md): one slim transport row, the arrangement, a piano roll or mixer that opens with a clip or the Mixer tool and is one line when idle, trays for Song (tempo, key, bars), Add track and Zoom, and Ask Autora in the grid. Tests: `ui-pdfwindow`, `ui-video`, `ui-studio`.
+  done yet. Music wears the shared rail (`src/components/ToolRail.tsx`, `src/lib/toolrail.ts`; docs/TOOL-RAIL.md):
+  one slim transport row, the arrangement, a piano roll or mixer that opens with a clip or the Mixer tool and is one
+  line when idle, trays for Song (tempo, key, bars), Add track and Zoom, and Ask Autora in the grid. Tests:
+  `ui-pdfwindow`, `ui-video`, `ui-studio`.
 - Full screen on a phone (`lib/fullscreen.ts`): one shared flag for every pinned tool (browser, app window, PDF,
   Pages/Sheets/Slides, widget), so Follow (`busiestSurface` in `Thread`) moves the stage to the next tool with the
   screen still full. While it is up, `components/ImmersiveChat.tsx` is laid over it: the agent's last reply as a
   `glance` (first sentence, fades after ~5 s) placed beside the cursor when the tool reports one (`lib/cursorPos.ts`:
   the Office cursor and the PDF cues -- `autora:cursor` from the editor frame), else at the top; a translucent chat
   button and a one-line box that sends through `onSuggest`; and a Follow toggle. Office cues locate the place in
-  the editor (`office/shim/cursor.js`): text in the DOM for Pages; a deck's element box as fractions of the slide
+  the editor (`office/shim/hand.js`): text in the DOM for Pages; a deck's element box as fractions of the slide
   (`withSlideBoxes`, the canvas is not searchable); a workbook cell by clicking and reading the editor's own name
   box, so a cell the editor cannot confirm is not pointed at (and one window per app: a Pages, a Sheets and a Slides
   document each have their own window and their own tab, all open at once).
@@ -808,6 +972,12 @@ page (`thoughtFromAction`) into "Clicking “Save”", under `MAX` characters, a
 since the windows play the work after it; the browser (and so Creator) draws its own inside the page (`__autoraThought` in
 `CURSOR_SCRIPT`, set from `LiveBrowser`'s `hooks.onAction`) and the 3D frame inside its own pointer. Photo draws its own,
 inside the editor (the hand, `hand_*` in `photo/overlay/autora.rs`), live while `photo_edit` is done there; nothing is
-played over a picture the server changed. Terminal: the agent's command is typed into the window key by key at a person's pace (`termAgentBegin`, server-side, so the output waits behind it and order holds), the page is told `{t:"agent", on}`, and the pointer follows the text cursor with its tag showing the caret.
-**Whose cursor**: `lib/cursorWho.ts` reads the chat's `agent.started` line and lays `--agent-accent(-rgb)` on the page, which every cursor style reads; the tag carries the agent's name and the polygon of its mark (`CursorTag`, `pointer.ts`); the browser's page pointer is told by `LiveBrowser`'s `who` hook (`cursorWhoFor` in `server.ts`), the 3D frame by `{autora3d:"who"}`, the terminal's own tag by its colour in `termAgentBegin`. All of it is off with the agent-cursor switch. Tests: `thought.test.ts`,
+played over a picture the server changed. Terminal: the agent's command is typed into the window key by key at a
+person's pace (`termAgentBegin`, server-side, so the output waits behind it and order holds), the page is told
+`{t:"agent", on}`, and the pointer follows the text cursor with its tag showing the caret.
+**Whose cursor**: `lib/cursorWho.ts` reads the chat's `agent.started` line and lays `--agent-accent(-rgb)` on the
+page, which every cursor style reads; the tag carries the agent's name and the polygon of its mark (`CursorTag`,
+`pointer.ts`); the browser's page pointer is told by `LiveBrowser`'s `who` hook (`cursorWhoFor` in `server.ts`), the
+3D frame by `{autora3d:"who"}`, the terminal's own tag by its colour in `termAgentBegin`. All of it is off with the
+agent-cursor switch. Tests: `thought.test.ts`,
 `browser-cursor.test.ts`.

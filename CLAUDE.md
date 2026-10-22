@@ -33,18 +33,19 @@ Only when a change genuinely has no user-facing effect, skip the bump and put
 
 ## Other checks before pushing
 
-Once per checkout, also `npm --prefix opencut-editor ci` and `npm --prefix autora-3d ci` (both are typechecked and built), and `npm --prefix spectra-editor ci`: the PDF window's
-editor is a sub-project with its own dependencies (see docs/MODULES.md).
+`npm run check` is the check for a change: the three root typechecks, an embedded editor's typecheck only when
+something it uses changed, ESLint, knip (unused code), the release check, then the tests the change can reach
+(`npm test -- --changed`, from the import graph in `tests/affected.ts`). Each editor it does typecheck needs its own
+`npm --prefix <editor> ci` once per checkout (spectra-editor, opencut-editor, gdevelop-editor, autora-3d; see
+docs/MODULES.md). It must pass before a push; CI then runs everything.
 
-- `npm run lint`: typechecks the client (`tsconfig.json`), the server
-  (`tsconfig.server.json`) and the tests (`tsconfig.test.json`), then runs
-  ESLint (`eslint.config.js`). ESLint is type-aware and aimed at bugs, not
-  style: unawaited promises (mark fire-and-forget ones with `void`), hooks
-  called conditionally or with stale dependencies, unused code. It must pass
-  with no errors or warnings; `.github/workflows/check.yml` and the Docker
-  build both run it.
-- `npm test` (after `npm run build`: the PDF window's test drives the built editor)
-- `npm run build`: also builds `spectra-editor/` into `dist/spectra-editor/`
+- `npm run lint` is the full static run (every editor). ESLint is type-aware and aimed at bugs, not style:
+  unawaited promises (mark fire-and-forget ones with `void`), hooks called conditionally or with stale dependencies,
+  unused code. No errors or warnings; `.github/workflows/check.yml` and the Docker build run it.
+- `npm test` runs every file (`-- name` filters, `-- -j 4` in parallel); UI tests need `npm run build` first.
+- A model's quirk (a field it refuses, an endpoint it needs) goes in `server/modelprofile.ts`, never as a special
+  case in `server/llm.ts`'s request builders. Measure a change to the prompt, tools or loop with `npm run eval -- code`
+  (docs/EVAL.md) on each vendor it touches: the figure is cost per finished task.
 
 ## Improvements an agent has recorded
 

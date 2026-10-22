@@ -212,6 +212,19 @@ export function readFile(args: ReadArgs, deps: { root: string; protect?: string[
   return { ok: true, content, text: `${head}, lines ${start}-${capped}:\n${numbered(lines, start, capped)}${more}` };
 }
 
+/**
+ * The whole declaration a line sits inside, numbered, when it is at most `maxLines` long: what a search hands back so
+ * that finding a place and reading it are one call, not two. Null at top level, or when it is longer (then the
+ * search's own lines and a read with symbol are the way in).
+ */
+export function bodyAround(lines: string[], line: number, maxLines: number, decls: Decl[] = declarations(lines)): { decl: Decl; from: number; to: number; text: string } | null {
+  const d = enclosing(decls, line);
+  if (!d) return null;
+  const to = endOf(lines, decls, decls.indexOf(d));
+  if (to < line || to - d.line + 1 > maxLines) return null;
+  return { decl: d, from: d.line, to, text: numbered(lines, d.line, to) };
+}
+
 /** The declaration a line sits inside: the nearest one above it that is not a heading. */
 export function enclosing(decls: readonly Decl[], line: number): Decl | null {
   let found: Decl | null = null;

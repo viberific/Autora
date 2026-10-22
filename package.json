@@ -1,7 +1,7 @@
 {
   "name": "autora",
   "private": true,
-  "version": "0.9.295",
+  "version": "0.9.296",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
@@ -11,6 +11,7 @@
     "unused": "knip --no-progress",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json && tsc --noEmit -p tsconfig.test.json && npm --prefix spectra-editor run typecheck && npm --prefix opencut-editor run typecheck && npm --prefix gdevelop-editor run typecheck && npm --prefix autora-3d run typecheck",
     "test": "tsx tests/run.ts",
+    "check": "tsx scripts/check.ts",
     "build:office": "node scripts/build-office.mjs",
     "build:photo": "node scripts/build-photo.mjs",
     "replay": "tsx scripts/replay.ts",

@@ -101,7 +101,11 @@ async function main() {
     // written a beat after the turn ends, not with it.
     await app.turn(s, "one line, so this session has a log");
     const log = sessionLog(app.home, s);
-    for (let i = 0; i < 40 && !fs.existsSync(log); i += 1) await sleep(100);
+    /* Until the turn's end is on disk, not only the file: the store writes events in batches (store.ts appendEvent),
+       and the file is there from session.started. Seeding ahead of the batch put the learned event under a seq the
+       turn's own events then took. */
+    const turnOnDisk = () => fs.existsSync(log) && fs.readFileSync(log, "utf8").includes('"turn.agent.done"');
+    for (let i = 0; i < 50 && !turnOnDisk(); i += 1) await sleep(100);
     seedLearned(app.home, s, { id: learned.body.id, revises: old.body.id });
     await app.restart();
     assert.ok(

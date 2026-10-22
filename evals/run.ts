@@ -19,6 +19,14 @@
  * variable (ANTHROPIC_API_KEY, ...) stands in for a saved one. The key goes only
  * to the throwaway server the run starts, through its environment.
  * Several runs per task (`--runs`) tell a real change from a lucky one.
+ *
+ * Tools: the set a person gets -- the always-on tools, with the specialist sets
+ * loaded when the words or a call ask for them -- so tokens are measured as they
+ * are spent. `--all-tools` offers every set from the start, as the e2e tests do.
+ *
+ * The figure that matters is cost per finished task: tokens or dollars spent on
+ * all runs of an area, over the runs that passed. A change that makes each call
+ * cheaper and needs more of them, or fails more often, does not get cheaper.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -58,6 +66,8 @@ const toRun = (events: Ev[], dir: string, ms: number, timedOut: boolean): Run =>
     rounds: usage.length,
     input: usage.reduce((n, e) => n + (e.payload.input_tokens ?? 0), 0),
     output: usage.reduce((n, e) => n + (e.payload.output_tokens ?? 0), 0),
+    cached: usage.reduce((n, e) => n + (e.payload.cached_tokens ?? 0), 0),
+    cacheWrite: usage.reduce((n, e) => n + (e.payload.cache_write_tokens ?? 0), 0),
     costUsd: usage.reduce((n, e) => n + (e.payload.cost_usd ?? 0), 0),
     log: events.map((e) => JSON.stringify(e.payload)).join("\n"),
   };
@@ -91,7 +101,7 @@ async function attempt(task: Task, script?: Scripted[]): Promise<Outcome> {
   const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "autora-eval-")));
   await task.setup?.(dir);
   const real = script ? null : backend();
-  const app = await startApp({ env: { AUTORA_WORKDIR: dir, ...real?.keyEnv } });
+  const app = await startApp({ env: { AUTORA_WORKDIR: dir, AUTORA_ALL_TOOLS: flag("all-tools") ? "1" : "0", ...real?.keyEnv } });
   try {
     if (script) app.script.push(...script);
     else {
@@ -116,8 +126,11 @@ async function attempt(task: Task, script?: Scripted[]): Promise<Outcome> {
     }, 1500);
     let events: Ev[] = [];
     let timedOut = false;
-    try { events = await app.turn(session, task.prompt, timeout); }
-    catch { timedOut = true; events = await app.events(session); }
+    try {
+      events = await app.turn(session, task.prompt, timeout);
+      // A follow-up is said once the turn before it has ended, as a person would.
+      for (const next of task.followups ?? []) events = await app.turn(session, next, timeout);
+    } catch { timedOut = true; events = await app.events(session); }
     clearInterval(answering);
     // What the person is handed is the file card in the thread. Office files and
     // PDFs the agent makes live in the app's file store, not the folder, so each
@@ -185,18 +198,20 @@ async function main(): Promise<number> {
       catch (err) { console.error(`\n${task.id}: could not run: ${(err as Error).message}`); return 1; }
       all.push(o);
       const failed = o.checks.filter((c) => !c.pass);
-      console.log(`${o.pass ? "PASS" : "FAIL"}  ${task.area.padEnd(9)} ${task.id.padEnd(30)} ${String(o.run.rounds).padStart(2)} rounds ${String(o.run.calls.length).padStart(2)} calls ${String(o.run.input + o.run.output).padStart(7)} tok ${(o.run.ms / 1000).toFixed(0).padStart(3)}s${o.heavy.length ? `  HEAVY: ${o.heavy.join(", ")}` : ""}`);
+      console.log(`${o.pass ? "PASS" : "FAIL"}  ${task.area.padEnd(9)} ${task.id.padEnd(30)} ${String(o.run.rounds).padStart(2)} rounds ${String(o.run.calls.length).padStart(2)} calls ${String(o.run.input + o.run.output).padStart(7)} tok ${pct(o.run.cached ?? 0, o.run.input).padStart(4)} cached $${o.run.costUsd.toFixed(4)} ${(o.run.ms / 1000).toFixed(0).padStart(3)}s${o.heavy.length ? `  HEAVY: ${o.heavy.join(", ")}` : ""}`);
       for (const c of failed) console.log(`        x ${c.name}${c.note ? ` (${c.note})` : ""}`);
       if (failed.length) console.log(`        said: ${o.reply.replace(/\s+/g, " ").slice(0, 160)}`);
     }
   }
 
-  console.log("\nBy area (checks passed / tasks fully passed / mean tokens / mean cost)");
-  for (const area of ["work", "guide", "safe", "honest", "efficient"] as const) {
+  console.log("\nBy area (checks passed / tasks fully passed / mean tokens / share of input cached / mean rounds / cost per finished task)");
+  for (const area of ["work", "guide", "safe", "honest", "efficient", "code"] as const) {
     const rows = all.filter((o) => o.area === area);
     if (!rows.length) continue;
     const c = rows.flatMap((o) => o.checks);
-    console.log(`  ${area.padEnd(10)} ${pct(c.filter((x) => x.pass).length, c.length).padStart(4)} checks  ${pct(rows.filter((o) => o.pass).length, rows.length).padStart(4)} tasks  ${Math.round(mean(rows.map((o) => o.run.input + o.run.output))).toString().padStart(7)} tok  $${mean(rows.map((o) => o.run.costUsd)).toFixed(3)}`);
+    const passed = rows.filter((o) => o.pass).length;
+    const spent = rows.reduce((n, o) => n + o.run.costUsd, 0);
+    console.log(`  ${area.padEnd(10)} ${pct(c.filter((x) => x.pass).length, c.length).padStart(4)} checks  ${pct(passed, rows.length).padStart(4)} tasks  ${Math.round(mean(rows.map((o) => o.run.input + o.run.output))).toString().padStart(7)} tok  ${pct(rows.reduce((n, o) => n + (o.run.cached ?? 0), 0), rows.reduce((n, o) => n + o.run.input, 0)).padStart(4)} cached  ${mean(rows.map((o) => o.run.rounds)).toFixed(1).padStart(4)} rounds  ${passed ? `$${(spent / passed).toFixed(4)}` : "n/a (none passed)"} per finished task`);
   }
   console.log(`  total      ${pct(all.filter((o) => o.pass).length, all.length)} of ${all.length} runs fully passed; $${all.reduce((n, o) => n + o.run.costUsd, 0).toFixed(2)} spent`);
 
@@ -221,7 +236,11 @@ function compare(then: Outcome[], now: Outcome[]) {
     const tok = (xs: Outcome[]) => mean(xs.map((o) => o.run.input + o.run.output));
     const d = rate(b) - rate(a);
     const dt = tok(a) ? Math.round((100 * (tok(b) - tok(a))) / tok(a)) : 0;
-    console.log(`  ${id.padEnd(30)} ${pct(a.filter((o) => o.pass).length, a.length).padStart(4)} -> ${pct(b.filter((o) => o.pass).length, b.length).padStart(4)}  ${d < 0 ? "WORSE " : d > 0 ? "better" : "same  "}  tokens ${dt >= 0 ? "+" : ""}${dt}%${Math.min(a.length, b.length) < 3 ? "  (under 3 runs each: a hint, not a result)" : ""}`);
+    /* Dollars per finished task, the figure a change is judged on: cheaper calls that fail more often are not cheaper. */
+    const perPass = (xs: Outcome[]) => { const n = xs.filter((o) => o.pass).length; return n ? xs.reduce((m, o) => m + o.run.costUsd, 0) / n : null; };
+    const ca = perPass(a), cb = perPass(b);
+    const dc = ca && cb !== null ? `  cost per finished task ${cb >= ca ? "+" : ""}${Math.round((100 * (cb - ca)) / ca)}%` : "";
+    console.log(`  ${id.padEnd(30)} ${pct(a.filter((o) => o.pass).length, a.length).padStart(4)} -> ${pct(b.filter((o) => o.pass).length, b.length).padStart(4)}  ${d < 0 ? "WORSE " : d > 0 ? "better" : "same  "}  tokens ${dt >= 0 ? "+" : ""}${dt}%${dc}${Math.min(a.length, b.length) < 3 ? "  (under 3 runs each: a hint, not a result)" : ""}`);
   }
 }
 

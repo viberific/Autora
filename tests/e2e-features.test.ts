@@ -9,7 +9,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import http from "node:http";
-import { sleep, startApp, type App, type Ev } from "./e2e-harness";
+import { turnStart, sleep, startApp, type App, type Ev } from "./e2e-harness";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -91,7 +91,7 @@ async function main() {
     await test("Agent starts every turn planning again", async () => {
       const s = await app.newSession();
       await app.api("PATCH", `/api/sessions/${s}`, { mode: "agent" });
-      app.decide = (req) => req.messages.filter((m) => m.role === "tool").length === 0 && /switch/.test(req.last)
+      app.decide = (req) => turnStart(req) && /switch/.test(req.last)
         ? { tools: [{ name: "set_mode", args: { to: "build" } }] } : { text: "ok" };
       const one = await app.turn(s, "switch now");
       assert.deepEqual(one.filter((e) => e.kind === "mode.switch").map((e) => e.payload.to), ["plan", "build"]);

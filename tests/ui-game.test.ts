@@ -14,7 +14,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { chromium, type Frame } from "playwright-core";
-import { sleep, startApp } from "./e2e-harness";
+import { turnStart, sleep, startApp } from "./e2e-harness";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -46,7 +46,7 @@ async function main() {
     hello.content.text = "Hello Autora";
     const sprite = clone(catalog.templates.objects.Sprite);
     sprite.name = "Cat";
-    app.decide = (req) => req.messages.filter((m) => m.role === "tool").length === 0
+    app.decide = (req) => turnStart(req)
       ? { tools: [
         { name: "game_open", args: { name: "Cat jump" } },
         { name: "game_edit", args: { ops: [

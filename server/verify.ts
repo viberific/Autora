@@ -10,17 +10,123 @@
  * it, up to a few runs a turn; after that the turn ends and says the check is
  * still failing rather than claiming a pass.
  *
- * Off until a command is set: Autora is not tied to any one kind of project.
+ * With no command set, the project's own check is looked for (detectCheck): the
+ * scripts in its package.json, its tsconfig, pytest, cargo, go. Found that way it
+ * runs only when the agent says it is done (not after each to-do item), at most
+ * twice a turn, and the agent is told it was not the person's choice, so a
+ * suite that was already failing is reported rather than chased. Settings can turn
+ * the looking off.
  */
 
+import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+
 export interface VerifyConfig {
-  /** The command to run in the terminal's directory. Empty means off. */
+  /** The command to run in the terminal's directory. Empty: detect one, or none. */
   command: string;
   /** Most runs of it in one turn. */
   tries: number;
+  /** With no command: look for the project's own check and run that. */
+  auto: boolean;
 }
 
-export const VERIFY_DEFAULTS: VerifyConfig = { command: "", tries: 3 };
+export const VERIFY_DEFAULTS: VerifyConfig = { command: "", tries: 3, auto: true };
+
+/** The check a turn runs: the person's, or one found in the project. */
+export interface ProjectCheck {
+  command: string;
+  tries: number;
+  /** Found by detectCheck, not set by the person. */
+  auto: boolean;
+  /** Where it runs. */
+  cwd: string;
+}
+
+/** A detected check runs at most this often a turn: once, and once more after a fix. */
+const AUTO_TRIES = 2;
+
+/** Scripts worth running as the check, best first: a whole check, then types, then tests, then lint, then a build. */
+const SCRIPT_ORDER = ["check", "verify", "typecheck", "type-check", "test", "lint", "build"];
+/** A script that never ends on its own (a watcher, a server) is no check. */
+const LONG_RUNNING = /--watch\b|\bwatch\b|nodemon|\bserve\b|\bdev\b|\bstart\b|storybook|--ui\b/;
+/** npm's placeholder test script. */
+const NO_TEST = /no test specified/;
+
+const onPath = new Map<string, boolean>();
+function has(command: string, args: string[] = ["--version"]): boolean {
+  const key = `${command} ${args.join(" ")}`;
+  if (!onPath.has(key)) {
+    const r = spawnSync(command, args, { stdio: "ignore", timeout: 4_000 });
+    onPath.set(key, r.status === 0);
+  }
+  return onPath.get(key)!;
+}
+
+function readJson(file: string): any {
+  try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; }
+}
+
+const exists = (dir: string, name: string) => fs.existsSync(path.join(dir, name));
+
+/**
+ * The check a project already has, in this folder, or null. Only what can run as it
+ * stands: npm scripts only once its dependencies are installed, pytest only where it
+ * is importable, cargo and go only where they are on the PATH. Several are joined
+ * with && so the first failure stops the rest.
+ */
+export function detectCheck(dir: string): string | null {
+  const pkg = readJson(path.join(dir, "package.json"));
+  if (pkg && exists(dir, "node_modules")) {
+    const scripts: Record<string, string> = pkg.scripts && typeof pkg.scripts === "object" ? pkg.scripts : {};
+    const usable = (name: string) => typeof scripts[name] === "string" && !LONG_RUNNING.test(scripts[name]) && !NO_TEST.test(scripts[name]);
+    const runner = exists(dir, "pnpm-lock.yaml") && has("pnpm") ? "pnpm" : exists(dir, "yarn.lock") && has("yarn") ? "yarn" : "npm";
+    /* CI=1 on each command: test runners that watch by default (jest, vitest, react-scripts) run once with it. */
+    const run = (name: string) => `CI=1 ${runner === "npm" ? `npm run -s ${name}` : `${runner} -s ${name}`}`;
+    const whole = SCRIPT_ORDER.slice(0, 2).find(usable);
+    if (whole) return run(whole);
+    // Types and tests together when both exist: each catches what the other does not.
+    const picked = SCRIPT_ORDER.slice(2, 5).filter(usable).filter((n, i, all) => !(n === "type-check" && all.includes("typecheck")));
+    if (picked.length) return picked.map(run).join(" && ");
+    if (exists(dir, "tsconfig.json") && exists(dir, "node_modules/.bin/tsc")) return "npx --no-install tsc --noEmit -p .";
+    const rest = SCRIPT_ORDER.slice(5).find(usable);
+    if (rest) return run(rest);
+  }
+  if (!pkg && exists(dir, "tsconfig.json") && exists(dir, "node_modules/.bin/tsc")) return "npx --no-install tsc --noEmit -p .";
+  if (exists(dir, "Cargo.toml") && has("cargo")) return "cargo check -q --message-format short";
+  if (exists(dir, "go.mod") && has("go", ["version"])) return "go vet ./...";
+  const python = ["pyproject.toml", "setup.py", "setup.cfg", "pytest.ini", "tox.ini"].some((f) => exists(dir, f)) ||
+    exists(dir, "tests") && fs.readdirSync(path.join(dir, "tests")).some((f) => /^test_.*\.py$|_test\.py$/.test(f));
+  if (python && has("python3", ["-c", "import pytest"])) return "python3 -m pytest -q -x";
+  return null;
+}
+
+/**
+ * The check this turn runs, or null for none. The person's command wins; otherwise,
+ * when looking is on, the project's own, searched for from each folder the agent
+ * changed files in up to the working folder (a project in a subfolder is found too),
+ * then in the working folder itself.
+ */
+export function projectCheck(config: VerifyConfig, root: string, changed: readonly string[] = []): ProjectCheck | null {
+  if (config.command) return { command: config.command, tries: config.tries, auto: false, cwd: root };
+  if (!config.auto) return null;
+  const top = path.resolve(root);
+  const tried = new Set<string>();
+  for (const file of [...changed].reverse()) {
+    let dir = path.dirname(path.resolve(top, file));
+    if (dir !== top && !dir.startsWith(top + path.sep)) continue;
+    while (!tried.has(dir)) {
+      tried.add(dir);
+      const found = detectCheck(dir);
+      if (found) return { command: found, tries: Math.min(config.tries, AUTO_TRIES), auto: true, cwd: dir };
+      if (dir === top) break;
+      dir = path.dirname(dir);
+    }
+  }
+  if (tried.has(top)) return null;
+  const found = detectCheck(top);
+  return found ? { command: found, tries: Math.min(config.tries, AUTO_TRIES), auto: true, cwd: top } : null;
+}
 
 const MAX_COMMAND = 500;
 
@@ -33,12 +139,15 @@ export function mergeVerify(into: VerifyConfig, patch: any): VerifyConfig {
     }
     const n = Number(patch.tries);
     if (Number.isFinite(n)) into.tries = Math.min(10, Math.max(1, Math.round(n)));
+    if (typeof patch.auto === "boolean") into.auto = patch.auto;
   }
   return into;
 }
 
 export interface CheckResult {
   command: string;
+  /** Found in the project rather than set by the person (see projectCheck). */
+  auto?: boolean;
   exitCode: number | null;
   ok: boolean;
   /** What it printed, already cut to a size the agent can read. */
@@ -103,7 +212,8 @@ export function failedNote(r: CheckResult, run: number, tries: number, previous?
     left > 0
       ? `Fix what it reports and carry on; the check will run again when you are done (${left} more run${left === 1 ? "" : "s"} this turn). ` +
         "Do not say the work is finished while it is failing. If it fails for a reason that is not yours -- something already broken, " +
-        "or an environment problem -- say so plainly rather than working around it.)"
+        "or an environment problem -- say so plainly rather than working around it." +
+        (r.auto ? " This check was found in the project, not chosen by the person: failures in code you did not touch are theirs to know about, not yours to fix." : "") + ")"
       : "That was the last run this turn. Say plainly that it is still failing and what you could not fix; do not say the work is done.)",
   ].join("\n");
 }

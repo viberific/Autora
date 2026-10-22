@@ -9,7 +9,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { chromium, type Page } from "playwright-core";
-import { sleep, startApp } from "./e2e-harness";
+import { turnStart, sleep, startApp } from "./e2e-harness";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -247,7 +247,7 @@ async function main() {
     });
     await test("Agent's switches are said in the thread as they happen", async () => {
       await app.api("PATCH", `/api/sessions/${s}`, { mode: "agent", permissions: "yolo" });
-      app.decide = (req) => req.messages.filter((m) => m.role === "tool").length === 0
+      app.decide = (req) => turnStart(req)
         ? { tools: [{ name: "set_mode", args: { to: "build", reason: "the plan is set" } }] } : { text: "All done here." };
       await page.goto(`${app.base}/?session=${s}`);
       await say("do the thing");
@@ -260,7 +260,9 @@ async function main() {
 
     console.log("the to-do list");
     await test("finished items have a filled box with a drawn tick and a struck title; the tick animates in", async () => {
-      app.decide = (req) => req.messages.filter((m) => m.role === "tool").length === 0
+      /* The turn's first request ends on the person's message; the history before it may hold an earlier turn's tool
+         work in this chat (carried on while it is in the vendor's cache). */
+      app.decide = (req) => turnStart(req)
         ? { tools: [{ name: "todo", args: { todos: [{ title: "Read it", status: "completed" }, { title: "Write it", status: "in-progress" }, "Send it"] } }] }
         : { text: "On it." };
       await page.goto(`${app.base}/?session=${s}`);

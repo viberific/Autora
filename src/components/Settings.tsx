@@ -118,6 +118,7 @@ type LoopConfig = {
 type VerifyConfig = {
   command: string;
   tries: number;
+  auto?: boolean;
 };
 
 type RetentionPolicy = {
@@ -793,7 +794,9 @@ export function Settings({
           <p className="jf-hint">
             Runs when the agent says it is done and has changed something: your
             linter, tests or build, in the terminal's directory. A failure sends
-            the agent back with the output. Leave empty for none.
+            the agent back with the output. Left empty, the project's own check
+            is used when it has one (its type check, tests or build), unless you
+            turn that off below.
           </p>
           <input
             className="set-prompt"
@@ -816,6 +819,20 @@ export function Settings({
                 onChange={(e) => setVerify({ ...verify, tries: Number(e.target.value) })}
               />
               <span className="tool-unit">times a turn</span>
+            </label>
+            <label className="tool-opt">
+              <span className="tool-label">Find the project's own check</span>
+              <button
+                type="button"
+                className={`job-switch ${verify.auto !== false ? "on" : ""}`}
+                role="switch"
+                aria-checked={verify.auto !== false}
+                aria-label={`Find the project's own check: ${verify.auto !== false ? "on" : "off"}`}
+                disabled={Boolean(verify.command.trim())}
+                onClick={() => setVerify({ ...verify, auto: verify.auto === false })}
+              >
+                <span className="job-knob" />
+              </button>
             </label>
           </div>
         </section>

@@ -188,9 +188,15 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  Fixes OpenAI models (such as gpt-6 Luna) failing with "Invalid 'tools': array too long". OpenAI accepts at most 128
-  tools per request, so when more are switched on, 128 are sent: tools the chat has already used first, then the built-in
-  ones, then ones the agent wrote, and connected-server tools last. The model is
-  told the names of any left out, and can still call them by name. Requests to OpenAI also now repair what it
-  rejects from connected (MCP) servers: arrays in a tool's inputs with no item type, a repeated tool name, and a
-  tool-call id over 40 characters. Other providers are sent exactly what they were before.
+  Fixes OpenAI's GPT-6 models (such as gpt-6 Luna) failing with "Function tools with reasoning_effort are not
+  supported": they are now reached through OpenAI's Responses API, which lets them use tools while reasoning, and any
+  other OpenAI model that asks for it is switched the same way. Other models are sent what they were before.
+  Coding work costs fewer rounds and tokens: an edit that leaves a file unable to parse is reported at once; the
+  project's own check (tests, type check or build) runs when the agent says it is done, if you have set none
+  (Settings can turn this off); a search shows the whole short function it found; several files are read in one
+  step; a short map of the project comes with each coding message; and a follow-up sent within a few minutes keeps
+  what the agent already read instead of reading it again. Research lookups run on a cheaper model of the same
+  provider, and how much a model thinks is now set automatically per model (less for small talk and unwatched
+  work, the efficient level for each model's real work). Adds Claude Opus 5.5, Sonnet 5.5
+  and Haiku 5.5 (now Anthropic's default) and stops sending the newest Claude models a setting they refuse.
+  Automatic provider choice now prices the model you picked for each provider.

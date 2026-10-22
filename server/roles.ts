@@ -58,6 +58,20 @@ export function backgroundTarget(r: RoleModels, override?: string, cheaper?: str
 }
 
 /**
+ * The model a research worker runs on: AUTORA_WORKER_MODEL when set ("main" keeps the main model), else a cheaper model
+ * of the main provider when its price list has one, else the main model. A worker's conversation is its own -- only
+ * its report reaches the chat -- so unlike a planner it shares no prompt cache with the main model and costs none.
+ * It only looks things up with read-only tools, and the main model judges what it reports.
+ */
+export function workerTarget(r: Pick<RoleModels, "provider" | "model" | "key" | "baseUrl">, override?: string, cheaper?: string | null): Target {
+  const main = mainTarget(r);
+  const forced = (override || "").trim();
+  if (forced === "main") return main;
+  if (forced) return { ...main, model: forced };
+  return cheaper ? { ...main, model: cheaper } : main;
+}
+
+/**
  * Every model that may answer in one conversation this turn, for the context
  * window: they all hold the same conversation, so the smallest window binds.
  * The voice is the main provider's.

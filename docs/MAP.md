@@ -37,7 +37,7 @@ task is about the PDF editor's shim or overlay.
    (`EVENT_BATCH_MS` in `App.tsx`), folds the whole log with `derive()` (`src/lib/derive.ts`),
    keeps unchanged cards' identity with `share()` (`src/lib/share.ts`), renders `Thread`.
 
-## `server.ts` (6.4k lines), by region
+## `server.ts` (7.3k lines), by region
 
 | Region (search for) | What |
 |---|---|
@@ -49,7 +49,7 @@ task is about the PDF editor's shim or overlay.
 | `previewRunFor` ... `previewStart` | the app (Creator) window |
 | `stopTurn`, `askPermission`, `askPerson`, `settleAsk` | approvals and questions |
 | `modelGuard`, `heldFor`, `targetBrowser` | guards before a tool runs |
-| `engineFor`, `historyFor`, `pastToolCalls` | context engine and history sent to the model |
+| `engineFor`, `applyWindow` | the context engine per chat and its window (the history itself: `server/history.ts`) |
 | `systemInstructionFor` | the system prompt: `pinned` (cached) + `note` (per turn) |
 | `notify`, `sendPush`, `flushHeldPushes` | phone notifications |
 | `proactiveSweep`, `createJob`, `noticeTick`, `reflect` | jobs, watchers, proactive turns, learning |
@@ -67,18 +67,27 @@ task is about the PDF editor's shim or overlay.
 - Automation: `/api/jobs*`, `/api/triggers*`, `/api/automation`, `/api/autonomy*`, `/api/policy/:requestId`, `/api/proactive*`
 - Settings: `/api/settings`, `/api/secrets*`, `/api/credentials*`, `/api/providers/:id/*`, `/api/usage*`, `/api/speech*`
 - System: `/api/system`, `/api/host`, `/api/storage*`, `/api/notices`, `/api/tools/health`, `/api/custom-tools*`, `/api/relay`, `/relay.py`, `/api/push/*`
-- Elsewhere: `server/routes/{system,artifacts,mcp,notebooks,memory,keys,settings,health,preview,browser,jobs,triggers,proactive}.ts` (memory graph and the small Mind switches; secrets, credentials, provider models, billing and usage; the Settings API and speech; tool health, host, storage, custom tools; the app window; the live browser's clicks, tabs, devtools, extensions and the app's versions; scheduled jobs; triggers; suggestions, notices and push). What each needs from `server.ts` arrives in a typed `deps` object; the shapes `Session`, `PreviewRun`, `Notice` and `AutoraEvent` are in `server/session-types.ts`. Still in `startServer`: sessions, the event/blob/trace reads, `/browser` state, `message`, `interrupt`, `ask`, policy approvals, autonomy, relay and the widget routes; `officeRoutes` (`server/officedesk.ts`); `deskRoutes` (`server/pdfdesk.ts`); `spectraRoutes` (`server/spectra.ts`); `server/newfile.ts`
+- Elsewhere:
+  `server/routes/{system,artifacts,mcp,notebooks,memory,keys,settings,health,preview,browser,jobs,triggers,proactive}.ts`
+  (memory graph and the small Mind switches; secrets, credentials, provider models, billing and usage; the Settings
+  API and speech; tool health, host, storage, custom tools; the app window; the live browser's clicks, tabs,
+  devtools, extensions and the app's versions; scheduled jobs; triggers; suggestions, notices and push). What each
+  needs from `server.ts` arrives in a typed `deps` object; the shapes `Session`, `PreviewRun`, `Notice` and
+  `AutoraEvent` are in `server/session-types.ts`. Still in `startServer`: sessions, the event/blob/trace reads,
+  `/browser` state, `message`, `interrupt`, `ask`, policy approvals, autonomy, relay and the widget routes;
+  `officeRoutes` (`server/officedesk.ts`); `deskRoutes` (`server/pdfdesk.ts`); `spectraRoutes`
+  (`server/spectra.ts`); `server/newfile.ts`
 
 ## `server/`, by job
 
 | Job | Files |
 |---|---|
-| Model calls | `llm.ts` (one call, any vendor), `providers.ts` (vendors, prices), `billing.ts`, `vendor-money.ts` |
+| Model calls | `llm.ts` (one call, any vendor), `modelprofile.ts` (per-model fields: effort, temperature, learned refusals), `providers.ts` (vendors, prices), `roles.ts` (which model does which job), `billing.ts`, `vendor-money.ts` |
 | The prompt | `prompt.ts`, `guides.ts` (the `*_GUIDE` texts), `tools.ts` `capabilityBriefing`, `server.ts` `systemInstructionFor`, `COLLABORATION` |
 | Tool schemas | `specs/{browser,computer,files,memory,person,schedule,skills,studio,terminal,video,voice}.ts` (`pdf_*` and `office_*` live in `specs/files.ts`) |
 | Tool execution | `tools.ts` `runTool` (the big switch), `argcheck.ts`, `guard.ts`, `modes.ts`, `toolload.ts` (which families are shown) |
-| Context | `context.ts` (compaction, vault), `pages.ts` (page re-reads), `readfile.ts`, `hints.ts` |
-| Loop safety | `loopwatch.ts`, `errorbudget.ts`, `budgetstore.ts`, `toolhealth.ts`, `resume.ts`, `verify.ts` |
+| Context | `context.ts` (compaction, vault, cache carry-over), `history.ts` (`historyFor`, `pastToolCalls`: the log as the model sees it), `datasieve.ts` (images lifted out of a streaming reply), `pages.ts` (page re-reads), `readfile.ts`, `hints.ts` |
+| Loop safety | `loopwatch.ts`, `errorbudget.ts`, `budgetstore.ts`, `toolhealth.ts`, `resume.ts`, `verify.ts` (the project check, found or set) |
 | Quick turns | `quick.ts` (`isSmallTalk`: a hello or thanks skips the plan and the thinking; `startTurn` sets `opts.quick`), `fastpath.ts` (a few exact questions, time, date and which model, answered with no model call; fails open, logged) |
 | Working notes | `todos.ts`, `ledger.ts`, `requirements.ts` |
 | Sub-agent | `subagent.ts` (+ `researchFor` in `runTurn`) |
@@ -88,7 +97,7 @@ task is about the PDF editor's shim or overlay.
 | Cost per task | `taskledger.ts` (a record per turn: kind of work, cost of every call it made, how it went; `routes/tasks.ts`; the Usage page's `TaskCosts.tsx`) |
 | Browser | `browser.ts` (4.5k: `LiveBrowser`), `human.ts`, `captcha*.ts`, `pagedescribe.ts`, `browsedata.ts`, `extensions.ts`, `cookies.ts`, `signins.ts`, `liveview.ts` |
 | App window | `preview.ts`, `pick.ts`, `domdiff.ts`, `snapshots.ts` |
-| Code | `codediff.ts` (`Workspace`), `codesearch.ts`, `editfile.ts`, `merge3.ts`, `background.ts` (long jobs) |
+| Code | `codediff.ts` (`Workspace`), `codesearch.ts`, `editfile.ts`, `syntaxcheck.ts` (does it still parse), `merge3.ts`, `background.ts` (long jobs) |
 | Video | `opencut.ts` (the project store, the window's state, commands to the editor, the `video_*` tools), `specs/video.ts` |
 | PDF | `pdf.ts` (3k: every `pdf_*` tool), `pdftext.ts`, `pdfrender.ts`, `compose.ts`, `pdfdesk.ts` (window state), `spectra.ts` + `spectra/{engine,commands}.ts` (the window's editor and its Python engine) |
 | Music | `studio.ts` (the song per chat, routes, commands to the window, `runStudioTool`), `specs/studio.ts`, `src/lib/studio/model.ts` (the song and the theory: shared with the page) |
@@ -144,7 +153,9 @@ class (`.pdf-window`, `.app-window`, `.composer`, `.rail`, `.turn`, `.cell`...).
 ## Recipes
 
 - **New tool**: schema in `server/specs/<group>.ts`, case in `runTool` (`server/tools.ts`), if specialist add to a family in `server/toolload.ts`, a test in `tests/`.
-- **New route**: in a `server/routes/*.ts` module (what it needs from server.ts goes in a typed `deps` object, as `settingsRoutes` does), or inside `startServer` for the browser/preview/session routes that are still there; side effects never on `GET`.
+- **New route**: in a `server/routes/*.ts` module (what it needs from server.ts goes in a typed `deps` object, as
+  `settingsRoutes` does), or inside `startServer` for the browser/preview/session routes that are still there; side
+  effects never on `GET`.
 - **Something that polls**: `every()` / `usePoll()` from `lib/poll.ts`, never a bare `setInterval`.
 - **Asking before a delete**: `await sure("...")`, never `confirm()`.
 - **New event kind**: emit via `emitEvent`; fold it in `derive()`; render in `CellView` (`Thread.tsx`).
