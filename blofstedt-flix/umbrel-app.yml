@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.63"
+version: "0.3.64"
 port: 8096
 # umbrelOS only hands a container the GPU when the manifest says so: with this
 # permission it adds /dev/dri plus the render/video groups those nodes belong
@@ -60,10 +60,10 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Home is one row now: what you were watching sits at the top as a wide
-  card, My List follows, then picks you can add straight to your list with a +.
-  On the TV app the idle slideshow shows those picks too, instead of falling back
-  to an empty screen.
+  The home Queue is two rails now: Continue and Ready to Watch sit on
+  top, Your list and suggestions under them. Episodes that have downloaded
+  and are ready play instantly from the top rail instead of waiting behind
+  whatever you were watching.
 
   The app shell cache is refreshed, so installed copies pick this build up on
   their own instead of holding the old one.
