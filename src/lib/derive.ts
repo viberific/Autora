@@ -1168,7 +1168,9 @@ export function derive(events: AutoraEvent[]): Derived {
         // the person: anything that arrives with a message, such as a desktop
         // relay connecting, which is otherwise invisible until something uses
         // it.
-        if (typeof e.payload.message === "string" && e.payload.message) {
+        /* A quiet one is the console keeping the turn going (finish the list, carry on): it goes to the line under
+           the thread (lib/activity.ts) and the Logs page, not into the conversation. */
+        if (typeof e.payload.message === "string" && e.payload.message && !e.payload.quiet) {
           push({ kind: "note", seq: e.seq, tone: "plain", text: e.payload.message });
         }
         if (e.payload.usage) {

@@ -316,6 +316,19 @@ Spectra's fetched renderer is most of what is on disk.
     folders the turn changed files in. A found check runs only when the agent says it is done (never after a to-do item), at most twice, and
     tells the agent pre-existing failures are not its to chase. `verify.auto`
     turns the looking off.
+  - `failedcalls.ts`: an action that failed (any tool: a command, a click, an edit, a request) is not done again
+    unchanged (`standingFailure`, checked in the loop just before a call runs; a refused call logs
+    `tool.error {repeat}`) while nothing has changed since: a file edit or card (not one the failing command wrote
+    itself), another call that does not only look (`looksOnly` in `modes.ts`; a command that never started, exit
+    126/127, does not count), for browser failures any browser call that worked or `BROWSER_FORGET_MS`, else
+    `FORGET_AFTER_MS`. The same tool with other arguments is another call. A failure that often passes (timeout,
+    network, rate limit) gets one more try; `retry: "<why>"` on any call lets one through and is taken off the
+    arguments before the tool sees them. Waiting and bookkeeping tools are never held (`NEVER_HELD`). Read from the
+    log, so it holds across turns and restarts; a failed result says so at once (`FAILED_NOTE`) and the turn note
+    lists what still fails (`failuresBriefing`).
+  - Quiet nudges: the console's "keep going" messages (open to-dos, unmet asks, a cut-off or empty reply) are
+    `system.log {quiet, activity}`: on the Logs page and the line under the thread (`lib/activity.ts`), never a note
+    in the thread (`derive`).
   - `syntaxcheck.ts`: whether a file still parses, answered by `edit_file` in
     the same result (`syntaxNote`), only for a break the edit made. Best parser
     on the machine: TypeScript's (the project's or Autora's; not in the
