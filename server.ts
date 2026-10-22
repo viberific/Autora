@@ -124,7 +124,7 @@ import type { AutoraEvent, Notice, PreviewRun, Session, SessionOrigin } from "./
 import { Workspace, type DiffLine, type FileChange as CodeChange } from "./server/codediff";
 import { runSubagent, type SubagentDeps } from "./server/subagent";
 import { projectMap } from "./server/projectmap";
-import { FAILED_NOTE, failuresBriefing, repeatRefusal, standingFailure } from "./server/failedcmds";
+import { FAILED_NOTE, failuresBriefing, holdsBack, repeatRefusal, standingFailure } from "./server/failedcalls";
 import { historyFor, pastToolCalls } from "./server/history";
 import { DataUrlSieve } from "./server/datasieve";
 import { autoEffort, type Effort } from "./server/modelprofile";
@@ -2433,7 +2433,7 @@ async function systemInstructionFor(
   const unloaded = own ? unloadedIndex(loadedTools(own), mcpTools()) : null;
   if (unloaded) notes.push(unloaded);
 
-  /* Commands that failed and would fail again: a new turn starts knowing it rather than trying them once more. */
+  /* Actions that failed and would fail again: a new turn starts knowing it rather than trying them once more. */
   const stillFailing = own ? failuresBriefing(own.events) : null;
   if (stillFailing) notes.push(stillFailing);
 
@@ -5687,12 +5687,18 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
             continue;
           }
 
-          /* The same command, failed, with nothing changed since that could make it pass: not run again, and the agent
-             is told why and what would (server/failedcmds.ts). `retry` with a reason lets it through. */
-          if (spec.name === "terminal" && !String(use.args?.retry ?? "").trim()) {
-            const standing = standingFailure(session.events, String(use.args?.command ?? ""), String(use.args?.cwd ?? ""));
+          /* The same call, failed, with nothing changed since that could make it pass: not made again, and the agent
+             is told why and what would (server/failedcalls.ts). `retry` with a reason lets it through; it is the
+             loop's, so it is taken off before the tool (or a connected server) sees the arguments. */
+          const retryWhy = String(use.args?.retry ?? "").trim();
+          if (use.args && "retry" in use.args && spec.name !== "terminal") {
+            const { retry: _retry, ...rest } = use.args;
+            use.args = rest;
+          }
+          if (!retryWhy) {
+            const standing = standingFailure(session.events, spec.name, use.args ?? {});
             if (standing) {
-              emitEvent(session, "tool.error", "agent", { repeat: true, error: "Not run again: it failed, and nothing has changed since." }, span);
+              emitEvent(session, "tool.error", "agent", { repeat: true, error: "Not done again: it failed, and nothing has changed since." }, span);
               reply(false, repeatRefusal(standing));
               continue;
             }
@@ -5711,9 +5717,9 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
             const gone = missingPathIn(outcome.summary);
             const near = gone ? pathHint(terminalDir(), gone) : "";
             if (near) outcome.summary += `\n[Autora:${near}]`;
-            // Learned on the first failure: it will not be run again unchanged (server/failedcmds.ts).
-            outcome.summary += `\n${FAILED_NOTE}`;
           }
+          // Learned on the first failure: the same call will not be made again unchanged (server/failedcalls.ts).
+          if (!outcome.ok && !outcome.held && holdsBack(spec.name)) outcome.summary += `\n${FAILED_NOTE}`;
           const durationMs = Date.now() - started;
           const wrote = willWrite;
           if (spec.name === "edit_file" && outcome.ok) changedFiles.push(path.resolve(terminalDir(), String(use.args?.path ?? "")));

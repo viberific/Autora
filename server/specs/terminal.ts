@@ -43,8 +43,8 @@ export const terminalSPECS: ToolSpec[] = [
         retry: {
           type: "string",
           description:
-            "Only to run a command again that failed with nothing changed since (Autora refuses that): why it will go " +
-            "differently now.",
+            "Only to repeat a call that failed with nothing changed since (Autora refuses that): why it will go " +
+            "differently now. Any tool takes it.",
         },
       },
       required: ["command"],

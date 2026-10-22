@@ -35,8 +35,8 @@ async function main() {
       await app.turn(s, "build it");
       assert.equal(runs(), 1, "it ran once, not twice");
       const said = results();
-      assert.ok(said.some((r) => /will not be run again unchanged/.test(r)), "the first failure says it will not be rerun");
-      assert.ok(said.some((r) => /Not run again: `echo run/.test(r) && /exit 1/.test(r)), "the repeat is refused with the reason");
+      assert.ok(said.some((r) => /will not be made again unchanged/.test(r)), "the first failure says it will not be rerun");
+      assert.ok(said.some((r) => /Not done again: `echo run/.test(r) && /exit 1/.test(r)), "the repeat is refused with the reason");
       app.decide = null;
 
       // A new turn: still refused, and the note says so up front.
@@ -44,7 +44,7 @@ async function main() {
       app.decide = (req) => (turnStart(req) ? { tools: [{ name: "terminal", args: { command } }] } : { text: "ok" });
       await app.turn(s, "try the build");
       assert.equal(runs(), 1, "not run on the next turn either");
-      assert.match(JSON.stringify(app.seen[from].messages), /Commands that failed in this chat and would fail again/);
+      assert.match(JSON.stringify(app.seen[from].messages), /Actions that failed in this chat and would fail again/);
 
       // retry with a reason runs it.
       app.decide = (req) => (turnStart(req) ? { tools: [{ name: "terminal", args: { command, retry: "the person says they fixed the build" } }] } : { text: "ok" });
@@ -60,6 +60,28 @@ async function main() {
       };
       await app.turn(s, "fix it and build");
       assert.equal(runs(), 3, "after an edit it runs again");
+      app.decide = null;
+    });
+    await test("an edit whose text is not in the file is not tried again; a retry with a reason is, and the tool never sees retry", async () => {
+      const s = await app.newSession("edits", "build");
+      fs.writeFileSync(path.join(app.home, "app.js"), "const a = 1;\n");
+      const args = { path: "app.js", edits: [{ old: "const b = 1;", new: "const b = 2;" }] };
+      let step = 0;
+      app.decide = (req) => {
+        if (turnStart(req)) step = 0;
+        step += 1;
+        return step === 1 ? { tools: [{ name: "edit_file", args }] }
+          : step === 2 ? { tools: [{ name: "edit_file", args }] }
+          : step === 3 ? { tools: [{ name: "edit_file", args: { ...args, retry: "checking the refusal is lifted" } }] }
+          : { text: "Done." };
+      };
+      const from = app.seen.length;
+      await app.turn(s, "change b");
+      const back = app.seen.slice(from).map((r) => String(r.messages.filter((m: any) => m.role === "tool").pop()?.content ?? ""));
+      assert.match(back[1], /that text is not in the file[\s\S]*will not be made again unchanged/, "the first failure, and the lesson");
+      assert.match(back[2], /^Not done again: `edit_file /, "the repeat is refused");
+      assert.match(back[3], /that text is not in the file/, "the retry ran the edit again, and it failed as before");
+      assert.doesNotMatch(back[3], /retry/i, "the edit tool was not handed retry");
       app.decide = null;
     });
   } finally {
