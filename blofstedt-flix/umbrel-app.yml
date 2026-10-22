@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.58"
+version: "0.3.62"
 port: 8096
 # umbrelOS only hands a container the GPU when the manifest says so: with this
 # permission it adds /dev/dri plus the render/video groups those nodes belong
@@ -60,17 +60,16 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Dark mode, everywhere. Flix is now dark only, with a tinted health strip and
-  accent-tinted rating pills.
+  Playback holds together better: the loading layer clears completely once a
+  title starts, Up next waits while you are paused and steps aside on a rewind,
+  and switching source starts clean instead of half-resuming.
 
-  A round of TV fixes from living with it on a big screen: the remote reaches the top
-  bar, menus open on the entry you chose, loading and failure controls are ringed and
-  reachable, and admin panels keep their highlight when they redraw.
+  On the TV app, Back closes the PIN box and the account menu, and the remote
+  reaches the player's loading and error buttons. Captions sit a line higher.
 
-  The health strip now pushes the page down instead of covering the first heading, the
-  offline screen updates in place with a countdown, and search no longer flashes on
-  every keystroke. Captions are smaller with a faded outline, and episode sound is
-  levelled so quiet mixes are audible at normal volume.
+  Profile page forms submit again, playback controls in Settings save, and
+  restarting qBittorrent no longer drops every active download. Profiles also
+  survive a brief server hiccup instead of signing you out.
 
-  The app shell cache is refreshed, so installed copies pick this build up on their own
-  instead of holding the old one.
+  The app shell cache is refreshed, so installed copies pick this build up on
+  their own instead of holding the old one.
