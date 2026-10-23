@@ -16,7 +16,7 @@ services:
     # Built by viberific/Flix's own workflow from the repo's package.json
     # version. Bump this tag (and `version` above) only once that tag exists
     # in the registry, or an update will fail with "manifest unknown".
-    image: ghcr.io/viberific/flix:0.3.67
+    image: ghcr.io/viberific/flix:0.3.69
     restart: unless-stopped
     # The GPU, for Quick Sync, is granted by umbrelOS, not here: it strips a
     # hand-written `devices: /dev/dri` when it patches this file at install

@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.67"
+version: "0.3.69"
 port: 8096
 # umbrelOS only hands a container the GPU when the manifest says so: with this
 # permission it adds /dev/dri plus the render/video groups those nodes belong
@@ -60,6 +60,17 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Fixed the Google TV playback logo overlay so it dismisses reliably, and
-  corrected the home carousel's end padding so the last card has room at the
-  end.
+  The television app stops working its GPU so hard. Flix had been asking a TV
+  to decode and paint far more than the screen ever shows: the poster rows now
+  come down at 342px instead of full size, and the busiest GPU work behind the
+  home screen is gone. On a TV the app should feel noticeably lighter.
+
+  The wait screen goes when the show does. On Google TV the Flix logo could sit
+  over the video even after playback had started, because the layer waited for
+  a "playing" event some TV players never send. It now clears as soon as the
+  video is genuinely progressing, and stays up, correctly, while it buffers.
+
+  Rows no longer clip at the end: the last tile has breathing room, so a
+  thumbnail is no longer cut off when you reach the end of a row.
+
+  Installed TVs pick all of this up on the next launch (cache v40).
