@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.75"
+version: "0.3.79"
 port: 8096
 # umbrelOS only hands a container the GPU when the manifest says so: with this
 # permission it adds /dev/dri plus the render/video groups those nodes belong
@@ -60,9 +60,11 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Flix now includes Android Auto support for use while parked, plus a quicker
-  way to add an entire series across all seasons or choose a single season.
+  Fixes playback stalling on some shows: a show copied for playback could be
+  sent to a position its media did not actually have, so the player kept going
+  back to it and the picture hung. A copied picture now covers the span it
+  promises, and a stream that cannot be honoured is rebuilt instead of played.
 
-  Playback is more reliable on TVs: the waiting overlay clears when video is
-  genuinely progressing, instead of sticking over the picture on players that
-  do not send a standard "playing" event.
+  Also fixes the Flix logo staying over the video on some shows: the player now
+  asks whether the picture is really playing, not whether its clock moved
+  forward.
