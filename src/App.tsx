@@ -654,13 +654,14 @@ export function App() {
     if (outbox.length === 0) return;
     const arrived = (m: Outgoing) => events.some((e) => e.seq > (sentAfter.current.get(m.id) ?? 0)
       && (e.kind === Kind.UserMessage || e.kind === Kind.Amend)
-      && (e.payload?.text === m.text || e.payload?.shown === m.text));
+      && [e.payload?.text, e.payload?.shown].some((t) => typeof t === "string" && t.trim() !== "" && (t.includes(m.text) || m.text.includes(t))));
     if (outbox.some(arrived)) setOutbox((list) => list.filter((m) => !arrived(m)));
   }, [events, outbox]);
   // A message that never shows up in the log (a command, an edited prompt) does not keep its tick for ever.
   useEffect(() => {
     if (outbox.length === 0) return;
-    const id = window.setTimeout(() => setOutbox((list) => list.slice(1)), 20_000);
+    const ids = outbox.map((m) => m.id);
+    const id = window.setTimeout(() => setOutbox((list) => list.filter((m) => !ids.includes(m.id))), 20_000);
     return () => window.clearTimeout(id);
   }, [outbox]);
   useEffect(() => { setOutbox([]); }, [sessionId]);

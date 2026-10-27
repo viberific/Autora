@@ -85,7 +85,7 @@ test("the plan docked above the message box: unfinished, or the latest turn's", 
   const later = turn(reply(9));
   assert.equal(dockedPlan([turn(plan(2, "completed", "in-progress")), later])?.seq, 2);
   assert.equal(dockedPlan([turn(plan(2, "completed", "completed")), later]), null);
-  assert.equal(dockedPlan([turn(page(1), plan(2, "completed", "completed"))])?.seq, 2, "a finished one stays while its turn is the latest");
+  assert.equal(dockedPlan([turn(page(1), plan(2, "completed", "completed"))]), null, "a finished one leaves the dock for the thread");
   assert.equal(dockedPlan([turn(page(1), widget(2))]), null);
 });
 

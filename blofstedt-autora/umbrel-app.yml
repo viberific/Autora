@@ -188,11 +188,7 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  The agent no longer repeats an action that just failed. When a command, a click, an edit or a request fails, the
-  agent is told at once that the same action will not be done again unchanged, and it is not, until something changes
-  that could make it work: a file is edited (by it or by you), another action changes things, the page is looked at
-  again, or some time passes. Failures that often pass on a second try (a timeout, the network) get one more. It still
-  knows on the next message what failed, and it can try again when it has a reason, such as you saying you fixed it.
-  The console's own nudges to keep going (finish the to-do list, carry on after a cut-off reply) now happen in the
-  background: the line under the chat says what it is doing, and they no longer appear as messages in the
-  conversation.
+  Chat layout and text size. A message you send no longer stays stuck at the bottom of the conversation when the reply
+  arrives: it is cleared as soon as the conversation has it, even when the text was adjusted on the way. A finished
+  to-do list now leaves the box above the message and stays in the conversation as a record of the work. Text in the
+  chat and the message box is the same size as the rest of the app on a desktop, instead of a size larger.
