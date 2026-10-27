@@ -239,8 +239,12 @@ session. Variable weights keep it to two files and 77KB.
 
 ## Choices I'd revisit
 
-- **Sequential tool execution.** Parallel calls would be faster, but watching two
-  things happen at once is much harder to follow, and legibility is the point.
+- **Parallel tool execution, only where it cannot collide.** Calls made together
+  in one response, and agents started together, first go through an overlap
+  analysis (`server/overlap.ts`): each gets a footprint of what it reads and
+  changes, and only calls that touch nothing in common share a moment. A shell,
+  the browser page, an edit, or any tool not understood runs alone, in the order
+  it was asked for. Answers come back in call order. Not with Ask on.
 - **Fold-from-zero in the UI.** O(n) per render keeps it honest with no
   incremental cache to get subtly wrong. Fine to tens of thousands of events;
   past that, memoize on checkpoints.

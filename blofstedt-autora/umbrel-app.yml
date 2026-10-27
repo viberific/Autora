@@ -188,6 +188,8 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  Agents can work at the same time. When parts of a job do not depend on one another, the lead can now start up to four
-  agents from the Organization in one step instead of one after another. Each works in a chat of its own, and their
-  reports come back together, so the wait is the slowest agent rather than the sum.
+  Work can now run in parallel. Agents from the Organization can be started together (up to four at once), and an agent
+  that asks for several things in one response gets them done at the same time when they only look: web requests,
+  research, reading files and windows. Before anything runs together, a quick background check works out what each
+  call reads and changes; calls that touch the same file or the same agent wait for each other, and the terminal, the
+  browser page and edits always run on their own, in order. Not used when a chat is set to Ask.

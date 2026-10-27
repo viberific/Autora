@@ -29,6 +29,7 @@ import type { LedgerResult } from "./ledger";
 import type { RequirementResult } from "./requirements";
 import { SKILL_NOT_MEMORY, checkEntry } from "./mindrules";
 import { checkArgs } from "./argcheck";
+import { planTasks } from "./overlap";
 import { officeDir, runOfficeTool } from "./office";
 import type { Phase } from "./modes";
 import { callMcpTool, mcpTools, statusOf as mcpStatusOf } from "./mcp";
@@ -1630,19 +1631,30 @@ async function runAgents(args: Record<string, any>, ctx: ToolContext): Promise<T
     if (!ctx.agents) return { ok: false, summary: "Agents cannot be started from here." };
     const self = ctx.agents.self.id;
     const jobs = args.tasks.slice(0, MAX_PARALLEL_AGENTS).map((t: any) => ({ ref: String(t?.agent ?? "").trim(), task: String(t?.task ?? "").trim() }));
+    const asked = jobs.map((j: { ref: string; task: string }) => ({ agent: findAgent(j.ref)?.name ?? j.ref, task: j.task }));
     const bad = jobs.findIndex((j: { ref: string; task: string }) => !j.ref || !j.task);
     if (bad >= 0) return { ok: false, summary: `tasks[${bad}] needs both agent and task: {"agent":"<name>","task":"<everything it needs to know, it has not seen this chat>"}. Nothing was started.` };
     const missing = jobs.find((j: { ref: string }) => { const f = findAgent(j.ref); return !f || f.id === self; });
     if (missing) return { ok: false, summary: `"${missing.ref}" is not an agent you can start (use agents list; you cannot start yourself). Nothing was started.` };
-    const results = await Promise.all(jobs.map(async (j: { ref: string; task: string }) => {
-      const who = findAgent(j.ref)!;
-      const r = await ctx.agents!.run(who.id, j.task).catch((err: Error) => ({ ok: false, summary: `${who.name} failed: ${String(err.message).split("\n")[0]}` }));
-      return { who, r };
-    }));
+    /* Checked first for overlap (server/overlap.ts): tasks that name the same file or the same agent are not
+       run together, the later one waits for the earlier to report. The rest start at the same time. */
+    const { batches, held } = planTasks(asked);
+    const results: Array<{ who: NonNullable<ReturnType<typeof findAgent>>; r: { ok: boolean; summary: string } } | undefined> = [];
+    for (const batch of batches) {
+      await Promise.all(batch.map(async (i: number) => {
+        const who = findAgent(jobs[i].ref)!;
+        const why = held.get(i);
+        const r = await ctx.agents!.run(who.id, why ? `${jobs[i].task}\n\n(Started after another agent finished, because the two tasks overlap: ${why}. Read what it changed before you begin.)` : jobs[i].task)
+          .catch((err: Error) => ({ ok: false, summary: `${who.name} failed: ${String(err.message).split("\n")[0]}` }));
+        results[i] = { who, r };
+      }));
+    }
+    const done = results.filter((x): x is NonNullable<typeof x> => Boolean(x));
+    const waited = held.size ? `\n\n(${held.size} of ${jobs.length} waited for another to finish, as they would have touched the same thing.)` : "";
     return {
-      ok: results.every((x) => x.r.ok),
-      summary: results.map((x) => x.r.summary).join("\n\n---\n\n"),
-      preview: `${results.length} agents: ${results.filter((x) => x.r.ok).length} reported`,
+      ok: done.every((x) => x.r.ok),
+      summary: done.map((x) => x.r.summary).join("\n\n---\n\n") + waited,
+      preview: `${done.length} agents: ${done.filter((x) => x.r.ok).length} reported`,
     };
   }
   const ref = String(args.agent ?? "").trim();

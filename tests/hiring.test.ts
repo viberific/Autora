@@ -367,6 +367,11 @@ await test("agents run starts several agents at the same time and returns their 
   const bad = await runTool(spec, { action: "run", tasks: [{ agent: "Pella", task: "one" }, { agent: "Nobody", task: "x" }] }, par);
   assert.equal(bad.ok, false);
   assert.equal(overlap, 2);
+  overlap = 0;
+  const same = await runTool(spec, { action: "run", tasks: [{ agent: "Pella", task: "Edit src/a.ts" }, { agent: "Quill", task: "Test src/a.ts" }] }, par);
+  assert.equal(same.ok, true, same.summary);
+  assert.equal(overlap, 1, "tasks on the same file ran one after the other");
+  assert.match(same.summary, /waited for another/);
   org.deleteAgent(a.id); org.deleteAgent(b.id);
 });
 

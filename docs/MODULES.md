@@ -334,6 +334,10 @@ Spectra's fetched renderer is most of what is on disk.
     on the machine: TypeScript's (the project's or Autora's; not in the
     container), else Node's type stripper / `node --check`, python3's `ast`,
     `JSON.parse`. No model, no setting.
+  - `overlap.ts`: which calls may run at the same time. `footprint` (reads/writes per tool call; unknown means
+    "changes everything"), `plan` (ordered batches), `planTasks` (agents started together: same file or same agent
+    waits). Used by the tool loop in `server.ts` (`handle` per call, one `Promise.all` per batch, replies kept in call
+    order) and by `agents run` with `tasks`. A new tool is alone until it is given a footprint here.
   - `subagent.ts` (`research`): a worker with a fresh context and read-only
     tools (`looksOnly` judges every call), its own loop watch and schema check,
     a step limit; only its short report reaches the main thread. It is given
