@@ -188,11 +188,8 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  The agent no longer repeats an action that just failed. When a command, a click, an edit or a request fails, the
-  agent is told at once that the same action will not be done again unchanged, and it is not, until something changes
-  that could make it work: a file is edited (by it or by you), another action changes things, the page is looked at
-  again, or some time passes. Failures that often pass on a second try (a timeout, the network) get one more. It still
-  knows on the next message what failed, and it can try again when it has a reason, such as you saying you fixed it.
-  The console's own nudges to keep going (finish the to-do list, carry on after a cut-off reply) now happen in the
-  background: the line under the chat says what it is doing, and they no longer appear as messages in the
-  conversation.
+  Work can now run in parallel. Agents from the Organization can be started together (up to four at once), and an agent
+  that asks for several things in one response gets them done at the same time when they only look: web requests,
+  research, reading files and windows. Before anything runs together, a quick background check works out what each
+  call reads and changes; calls that touch the same file or the same agent wait for each other, and the terminal, the
+  browser page and edits always run on their own, in order. Not used when a chat is set to Ask.

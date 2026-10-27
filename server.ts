@@ -133,6 +133,7 @@ import { buildTrace, traceText } from "./server/trace";
 import { keepBudget, loadBudget } from "./server/budgetstore";
 import { interruptedWork, resumeNote, type InterruptedWork, type ResumeEvent } from "./server/resume";
 import { checkArgs } from "./server/argcheck";
+import { planCalls } from "./server/overlap";
 import { healthBriefing, recordOutcome, targetOf } from "./server/toolhealth";
 import { Scheduler, type Job, type JobWatch } from "./server/scheduler";
 import {
@@ -5375,15 +5376,19 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
         const replies: ToolReply[] = [];
         const finishedBefore = doneCount();
 
-        for (const use of turn.calls) {
+        /* The calls of this response, each answered in its slot so the answers come back in the order they were made
+           however they finished. Calls that cannot break one another run together (server/overlap.ts, worked out
+           from what each reads and changes, in the background); anything else waits for the calls before it. */
+        const slots: Array<ToolReply | undefined> = [];
+        const handle = async (use: (typeof turn.calls)[number], at: number): Promise<void> => {
           const span = `span-${session.id}-${session.seqCounter}-${spans++}`;
           const reply = (ok: boolean, result: string, images?: ToolReply["images"]): void => {
-            replies.push({ id: use.id, name: use.name, ok, result, images });
+            slots[at] = { id: use.id, name: use.name, ok, result, images };
           };
 
           if (running.get(session.id)?.stopped) {
             reply(false, "The person stopped the turn before this ran.");
-            continue;
+            return;
           }
 
           /* Cut off before its arguments were complete. Run with `{}` it
@@ -5399,7 +5404,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
               "split it into several smaller parts.";
             emitEvent(session, "tool.error", "agent", { error: said }, span);
             reply(false, said);
-            continue;
+            return;
           }
 
           /* Talk mode's hand-over, handled here rather than in the registry:
@@ -5423,7 +5428,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
                 "person, and it says them in its own voice. Do not address the person " +
                 "yourself, and do not ask them anything.",
             );
-            continue;
+            return;
           }
 
           const spec = findTool(use.name);
@@ -5443,7 +5448,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
               const said = `Not run: ${use.name} was not loaded; it is now. How it is called (* = required):\n${signatureOf(spec)}\n${bad}`;
               emitEvent(session, "tool.error", "agent", { error: said }, span);
               reply(false, watched(use.name, use.args, false, said, said));
-              continue;
+              return;
             }
           }
           if (spec && !tools.some((t) => t.name === use.name)) {
@@ -5471,7 +5476,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
             emitEvent(session, "tool.error", "agent", { error: why }, span);
             const said = `${why} The tools you have are: ${known}.`;
             reply(false, watched(use.name, use.args, false, said, said));
-            continue;
+            return;
           }
 
           emitEvent(session, "tool.call", "agent", {
@@ -5486,7 +5491,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
           if (badArgs) {
             emitEvent(session, "tool.error", "agent", { error: badArgs }, span);
             reply(false, watched(spec.name, use.args, false, badArgs, badArgs));
-            continue;
+            return;
           }
 
           /* Planning first, and it is a refusal rather than a card: planning
@@ -5500,7 +5505,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
               held: true, planning: true, error: "Not run: planning changes nothing.",
             }, span);
             reply(false, refusal);
-            continue;
+            return;
           }
 
           /* The person is using it, or has taken it: not done, said plainly,
@@ -5510,7 +5515,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
           if (heldNow) {
             emitEvent(session, "tool.error", "agent", { held: true, error: "Not done: the person is working on this." }, span);
             reply(false, heldNow);
-            continue;
+            return;
           }
 
           /* An exact call that was repeated after the loop watch said not to:
@@ -5520,12 +5525,12 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
           if (gated.stop) {
             loopStop = gated.stop;
             reply(false, "Not run: the turn was stopped.");
-            break;
+            return;
           }
           if (gated.refuse) {
             emitEvent(session, "tool.error", "agent", { held: true, error: gated.refuse }, span);
             reply(false, gated.refuse);
-            continue;
+            return;
           }
 
           /* Acting on a site nothing current is stored about: find out from its own
@@ -5550,7 +5555,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
                   });
                 }
                 reply(false, why);
-                continue;
+                return;
               }
             }
           }
@@ -5589,7 +5594,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
                   "Do not retry it. Either carry on without it or say what you needed it " +
                   "for and why.",
               );
-              continue;
+              return;
             }
           }
 
@@ -5613,7 +5618,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
                 "The person declined this. Do not retry it. Either find " +
                   "another way, or tell them what you needed it for and why.",
               );
-              continue;
+              return;
             }
             if (decision.response) {
               emitEvent(session, "context.note", "user", {
@@ -5668,7 +5673,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
                 guarded: true, denied: true, error: "Held: the person declined an irreversible command.",
               }, span);
               reply(false, said);
-              continue;
+              return;
             }
           }
 
@@ -5684,7 +5689,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
                 "make the same call again and it will go through. If they decline, " +
                 "find another way or stop.",
             );
-            continue;
+            return;
           }
 
           /* The same call, failed, with nothing changed since that could make it pass: not made again, and the agent
@@ -5700,7 +5705,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
             if (standing) {
               emitEvent(session, "tool.error", "agent", { repeat: true, error: "Not done again: it failed, and nothing has changed since." }, span);
               reply(false, repeatRefusal(standing));
-              continue;
+              return;
             }
           }
 
@@ -5796,8 +5801,22 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
             reply(outcome.ok, watched(spec.name, use.args, outcome.ok, outcome.summary, shown), outcome.images);
             if (outcome.ok && spec.name === "skill" && use.args?.action === "use") skillsFollowed.add(String(use.args?.name ?? "").trim());
           }
+        };
+        /* Not with Ask on: its cards are answered one at a time, in the order the calls were made. */
+        const batches = turn.calls.length > 1 && permissionsOf(session.permissions) === "yolo"
+          ? planCalls(turn.calls.map((c) => ({ name: c.name, args: c.args as Record<string, any> })))
+          : turn.calls.map((_, i) => [i]);
+        for (const batch of batches) {
           if (loopStop) break;
+          if (batch.length > 1) {
+            emitEvent(session, "system.log", "system", {
+              quiet: true,
+              message: `${batch.length} calls checked for overlap and run at the same time: ${batch.map((i) => turn.calls[i].name).join(", ")}.`,
+            });
+          }
+          await Promise.all(batch.map((i) => handle(turn.calls[i], i)));
         }
+        replies.push(...slots.filter((r): r is ToolReply => r !== undefined));
 
         /* The loop watch stopped the turn partway through the calls: the
            ones it never reached still need an answer, or the provider

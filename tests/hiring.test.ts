@@ -343,4 +343,36 @@ await test("agents answering each other taper off, with a pause that varies", ()
   assert.ok(life.isNamed("what do you think, Ada?", "Ada") && !life.isNamed("what do you think?", "Ada"), "being named is told from not being named");
 });
 
+await test("agents run starts several agents at the same time and returns their reports together", async () => {
+  const a = org.createAgent({ name: "Pella" });
+  const b = org.createAgent({ name: "Quill" });
+  let running = 0;
+  let overlap = 0;
+  const par = {
+    session: "s1", onOutput: () => undefined, cancelled: () => false,
+    agents: {
+      self: { id: org.LEAD_ID, name: "Autora" },
+      run: async (id: string, task: string) => {
+        running += 1; overlap = Math.max(overlap, running);
+        await new Promise((ok) => setTimeout(ok, 20));
+        running -= 1;
+        return { ok: true, summary: `${org.getAgent(id)!.name} did ${task}` };
+      },
+    },
+  } as never;
+  const r = await runTool(spec, { action: "run", tasks: [{ agent: "Pella", task: "one" }, { agent: "Quill", task: "two" }] }, par);
+  assert.equal(r.ok, true, r.summary);
+  assert.equal(overlap, 2, "both were running at once");
+  assert.ok(r.summary.indexOf("Pella did one") < r.summary.indexOf("Quill did two"), "reports keep the order asked for");
+  const bad = await runTool(spec, { action: "run", tasks: [{ agent: "Pella", task: "one" }, { agent: "Nobody", task: "x" }] }, par);
+  assert.equal(bad.ok, false);
+  assert.equal(overlap, 2);
+  overlap = 0;
+  const same = await runTool(spec, { action: "run", tasks: [{ agent: "Pella", task: "Edit src/a.ts" }, { agent: "Quill", task: "Test src/a.ts" }] }, par);
+  assert.equal(same.ok, true, same.summary);
+  assert.equal(overlap, 1, "tasks on the same file ran one after the other");
+  assert.match(same.summary, /waited for another/);
+  org.deleteAgent(a.id); org.deleteAgent(b.id);
+});
+
 console.log(`${passed} passed`);

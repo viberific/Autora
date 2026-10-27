@@ -77,12 +77,14 @@ export function pickSurfaces(buckets: readonly Bucket[], liveBrowserSeq: number 
 
 /**
  * The to-do list docked above the message box, on every screen size: the same
- * plan the stage used to hold at the top (one with work left, or the latest
- * turn's), now where the eye already is while typing. Null when there is none.
+ * plan the stage used to hold at the top, now where the eye already is while
+ * typing. Only a plan with work left: once it is finished it is a card in the
+ * thread. Null when there is none.
  */
 export function dockedPlan(buckets: readonly Bucket[]): Extract<Cell, { kind: "todo" }> | null {
   const cell = pickSurfaces(buckets, null).find((s) => s.kind === "plan")?.cell;
-  return cell && cell.kind === "todo" ? cell : null;
+  // A finished list leaves the dock and stays in the thread as a record of the work.
+  return cell && cell.kind === "todo" && unfinished(cell) ? cell : null;
 }
 
 /** The last the agent did on a surface: a page it clicked, an item it ticked. */

@@ -29,6 +29,7 @@ import type { LedgerResult } from "./ledger";
 import type { RequirementResult } from "./requirements";
 import { SKILL_NOT_MEMORY, checkEntry } from "./mindrules";
 import { checkArgs } from "./argcheck";
+import { planTasks } from "./overlap";
 import { officeDir, runOfficeTool } from "./office";
 import type { Phase } from "./modes";
 import { callMcpTool, mcpTools, statusOf as mcpStatusOf } from "./mcp";
@@ -1595,6 +1596,9 @@ function runSkill(args: Record<string, any>, ctx: ToolContext): ToolOutcome {
   }
 }
 
+/** Most agents one `agents run` starts at once. */
+const MAX_PARALLEL_AGENTS = 4;
+
 async function runAgents(args: Record<string, any>, ctx: ToolContext): Promise<ToolOutcome> {
   const action = String(args.action ?? "").trim().toLowerCase();
   if (action === "list") {
@@ -1621,6 +1625,38 @@ async function runAgents(args: Record<string, any>, ctx: ToolContext): Promise<T
   }
   if (["hire", "edit", "merge", "remove", "move"].includes(action)) return shapeOrganization(action, args, ctx);
   if (action !== "run") return { ok: false, summary: `Unknown agents action "${action}". Use list, run, domains, teach, note, hire, edit, merge, remove or move.` };
+  /* Several agents at the same time: each is a chat of its own that cannot step on the others, so the wait
+     is the slowest one, not the sum. Their reports come back together, in the order they were asked for. */
+  if (Array.isArray(args.tasks) && args.tasks.length > 0) {
+    if (!ctx.agents) return { ok: false, summary: "Agents cannot be started from here." };
+    const self = ctx.agents.self.id;
+    const jobs = args.tasks.slice(0, MAX_PARALLEL_AGENTS).map((t: any) => ({ ref: String(t?.agent ?? "").trim(), task: String(t?.task ?? "").trim() }));
+    const asked = jobs.map((j: { ref: string; task: string }) => ({ agent: findAgent(j.ref)?.name ?? j.ref, task: j.task }));
+    const bad = jobs.findIndex((j: { ref: string; task: string }) => !j.ref || !j.task);
+    if (bad >= 0) return { ok: false, summary: `tasks[${bad}] needs both agent and task: {"agent":"<name>","task":"<everything it needs to know, it has not seen this chat>"}. Nothing was started.` };
+    const missing = jobs.find((j: { ref: string }) => { const f = findAgent(j.ref); return !f || f.id === self; });
+    if (missing) return { ok: false, summary: `"${missing.ref}" is not an agent you can start (use agents list; you cannot start yourself). Nothing was started.` };
+    /* Checked first for overlap (server/overlap.ts): tasks that name the same file or the same agent are not
+       run together, the later one waits for the earlier to report. The rest start at the same time. */
+    const { batches, held } = planTasks(asked);
+    const results: Array<{ who: NonNullable<ReturnType<typeof findAgent>>; r: { ok: boolean; summary: string } } | undefined> = [];
+    for (const batch of batches) {
+      await Promise.all(batch.map(async (i: number) => {
+        const who = findAgent(jobs[i].ref)!;
+        const why = held.get(i);
+        const r = await ctx.agents!.run(who.id, why ? `${jobs[i].task}\n\n(Started after another agent finished, because the two tasks overlap: ${why}. Read what it changed before you begin.)` : jobs[i].task)
+          .catch((err: Error) => ({ ok: false, summary: `${who.name} failed: ${String(err.message).split("\n")[0]}` }));
+        results[i] = { who, r };
+      }));
+    }
+    const done = results.filter((x): x is NonNullable<typeof x> => Boolean(x));
+    const waited = held.size ? `\n\n(${held.size} of ${jobs.length} waited for another to finish, as they would have touched the same thing.)` : "";
+    return {
+      ok: done.every((x) => x.r.ok),
+      summary: done.map((x) => x.r.summary).join("\n\n---\n\n") + waited,
+      preview: `${done.length} agents: ${done.filter((x) => x.r.ok).length} reported`,
+    };
+  }
   const ref = String(args.agent ?? "").trim();
   const task = String(args.task ?? "").trim();
   if (!ref || !task) {
