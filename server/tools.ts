@@ -1595,6 +1595,9 @@ function runSkill(args: Record<string, any>, ctx: ToolContext): ToolOutcome {
   }
 }
 
+/** Most agents one `agents run` starts at once. */
+const MAX_PARALLEL_AGENTS = 4;
+
 async function runAgents(args: Record<string, any>, ctx: ToolContext): Promise<ToolOutcome> {
   const action = String(args.action ?? "").trim().toLowerCase();
   if (action === "list") {
@@ -1621,6 +1624,27 @@ async function runAgents(args: Record<string, any>, ctx: ToolContext): Promise<T
   }
   if (["hire", "edit", "merge", "remove", "move"].includes(action)) return shapeOrganization(action, args, ctx);
   if (action !== "run") return { ok: false, summary: `Unknown agents action "${action}". Use list, run, domains, teach, note, hire, edit, merge, remove or move.` };
+  /* Several agents at the same time: each is a chat of its own that cannot step on the others, so the wait
+     is the slowest one, not the sum. Their reports come back together, in the order they were asked for. */
+  if (Array.isArray(args.tasks) && args.tasks.length > 0) {
+    if (!ctx.agents) return { ok: false, summary: "Agents cannot be started from here." };
+    const self = ctx.agents.self.id;
+    const jobs = args.tasks.slice(0, MAX_PARALLEL_AGENTS).map((t: any) => ({ ref: String(t?.agent ?? "").trim(), task: String(t?.task ?? "").trim() }));
+    const bad = jobs.findIndex((j: { ref: string; task: string }) => !j.ref || !j.task);
+    if (bad >= 0) return { ok: false, summary: `tasks[${bad}] needs both agent and task: {"agent":"<name>","task":"<everything it needs to know, it has not seen this chat>"}. Nothing was started.` };
+    const missing = jobs.find((j: { ref: string }) => { const f = findAgent(j.ref); return !f || f.id === self; });
+    if (missing) return { ok: false, summary: `"${missing.ref}" is not an agent you can start (use agents list; you cannot start yourself). Nothing was started.` };
+    const results = await Promise.all(jobs.map(async (j: { ref: string; task: string }) => {
+      const who = findAgent(j.ref)!;
+      const r = await ctx.agents!.run(who.id, j.task).catch((err: Error) => ({ ok: false, summary: `${who.name} failed: ${String(err.message).split("\n")[0]}` }));
+      return { who, r };
+    }));
+    return {
+      ok: results.every((x) => x.r.ok),
+      summary: results.map((x) => x.r.summary).join("\n\n---\n\n"),
+      preview: `${results.length} agents: ${results.filter((x) => x.r.ok).length} reported`,
+    };
+  }
   const ref = String(args.agent ?? "").trim();
   const task = String(args.task ?? "").trim();
   if (!ref || !task) {

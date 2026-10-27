@@ -188,7 +188,6 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  Chat layout and text size. A message you send no longer stays stuck at the bottom of the conversation when the reply
-  arrives: it is cleared as soon as the conversation has it, even when the text was adjusted on the way. A finished
-  to-do list now leaves the box above the message and stays in the conversation as a record of the work. Text in the
-  chat and the message box is the same size as the rest of the app on a desktop, instead of a size larger.
+  Agents can work at the same time. When parts of a job do not depend on one another, the lead can now start up to four
+  agents from the Organization in one step instead of one after another. Each works in a chat of its own, and their
+  reports come back together, so the wait is the slowest agent rather than the sum.
