@@ -1325,7 +1325,11 @@ onStudioChange((sessionId) => {
 onPanaceaChange((sessionId) => {
   sendEphemeral(sessionId, { type: "panaceadesk", session: sessionId, state: panaceaState(sessionId) });
 });
-onPanaceaTouch((sessionId, text) => touchPresence(sessionId, "panacea", "*", "edit", text));
+onPanaceaTouch((sessionId, text) => {
+  // Heard by a running turn like any touch; but on the canvas the proactive voice is a ghost panel, not a remark in the chat.
+  presenceFor(sessionId).touch("panacea", "*", "edit", text);
+  announcePresence(sessionId);
+});
 /* Its suggester: a small, unwatched call, only with the companion on, nothing running, and somebody looking. */
 panaceaSuggester({
   ask: (sessionId, system, prompt) => backgroundCall(sessionId, system, prompt, 160),

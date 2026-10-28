@@ -74,18 +74,19 @@ export const PanelCard = memo(function PanelCard({ panel, selected, fresh, offse
           </span>
         </div>
       )}
-      <div className="pa-body" ref={(el) => el?.toggleAttribute("inert", ghost || dim)}>
-        <Atom node={panel.tree} panel={panel} />
-      </div>
+      {/* An offer says what it is for and how to take it first, under the title: a ghost half off screen can still be answered. */}
       {ghost && (
-        <footer className="pa-offer">
+        <div className="pa-offer is-top">
           <span>{panel.why}</span>
           <span className="pa-offer-acts">
             <button type="button" className="pa-btn is-accent" data-act="accept" onClick={() => actions.accept(panel)}>Add</button>
             <button type="button" className="pa-btn" data-act="wave" onClick={() => actions.wave(panel)}>Not now</button>
           </span>
-        </footer>
+        </div>
       )}
+      <div className="pa-body" ref={(el) => el?.toggleAttribute("inert", ghost || dim)}>
+        <Atom node={panel.tree} panel={panel} />
+      </div>
       {draft && (
         <footer className="pa-offer">
           <span>Made for this. Tell Autora what to change, or keep it.</span>

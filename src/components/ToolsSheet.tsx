@@ -12,6 +12,7 @@
  */
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { usePhone } from "../lib/stage";
 import { IconCube, IconFile, IconGame, IconMusic, IconNotebook, IconSlides, IconSparkle, IconStar, IconTable, IconTerminal, IconVideo, IconWrench, IconX } from "./Icons";
 
 type Kind = "pdf" | "docx" | "xlsx" | "pptx" | "video" | "cad" | "game" | "studio" | "panacea" | "terminal";
@@ -47,6 +48,7 @@ export function ToolsSheet({ session, onClose, onTrouble, onOpened, onAsk }: {
   /** What was opened, so the chat can say so and the window is already up. */
   onOpened: (name: string, app: string) => void;
 }) {
+  const phone = usePhone();
   /* Which apps are on, from the same settings the Tools page writes. Held as
      null while it loads: unknown is not the same as off, and a row that said
      "switched off" for half a second would be wrong. */
@@ -150,7 +152,8 @@ export function ToolsSheet({ session, onClose, onTrouble, onOpened, onAsk }: {
         <div className="modal-body tools-body">
           <p className="jf-hint">Opens a tool with a new blank file: no message, no waiting. The terminal opens in your working folder.</p>
           <div className="tool-tiles">
-            {TOOLS.map((tool) => {
+            {/* Panacea is a canvas for a wide screen; a phone's layout for it is still to come (docs/PANACEA.md). */}
+            {TOOLS.filter((tool) => !(phone && tool.kind === "panacea")).map((tool) => {
               const off = on !== null && on[tool.setting]?.enabled === false;
               return (
                 <button

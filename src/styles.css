@@ -7714,6 +7714,7 @@ body.is-resizing iframe { pointer-events: none; }
 .pa-body { padding: 0 var(--pa-pad) var(--pa-pad); min-height: 0; overflow: auto; }
 .pa-offer { display: flex; flex-direction: column; gap: 8px; padding: 0 var(--pa-pad) var(--pa-pad); font-size: var(--fs-xs); color: var(--text-2); line-height: 1.4; }
 .pa-offer-acts { display: flex; gap: 6px; }
+.pa-offer.is-top { padding-bottom: 10px; }
 .pa-resize { position: absolute; right: -4px; top: 14px; bottom: 14px; width: 8px; cursor: ew-resize; }
 .pa-resize::after { content: ""; position: absolute; right: 3px; top: 50%; width: 2px; height: 24px; margin-top: -12px; border-radius: var(--r-pill); background: var(--border-strong); opacity: 0; transition: opacity var(--dur-1) var(--ease); }
 .pa-panel:hover .pa-resize::after { opacity: 1; }

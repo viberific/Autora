@@ -113,11 +113,12 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
     surfaceCount.current = canvas.surfaces.length;
   }, [canvas.surfaces, setView]);
 
-  // A panel that arrives off screen (the agent's, or one that had nowhere closer to go) comes into view: measured as
+  // A panel placed off screen (the agent's, or one that had nowhere closer to go) comes into view: measured as
   // drawn, so a tall one is not left under the strip along the bottom.
   const seenPanels = useRef(new Set(canvas.panels.map((p) => p.id)));
   useEffect(() => {
-    const fresh = canvas.panels.filter((p) => !seenPanels.current.has(p.id)).map((p) => p.id);
+    // A ghost is only an offer: it never moves the person's view away from what they are doing.
+    const fresh = canvas.panels.filter((p) => !seenPanels.current.has(p.id) && p.state !== "ghost").map((p) => p.id);
     seenPanels.current = new Set(canvas.panels.map((p) => p.id));
     if (!fresh.length || !root.current || drag) return;
     const frame = requestAnimationFrame(() => {
