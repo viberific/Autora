@@ -193,11 +193,8 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  New: Panacea, a canvas window where the controls come to the work. It starts as a blank dotted grid; say what you
-  want to do, or drop a photo or a table on it, and sliders, switches, charts and filters appear around it, built from a
-  library of small pieces (about twenty ready-made panels for each kind of work). They go when the work moves on and
-  come back with a click. Suggestions arrive as faint panels to add or wave away, every panel says why it is there, one
-  history undoes your changes and Autora's, and it learns which controls you use. Photos are edited live (light, colour,
-  curves, looks, crop, before and after) and tables become charts you filter by clicking. When nothing in the library
-  fits, Autora makes a piece with you and keeps it. Project folders now keep a notebook of what each chat in them did,
-  and it comes along when you attach the folder to a new chat.
+  New: web search now has an order it cannot skip. Autora asks 4get first, then Webclaw, then its own search
+  providers, and says which one answered; a blocked, empty or failed result moves it down the list on its own. The
+  browser is no longer used as a quiet substitute for a search -- it opens a page when you ask to see one. The MCP
+  catalog also gained 4get and Fetch (a small page reader), and the app image now carries uv so those servers can
+  start.

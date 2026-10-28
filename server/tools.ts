@@ -33,6 +33,7 @@ import { planTasks } from "./overlap";
 import { officeDir, runOfficeTool } from "./office";
 import type { Phase } from "./modes";
 import { callMcpTool, mcpTools, statusOf as mcpStatusOf } from "./mcp";
+import { searchInTiers } from "./websearch";
 import { existing as existingMcp, install as installMcp, noteDeclined, overview as mcpOverview, planOffer, wasDeclined } from "./mcpoffer";
 import {
   PREFIX as CUSTOM_PREFIX, customEnv, defineCustomTool, deleteCustomTool, getCustomTool,
@@ -53,7 +54,7 @@ import { mergeTools, save, state, allSecrets, keyFor, secretFor, stateDir, redac
 import {
   STATUSES, checkoutFolder, findCheckout, listEntries, moveInto, recordFinding, setStatus, type Status,
 } from "./improvements";
-import { APP_GUIDE, BROWSING_GUIDE, MEMORY_GUIDE, OFFICE_GUIDE, SKILLS_GUIDE, TODO_GUIDE, VOICE_GUIDE, WINDOWS_GUIDE } from "./guides";
+import { APP_GUIDE, BROWSING_GUIDE, MEMORY_GUIDE, OFFICE_GUIDE, SKILLS_GUIDE, TODO_GUIDE, VOICE_GUIDE, WEB_RESEARCH_GUIDE, WINDOWS_GUIDE } from "./guides";
 import { credentialsBriefing, fillPlaceholders, hasPlaceholder, identityEnv, redactCredentials } from "./credentials";
 import type { ChatImage } from "./llm";
 import { frameImage, latestFrame } from "./liveview";
@@ -3177,10 +3178,25 @@ async function runToolUnredacted(
       case "web_search": {
         const query = String(args.query ?? "").trim();
         if (!query) return { ok: false, summary: "No search query was provided." };
-        const results = await searchWeb(query, ctx);
+        // In tiers, in the order settled with the person: 4get, then Webclaw,
+        // then the built-in keys. The browser is never one of them.
+        const outcome = await searchInTiers(query, {
+          tools: mcpTools,
+          call: callMcpTool,
+          builtin: (q) => searchWeb(q, ctx),
+        });
+        if (!outcome.ok) {
+          return {
+            ok: false,
+            summary: `No search tier answered for "${query}" (${outcome.tried.join("; ")}). ` +
+              "Do not make up for it with another search tool or the browser: say the search failed " +
+              "and what was tried, and leave the browser for when the person asks to see a page.",
+          };
+        }
+        const from = outcome.tier === "built-in" ? "built-in search" : outcome.tier;
         return {
           ok: true,
-          summary: `Web search results for "${query}":\n\n${results}`,
+          summary: `Web search results for "${query}" (from ${from}):\n\n${outcome.text}`,
           preview: `search: ${query.slice(0, 60)}`,
         };
       }
@@ -3850,6 +3866,7 @@ export async function capabilityBriefing(): Promise<string> {
     }
   }
 
+  lines.push(WEB_RESEARCH_GUIDE);
   if (groups.some((g) => g.group === "browser" && g.available)) lines.push(BROWSING_GUIDE, signInBriefing(), credentialsBriefing());
   if (groups.some((g) => g.group === "memory" && g.available)) lines.push(MEMORY_GUIDE);
   if (groups.some((g) => g.group === "voice" && g.available)) lines.push(VOICE_GUIDE);

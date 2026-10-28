@@ -1,9 +1,9 @@
 /**
  * Getting an MCP server's launcher to run on this machine.
  *
- * Every catalog server is started with `npx`, which is why the catalog can
- * say that nothing needs installing first. A few of those launchers are not
- * Node programs, though: they download a compiled binary for the platform
+ * Catalog servers start with `npx` or `uvx`; the app image includes a pinned,
+ * Alpine-compatible `uv` for Python-based servers. A few `npx` launchers are
+ * not Node programs, though: they download a compiled binary for the platform
  * and run that. @webclaw/mcp is one of them, and its platform map has no
  * musl entry -- linux/x64 always maps to the glibc build. Autora's own
  * container is Alpine (musl), so the launcher caches a binary that cannot

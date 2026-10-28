@@ -51,6 +51,14 @@ export const BROWSING_GUIDE = [
     "result says SIGN-IN REFUSED, the site is refusing this browser: stop, and follow what it says.",
 ].join("\n");
 
+export const WEB_RESEARCH_GUIDE = [
+  "- `web_search` is tiered and runs itself: it asks 4get first, then Webclaw, then the built-in keys, and says which one answered. Do not call the 4get or Webclaw MCP search tools directly to go round that order, and do not run the same query again through another tool to double-check it.",
+  "- If it says no tier answered, say the search failed and what was tried. Do not substitute another search tool.",
+  "- Use MCP Fetch, or Webclaw's scrape and crawl, to read a chosen page, not to search: give it a URL from the results or one the person supplied. Fetch refuses private/local addresses by default, but it is not a network-isolation boundary.",
+  "- Use the browser for web research only when the person explicitly asks to see a live page or explicitly asks for the browser. This does not change the separate browser sign-in and interaction instructions.",
+  "- Search goes through upstream search engines, so coverage, availability and blocks vary, and the query leaves this machine. Verify important or current claims against the official source.",
+].join("\n");
+
 /**
  * What the agent is told it can do, in prose, before the conversation starts.
  *

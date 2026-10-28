@@ -411,9 +411,10 @@ export const browserSPECS: ToolSpec[] = [
     name: "web_search",
     group: "browser",
     description:
-      "Search the web for up-to-date documentation, release notes, news, code examples, or factual answers " +
-      "without being blocked by search engine bot detection. Then open the result you need with " +
-      "browser_open.",
+      "Search the web for up-to-date documentation, release notes, news, code examples, or factual answers. " +
+      "It runs in tiers and cannot skip one: 4get first, then Webclaw, then the built-in keys, and it says " +
+      "which answered. Read a result with MCP Fetch or Webclaw; the browser is for a page the person asks " +
+      "to see.",
     parameters: {
       type: "object",
       properties: {

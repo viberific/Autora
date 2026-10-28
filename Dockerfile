@@ -161,6 +161,9 @@ RUN npm prune --omit=dev \
 
 # ── stage 2: runtime ─────────────────────────────────────────────────────────
 FROM mirror.gcr.io/library/node:22-alpine
+# Copy Astral's pinned standalone uv/uvx binaries; unlike the default image,
+# the runtime here is Alpine (musl).
+COPY --from=ghcr.io/astral-sh/uv:0.13.6@sha256:af22a52f5eafef3d78e551599d405c02df61919d18028f0cea8eda93bc9986d0 /uv /uvx /usr/local/bin/
 WORKDIR /app
 
 # Chromium, for the browser the agent drives and you watch. Alpine's own

@@ -13,9 +13,10 @@ import path from "node:path";
 
 process.env.AUTORA_STATE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "autora-mcpoffer-"));
 
-const { matchCatalog } = await import("../server/mcpcatalog");
+const { matchCatalog, fillEnvParams } = await import("../server/mcpcatalog");
+const { BROWSING_GUIDE, WEB_RESEARCH_GUIDE } = await import("../server/guides");
 const { planOffer } = await import("../server/mcpoffer");
-const { findTool, runTool } = await import("../server/tools");
+const { capabilityBriefing, findTool, runTool } = await import("../server/tools");
 const { setSecretLookup, callMcpTool, disconnect } = await import("../server/mcp");
 const { setSecret, secretFor, state } = await import("../server/state");
 
@@ -51,7 +52,30 @@ console.log("mcp offers");
 await test("requests are matched to the servers that fit", () => {
   assert.equal(matchCatalog("list the open issues on my github repo")[0]?.id, "github");
   assert.equal(matchCatalog("what does this postgres table hold")[0]?.id, "postgres");
+  const fourget = matchCatalog("search the web for current information")[0];
+  assert.equal(fourget?.id, "4get");
+  assert.equal(fourget?.command, "uvx");
+  assert.deepEqual(fourget?.args, ["--python", "3.13", "--from", "mcp-4get", "mcp_4get"]);
+  assert.deepEqual(fourget?.params, [{ name: "FOURGET_BASE_URL", label: "4get instance base URL", fallback: "https://4get.ca" }]);
+  assert.deepEqual(fillEnvParams(fourget!, {}), { FOURGET_BASE_URL: "https://4get.ca" });
+  assert.deepEqual(fillEnvParams(fourget!, { FOURGET_BASE_URL: "https://search.example" }), { FOURGET_BASE_URL: "https://search.example" });
+  const fetch = matchCatalog("fetch a webpage and read its content")[0];
+  assert.equal(fetch?.id, "fetch");
+  assert.equal(fetch?.command, "uvx");
+  assert.deepEqual(fetch?.args, ["--python", "3.13", "mcp-server-fetch"]);
   assert.deepEqual(matchCatalog("tell me a joke"), []);
+});
+
+await test("web research guidance names the enforced tiers and leaves browser use to the person", async () => {
+  assert.ok(WEB_RESEARCH_GUIDE.includes("it asks 4get first, then Webclaw, then the built-in keys"));
+  assert.ok(WEB_RESEARCH_GUIDE.includes("Do not call the 4get or Webclaw MCP search tools directly"));
+  assert.ok(WEB_RESEARCH_GUIDE.includes("If it says no tier answered, say the search failed and what was tried."));
+  assert.ok(WEB_RESEARCH_GUIDE.includes("Use MCP Fetch, or Webclaw's scrape and crawl, to read a chosen page, not to search"));
+  assert.ok(WEB_RESEARCH_GUIDE.includes("Use the browser for web research only when the person explicitly asks to see a live page"));
+  assert.ok(BROWSING_GUIDE.includes("After each action, check the page did what you meant"));
+  assert.ok(BROWSING_GUIDE.includes("Sign-ins: fill the fields yourself when you have the details"));
+  assert.match(WEB_RESEARCH_GUIDE, /upstream search engines/);
+  assert.ok((await capabilityBriefing()).includes(WEB_RESEARCH_GUIDE));
 });
 
 await test("an offer needs a reason and a real server", () => {

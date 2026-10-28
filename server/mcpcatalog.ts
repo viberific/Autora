@@ -9,8 +9,9 @@
  * the server instead -- once, with the reason in one line -- and sets it up
  * if the person says yes (see `mcp_offer` in tools.ts).
  *
- * Every entry only runs through `npx` (Node is always there), so nothing
- * needs installing first. A key a server needs is named here, never stored
+ * Entries use `npx` (Node is always there) or `uvx` (the app image includes
+ * a pinned, Alpine-compatible `uv`); package dependencies are fetched on demand.
+ * A key a server needs is named here, never stored
  * here: the offer card saves it to the secret store, and the config refers
  * to it as `${secret:NAME}`, resolved only at connect time (see mcp.ts).
  */
@@ -113,6 +114,18 @@ export const CATALOG: CatalogEntry[] = [
     }],
   },
   {
+    id: "4get",
+    name: "4get",
+    title: "4get Search",
+    summary: "Searches via 4get; defaults to the public https://4get.ca. Set FOURGET_BASE_URL to use a self-hosted instance.",
+    better: "Returns search results as structured data; unlike MCP Fetch, it is for finding pages, not reading one.",
+    keywords: ["search the web", "current information", "metasearch", "4get", "web search"],
+    command: "uvx",
+    args: ["--python", "3.13", "--from", "mcp-4get", "mcp_4get"],
+    env: { FOURGET_BASE_URL: "${param:FOURGET_BASE_URL}" },
+    params: [{ name: "FOURGET_BASE_URL", label: "4get instance base URL", fallback: "https://4get.ca" }],
+  },
+  {
     id: "brave-search",
     name: "brave_search",
     title: "Brave Search",
@@ -144,6 +157,16 @@ export const CATALOG: CatalogEntry[] = [
       hint: "serper key — optional, everything but search works without it",
       optional: true,
     }],
+  },
+  {
+    id: "fetch",
+    name: "fetch",
+    title: "MCP Fetch",
+    summary: "Reads a chosen public webpage and converts it to text or markdown.",
+    better: "Reads a result or supplied URL directly; it is not a search engine and refuses private/local addresses by default.",
+    keywords: ["fetch a webpage", "read this webpage", "read a url", "page content", "webpage text"],
+    command: "uvx",
+    args: ["--python", "3.13", "mcp-server-fetch"],
   },
   {
     id: "google-maps",
@@ -238,11 +261,19 @@ export function matchCatalog(text: string, limit = 3): CatalogEntry[] {
 }
 
 /** Fill ${param:NAME} from what the offer supplied, or the entry's fallback. */
-export function fillParams(entry: CatalogEntry, given: Record<string, string>): string[] {
-  return entry.args.map((arg) => arg.replace(/\$\{param:([A-Za-z0-9_]+)\}/g, (_m, name: string) => {
+function fillParamValue(entry: CatalogEntry, value: string, given: Record<string, string>): string {
+  return value.replace(/\$\{param:([A-Za-z0-9_]+)\}/g, (_m, name: string) => {
     const spec = entry.params?.find((p) => p.name === name);
     return (given[name] ?? "").trim() || spec?.fallback || "";
-  }));
+  });
+}
+
+export function fillParams(entry: CatalogEntry, given: Record<string, string>): string[] {
+  return entry.args.map((arg) => fillParamValue(entry, arg, given));
+}
+
+export function fillEnvParams(entry: CatalogEntry, given: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(entry.env ?? {}).map(([key, value]) => [key, fillParamValue(entry, value, given)]));
 }
 
 /** Secret names a config refers to, wherever it refers to them. */
