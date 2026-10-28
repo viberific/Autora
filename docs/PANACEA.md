@@ -86,6 +86,10 @@ Autora already runs become surfaces on it, rather than Panacea growing its own e
    The library's recipes for those kinds already exist and bind to shared values (`doc.font`, `music.bpm`, `video.speed`,
    `model.x`, `game.gravity`, `ui.radius`): once a kind has a surface, its recipes' binds move from `doc.font` to
    `@doc.font` and the panels start driving the editor.
+   **Not every engine is equal yet.** Music, 3D and games are early: good starting points, nowhere near a Blender, and
+   they will be refined over time. A surface's manifest declares only what its engine really does well today, and grows
+   as the engine does; a panel never promises a control the engine behind it cannot honour. Expect these surfaces to
+   change more often than Office's or the PDF's, and keep their recipes' binds easy to move.
 2. **A surface can embed its editor's view** (a frame, as the windows do now) while the panels around it are Panacea's own.
    The editor's own chrome is hidden, as the tool rail did for the windows.
 3. **Web and app design** gets a surface over the app window (`server/preview.ts`): the page, its components as parameters.
