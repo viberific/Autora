@@ -19,7 +19,7 @@
  * Pure -- a clock in, text out -- so the rules are tested without a page.
  */
 
-export type Surface = "pdf" | "office" | "app" | "browser" | "code" | "video";
+export type Surface = "pdf" | "office" | "app" | "browser" | "code" | "video" | "panacea";
 
 const NAME: Record<Surface, string> = {
   pdf: "the PDF",
@@ -28,6 +28,7 @@ const NAME: Record<Surface, string> = {
   browser: "the browser",
   code: "the code",
   video: "the video project",
+  panacea: "the Panacea canvas",
 };
 
 /** How long what they touched stays theirs after the last touch. */

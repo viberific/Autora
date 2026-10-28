@@ -14,13 +14,13 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { IconCube, IconFile, IconGame, IconMusic, IconNotebook, IconSlides, IconSparkle, IconStar, IconTable, IconTerminal, IconVideo, IconWrench, IconX } from "./Icons";
 
-type Kind = "pdf" | "docx" | "xlsx" | "pptx" | "video" | "cad" | "game" | "studio" | "terminal";
+type Kind = "pdf" | "docx" | "xlsx" | "pptx" | "video" | "cad" | "game" | "studio" | "panacea" | "terminal";
 
 type Tool = {
   kind: Kind;
   app: string;
   /** The setting on the Tools page that decides whether this app is on. */
-  setting: "pdf" | "video" | "pages" | "sheets" | "slides" | "cad" | "game" | "studio" | "terminal";
+  setting: "pdf" | "video" | "pages" | "sheets" | "slides" | "cad" | "game" | "studio" | "panacea" | "terminal";
   what: string;
   icon: (size: number) => JSX.Element;
 };
@@ -32,6 +32,7 @@ const TOOLS: Tool[] = [
   { kind: "xlsx", app: "Autora Sheets", setting: "sheets", what: "A blank spreadsheet", icon: (s) => <IconTable size={s} /> },
   { kind: "pptx", app: "Autora Slides", setting: "slides", what: "A blank slide", icon: (s) => <IconSlides size={s} /> },
   { kind: "studio", app: "Autora Music", setting: "studio", what: "A new song", icon: (s) => <IconMusic size={s} /> },
+  { kind: "panacea", app: "Panacea", setting: "panacea", what: "A blank canvas", icon: (s) => <IconSparkle size={s} /> },
   { kind: "terminal", app: "Autora Terminal", setting: "terminal", what: "A shell you and Autora share", icon: (s) => <IconTerminal size={s} /> },
   { kind: "cad", app: "Autora 3D", setting: "cad", what: "A block to shape", icon: (s) => <IconCube size={s} /> },
   { kind: "game", app: "Autora Games", setting: "game", what: "A new game", icon: (s) => <IconGame size={s} /> },
@@ -106,6 +107,8 @@ export function ToolsSheet({ session, onClose, onTrouble, onOpened, onAsk }: {
         ? await fetch(`/api/game/${encodeURIComponent(session)}/open`, { method: "POST" })
         : tool.kind === "studio"
         ? await fetch(`/api/studio/${encodeURIComponent(session)}/open`, { method: "POST" })
+        : tool.kind === "panacea"
+        ? await fetch(`/api/panacea/${encodeURIComponent(session)}/open`, { method: "POST" })
         : await fetch(`/api/sessions/${session}/new`, {
             method: "POST",
             headers: { "content-type": "application/json" },

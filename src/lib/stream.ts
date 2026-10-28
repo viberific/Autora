@@ -29,6 +29,10 @@ type Handlers = {
   onStudioDesk?: (state: unknown) => void;
   /** Something only a browser can do, asked of the music window: play, stop, bounce. */
   onStudioCommand?: (cmd: { id: string; name: string; args: Record<string, unknown> }) => void;
+  /** Panacea's window: whether it is open, and what changed last. */
+  onPanaceaDesk?: (state: unknown) => void;
+  /** Something only the canvas window can do: steps by the agent's hand, a picture rendered, a chart drawn. */
+  onPanaceaCommand?: (cmd: { id: string; name: string; args: Record<string, unknown> }) => void;
   onOfficeDesk?: (state: unknown) => void;
   onOfficePush?: (msg: unknown) => void;
   onOfficeHand?: (msg: unknown) => void;
@@ -206,6 +210,14 @@ export class SessionStream {
         case "studio.command":
           if (typeof msg.id === "string" && typeof msg.name === "string") {
             this.handlers.onStudioCommand?.({ id: msg.id, name: msg.name, args: msg.args && typeof msg.args === "object" ? msg.args : {} });
+          }
+          break;
+        case "panaceadesk":
+          this.handlers.onPanaceaDesk?.(msg.state);
+          break;
+        case "panacea.command":
+          if (typeof msg.id === "string" && typeof msg.name === "string") {
+            this.handlers.onPanaceaCommand?.({ id: msg.id, name: msg.name, args: msg.args && typeof msg.args === "object" ? msg.args : {} });
           }
           break;
         case "officedesk":

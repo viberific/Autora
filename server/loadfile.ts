@@ -19,13 +19,14 @@ import { runVideoTool } from "./opencut";
 import { deskHooks } from "./pdfdesk";
 import { runPhotoTool } from "./photodesk";
 import { loadSong } from "./studio";
+import { loadIntoPanacea } from "./panacea";
 import { terminalDir } from "./tools";
 import { LOAD_APPS, loadable, type LoadApp } from "../src/lib/loadable";
 
 
 const NAME: Record<LoadApp, string> = {
   pdf: "Autora PDF", pages: "Autora Pages", sheets: "Autora Sheets", slides: "Autora Slides", photo: "Autora Photo",
-  video: "Autora Video", studio: "Autora Music", cad: "Autora 3D", game: "Autora Games",
+  video: "Autora Video", studio: "Autora Music", cad: "Autora 3D", game: "Autora Games", panacea: "Panacea",
 };
 
 type Done = { ok: boolean; error?: string; said?: string };
@@ -75,6 +76,10 @@ async function load(session: string, app: LoadApp, art: Artifact): Promise<Done>
     case "cad": {
       const out = await loadModel(session, data);
       return out.ok ? { ok: true, said: `${art.name} is open in Autora 3D (${out.shapes ?? 0} shape${out.shapes === 1 ? "" : "s"}).` } : { ok: false, error: out.error };
+    }
+    case "panacea": {
+      const out = loadIntoPanacea(session, art, data);
+      return out.ok ? { ok: true, said: out.said } : { ok: false, error: out.error };
     }
     case "game": {
       // A game that was kept replaces the game; any other file (JSON that is not a game too) is added to the game's resources.

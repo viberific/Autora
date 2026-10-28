@@ -24,6 +24,7 @@ await test("each app takes what it can open, and nothing it cannot", () => {
   assert.ok(loadable("studio", f("Night.song.json")) && !loadable("studio", f("other.json")));
   assert.ok(loadable("cad", f("Stand.model.json")) && !loadable("cad", f("Stand.glb")));
   assert.ok(loadable("game", f("Game.json")) && loadable("game", f("hero.png", "image/png")) && loadable("game", f("theme.ogg")));
+  assert.ok(loadable("panacea", f("Shoot.panacea.json")) && loadable("panacea", f("sunset.jpg", "image/jpeg")) && loadable("panacea", f("sales.csv")) && !loadable("panacea", f("Night.song.json")));
   for (const a of LOAD_APPS) assert.ok(!loadable(a, f("readme.txt", "text/plain")), `${a} takes a text file`);
 });
 

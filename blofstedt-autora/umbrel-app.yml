@@ -75,6 +75,11 @@ description: >-
   ask it to. One Ctrl+Z takes back anything it did. Has its own switch on the
   Tools page.
 
+  • Panacea — a blank canvas where the controls for the work appear when they are
+  needed and go when they are not. Drop a photo or a table, or say what you want to
+  do, and you and Autora work the same sliders, switches and charts. It learns what
+  you use. Has its own switch on the Tools page.
+
   • Autora 3D — a 3D modelling window for things to design or print. The agent
   builds shapes by sketching an outline and pulling it up (and cutting, bevelling,
   repeating and measuring them) and you work on the same model beside the chat:
@@ -188,8 +193,11 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  Work can now run in parallel. Agents from the Organization can be started together (up to four at once), and an agent
-  that asks for several things in one response gets them done at the same time when they only look: web requests,
-  research, reading files and windows. Before anything runs together, a quick background check works out what each
-  call reads and changes; calls that touch the same file or the same agent wait for each other, and the terminal, the
-  browser page and edits always run on their own, in order. Not used when a chat is set to Ask.
+  New: Panacea, a canvas window where the controls come to the work. It starts as a blank dotted grid; say what you
+  want to do, or drop a photo or a table on it, and sliders, switches, charts and filters appear around it, built from a
+  library of small pieces (about twenty ready-made panels for each kind of work). They go when the work moves on and
+  come back with a click. Suggestions arrive as faint panels to add or wave away, every panel says why it is there, one
+  history undoes your changes and Autora's, and it learns which controls you use. Photos are edited live (light, colour,
+  curves, looks, crop, before and after) and tables become charts you filter by clicking. When nothing in the library
+  fits, Autora makes a piece with you and keeps it. Project folders now keep a notebook of what each chat in them did,
+  and it comes along when you attach the folder to a new chat.

@@ -10,12 +10,13 @@ import { setLiveFields, setLiveFrame, setLivePaneOwns, setLiveTabs } from "./lib
 import { resetPreview, setPreviewFrame, setPreviewState, usePreviewState, type PreviewState } from "./lib/preview";
 import { ScreencastCell } from "./components/ScreencastCell";
 import { WidgetCell } from "./components/WidgetCell";
-import { AppPreview, CadWindow, GameWindow, OfficeWindow, OpenCutWindow, PhotoWindow, SpectraWindow, StudioWindow, TerminalWindow } from "./components/lazyWindows";
+import { AppPreview, CadWindow, GameWindow, OfficeWindow, OpenCutWindow, PanaceaWindow, PhotoWindow, SpectraWindow, StudioWindow, TerminalWindow } from "./components/lazyWindows";
 import { emitCadHand, resetCad, setCadState, useCadState } from "./lib/caddesk";
 import { resetGame, setGameState, useGameState } from "./lib/gamedesk";
 import { emitPhotoHand, resetPhoto, setPhotoState, usePhotoState } from "./lib/photodesk";
 import { resetTerm, setTermState, useTermState } from "./lib/termdesk";
 import { emitStudioCommand, resetStudio, setStudioState, useStudioState } from "./lib/studio";
+import { emitPanaceaCommand, resetPanacea, setPanaceaState, usePanaceaState } from "./lib/panacea";
 import { emitSpectraEvent } from "./lib/spectra";
 import { ResizeHandle } from "./components/ResizeHandle";
 import { CHAT, RAIL, setChatWidth, setRailMini, setRailWidth, usePanes } from "./lib/panes";
@@ -138,7 +139,7 @@ const LIBRARY_TABS: LibraryTab[] = ["notebooks", "files"];
 const ARTIFACT_TABS: LibraryTab[] = ["files", "folders"];
 
 /** The windows that can sit beside the chat on a wide screen, one at a time. */
-type SideWindow = "app" | "pdf" | "video" | "cad" | "game" | "photo" | "term" | "studio" | "pages" | "sheets" | "slides" | "browser" | "widget" | "work";
+type SideWindow = "app" | "pdf" | "video" | "cad" | "game" | "photo" | "term" | "studio" | "panacea" | "pages" | "sheets" | "slides" | "browser" | "widget" | "work";
 
 /**
  * The Office windows that can be open beside the chat, one per app, in the order their tabs sit in. Each has its
@@ -170,6 +171,7 @@ function closeUrlFor(pane: SideWindow, session: string): string | null {
     case "photo": return `/api/photo/${id}/close`;
     case "term": return `/api/term/${id}/close`;
     case "studio": return `/api/studio/${id}/close`;
+    case "panacea": return `/api/panacea/${id}/close`;
     case "pages": return `/api/officedesk/${id}/close?kind=docx`;
     case "sheets": return `/api/officedesk/${id}/close?kind=xlsx`;
     case "slides": return `/api/officedesk/${id}/close?kind=pptx`;
@@ -463,6 +465,7 @@ export function App() {
     resetPhoto();
     resetTerm();
     resetStudio();
+    resetPanacea();
     resetOffice();
     resetCollab();
     const stream = new SessionStream(sessionId, {
@@ -494,6 +497,8 @@ export function App() {
       onTermDesk: setTermState,
       onStudioDesk: setStudioState,
       onStudioCommand: emitStudioCommand,
+      onPanaceaDesk: setPanaceaState,
+      onPanaceaCommand: emitPanaceaCommand,
       onSpectra: emitSpectraEvent,
       onVideoDesk: setVideoState,
       onVideoCommand: emitVideoCommand,
@@ -1518,6 +1523,7 @@ export function App() {
   const photo = usePhotoState();
   const term = useTermState();
   const studio = useStudioState();
+  const panacea = usePanaceaState();
   const off = useOfficeState();
   const windowAt = (kind: OfficeKind) => off.windows.find((w) => w.kind === kind) ?? null;
   const pointedAt = useOfficePick();
@@ -1610,6 +1616,7 @@ export function App() {
     ...(photo.open ? [{ pane: "photo" as const, since: photo.since ?? 0 }] : []),
     ...(term.open ? [{ pane: "term" as const, since: term.since ?? 0 }] : []),
     ...(studio.open ? [{ pane: "studio" as const, since: studio.since ?? 0 }] : []),
+    ...(panacea.open ? [{ pane: "panacea" as const, since: panacea.since ?? 0 }] : []),
     ...OFFICE_PANES.flatMap((o) => {
       const win = windowAt(o.kind);
       return win ? [{ pane: o.pane, since: win.since ?? 0 }] : [];
@@ -1640,6 +1647,7 @@ export function App() {
     ...(photo.open ? [{ pane: "photo" as const, label: "Photo" }] : []),
     ...(term.open ? [{ pane: "term" as const, label: "Terminal" }] : []),
     ...(studio.open ? [{ pane: "studio" as const, label: "Music" }] : []),
+    ...(panacea.open ? [{ pane: "panacea" as const, label: "Panacea" }] : []),
     ...OFFICE_PANES.filter((o) => openWindows.some((w) => w.pane === o.pane)).map((o) => ({ pane: o.pane, label: o.label })),
     ...(browser?.open ? [{ pane: "browser" as const, label: "Browser" }] : []),
     ...(preview.open ? [{ pane: "app" as const, label: "Creator" }] : []),
@@ -2794,6 +2802,12 @@ export function App() {
             {studio.open && sessionId && (
               <aside className="app-pane" data-pane="studio" hidden={sidePane !== "studio"} aria-label="Autora Music, the song being made">
                 <Suspense fallback={null}><StudioWindow sessionId={sessionId} phone={false} /></Suspense>
+              </aside>
+            )}
+            {/* Panacea: the canvas where the controls come to the work. */}
+            {panacea.open && sessionId && (
+              <aside className="app-pane" data-pane="panacea" hidden={sidePane !== "panacea"} aria-label="Panacea, the canvas">
+                <Suspense fallback={null}><PanaceaWindow sessionId={sessionId} /></Suspense>
               </aside>
             )}
             {/* And one window for each Office app with a document open in it: Autora Pages, Autora Sheets and
