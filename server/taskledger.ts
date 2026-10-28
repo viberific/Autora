@@ -36,7 +36,7 @@ import { readDoc, saveDoc } from "./store";
 /** In the order a tie between two kinds is broken: a deliverable beats the
     means of making it, and "just talking" is only what is left. */
 const KINDS = [
-  "documents", "spreadsheets", "presentations", "pdf", "video", "music", "3d", "games", "photo",
+  "documents", "spreadsheets", "presentations", "pdf", "video", "music", "3d", "games", "photo", "canvas",
   "code", "web", "desktop", "agents", "scheduling", "integrations", "chat",
 ] as const;
 type TaskKind = (typeof KINDS)[number];
@@ -51,6 +51,7 @@ const KIND_LABEL: Record<TaskKind, string> = {
   "3d": "3D",
   games: "Games",
   photo: "Photo and images",
+  canvas: "Panacea canvas",
   code: "Code and files",
   web: "Web and research",
   desktop: "Desktop",
@@ -89,6 +90,7 @@ export function kindOfCall(name: string, args: Record<string, any> = {}): TaskKi
   if (name.startsWith("cad_")) return "3d";
   if (name.startsWith("game_")) return "games";
   if (name.startsWith("photo_") || name === "image_generate") return "photo";
+  if (name.startsWith("panacea_")) return "canvas";
   if (CODE_TOOLS.has(name)) return "code";
   if (name.startsWith("browser_") || WEB_TOOLS.has(name)) return "web";
   if (name.startsWith("computer_")) return "desktop";

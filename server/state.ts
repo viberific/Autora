@@ -184,6 +184,8 @@ interface ToolSettings {
   video: { enabled: boolean };
   /** Autora Music, the music window: the studio_* tools and the window beside the chat. */
   studio: { enabled: boolean };
+  /** Panacea, the canvas window: the panacea_* tools and the window beside the chat. */
+  panacea: { enabled: boolean };
   /** Autora Pages (.docx), Autora Sheets (.xlsx) and Autora Slides (.pptx): each its own switch, for the
       Office tools' work on that kind of file and its window beside the chat. */
   pages: { enabled: boolean };
@@ -407,6 +409,7 @@ export function defaultTools(): ToolSettings {
     pdf: { enabled: true },
     video: { enabled: true },
     studio: { enabled: true },
+    panacea: { enabled: true },
     pages: { enabled: true },
     sheets: { enabled: true },
     slides: { enabled: true },
@@ -461,7 +464,7 @@ export function mergeTools(into: ToolSettings, patch: any): ToolSettings {
   if (patch.office && typeof patch.office === "object" && typeof patch.office.enabled === "boolean") {
     for (const key of ["pages", "sheets", "slides"] as const) into[key].enabled = patch.office.enabled;
   }
-  for (const key of ["widgets", "app", "pdf", "video", "studio", "pages", "sheets", "slides", "cad", "game", "photo"] as const) {
+  for (const key of ["widgets", "app", "pdf", "video", "studio", "panacea", "pages", "sheets", "slides", "cad", "game", "photo"] as const) {
     const given = patch[key];
     if (given && typeof given === "object") into[key].enabled = bool(given.enabled, into[key].enabled);
   }

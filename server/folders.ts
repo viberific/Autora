@@ -24,6 +24,10 @@ interface Folder {
   name: string;
   /** Milliseconds since the epoch. */
   ts: number;
+  /** The project's notebook, where every chat in it leaves its context (server/projectbook.ts). */
+  notebook?: string;
+  /** Which note in it is each chat's, by chat id. */
+  notes?: Record<string, string>;
 }
 
 interface Store {
@@ -172,6 +176,32 @@ export function joinWork(chat: string, file: { folder?: string; session?: string
   s.chats[chat] = folder.id;
   persist();
   return folder;
+}
+
+/** The project's notebook, if it has one yet. */
+export function folderNotebook(id: string): string | null {
+  return getFolder(id)?.notebook ?? null;
+}
+
+export function setFolderNotebook(id: string, notebook: string | null): void {
+  const folder = load().folders.find((f) => f.id === id);
+  if (!folder) return;
+  if (notebook) folder.notebook = notebook;
+  else delete folder.notebook;
+  delete folder.notes;
+  persist();
+}
+
+/** The note a chat keeps in its project's notebook. */
+export function folderNote(id: string, chat: string): string | null {
+  return getFolder(id)?.notes?.[chat] ?? null;
+}
+
+export function setFolderNote(id: string, chat: string, entry: string): void {
+  const folder = load().folders.find((f) => f.id === id);
+  if (!folder) return;
+  folder.notes = { ...(folder.notes ?? {}), [chat]: entry };
+  persist();
 }
 
 /** For the tests: read the file again. */

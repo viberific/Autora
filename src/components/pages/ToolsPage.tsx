@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { IconCode, IconCube, IconFile, IconGame, IconGlobe, IconImage, IconMusic, IconSlides, IconSparkle, IconTable, IconTerminal, IconVideo } from "../Icons";
 
-type WindowKey = "widgets" | "browser" | "app" | "pdf" | "video" | "studio" | "pages" | "sheets" | "slides" | "cad" | "game" | "photo" | "terminal";
+type WindowKey = "widgets" | "browser" | "app" | "pdf" | "video" | "studio" | "panacea" | "pages" | "sheets" | "slides" | "cad" | "game" | "photo" | "terminal";
 
 type ToolsState = {
   config: Record<WindowKey, { enabled: boolean }>;
@@ -50,6 +50,13 @@ const WINDOWS: { key: WindowKey; name: string; icon: ReactNode; what: string; to
     icon: <IconMusic size={18} />,
     what: "Music beside the chat: instruments, drums, piano roll, mixer and WAV export. Ask for chords, a bass line or a beat, or write the tune yourself and have the agent fix timing and balance. The music stays yours.",
     tools: "studio_open, studio_look, studio_song, studio_track, studio_clip, studio_notes, studio_make, studio_play, studio_export",
+  },
+  {
+    key: "panacea",
+    name: "Panacea",
+    icon: <IconSparkle size={18} />,
+    what: "A blank canvas where the controls come to the work: drop a photo or a table, or say what you want to do, and the sliders, charts and switches for it appear, and go when you move on. You and the agent both use them.",
+    tools: "panacea_open, panacea_look, panacea_surface, panacea_place, panacea_set, panacea_arrange, panacea_bespoke, panacea_export",
   },
   {
     key: "pages",

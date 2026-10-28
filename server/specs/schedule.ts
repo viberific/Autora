@@ -239,7 +239,7 @@ export const scheduleSPECS: ToolSpec[] = [
     group: "schedule",
     description:
       "Bring in tools that are not in your list yet. The console note lists what exists, one line each: the specialist sets " +
-      "(pdf, video, studio, office, cad, game, photo, widgets, browser, live, custom, research, creator, schedule, notebooks, " +
+      "(pdf, video, studio, panacea, office, cad, game, photo, widgets, browser, live, custom, research, creator, schedule, notebooks, " +
       "organization, mcp) and the tools of connected servers. Say what you need in whichever way is easiest: query (plain " +
       "words for the job, like \"search google drive files\" -- finds the best matches across every connected server and " +
       "loads them), tools (exact names from the note), or family (a whole set by its name, or a server as mcp:<server> for a " +
@@ -251,7 +251,7 @@ export const scheduleSPECS: ToolSpec[] = [
       properties: {
         query: { type: "string", description: "What you want to do, in a few words. Loads the closest connected tools." },
         tools: { type: "array", items: { type: "string" }, description: "Exact tool names from the console note." },
-        family: { type: "string", description: "A set by its name (pdf, video, studio, office, cad, game, photo, widgets, browser, live, custom, research, creator, schedule, notebooks, organization, mcp), or a connected server as mcp:<server>." },
+        family: { type: "string", description: "A set by its name (pdf, video, studio, panacea, office, cad, game, photo, widgets, browser, live, custom, research, creator, schedule, notebooks, organization, mcp), or a connected server as mcp:<server>." },
       },
     },
   },

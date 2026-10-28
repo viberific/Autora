@@ -209,6 +209,14 @@ function doing(name: string, args: Record<string, any>): string {
     case "studio_make": return args.kind === "drums" ? "Laying down a beat" : args.kind === "bass" ? "Writing a bass line" : "Laying down chords";
     case "studio_play": return args.action === "stop" ? "Stopping the music" : "Playing the song";
     case "studio_export": return "Bouncing the song to a WAV";
+    case "panacea_open": return args.new ? `Starting the canvas${quoted(args.new)}` : "Opening the canvas";
+    case "panacea_look": return args.library || args.recipe ? "Looking through the library" : "Looking at the canvas";
+    case "panacea_surface": return args.remove ? "Taking work off the canvas" : "Putting work on the canvas";
+    case "panacea_place": return args.ghost ? `Offering${quoted(args.title ?? args.recipe)}` : `Placing${quoted(args.title ?? args.recipe)}`;
+    case "panacea_set": return "Setting values";
+    case "panacea_arrange": return Array.isArray(args.remove) && args.remove.length ? "Tidying the canvas" : "Arranging the canvas";
+    case "panacea_bespoke": return args.action === "keep" ? "Keeping the piece" : args.action === "discard" ? "Discarding the draft" : "Making a piece for this";
+    case "panacea_export": return "Saving from the canvas";
     case "memory_write": return args.title ? `Remembering “${brief(args.title, 6)}”` : "Remembering something";
     case "memory_search": return `Searching its memory for${quoted(args.query)}`;
     case "memory_update":
@@ -247,6 +255,7 @@ function looked(name: string, args: Record<string, any>): string {
   if (name === "notebook") return "the notebook";
   if (name.startsWith("pdf_")) return "the PDF";
   if (name.startsWith("studio_")) return "the song";
+  if (name.startsWith("panacea_")) return "the canvas";
   if (name === "ask_user") return "your answer";
   if (name === "image_generate") return "the image";
   if (name === "speak") return "what to say next";

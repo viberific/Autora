@@ -265,6 +265,9 @@ export function looksOnly(name: string, args: Record<string, any> = {}): boolean
   // The same for the music window; playing and stopping change nothing in the song.
   if (name === "studio_look" || name === "studio_play") return true;
   if (name === "studio_open") return !String(args.new ?? "").trim();
+  // Looking at the canvas or its library is looking; opening it does not change it, starting a new one does.
+  if (name === "panacea_look") return true;
+  if (name === "panacea_open") return !String(args.new ?? "").trim();
   // A command that only reads (cat a file, list a folder) is looking.
   if (name === "terminal") return readOnlyCommand(String(args.command ?? ""));
   // Reading notebooks is looking; filing into one is not.

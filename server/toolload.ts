@@ -46,6 +46,12 @@ export const FAMILIES: Family[] = [
     words: /\bautora studio\b|\bmusic\b|\bsongs?\b|\bbeats?\b|\bdaw\b|\bchord progression|\bchords?\b|\bmelod(?:y|ies)\b|\bbassline\b|\bbass line\b|\bdrum (?:loop|pattern|track|beat|kit)|\bsynth(?:esizer)?\b|\bpiano roll\b|\bbpm\b|\btempo\b|\bmix(?:ing)? (?:the |a |my )?(?:song|track|tracks)\b|\bjingle\b|\bsoundtrack\b|\bproduce (?:a |some )?(?:track|tune|song)/i,
   },
   {
+    id: "panacea",
+    about: "Panacea: the canvas window, where controls for the work appear and go -- photos and tables as surfaces, panels from the library or composed from atoms, values set, bespoke pieces",
+    match: (n) => n.startsWith("panacea_"),
+    words: /\bpanacea\b|\bcanvas\b|\bgenerative ui\b|\b(?:sliders?|knobs?|toggles?|controls?) (?:for|to)\b|\b(?:control )?panels? for\b|\bdotted grid\b|\bmiro\b|\bfigma\b/i,
+  },
+  {
     id: "office",
     about: "Autora Pages, Sheets and Slides: read, edit, check, make and convert documents (.docx), spreadsheets (.xlsx) and presentations (.pptx)",
     match: (n) => n.startsWith("office_"),

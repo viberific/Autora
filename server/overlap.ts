@@ -27,7 +27,7 @@ interface Footprint {
 const ALONE: Footprint = { reads: [], writes: ["world"] };
 
 /** Tool families that drive one window each: opening or driving one changes it, looking at it does not. */
-const WINDOWS = ["office_", "video_", "photo_", "studio_", "pdf_", "app_", "cad_", "game_"];
+const WINDOWS = ["office_", "video_", "photo_", "studio_", "panacea_", "pdf_", "app_", "cad_", "game_"];
 
 const FILE_WORD = /(?:~|\.{0,2}\/)?(?:[\w.@-]+\/)+[\w.@-]*[\w@-]|\b[\w-]+\.[a-z][a-z0-9]{0,4}\b/gi;
 const NOT_FILES = /^(?:e\.g|i\.e|etc|vs|approx)\.?$|\.(?:com|org|net|io|dev|app|ai|co|uk|de)$|^https?:/i;

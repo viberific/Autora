@@ -553,6 +553,25 @@ Spectra's fetched renderer is most of what is on disk.
   `tests/e2e-studio.test.ts` (a real turn), `tests/ui-studio.test.ts` (a real browser: draws, plays, bounces a WAV and checks it has
   sound, an agent change lights up and undoes with Visible off, and with it on adds a track, draws a clip with notes, types a
   tempo and clicks drum hits by hand), `tests/studiohand.test.ts` (the steps).
+- `server/panacea.ts`, `server/specs/panacea.ts`, `src/lib/panacea/`, `src/components/PanaceaWindow.tsx` + `src/components/panacea/`,
+  `server/projectbook.ts`: **Panacea**, the canvas window (design and plan: `docs/PANACEA.md`). The model is pure and shared
+  (`src/lib/panacea/`: no DOM or Node types, imported by the server and the page): `atoms.ts` (the pieces), `recipe.ts` (the
+  rulebook `checkTree`, `fingerprint`, `generalize`), `surfaces.ts` (the image and data manifests, tables: `tableFrom`,
+  `filteredRows`, `aggregate`), `canvas.ts` (the document, `normalizeCanvas`, placement `placeFor` / `nearestFree`, `refocus` /
+  `fade` / `restore`, values), `library.ts` (180 built-in recipes, `instantiate`, `searchLibrary`), `rules.ts` (starters and offers,
+  `addSurfaceTo`, `placeRecipe` / `placeComposed`), `profile.ts` (what is learned), `handsteps.ts` (Visible work's plan). One canvas
+  per chat lives in `panacea.ts` (`panacea-<session>.json`, removed with the chat; `forgetSession` calls `dropPanacea`); the library
+  of learned recipes (`panacea-library.json`) and the profile (`panacea-profile.json`) are one per install. The wire is Music's:
+  `PUT /doc` with the rev seen (409 when the agent changed it since), `panaceadesk` state and `panacea.command` over the socket
+  (`hand`, `render`, `chart`), `/claim`, `/reply`, `/ready`; plus `/activity` (what the person did: the turn note, presence, the
+  profile, a local offer back, the suggester), `/use` (a panel's first use: a composed one joins the library), `/import` (a dropped
+  file kept as an artifact and read), `/deliver` (PNG, JPEG, SVG or CSV from the window), `/keep` (Save), and the library and
+  profile routes. Traps: the image is drawn by WebGL in the page (`imagegl.ts`), so only the window can render an export; a
+  chart's SVG is written with its colours inlined (`standaloneSvg`); ghosts are one at a time and an offer is dropped when its
+  value has moved on or it was waved away lately (`tell` in the window); the board never scrolls (it pans by its view;
+  `onScroll` resets), or a `scrollIntoView` would shift its chrome; a panel's height is estimated before it is drawn
+  (`estimateHeight`), and the board pans to show a new panel measured as drawn. `projectbook.ts` keeps each project folder's
+  notebook (a note per chat, written at the end of a turn in `server.ts`; attached with the folder in the message route).
 - `spectra-editor/`: Spectra-PDF's renderer (github.com/jasonulbright/Spectra-PDF), the PDF window's
   editor, built by `spectra-editor/vite.config.ts` into `dist/spectra-editor/`. **Its source is not in
   this repository**: `scripts/prepare-spectra-editor.mjs` (run by `npm run build` and `npm run lint`)

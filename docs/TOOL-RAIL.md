@@ -74,7 +74,8 @@ in its own build (`autora-3d/src/components/Rail.tsx`, Tailwind, same colours an
 rules): its bottom bar of text pills and the menus of its top bar are gone, the top bar is undo, redo and what is selected, and
 every tool is on the bar or in All tools. It is a copy of blofstedt/3D-Modeling, and the change was made in the copy
 (`docs/autora-3d-tool-rail.patch` is the same change; apply it upstream with `git apply -p2` before the next
-`scripts/sync-autora-3d.mjs`, which would otherwise undo it). Browser is a navigation bar, not a palette.
+`scripts/sync-autora-3d.mjs`, which would otherwise undo it). Browser is a navigation bar, not a palette. Panacea has no rail by design: its controls are the panels the work
+brings (`docs/PANACEA.md`).
 
 **No repeats.** When an app takes the rail, everything the rail now does is removed from the old chrome in the same change:
 a tool that is on the bar is not also a button in a toolbar, a tab, a row of chips or a form. Music dropped its tempo/key row,

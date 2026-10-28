@@ -87,6 +87,7 @@ import { readActivity } from "./src/lib/activity";
 import { mcpRoutes } from "./server/routes/mcp";
 import { artifactRoutes } from "./server/routes/artifacts";
 import { chatTitles, folderOfChat, setChatFolder } from "./server/folders";
+import { projectNotebookRefs, recordProjectTurn } from "./server/projectbook";
 import { systemRoutes } from "./server/routes/system";
 import {
   attachmentRefs, folderFiles, notebookRefs, type AttachmentRef, type NotebookRef,
@@ -170,6 +171,7 @@ import { dropGame, gameRoutes, gameState, onGameChange, serveGame } from "./serv
 import { dropPhoto, onPhotoChange, photoRoutes, photoState, servePhoto } from "./server/photodesk";
 import { dropTerm, onTermChange, termRoutes, termState, termUpgrade } from "./server/termdesk";
 import { dropStudio, onStudioChange, studioRoutes, studioState, studioTurnNote, studioVisible } from "./server/studio";
+import { dropPanacea, onPanaceaChange, onPanaceaTouch, panaceaRoutes, panaceaState, panaceaSuggester, panaceaTurnNote, panaceaVisible } from "./server/panacea";
 import { joinProjects, windowOff } from "./server/tools";
 import { dropOfficeDesk, onOfficeChange, onOfficePush, onOfficeTouch, officeBriefing, officeData, officeRoutes, officeState, officeHooks, serveOfficeEditors } from "./server/officedesk";
 import { renderToPdf, webDir as officeWebDir } from "./server/officerender";
@@ -484,6 +486,7 @@ function forgetSession(id: string) {
   dropPhoto(id);
   dropTerm(id);
   dropStudio(id);
+  dropPanacea(id);
   presenceSent.delete(id);
   for (const timers of [presenceTimers, termTimers]) {
     const timer = timers.get(id);
@@ -1316,6 +1319,21 @@ onCadChange((sessionId) => {
 /* Autora Music, the same way: the window opens, and the song changes (by the agent's tools or the person's hands). */
 onStudioChange((sessionId) => {
   sendEphemeral(sessionId, { type: "studiodesk", session: sessionId, state: studioState(sessionId) });
+});
+
+/* Panacea, the same way; and what the person does on the canvas is heard like a touch on any shared surface. */
+onPanaceaChange((sessionId) => {
+  sendEphemeral(sessionId, { type: "panaceadesk", session: sessionId, state: panaceaState(sessionId) });
+});
+onPanaceaTouch((sessionId, text) => {
+  // Heard by a running turn like any touch; but on the canvas the proactive voice is a ghost panel, not a remark in the chat.
+  presenceFor(sessionId).touch("panacea", "*", "edit", text);
+  announcePresence(sessionId);
+});
+/* Its suggester: a small, unwatched call, only with the companion on, nothing running, and somebody looking. */
+panaceaSuggester({
+  ask: (sessionId, system, prompt) => backgroundCall(sessionId, system, prompt, 160),
+  allowed: (sessionId) => state.collabRemarks && !sessions.get(sessionId)?.busy && Boolean(sessionSockets.get(sessionId)?.size),
 });
 
 /* The Office window, the same way: what the person types is theirs for a moment, and the window's
@@ -2349,6 +2367,9 @@ async function systemInstructionFor(
   // And the music window, when a song is open in it.
   const studioDesk = studioTurnNote(sessionId);
   if (studioDesk) notes.push(studioDesk);
+  // And the canvas, when Panacea is open.
+  const panaceaDesk = panaceaTurnNote(sessionId);
+  if (panaceaDesk) notes.push(panaceaDesk);
 
   const open = browsers.get(sessionId)?.status();
   if (open?.open && open.url?.startsWith("chrome-error:")) {
@@ -3805,6 +3826,8 @@ function autoLoadTools(session: Session, text: string) {
     for (const id of loadedFamilies({ events: session.events, said: text, hasPdf: pdfInChat(session), lazy: true })) {
       if (!have.has(id)) emitEvent(session, "tools.enable", "system", { family: id, why: "wanted" });
     }
+    // An open canvas is what the message is about, whatever its words: its tools come with it.
+    if (panaceaState(session.id).open && !have.has("panacea") && !windowOff("panacea_look")) emitEvent(session, "tools.enable", "system", { family: "panacea", why: "wanted" });
   }
   /* Connected servers' tools are loaded one by one, the ones the message is about: a server can carry a hundred
      and ten, and a chat about one file needs none of them. The agent can still ask for more (tools_enable query). */
@@ -3905,6 +3928,11 @@ function runTurnFor(
       const first = offerNextSteps(session, text, startSeq, result, opts, []);
       doneWhileAway(session, result, began, opts);
       noteSkillsUsed(session, startSeq, result);
+      /* A chat in a project folder leaves a line in the project's notebook, so the next chat in it carries on. */
+      if (!session.incognito) {
+        const files = session.events.filter((e) => e.seq > startSeq && e.kind === "media.file").map((e) => String(e.payload?.name ?? "")).filter(Boolean);
+        recordProjectTurn(session.id, { title: session.title, request: text, reply: result.reply, files, scheduled: Boolean(opts.automated) });
+      }
       /* A job or watcher runs the same prompt again and again; looking back at each run is one more model
          call per firing that teaches the same thing. The person's own turns are the ones worth learning from. */
       const ideas = opts.automated ? [] : await reflect(session, text, startSeq, previousReply, result);
@@ -6263,6 +6291,14 @@ async function startServer() {
     push: (id: string, message: Record<string, unknown>) => sendEphemeral(id, message),
   });
   studioVisible(() => state.agentCursor);
+  // Panacea: the canvas, its library and profile, the commands to it, and opening and putting it away.
+  panaceaRoutes(app, {
+    exists: (id: string) => sessions.has(id),
+    incognito: (id: string) => Boolean(sessions.get(id)?.incognito),
+    off: () => windowOff("panacea_look"),
+    push: (id: string, message: Record<string, unknown>) => sendEphemeral(id, message),
+  });
+  panaceaVisible(() => state.agentCursor);
 
   /* File -> Export PDF in the Office window: the server lays the document out (the same pages office_pdf
      makes), and the PDF opens in the PDF editor -- PDFs always go to our own. */
@@ -6578,7 +6614,9 @@ async function startServer() {
        nothing but a folder is a whole request, as a message of nothing but a file is. */
     const fromFolders = folderFiles(req.body?.folders, asFiles);
     const attachments = [...asFiles, ...fromFolders.files];
-    const notebooks = notebookRefs(req.body?.notebooks);
+    /* A project folder comes with its notebook: what the chats in it did and decided, so this one carries on from there. */
+    const notebooks = [...notebookRefs(req.body?.notebooks), ...(session.incognito ? [] : projectNotebookRefs(fromFolders.folders))]
+      .filter((b, i, all) => all.findIndex((x) => x.id === b.id) === i);
     if (!text && attachments.length === 0 && notebooks.length === 0) {
       return res.status(400).json({ error: fromFolders.folders.length ? "That folder has nothing in it." : "Empty message" });
     }
@@ -7024,6 +7062,7 @@ async function startServer() {
       ws.send(JSON.stringify({ type: "gamedesk", session: sessionId, state: gameState(sessionId) }));
       ws.send(JSON.stringify({ type: "photodesk", session: sessionId, state: photoState(sessionId) }));
       ws.send(JSON.stringify({ type: "studiodesk", session: sessionId, state: studioState(sessionId) }));
+      ws.send(JSON.stringify({ type: "panaceadesk", session: sessionId, state: panaceaState(sessionId) }));
       ws.send(JSON.stringify({ type: "termdesk", session: sessionId, state: termState(sessionId) }));
       ws.send(JSON.stringify({ type: "presence", session: sessionId, state: presenceFor(sessionId).view() }));
       if (openPreview?.opened) void openPreview.live.nudge();

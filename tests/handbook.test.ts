@@ -22,6 +22,7 @@ await test("every window has a manual that names its tools", () => {
   const expect: Record<string, string[]> = {
     browser: ["Autora Browser", "browser_handoff"], creator: ["Autora Creator", "app_preview"], terminal: ["Autora Terminal", "run_background"],
     pdf: ["Autora PDF", "pdf_compose"], video: ["Autora Video", "video_ui"], studio: ["Autora Music", "studio_make"],
+    panacea: ["Panacea", "panacea_bespoke"],
     office: ["Pages, Sheets and Slides", "office_create"], cad: ["Autora 3D", "cad_shape_measure"], game: ["Autora Games", "game_catalog"], photo: ["Autora Photo", "photo_edit"],
     widgets: ["Widgets", "widget_show"],
   };
@@ -88,7 +89,7 @@ await test("the Office manual says that with Visible work on office_edit's words
 
 await test("every window's manual says where its Save is and what it keeps; the overview says how folders work", () => {
   const kept: Record<string, string> = {
-    pdf: "kept in Artifacts", office: "Saved by you", studio: ".song.json", cad: "GLB", game: "GDevelop project", photo: "PNG", video: "writes the project now",
+    pdf: "kept in Artifacts", office: "Saved by you", studio: ".song.json", panacea: ".panacea.json", cad: "GLB", game: "GDevelop project", photo: "PNG", video: "writes the project now",
   };
   for (const [id, needle] of Object.entries(kept)) {
     const text = manualText(id as Parameters<typeof manualText>[0]);
@@ -126,6 +127,21 @@ await test("the Music manual says that with Visible work on the studio tools are
   const music = manualText("studio");
   for (const needle of ["With Visible work on", "by your hand, live", "Song tray", "Add track", "piano roll", "drum grid", "finished song goes in", "With Visible work off"]) {
     assert.ok(music.includes(needle), `the Music manual lacks "${needle}"`);
+  }
+});
+
+await test("the Panacea manual teaches the canvas as it is: no toolbar, the library and atoms, ghosts, fading, the history", () => {
+  const p = manualText("panacea");
+  for (const needle of ["no toolbar and no icons", "about twenty ready-made panels", "at most 8 controls in view", "Keep in library", "ghost", "Not now",
+    "Not this", "put away", "double-click the grid or press /", "Ask Autora", "Undo, Redo", "behind More", "denser panels", "Whose choices"]) {
+    assert.ok(p.includes(needle), `the Panacea manual lacks "${needle}"`);
+  }
+});
+
+await test("the Panacea manual says that with Visible work on its changes are done in the window by hand, and what has no control", () => {
+  const p = manualText("panacea");
+  for (const needle of ["With Visible work on", "by your hand", "name typed in the picker", "dragging that slider", "dragged by its title bar", "finished canvas goes in", "With Visible work off"]) {
+    assert.ok(p.includes(needle), `the Panacea manual lacks "${needle}"`);
   }
 });
 
@@ -177,6 +193,7 @@ await test("a tool finds its window's manual, and a tool with no window finds no
   assert.equal(manualId("terminal"), "terminal");
   assert.equal(manualId("pdf_edit"), "pdf");
   assert.equal(manualId("studio_clip"), "studio");
+  assert.equal(manualId("panacea_place"), "panacea");
   assert.equal(manualId("office_edit"), "office");
   assert.equal(manualId("cad_batch"), "cad");
   assert.equal(manualId("photo_edit"), "photo");
@@ -219,7 +236,7 @@ await test("tool_manual returns a manual, and refuses a window that does not exi
 
 await test("the general manual says every window has Load, and what the composer's Artifacts button attaches", () => {
   const text = windowsOverview();
-  for (const needle of ["has Load", "opens in that window", "you did not open", "the Artifacts button beside the notebook", "project folder", "up to 20"]) {
+  for (const needle of ["has Load", "opens in that window", "you did not open", "the Artifacts button beside the notebook", "project folder", "up to 20", "project notes", "comes with the folder"]) {
     assert.ok(text.includes(needle), `the windows overview lacks "${needle}"`);
   }
 });

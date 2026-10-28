@@ -77,6 +77,7 @@ import { handToWindow as officeHandToWindow } from "./officehand";
 import { runPdfTool } from "./pdf";
 import { runVideoTool } from "./opencut";
 import { runStudioTool, studioBriefing } from "./studio";
+import { panaceaBriefing, runPanaceaTool } from "./panacea";
 import {
   addEntries, createNotebook, describeNotebook, findNotebook, listNotebooks, moveEntry,
   notebookLine, notebookMarkdown, removeEntry, updateEntry, updateNotebook, type Notebook,
@@ -129,6 +130,7 @@ interface ToolSettings {
   pdf: { enabled: boolean };
   video: { enabled: boolean };
   studio: { enabled: boolean };
+  panacea: { enabled: boolean };
   pages: { enabled: boolean };
   sheets: { enabled: boolean };
   slides: { enabled: boolean };
@@ -184,6 +186,7 @@ import { skillsSPECS } from "./specs/skills";
 import { SkillError, catalogue, findSkills, readSkillFile, skillForUse, writeSkillParts, noteSkillUsed, type SkillAuthor } from "./skills";
 import { videoSPECS } from "./specs/video";
 import { studioSPECS } from "./specs/studio";
+import { panaceaSPECS } from "./specs/panacea";
 import { cadSPECS } from "./specs/cad";
 import { gameSPECS } from "./specs/game";
 import { gameAvailable, gameBriefing, runGameTool } from "./gamedesk";
@@ -260,6 +263,7 @@ const TOOLS: ToolSpec[] = [
   ...skillsSPECS,
   ...videoSPECS,
   ...studioSPECS,
+  ...panaceaSPECS,
 ];
 
 // ------------------------------------------------------------ availability --
@@ -376,6 +380,7 @@ export function windowOff(name: string, settings: ToolSettings = toolSettings())
   if (name.startsWith("pdf_")) return !settings.pdf.enabled;
   if (name.startsWith("video_")) return !settings.video.enabled;
   if (name.startsWith("studio_")) return !settings.studio.enabled;
+  if (name.startsWith("panacea_")) return !settings.panacea.enabled;
   // Built by autora-3d/ (npm run build); a server without it does not offer tools that cannot work.
   if (name.startsWith("cad_")) return !cadAvailable() || !settings.cad.enabled;
   // Built by gdevelop-editor/ (npm run build): the same.
@@ -3566,6 +3571,20 @@ async function runToolUnredacted(
         }
         return await runStudioTool(ctx.session, spec.name, args, { showFile: ctx.showFile });
 
+      // --------------------------------------------------------- Panacea --
+      case "panacea_open":
+      case "panacea_look":
+      case "panacea_surface":
+      case "panacea_place":
+      case "panacea_set":
+      case "panacea_arrange":
+      case "panacea_bespoke":
+      case "panacea_export":
+        if (ctx.memory.incognito) {
+          return { ok: false, summary: "Not available in an incognito chat: the canvas is kept on disk." };
+        }
+        return await runPanaceaTool(ctx.session, spec.name, args, { cwd: terminalDir(), showFile: ctx.showFile });
+
       // ---------------------------------------------------------- Office --
       case "office_guide":
       case "office_read":
@@ -3899,6 +3918,7 @@ export async function capabilityBriefing(): Promise<string> {
       "music, the look) stay theirs: ask and suggest, and do the technical work completely. Export only when they ask for a file."
     : offLine("Autora Video"));
   lines.push(studioBriefing(windows.studio.enabled));
+  lines.push(panaceaBriefing(windows.panacea.enabled));
   // Only a server that has the modeller built in says anything about it.
   if (cadAvailable()) lines.push(cadBriefing(windows.cad.enabled));
   if (gameAvailable()) lines.push(gameBriefing(windows.game.enabled));
