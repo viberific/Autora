@@ -41,8 +41,8 @@ const find = (id: string) => BUILTINS.find((r) => r.id === id);
 
 function withSurfaces() {
   const c = newCanvas("Test");
-  c.surfaces.push({ id: "img1", kind: "image", title: "Photo", x: 0, y: 0, w: 512, h: 320, name: "p.jpg", params: surfaceParams("image", null) });
-  c.surfaces.push({ id: "dat1", kind: "data", title: "Sales", x: 0, y: 600, w: 576, h: 352, name: "s.csv", params: surfaceParams("data", table), table });
+  c.surfaces.push({ id: "img1", kind: "image", title: "Photo", x: 0, y: 0, w: 512, h: 320, name: "p.jpg", params: surfaceParams({ kind: "image" }) });
+  c.surfaces.push({ id: "dat1", kind: "data", title: "Sales", x: 0, y: 600, w: 576, h: 352, name: "s.csv", params: surfaceParams({ kind: "data", table }), table });
   return c;
 }
 
@@ -56,11 +56,11 @@ await test("tables read as typed columns: dates, words, numbers with thousands s
 });
 
 await test("filters, search and sort decide the rows; charts aggregate them", () => {
-  const params = { ...surfaceParams("data", table), "filter.Region": ["EU"] };
+  const params = { ...surfaceParams({ kind: "data", table }), "filter.Region": ["EU"] };
   assert.equal(filteredRows(table, params).length, 2);
-  assert.equal(filteredRows(table, { ...surfaceParams("data", table), "filter.Revenue": [100, 160] }).length, 2);
-  assert.equal(filteredRows(table, { ...surfaceParams("data", table), search: "apac" }).length, 1);
-  const sorted = filteredRows(table, { ...surfaceParams("data", table), sort: "Revenue", descending: true });
+  assert.equal(filteredRows(table, { ...surfaceParams({ kind: "data", table }), "filter.Revenue": [100, 160] }).length, 2);
+  assert.equal(filteredRows(table, { ...surfaceParams({ kind: "data", table }), search: "apac" }).length, 1);
+  const sorted = filteredRows(table, { ...surfaceParams({ kind: "data", table }), sort: "Revenue", descending: true });
   assert.equal(sorted[0]![2], 1180);
   const agg = aggregate(table, table.rows, "Region", ["Revenue"], "sum");
   assert.deepEqual(agg.labels, ["EU", "US", "APAC"]);
@@ -92,7 +92,7 @@ await test("the rulebook refuses what is outside it, and says why", () => {
   assert.match(checkTree({ atom: "slider" }, ctx).errors.join(), /needs a bind/);
   assert.match(checkTree({ atom: "slider", bind: "9lives" }, ctx).errors.join(), /not a value name/);
   assert.match(checkTree({ atom: "chart", props: { x: "Nope", y: ["Revenue"] } }, ctx).errors.join(), /no column "Nope"/);
-  assert.match(checkTree({ atom: "button", props: { action: "@img1.explode" } }, ctx).errors.join(), /not a surface's action/);
+  assert.match(checkTree({ atom: "button", props: { action: "@img1.explode" } }, ctx).errors.join(), /not a surface's command/);
   const loud = { atom: "stack", children: Array.from({ length: 9 }, (_, i) => ({ atom: "slider", bind: `v${i}` })) };
   assert.match(checkTree(loud, ctx).errors.join(), /9 controls in view: a panel shows at most 8. Mark the rarer ones "advanced"/);
   const calm = { atom: "stack", children: Array.from({ length: 9 }, (_, i) => ({ atom: "slider", bind: `v${i}`, ...(i > 5 ? { advanced: true } : {}) })) };
@@ -114,8 +114,8 @@ await test("a panel's shape is its fingerprint: other words and values, same sha
 
 // ------------------------------------------------------------- the library --
 
-await test("the library has twenty pieces for each kind of work, every one passes the rulebook on a canvas", () => {
-  for (const d of DOMAINS) assert.equal(BUILTINS.filter((r) => r.domain === d).length, 20, d);
+await test("the library has twenty pieces for each kind of work (thirty for photos, with the engine's tools), every one passes the rulebook on a canvas", () => {
+  for (const d of DOMAINS) assert.equal(BUILTINS.filter((r) => r.domain === d).length, d === "photo" ? 30 : 20, d);
   assert.equal(new Set(BUILTINS.map((r) => r.id)).size, BUILTINS.length, "ids are unique");
   const c = withSurfaces();
   for (const r of BUILTINS) {
@@ -132,7 +132,7 @@ await test("data recipes take the table's own columns; one that needs what the t
   if (!("error" in bar)) assert.deepEqual([bar.tree.children![0]!.props!.x, bar.tree.children![0]!.props!.y], ["Region", ["Revenue"]]);
   const words = tableFrom([["A", "B"], ["x", "y"]])!;
   const plain = newCanvas();
-  plain.surfaces.push({ id: "d", kind: "data", title: "W", x: 0, y: 0, w: 400, h: 300, name: "w.csv", params: surfaceParams("data", words), table: words });
+  plain.surfaces.push({ id: "d", kind: "data", title: "W", x: 0, y: 0, w: 400, h: 300, name: "w.csv", params: surfaceParams({ kind: "data", table: words }), table: words });
   const scatter = instantiate(find("data.scatter")!, contextOf(plain));
   assert.ok("error" in scatter && /numeric column/.test(scatter.error));
 });
@@ -152,17 +152,18 @@ await test("a surface brings its starters beside it, on the person's side, never
   assert.ok(!("error" in made));
   if ("error" in made) return;
   assert.equal(made.surface.h, 320, "as tall as the picture's shape");
-  assert.deepEqual(made.panels.map((p) => `${p.recipe}:${p.state}`), ["photo.light:live", "photo.colour:live", "photo.looks:ghost"]);
+  assert.deepEqual(made.panels.map((p) => `${p.recipe}:${p.state}`), ["photo.light:live", "photo.colour:live", "photo.tools:live", "photo.looks:ghost"]);
   assert.equal(c.focus, made.surface.id);
   const boxes = [made.surface, ...made.panels].map((b) => ({ ...b, h: b.h || canvasLib.estimateHeight((b as { tree?: never }).tree ?? { atom: "stack" }, b.w) }));
   for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
     const a = boxes[i]!; const b = boxes[j]!;
     assert.ok(!(a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y), `${i} and ${j} overlap`);
   }
-  assert.ok(made.panels.filter((p) => p.state === "live").every((p) => p.x >= made.surface.x + made.surface.w), "to the right");
+  assert.ok(made.panels.filter((p) => p.state === "live" && p.recipe !== "photo.tools").every((p) => p.x >= made.surface.x + made.surface.w), "to the right");
+  assert.ok(made.panels[2]!.x + made.panels[2]!.w <= made.surface.x, "and the tools on the other side, as a tool bar");
   const left = newCanvas();
   const sl = addSurfaceTo(left, { kind: "image", name: "a.jpg" }, find, { side: "left" });
-  if (!("error" in sl)) assert.ok(sl.panels[0]!.x < sl.surface.x, "or the side they like");
+  if (!("error" in sl)) assert.ok(sl.panels[0]!.x < sl.surface.x && sl.panels[2]!.x >= sl.surface.x + sl.surface.w, "or the side they like, the tools opposite");
   const t = addSurfaceTo(newCanvas(), { kind: "data", name: "sales.csv", table }, find);
   if (!("error" in t)) assert.deepEqual(t.panels.map((p) => p.recipe), ["data.line", "data.filter-category", "data.explore"]);
   assert.deepEqual(starters({ id: "x", kind: "data", title: "", x: 0, y: 0, w: 1, h: 1, name: "", params: {}, table: tableFrom([["a", "b"], ["x", "y"]])! }).live, []);
@@ -301,7 +302,7 @@ const call = async (method: string, url: string, body?: unknown, raw?: Buffer, t
 };
 
 await test("the tools are a family of their own, read-only where they only look, and switch off with the window", () => {
-  assert.deepEqual(panaceaSPECS.map((s) => s.name), ["panacea_open", "panacea_look", "panacea_surface", "panacea_place", "panacea_set", "panacea_arrange", "panacea_bespoke", "panacea_export"]);
+  assert.deepEqual(panaceaSPECS.map((s) => s.name), ["panacea_open", "panacea_look", "panacea_do", "panacea_surface", "panacea_place", "panacea_set", "panacea_arrange", "panacea_bespoke", "panacea_export"]);
   assert.ok(loadedFamilies({ events: [], said: "open the panacea canvas", hasPdf: false, lazy: true }).has("panacea"));
   assert.equal(looksOnly("panacea_look", {}), true);
   assert.equal(looksOnly("panacea_open", {}), true);

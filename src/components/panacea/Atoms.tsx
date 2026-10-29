@@ -3,11 +3,14 @@ import { ATOMS, emptyValue, type LaneItem, type Value } from "../../lib/panacea/
 import type { Panel } from "../../lib/panacea/canvas";
 import { revealed } from "../../lib/panacea/profile";
 import { bindsOf, isRef, parseBind, type Node, type Option } from "../../lib/panacea/recipe";
-import { findParam, LOOKS, type ParamSpec } from "../../lib/panacea/surfaces";
+import { findParam, LOOKS, toolsOf, type ParamSpec } from "../../lib/panacea/surfaces";
+import { BLENDS, newImageDoc, type Layer } from "../../lib/panacea/image";
 import { Chart, DataTable } from "./Chart";
 import { Bespoke } from "./Bespoke";
 import { imageStats, onImageStats } from "./imagegl";
 import { usePanacea, type PanaceaApi } from "./context";
+import { ToolGlyph } from "./ToolGlyph";
+import { IconX } from "../Icons";
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 const roundTo = (v: number, step: number) => (step > 0 ? Math.round(v / step) * step : v);
@@ -19,7 +22,7 @@ function paramOf(api: PanaceaApi, bind: string | undefined): ParamSpec | null {
   if (!bind?.startsWith("@")) return null;
   const { surface, param } = parseBind(bind);
   const s = api.canvas.surfaces.find((x) => x.id === surface);
-  return s ? findParam(s.kind, s.table, param) : null;
+  return s ? findParam(s, param) : null;
 }
 
 /** A prop that may read a shared value ("=data.chart"). */
@@ -155,6 +158,8 @@ export function Atom({ node, panel }: AtomProps): ReactNode {
     case "list": return <ListField node={node} label={label} value={Array.isArray(value) ? (value as string[]) : []} set={set} />;
     case "pads": return <Pads node={node} label={label} value={Array.isArray(value) ? (value as number[]) : []} set={set} />;
     case "lanes": return <Lanes node={node} label={label} value={Array.isArray(value) ? (value as LaneItem[]) : []} set={set} />;
+    case "tools": return <Tools node={node} label={label} value={typeof value === "string" ? value : "pointer"} set={set} />;
+    case "layers": return <Layers surface={String(node.props?.surface ?? "")} />;
     case "histogram": return <Histogram surface={String(node.props?.surface ?? "")} />;
     case "chart": {
       const s = api.canvas.surfaces.find((x) => x.id === node.props?.surface);
@@ -491,7 +496,7 @@ function ActionButton({ node, panel, label }: { node: Node; panel: Panel; label:
   const action = typeof node.props?.action === "string" ? node.props.action : "";
   const run = () => {
     if (ask) return api.ask(ask, panel);
-    if (action.startsWith("@")) return api.act(action);
+    if (action.startsWith("@")) return api.act(action, node.props?.args && typeof node.props.args === "object" ? (node.props.args as Record<string, unknown>) : undefined);
     if (action.startsWith("set:")) {
       const eq = action.indexOf("=");
       try { api.set(action.slice(4, eq), JSON.parse(action.slice(eq + 1)) as Value, panel, label); } catch { /* a value that is not JSON does nothing */ }
@@ -604,6 +609,89 @@ function Lanes({ node, label, value, set }: { node: Node; label: string; value: 
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** A palette of a surface's pointer tools: one press picks one, its key shown on hover. */
+function Tools({ node, label, value, set }: { node: Node; label: string; value: string; set: (v: Value, what?: string) => void }) {
+  const api = usePanacea();
+  const surface = api.canvas.surfaces.find((s) => node.bind?.startsWith(`@${s.id}.`));
+  const all = surface ? toolsOf(surface) : [];
+  const raw = node.props?.options;
+  const only = Array.isArray(raw) && raw.length ? new Set((raw as Option[]).map((o) => o.value)) : null;
+  const list = all.filter((t) => !only || only.has(t.name));
+  const on = all.find((t) => t.name === value);
+  return (
+    <div className="pa-field" data-atom="tools" data-bind={node.bind}>
+      {label && <span className="pa-cap">{label}{on ? <b className="pa-tools-now">{on.label}</b> : null}</span>}
+      <div className="pa-tools" role="radiogroup" aria-label={label || "Tools"}>
+        {list.map((t) => (
+          <button key={t.name} type="button" role="radio" aria-checked={value === t.name} aria-label={t.label} data-value={t.name} title={`${t.label} (${t.key === "Escape" ? "Esc" : t.key.toUpperCase()}): ${t.about}`}
+            className={value === t.name ? "is-on" : ""} onClick={() => set(t.name, `${t.label} tool`)}>
+            <ToolGlyph tool={t.name} />
+          </button>
+        ))}
+      </div>
+      {on && on.name !== "pointer" && <p className="pa-note pa-tools-about">{on.about}</p>}
+    </div>
+  );
+}
+
+/** A photo's layers, top first, and its local adjustments: show or hide, pick, reorder, opacity and blend, delete. */
+function Layers({ surface }: { surface: string }) {
+  const api = usePanacea();
+  const s = api.canvas.surfaces.find((x) => x.id === surface);
+  if (!s || s.kind !== "image") return <div className="pa-chart-empty">The picture is gone.</div>;
+  const doc = s.image ?? newImageDoc();
+  const v = (l: Layer, k: string) => s.params[`layer.${l.id}.${k}`];
+  const KIND: Record<string, string> = { photo: "Photo", copy: "Pixels", image: "Picture", fill: "Fill", paint: "Paint", text: "Text", heal: "Removed" };
+  const active = doc.layers.find((l) => l.id === doc.active);
+  return (
+    <div className="pa-layers" data-atom="layers">
+      <ul className="pa-layer-list" aria-label="Layers">
+        {[...doc.layers].reverse().map((l) => {
+          const shown = v(l, "visible") !== false;
+          return (
+            <li key={l.id} className={`pa-layer${l.id === doc.active ? " is-on" : ""}${shown ? "" : " is-hidden"}`} data-layer={l.id}>
+              <button type="button" className="pa-layer-eye" aria-pressed={shown} aria-label={`${shown ? "Hide" : "Show"} ${l.name}`} onClick={() => api.setOn(s.id, { [`layer.${l.id}.visible`]: !shown }, `${shown ? "Hid" : "Showed"} ${l.name}`)}>{shown ? "●" : "○"}</button>
+              <button type="button" className="pa-layer-name" onClick={() => void api.run(s.id, "layer.select", { id: l.id }, `Picked ${l.name}`)}>
+                <span>{l.name}</span><small>{KIND[l.kind]}{l.mask?.length ? " · masked" : ""}</small>
+              </button>
+              {l.kind !== "photo" && (
+                <span className="pa-layer-acts">
+                  <button type="button" aria-label={`Bring ${l.name} forward`} title="Bring forward" onClick={() => void api.run(s.id, "layer.up", { id: l.id }, `Moved ${l.name} up`)}>↑</button>
+                  <button type="button" aria-label={`Send ${l.name} backward`} title="Send backward" onClick={() => void api.run(s.id, "layer.down", { id: l.id }, `Moved ${l.name} down`)}>↓</button>
+                  <button type="button" aria-label={`Delete ${l.name}`} title="Delete" onClick={() => void api.run(s.id, "layer.delete", { id: l.id }, `Deleted ${l.name}`)}><IconX size={10} /></button>
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {active && (
+        <div className="pa-layer-props">
+          <label className="pa-cap" htmlFor={`op-${active.id}`}>Opacity <span className="pa-val">{String(v(active, "opacity") ?? 100)}%</span></label>
+          <input id={`op-${active.id}`} type="range" min={0} max={100} value={Number(v(active, "opacity") ?? 100)} aria-label={`${active.name} opacity`}
+            onPointerDown={() => api.hold(true)} onPointerUp={() => api.hold(false)}
+            onChange={(e) => api.setOn(s.id, { [`layer.${active.id}.opacity`]: Number(e.target.value) }, `${active.name} opacity`)} />
+          <select aria-label={`${active.name} blend`} value={String(v(active, "blend") ?? "normal")} onChange={(e) => api.setOn(s.id, { [`layer.${active.id}.blend`]: e.target.value }, `${active.name} blend`)}>
+            {BLENDS.map((b) => <option key={b} value={b}>{b === "normal" ? "Normal" : b.replace("-", " ")}</option>)}
+          </select>
+          {active.mask?.length && active.kind !== "copy" && active.kind !== "heal" ? <button type="button" className="pa-btn" onClick={() => void api.run(s.id, "layer.mask_clear", { id: active.id }, `Cleared ${active.name}'s mask`)}>Clear mask</button> : null}
+        </div>
+      )}
+      {doc.masks.length > 0 && (
+        <ul className="pa-layer-list is-masks" aria-label="Local adjustments">
+          {doc.masks.map((m) => (
+            <li key={m.id} className="pa-layer" data-mask={m.id}>
+              <span className="pa-layer-eye" aria-hidden="true">◐</span>
+              <span className="pa-layer-name"><span>{m.name}</span><small>Adjustment</small></span>
+              <span className="pa-layer-acts"><button type="button" aria-label={`Delete ${m.name}`} title="Delete" onClick={() => void api.run(s.id, "mask.delete", { id: m.id }, `Deleted ${m.name}`)}><IconX size={10} /></button></span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

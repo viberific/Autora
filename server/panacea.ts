@@ -30,9 +30,10 @@ import {
 import { panaceaSteps, stepWords } from "../src/lib/panacea/handsteps";
 import { BUILTINS, DOMAINS, libraryIndex, searchLibrary, type Domain, type Recipe } from "../src/lib/panacea/library";
 import { normalizeProfile, noteDismiss, noteSide, noteUse, preferredSide, profileWords, quieted, sideOf, usageKey, type Profile } from "../src/lib/panacea/profile";
-import { checkTree, fingerprint, generalize, treeWords, type Node } from "../src/lib/panacea/recipe";
-import { addSurfaceTo, placeComposed, placeRecipe, suggestFor, type SurfaceInput } from "../src/lib/panacea/rules";
-import { filteredRows, splitDelimited, tableCsv, tableFrom, type Table } from "../src/lib/panacea/surfaces";
+import { fromShown, imageWords, newImageDoc } from "../src/lib/panacea/image";
+import { bindsOf, checkTree, fingerprint, generalize, treeWords, type Node } from "../src/lib/panacea/recipe";
+import { addSurfaceTo, placeComposed, placeRecipe, runCommand, suggestFor, type SurfaceInput } from "../src/lib/panacea/rules";
+import { engineWords, filteredRows, splitDelimited, tableCsv, tableFrom, type Table } from "../src/lib/panacea/surfaces";
 import { MAX_ARTIFACT_BYTES, keepCopy, saveArtifact } from "./artifacts";
 import { chatTitle } from "./folders";
 import { readFileRef } from "./fileref";
@@ -160,6 +161,39 @@ export function dropPanacea(session: string) {
   entries.delete(session);
   if (!validSession(session)) return;
   fs.rmSync(path.join(stateDir(), `${savedName(session)}.json`), { force: true });
+  fs.rmSync(maskDir(session), { recursive: true, force: true });
+}
+
+/** Where the outlines the segmentation model found for a chat's pictures are kept. */
+const maskDir = (session: string) => path.join(stateDir(), "panacea-masks", session);
+
+// ---------------------------------------------------------------- the model --
+
+/** Object select's model (MediaPipe's interactive segmenter, "magic touch", Apache-2.0): fetched once, checked, kept. */
+const MODEL_URL = "https://storage.googleapis.com/mediapipe-models/interactive_segmenter/magic_touch/float32/1/magic_touch.tflite";
+const MODEL_SHA256 = "e24338a717c1b7ad8d159666677ef400babb7f33b8ad60c4d96db4ecf694cd25";
+let modelFetch: Promise<string> | null = null;
+
+async function segmentModel(): Promise<string> {
+  const given = process.env.AUTORA_PANACEA_MODEL;
+  if (given && fs.existsSync(given)) return given;
+  const file = path.join(stateDir(), "models", "magic_touch.tflite");
+  if (fs.existsSync(file)) return file;
+  modelFetch ??= (async () => {
+    const res = await fetch(MODEL_URL);
+    if (!res.ok) throw new Error(`the model's host answered ${res.status}`);
+    const data = Buffer.from(await res.arrayBuffer());
+    if (crypto.createHash("sha256").update(data).digest("hex") !== MODEL_SHA256) throw new Error("the model that came is not the one expected");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(`${file}.part`, data);
+    fs.renameSync(`${file}.part`, file);
+    return file;
+  })();
+  try {
+    return await modelFetch;
+  } finally {
+    modelFetch = null;
+  }
 }
 
 // ---------------------------------------------------------------- library --
@@ -216,6 +250,8 @@ const findRecipe = (id: string): Recipe | undefined => allRecipes().find((r) => 
  * hand can summon it, and forgotten in a week if nobody uses it.
  */
 function learn(tree: Node, meta: { name: string; about: string; domain: Domain; origin: "composed" | "bespoke"; w: number }, kinds: Record<string, "image" | "data">, used: boolean): string {
+  // A panel for one layer or one local adjustment is of that picture only: nothing to keep for another canvas.
+  if (bindsOf(tree).some((b) => /^@[\w-]+\.(layer|mask)\./.test(b))) return "";
   const general = generalize(tree, kinds);
   const fp = fingerprint(general);
   const builtin = BUILTINS.find((r) => fingerprint(r.tree) === fp);
@@ -445,6 +481,8 @@ interface Outcome {
   ok: boolean;
   summary: string;
   preview?: string;
+  /** Pictures the model is handed with the result (panacea_look surface). */
+  images?: Array<{ mime: string; data: string }>;
 }
 
 class Refuse extends Error {}
@@ -730,6 +768,24 @@ export async function runPanaceaTool(session: string, name: string, args: Record
             preview: `${found.length} recipes`,
           };
         }
+        if (typeof args.surface === "string") {
+          const s = e.canvas.surfaces.find((x) => x.id === args.surface) ?? refuse(`There is no surface "${args.surface}". Surfaces: ${e.canvas.surfaces.map((x) => `${x.id} ${x.kind}`).join(", ") || "none"}.`);
+          const words = [
+            `${s.id} "${s.title}" (${s.kind}${s.px ? `, ${s.px.w}x${s.px.h}` : ""}).`,
+            s.kind === "image" ? imageWords(s.image ?? newImageDoc(), s.params) : "",
+            `Its engine (panacea_do; points are 0..1 across the picture as shown):\n${engineWords(s)}`,
+          ].filter(Boolean).join("\n");
+          if (s.kind !== "image") return { ok: true, summary: words, preview: s.title };
+          if (!e.ready) return { ok: true, summary: `${words}\nThe picture itself can be seen once the Panacea window is open in the browser.`, preview: s.title };
+          const shot = (await command(session, "snapshot", { surface: s.id, grid: args.grid !== false }, 30_000).catch(() => null)) as { base64?: string } | null;
+          if (!shot?.base64) return { ok: true, summary: `${words}\nThe window could not show the picture just now.`, preview: s.title };
+          return {
+            ok: true,
+            summary: `The picture as shown is in this result${args.grid !== false ? ", with a grid of tenths (0.1 ... 0.9 across from the left and down from the top)" : ""}${s.image?.selection.length ? "; the selection is outlined in marching ants" : ""}.\n${words}`,
+            preview: s.title,
+            images: [{ mime: "image/png", data: shot.base64 }],
+          };
+        }
         const recent = e.acts.slice(-12).map((a) => a.text);
         return {
           ok: true,
@@ -750,6 +806,59 @@ export async function runPanaceaTool(session: string, name: string, args: Record
         if (hand) e.quiet = e.rev + 1;
         commit(session, e, next, "agent");
         return { ok: true, summary: `${done.text}${hand ? ` ${hand}` : ""}`, preview: done.preview };
+      }
+
+      case "panacea_do": {
+        const c = e.canvas;
+        const images = c.surfaces.filter((x) => x.kind === "image");
+        const s = (typeof args.surface === "string" ? c.surfaces.find((x) => x.id === args.surface) : images.find((x) => x.id === c.focus) ?? images.at(-1))
+          ?? refuse(images.length ? `There is no surface "${String(args.surface)}". Photos: ${images.map((x) => `${x.id} "${x.title}"`).join(", ")}.` : "There is no photo on the canvas; add one first (panacea_surface).");
+        if (s.kind !== "image") refuse(`${s.id} is a table; panacea_do works on a photo. A table's controls are panels (panacea_place).`);
+        const given = (Array.isArray(args.commands) ? args.commands : []).slice(0, 24).filter((x: unknown): x is { name: string; args?: Record<string, unknown> } => !!x && typeof (x as { name?: unknown }).name === "string");
+        if (!given.length) refuse("Pass `commands`: [{\"name\": \"select.rect\", \"args\": {\"x\": 0, \"y\": 0, \"w\": 1, \"h\": 0.4}}]. panacea_look surface lists them.");
+        // Points are as shown when each command runs: a crop or an uncrop earlier in the list moves the ones after it, so the
+        // list is walked on a copy of the canvas, each command's points read against the picture as it is by then.
+        const walk = structuredClone(c);
+        const list = given.map((g) => {
+          const a: Record<string, unknown> = g.args && typeof g.args === "object" ? { ...g.args } : {};
+          // A picture to place is a file the agent names: kept as an artifact, and the layer shows it.
+          if (g.name === "layer.place" && a.artifact === undefined && a.file !== undefined) {
+            const f = readFileRef(a.file, hooks.cwd, "the picture", "panacea_do");
+            if (!IMAGE_EXT.test(f.name)) refuse(`${f.name} is not a picture (PNG, JPEG, GIF, WebP).`);
+            a.artifact = (f.artifact ?? saveArtifact({ origin: "agent", name: f.name, data: f.data, mime: `image/${/png$/i.test(f.name) ? "png" : /gif$/i.test(f.name) ? "gif" : /webp$/i.test(f.name) ? "webp" : "jpeg"}`, session, note: "Placed in Panacea" })).id;
+            delete a.file;
+          }
+          const w = walk.surfaces.find((x) => x.id === s.id)!;
+          const shown = fromShown({ image: w.image ?? newImageDoc(), params: w.params, px: w.px }, g.name, a);
+          runCommand(walk, s.id, shown.name, shown.args, findRecipe, { by: "agent" });
+          return shown;
+        });
+        type Done = { name: string; ok: boolean; said?: string; error?: string; hand?: boolean };
+        let results: Done[];
+        setOpen(session, true);
+        if (e.ready) {
+          // The window does them: it has the picture, the model and the person's view. By hand with Visible work on.
+          const reply = (await command(session, "do", { surface: s.id, commands: list, hand: visible(), by: "agent" }, 30_000 + list.length * 60_000)) as { results?: Done[] } | null;
+          results = reply?.results ?? [];
+        } else {
+          const next = structuredClone(c);
+          results = [];
+          for (const cmd of list) {
+            const r = runCommand(next, s.id, cmd.name, cmd.args, findRecipe, { by: "agent", side: preferredSide(profileNow()) });
+            results.push(r.ok ? { name: cmd.name, ok: true, said: r.said } : { name: cmd.name, ok: false, error: r.window ? `${r.error} (open the Panacea window in the browser for this one)` : r.error });
+            if (!r.ok) break;
+          }
+          if (results.some((r) => r.ok)) commit(session, e, next, "agent");
+        }
+        const ok = results.filter((r) => r.ok);
+        const hand = results.some((r) => r.hand);
+        const lines = results.map((r) => `${r.name}: ${r.ok ? r.said ?? "done" : `FAILED -- ${r.error}`}`);
+        const skipped = list.length - results.length;
+        return {
+          ok: ok.length > 0,
+          summary: `${lines.join("\n")}${skipped ? `\n${skipped} more not run (it stops at the first that fails).` : ""}${hand ? "\nDone by hand in the Panacea window, where the person watched." : ""}\nNow: ${imageWords((entryFor(session).canvas.surfaces.find((x) => x.id === s.id)?.image) ?? newImageDoc(), entryFor(session).canvas.surfaces.find((x) => x.id === s.id)?.params ?? {})}`,
+          preview: list.length === 1 ? list[0]!.name : `${list.length} commands`,
+        };
       }
 
       case "panacea_export": {
@@ -865,7 +974,15 @@ export function panaceaRoutes(app: Express, opts: {
     res.json({ ok: true });
   });
 
-  app.get("/api/panacea/profile", (_req, res) => {
+  /* Object select's model, for the page's segmenter: kept here once fetched, so it is fetched once per install. */
+  app.get("/api/panacea/model/magic_touch.tflite", (_req, res) => {
+    segmentModel().then((file) => {
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      res.type("application/octet-stream").sendFile(file);
+    }).catch((err: unknown) => res.status(503).json({ error: `Object select's model could not be fetched: ${err instanceof Error ? err.message : String(err)}` }));
+  });
+
+    app.get("/api/panacea/profile", (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.json({ profile: profileNow() });
   });
@@ -959,6 +1076,29 @@ export function panaceaRoutes(app: Express, opts: {
       return res.json({ kind: "data", artifact: art.id, name: art.name, table });
     }
     res.status(415).json({ error: "Panacea works on photos (PNG, JPEG, GIF, WebP) and tables (CSV, TSV, XLSX) for now." });
+  });
+
+  /* An outline the segmentation model found (a grey PNG), kept beside the chat's canvas: an object's selection names it. */
+  app.post("/api/panacea/:session/mask", rawBody, (req, res) => {
+    const id = known(req, res);
+    if (!id) return;
+    if (opts.off()) return res.status(403).json({ error: OFF });
+    if (!Buffer.isBuffer(req.body) || req.body.byteLength < 8 || req.body.readUInt32BE(0) !== 0x89504e47) return res.status(400).json({ error: "A mask is a PNG." });
+    if (req.body.byteLength > 16 * 1024 * 1024) return res.status(413).json({ error: "That mask is too big." });
+    const name = crypto.createHash("sha256").update(req.body).digest("hex").slice(0, 24);
+    fs.mkdirSync(maskDir(id), { recursive: true });
+    fs.writeFileSync(path.join(maskDir(id), `${name}.png`), req.body);
+    res.json({ id: name });
+  });
+
+  app.get("/api/panacea/:session/mask/:mask", (req, res) => {
+    const id = known(req, res);
+    if (!id) return;
+    const name = String(req.params.mask);
+    const file = path.join(maskDir(id), `${name}.png`);
+    if (!/^[0-9a-f]{24}$/.test(name) || !fs.existsSync(file)) return res.status(404).json({ error: "No such mask." });
+    res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
+    res.type("image/png").sendFile(file);
   });
 
   /* Save: the canvas as it is, kept in the project's folder in Artifacts. The agent is not woken. */

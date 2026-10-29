@@ -3595,6 +3595,7 @@ async function runToolUnredacted(
       case "panacea_set":
       case "panacea_arrange":
       case "panacea_bespoke":
+      case "panacea_do":
       case "panacea_export":
         if (ctx.memory.incognito) {
           return { ok: false, summary: "Not available in an incognito chat: the canvas is kept on disk." };

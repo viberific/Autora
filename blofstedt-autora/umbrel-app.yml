@@ -193,8 +193,10 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  New: web search now has an order it cannot skip. Autora asks 4get first, then Webclaw, then its own search
-  providers, and says which one answered; a blocked, empty or failed result moves it down the list on its own. The
-  browser is no longer used as a quiet substitute for a search -- it opens a page when you ask to see one. The MCP
-  catalog also gained 4get and Fetch (a small page reader), and the app image now carries uv so those servers can
-  start.
+  New: Panacea's photos have an engine of their own. Select with a rectangle, an ellipse, a lasso, a polygon, a brush,
+  the magic wand, a colour range, or a click on an object (a model in your browser finds its outline, and the picture
+  never leaves your machine); add, take away, feather, grow and invert. Keep a selection as a local adjustment with
+  sliders of its own, copy or cut it to a layer and move it, fill it, delete it, remove what is in it, or crop to it.
+  Paint, erase, heal and add text; colour by hue, grading, sharpen, blur and dehaze join the sliders. The tools come with
+  the photo, and the panels for a selection, a layer or text come when you make one. Autora sees the picture and works
+  the same tools, by hand with its cursor when Visible work is on.

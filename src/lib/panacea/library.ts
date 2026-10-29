@@ -14,6 +14,7 @@
  * Shared by the server and the page, so written without DOM or Node types.
  */
 import type { Value } from "./atoms";
+import { HUE_NAMES } from "./image";
 import { checkTree, type CheckContext, type Node } from "./recipe";
 import type { Table } from "./surfaces";
 
@@ -77,6 +78,8 @@ const table = (limit = 50) => n("table", { surface: "@data", limit });
 const hist = () => n("histogram", { surface: "@image" });
 
 const I = (p: string) => `@image.${p}`;
+const HUE_LIST = HUE_NAMES;
+const cap = (w: string) => `${w[0]!.toUpperCase()}${w.slice(1)}`;
 const D = (p: string) => `@data.${p}`;
 
 const LOOK_SWATCHES = "looks";
@@ -95,7 +98,7 @@ const PHOTO: Recipe[] = [
   r("photo", "looks", "Looks", "a row of looks to try, and how strong", "looks presets filters style mood",
     stack(sw(I("look"), "Look", LOOK_SWATCHES), sl(I("look_amount"), "Strength", { unit: "%" })), 320),
   r("photo", "crop", "Crop & rotate", "aspect, straighten, rotate and flip", "crop rotate straighten aspect flip frame",
-    grp("Crop & rotate", seg(I("aspect"), "Aspect"), sl(I("straighten"), "Straighten", { centre: true }), seg(I("rotate"), "Rotate"), adv(tg(I("flip_h"), "Flip horizontal")), adv(tg(I("flip_v"), "Flip vertical")), adv(sl(I("zoom"), "Zoom")))),
+    grp("Crop & rotate", n("button", { label: "Crop tool", action: "set:@image.tool=\"crop\"", tone: "accent" }), seg(I("aspect"), "Aspect"), sl(I("straighten"), "Straighten", { centre: true }), seg(I("rotate"), "Rotate"), adv(act("Crop to selection", "@image.image.crop_selection")), adv(act("Clear crop", "@image.image.uncrop")), adv(tg(I("flip_h"), "Flip horizontal")), adv(tg(I("flip_v"), "Flip vertical")), adv(sl(I("zoom"), "Zoom")))),
   r("photo", "curve", "Tone curve", "the tone curve over the live histogram", "curve curves tone histogram levels",
     stack(hist(), n("curve", { label: "Curve" }, I("curve"))), 304),
   r("photo", "histogram", "Histogram", "the picture's live histogram", "histogram levels clipping", stack(hist()), 256),
@@ -122,6 +125,28 @@ const PHOTO: Recipe[] = [
   r("photo", "export", "Export", "save the picture to the project", "export save png download", stack(note("Saved to the project's folder in Artifacts, as a PNG."), act("Export PNG", "@image.export", "accent"))),
   r("photo", "social", "Social crop", "square, portrait or story crops", "social instagram square story crop",
     stack(seg(I("aspect"), "Crop", [{ value: "1:1", label: "Square" }, { value: "4:5", label: "Portrait" }, { value: "9:16", label: "Story" }, { value: "16:9", label: "Wide" }]), sl(I("zoom"), "Zoom"))),
+  // The engine's tools: selecting, layers, painting, removing.
+  r("photo", "tools", "Tools", "every tool for the picture: select, crop, paint, heal, text", "tools select selection lasso marquee wand brush move crop text eyedropper",
+    stack(n("tools", { label: "Tools" }, I("tool")), seg(I("tool.mode"), "Mode", [{ value: "new", label: "New" }, { value: "add", label: "+" }, { value: "subtract", label: "−" }, { value: "intersect", label: "∩" }]), adv(sl(I("tool.tolerance"), "Tolerance")), adv(sl(I("tool.size"), "Brush size")), adv(sl(I("sel.feather"), "Feather"))), 208),
+  r("photo", "selection", "Selection", "what to do with what is selected: adjust it, copy it, fill it, remove it, crop to it", "selection selected adjust copy cut fill remove delete crop feather invert mask",
+    stack(row(act("Adjust", "@image.mask.add", "accent"), act("Copy to layer", "@image.layer.copy"), act("Remove", "@image.layer.remove")), row(act("Fill", "@image.layer.fill"), act("Crop to it", "@image.image.crop_selection"), adv(act("Delete", "@image.layer.erase"))),
+      sl(I("sel.feather"), "Feather"), row(act("Invert", "@image.select.invert"), act("Deselect", "@image.select.none")), adv(sl(I("sel.grow"), "Grow / shrink", { centre: true })), adv(act("Cut to layer", "@image.layer.cut"))), 320),
+  r("photo", "layers", "Layers", "the picture's layers and local adjustments", "layers layer stack opacity blend hide show order adjustments masks",
+    stack(n("layers", { surface: "@image" }), row(act("New layer", "@image.layer.new"), n("button", { label: "Add text", action: "@image.layer.text", args: { text: "Your words" } }))), 304),
+  r("photo", "brush", "Brush", "paint in a colour: size, hardness, opacity", "brush paint draw colour color pen",
+    stack(col(I("color"), "Colour"), sl(I("tool.size"), "Size"), sl(I("tool.hardness"), "Hardness"), sl(I("tool.opacity"), "Opacity"), n("button", { label: "Paint", action: "set:@image.tool=\"brush\"" }))),
+  r("photo", "remove", "Remove", "take out blemishes, specks and small things: brush them or select them", "remove heal blemish spot clean erase object retouch",
+    stack(note("Paint over it with Heal, or select it and press Remove."), n("button", { label: "Heal brush", action: "set:@image.tool=\"heal\"" }), sl(I("tool.size"), "Brush size"), act("Remove selection", "@image.layer.remove", "accent"))),
+  r("photo", "object", "Select an object", "click a person, a thing or the sky and it is selected", "object subject person sky select ai mask cutout background",
+    stack(note("Click what to select with Object select; Shift adds another."), row(n("button", { label: "Object select", action: "set:@image.tool=\"object\"" }), act("Select subject", "@image.select.subject", "accent")), row(act("Invert", "@image.select.invert"), act("Copy to layer", "@image.layer.copy")))),
+  r("photo", "mix", "Colour mix", "each colour's hue, saturation and luminance", "hsl colour mix hue saturation luminance colors channels",
+    grp("Colour mix", ...HUE_LIST.map((h) => sl(I(`hsl.${h}.sat`), `${cap(h)}`, { centre: true })), ...HUE_LIST.map((h) => adv(sl(I(`hsl.${h}.hue`), `${cap(h)} hue`, { centre: true }))), ...HUE_LIST.map((h) => adv(sl(I(`hsl.${h}.lum`), `${cap(h)} luminance`, { centre: true })))), 304),
+  r("photo", "grade", "Colour grading", "a tint in the shadows and another in the highlights", "grading grade split toning tint shadows highlights cinematic",
+    grp("Colour grading", sl(I("grade.shadows_hue"), "Shadows hue"), sl(I("grade.shadows_sat"), "Shadows tint"), sl(I("grade.highlights_hue"), "Highlights hue"), sl(I("grade.highlights_sat"), "Highlights tint"), sl(I("grade.balance"), "Balance", { centre: true }))),
+  r("photo", "sharpen", "Sharpen & blur", "sharpen the detail, soften it, or clear the haze", "sharpen sharpness blur soften dehaze haze detail focus",
+    grp("Sharpen & blur", sl(I("sharpen"), "Sharpen"), sl(I("blur"), "Blur"), sl(I("dehaze"), "Dehaze", { centre: true }))),
+  r("photo", "text", "Text", "words on the picture: a title, a caption, a watermark", "text type words title caption watermark font",
+    stack(n("button", { label: "Add text", action: "@image.layer.text", args: { text: "Your words" }, tone: "accent" }), n("button", { label: "Text tool", action: "set:@image.tool=\"text\"" }), col(I("color"), "Colour"), note("Click the picture with the Text tool where the words go; their panel opens beside it."))),
 ];
 
 const DATA: Recipe[] = [

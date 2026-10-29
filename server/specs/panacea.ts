@@ -11,14 +11,18 @@ const NODE_HELP =
   "A panel is a tree of atoms: {\"atom\": \"group\", \"props\": {\"label\": \"Light\"}, \"children\": [{\"atom\": \"slider\", \"bind\": \"@image.exposure\", \"props\": {\"label\": \"Exposure\"}}]}. " +
   "Layout: stack, row, group (a titled section), divider. Show: label, note, stat, meter, badge. Controls (each needs a bind): slider, knob, stepper, toggle, " +
   "segmented (2-6 choices), select, chips (several), swatches, color, text, range (two numbers), xy, curve, list, pads (a step grid), lanes (blocks on a timeline), " +
-  "button (props ask: a request sent to you with the values; or action: \"@<surface>.<action>\" or \"set:<value>=<json>\"). Views: histogram (an image), chart " +
+  "button (props ask: a request sent to you with the values; or action: \"@<surface>.<command>\" with props args {...}, \"set:<value>=<json>\" or \"set:@<surface>.<parameter>=<json>\", " +
+  "e.g. \"set:@image.tool=\\\"lasso\\\"\"), tools (a photo's tool palette, bind @image.tool). Views: histogram (an image), layers (a photo's layers), chart " +
   "(props kind bar|line|area|pie|scatter, x, y [columns], agg sum|mean|count|min|max), table. A bind is a surface parameter (\"@img1.exposure\", or \"@image.\" / " +
   "\"@data.\" for the one near) or a shared value name (\"budget\"): every control bound to the same name shows and sets the same value, so panels link by sharing a name. " +
   "Options are a list (strings or {value, label, color}), or \"columns\" / \"column:<name>\" / \"looks\" / \"palette\" read off the surface. Props kind, x and y may be " +
   "\"=<value name>\" to follow a shared value. At most 8 controls in view: mark the rarer ones \"advanced\": true and they wait behind More. Bindable parameters: " +
   "an image has exposure (-3..3), contrast, highlights, shadows, whites, blacks, temperature, tint, vibrance, saturation, clarity (-100..100), fade, vignette, grain " +
-  "(0..100), curve (points), look, look_amount, aspect, straighten, rotate, flip_h, flip_v, zoom, compare; a table has filter.<column> (choices, or a [lo, hi] range " +
-  "for a number column), sort, descending, search.";
+  "(0..100), curve (points), look, look_amount, aspect, straighten, rotate, flip_h, flip_v, zoom, compare, sharpen, blur, dehaze, hsl.<red|orange|yellow|green|aqua|blue|purple|magenta>.<hue|sat|lum>, " +
+  "grade.shadows_hue, grade.shadows_sat, grade.highlights_hue, grade.highlights_sat, grade.balance, crop ([x, y, w, h]), the tools' options (tool, tool.mode, tool.size, tool.hardness, " +
+  "tool.opacity, tool.tolerance, tool.contiguous, color, sel.feather, sel.grow, sel.invert), each layer's (layer.<id>.visible, opacity, blend, and by kind dx, dy, x, y, scale, angle, color, " +
+  "text, size, font, bold, align, shadow) and each local adjustment's (mask.<id>.exposure, contrast, highlights, shadows, temperature, tint, vibrance, saturation, clarity, blur, amount); " +
+  "a table has filter.<column> (choices, or a [lo, hi] range for a number column), sort, descending, search.";
 
 export const panaceaSPECS: ToolSpec[] = [
   {
@@ -43,10 +47,14 @@ export const panaceaSPECS: ToolSpec[] = [
       "Read the canvas: its surfaces (with every parameter that is not at its default), its panels (id, place, what they work on, why they are there, and each " +
       "tree), shared values, what faded lately, what the person did on it lately, and what Panacea has learned about them. Or search the library: `library` " +
       "(words, e.g. \"crop\", \"chart trend\") and/or `domain` (photo, data, general, document, music, video, 3d, game, design) list matching recipes with their trees; " +
-      "`recipe` (an id) gives one recipe's whole tree as JSON, to change and place as your own. Read before you change anything: the person changes the canvas too. Changes nothing.",
+      "`recipe` (an id) gives one recipe's whole tree as JSON, to change and place as your own. `surface` (a photo's id) shows you the picture as it is now, " +
+      "with the selection outlined and a grid of tenths to place points by, and lists its engine: its layers, local adjustments, selection, tools and every " +
+      "command with its arguments (for panacea_do). Read before you change anything: the person changes the canvas too. Changes nothing.",
     parameters: {
       type: "object",
       properties: {
+        surface: { type: "string", description: "A photo's surface id: see it, and its engine's map." },
+        grid: { type: "boolean", description: "With `surface`: draw the grid of tenths over it (default true)." },
         trees: { type: "boolean", description: "Include each panel's tree (default true)." },
         library: { type: "string", description: "Words to search the library for." },
         domain: { type: "string", description: "Only recipes for this kind of work." },
@@ -55,12 +63,41 @@ export const panaceaSPECS: ToolSpec[] = [
     },
   },
   {
+    name: "panacea_do",
+    group: "files",
+    risky: true,
+    description:
+      "Work on a photo on the canvas with its engine, the commands the person's tools and buttons run: select (select.rect, select.ellipse, select.polygon " +
+      "for a lasso, select.brush, select.wand, select.color, select.object for the thing at a point, found by the segmentation model, select.subject, select.all, " +
+      "select.none, select.invert, select.feather, select.grow), layers (layer.copy and layer.cut the selection to a layer, layer.fill, layer.erase deletes the " +
+      "selection from the active layer, layer.remove fills it in from around it, layer.text, layer.place another picture, layer.paint, layer.erase_stroke, " +
+      "layer.heal_stroke, layer.new, layer.select, layer.rename, layer.up, layer.down, layer.delete, layer.mask_clear), local adjustments (mask.add keeps the " +
+      "selection with sliders of its own: a darker sky, a brighter face; mask.delete), and the frame (image.crop, image.crop_selection, image.uncrop, reset, auto, " +
+      "export). `commands` run in order and stop at the first that fails. Every x, y, w, h and point is 0..1 across the picture AS SHOWN (as panacea_look " +
+      "shows it), from its top left; look first to see where things are (panacea_look surface, which shows it with a grid of tenths). A selection made brings " +
+      "the Selection panel, a local adjustment its own sliders, text its own panel, by themselves. panacea_look surface lists every command with its arguments. " +
+      "With Visible work on your cursor does each by hand: picks the tool and drags, traces, clicks or types on the picture while the person watches. " +
+      "The look of a photo is the person's: select and set up for them, and set creative values only when asked.",
+    parameters: {
+      type: "object",
+      properties: {
+        surface: { type: "string", description: "The photo's surface id (default: the one being worked on)." },
+        commands: {
+          type: "array",
+          description: "[{\"name\": \"select.object\", \"args\": {\"x\": 0.42, \"y\": 0.55}}, {\"name\": \"mask.add\", \"args\": {\"name\": \"Dog\", \"exposure\": 0.3}}]",
+          items: { type: "object", properties: { name: { type: "string" }, args: { type: "object" } }, required: ["name"] },
+        },
+      },
+      required: ["commands"],
+    },
+  },
+  {
     name: "panacea_surface",
     group: "files",
     risky: true,
     description:
       "Put work on the canvas, or take it off. `file` (an artifact id or a path in the working folder) adds a photo (PNG, JPEG, GIF, WebP) as an image surface or a " +
-      "table (CSV, TSV, XLSX) as a data surface; `csv` adds a table from text. The panels that always help open beside it by themselves (light and colour for a " +
+      "table (CSV, TSV, XLSX) as a data surface; `csv` adds a table from text. The panels that always help open beside it by themselves (its tools, light and colour for a " +
       "photo; a chart and a category filter for a table), and one more is offered as a ghost: you do not need to place those. `remove` (a surface id) takes a " +
       "surface off with its panels. Other kinds of work (documents, PDFs, video, 3D, games, music) are done in their own windows.",
     parameters: {

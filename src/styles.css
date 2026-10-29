@@ -7671,6 +7671,40 @@ body.is-resizing iframe { pointer-events: none; }
 .pa-split-tag { position: absolute; top: 8px; font-size: var(--fs-2xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--on-accent); background: var(--scrim); padding: 2px 7px; border-radius: var(--r-pill); line-height: 1.4; }
 .pa-split-tag.is-before { left: 8px; }
 .pa-split-tag.is-after { right: 8px; }
+/* The image engine's tools: the overlay takes the pointer over the picture, its cursor saying which tool is up. */
+.pa-image-gl { background-color: var(--s3); background-image: linear-gradient(45deg, var(--s2) 25%, transparent 25%, transparent 75%, var(--s2) 75%), linear-gradient(45deg, var(--s2) 25%, transparent 25%, transparent 75%, var(--s2) 75%); background-size: 16px 16px; background-position: 0 0, 8px 8px; }
+.pa-image-tools { position: absolute; inset: 0; margin: auto; pointer-events: none; touch-action: none; }
+.pa-image-tools:not(.is-pointer) { pointer-events: auto; cursor: crosshair; }
+.pa-image-tools.is-move { cursor: move; }
+.pa-image-tools.is-text { cursor: text; }
+.pa-image-tools.is-wand, .pa-image-tools.is-object, .pa-image-tools.is-color, .pa-image-tools.is-eyedropper { cursor: cell; }
+.pa-image-tools.is-quick, .pa-image-tools.is-brush, .pa-image-tools.is-eraser, .pa-image-tools.is-heal { cursor: none; }
+.pa-image-wait.is-busy { bottom: 12px; padding: 4px 10px; border-radius: var(--r-pill); background: var(--scrim); color: var(--on-accent); }
+
+.pa-tools { display: grid; grid-template-columns: repeat(auto-fill, minmax(32px, 1fr)); gap: 4px; }
+.pa-tools button { display: grid; place-items: center; height: 32px; border: 1px solid transparent; border-radius: var(--r-sm); background: var(--s2); color: var(--text-2); cursor: pointer; transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); }
+.pa-tools button:hover { background: var(--s3); color: var(--text); }
+.pa-tools button.is-on { background: var(--accent-soft); border-color: var(--accent-line); color: var(--text); }
+.pa-tools-now { margin-left: 6px; font-weight: 600; color: var(--text); }
+.pa-tools-about { margin-top: 6px; }
+
+.pa-layers { display: flex; flex-direction: column; gap: 8px; }
+.pa-layer-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 240px; overflow: auto; }
+.pa-layer-list.is-masks { border-top: 1px solid var(--border); padding-top: 6px; }
+.pa-layer { display: flex; align-items: center; gap: 4px; padding: 2px; border-radius: var(--r-sm); }
+.pa-layer.is-on { background: var(--accent-soft); }
+.pa-layer.is-hidden .pa-layer-name { opacity: 0.5; }
+.pa-layer-eye { width: 24px; height: 24px; border: 0; background: transparent; color: var(--text-2); font-size: var(--fs-xs); cursor: pointer; border-radius: var(--r-xs); display: grid; place-items: center; }
+.pa-layer-name { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; border: 0; background: transparent; color: var(--text); font: 500 var(--fs-xs) var(--sans); text-align: left; padding: 2px 4px; cursor: pointer; }
+.pa-layer-name span { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pa-layer-name small { color: var(--text-3); font-size: var(--fs-2xs); }
+.pa-layer-acts { display: flex; gap: 2px; opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+.pa-layer:hover .pa-layer-acts, .pa-layer.is-on .pa-layer-acts { opacity: 1; }
+.pa-layer-acts button { width: 22px; height: 22px; border: 0; border-radius: var(--r-xs); background: transparent; color: var(--text-2); cursor: pointer; font-size: var(--fs-xs); display: grid; place-items: center; }
+.pa-layer-acts button:hover, .pa-layer-eye:hover { background: var(--s3); color: var(--text); }
+.pa-layer-props { display: grid; grid-template-columns: 1fr; gap: 6px; }
+.pa-layer-props input[type="range"] { width: 100%; accent-color: var(--accent); }
+.pa-layer-props select { height: 28px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--s2); color: var(--text); font: var(--fs-xs) var(--sans); padding: 0 8px; }
 .pa-surface.is-data .pa-surface-body { overflow: hidden; }
 
 /* --- panels --- */

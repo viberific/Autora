@@ -2,6 +2,7 @@ import { createContext, useContext } from "react";
 import type { Value } from "../../lib/panacea/atoms";
 import type { Canvas, Panel } from "../../lib/panacea/canvas";
 import type { Profile } from "../../lib/panacea/profile";
+import type { RunResult } from "../../lib/panacea/rules";
 
 /** What every atom of a panel can reach: the canvas, its values, and the person's hands on them. */
 export interface PanaceaApi {
@@ -11,8 +12,12 @@ export interface PanaceaApi {
   value: (key: string) => Value | undefined;
   /** The person set a value with a control on `panel`. `label` names the step in the history. */
   set: (key: string, value: Value, panel: Panel, label: string) => void;
-  /** A surface's action (reset, auto, export, clear). */
-  act: (bind: string) => void;
+  /** A surface's command from a button ("@img1.layer.copy"), with its arguments. */
+  act: (bind: string, args?: Record<string, unknown>) => void;
+  /** Run a surface's command (a tool, a key, a button): the engine's one way in, the person's and the agent's. */
+  run: (surface: string, name: string, args?: Record<string, unknown>, label?: string) => Promise<RunResult>;
+  /** Set a surface's own values from the surface itself (a tool picked, a layer dragged), as one step of the history. */
+  setOn: (surface: string, values: Record<string, Value>, label: string) => void;
   /** Send a request to the chat, with the panel's values. */
   ask: (text: string, panel: Panel) => void;
   /** A drag began or ended: the agent's changes wait for it. */

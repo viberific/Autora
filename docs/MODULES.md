@@ -557,9 +557,19 @@ Spectra's fetched renderer is most of what is on disk.
   `server/projectbook.ts`: **Panacea**, the canvas window (design and plan: `docs/PANACEA.md`). The model is pure and shared
   (`src/lib/panacea/`: no DOM or Node types, imported by the server and the page): `atoms.ts` (the pieces), `recipe.ts` (the
   rulebook `checkTree`, `fingerprint`, `generalize`), `surfaces.ts` (the image and data manifests, tables: `tableFrom`,
-  `filteredRows`, `aggregate`), `canvas.ts` (the document, `normalizeCanvas`, placement `placeFor` / `nearestFree`, `refocus` /
-  `fade` / `restore`, values), `library.ts` (180 built-in recipes, `instantiate`, `searchLibrary`), `rules.ts` (starters and offers,
-  `addSurfaceTo`, `placeRecipe` / `placeComposed`), `profile.ts` (what is learned), `handsteps.ts` (Visible work's plan). One canvas
+  `filteredRows`, `aggregate`; the engine contract `paramsOf` / `commandsOf` / `toolsOf` / `engineWords`), `image.ts` (the image
+  engine: layers, local adjustments, the selection as shapes, the tools, `IMAGE_COMMANDS` and `runImageCommand`, the geometry
+  `toSource` / `toOutput`, `fromShown` for the agent's points), `mask.ts` (selections rasterized, wand, colour range, feather,
+  grow, `heal`), `canvas.ts` (the document, `normalizeCanvas`, placement `placeFor` / `nearestFree`, `refocus` /
+  `fade` / `restore`, values), `library.ts` (190 built-in recipes, thirty of them photo panels, `instantiate`, `searchLibrary`), `rules.ts` (starters and offers,
+  `addSurfaceTo`, `placeRecipe` / `placeComposed`, `runCommand`: a command and the panels its result brings or puts away), `profile.ts` (what is learned), `handsteps.ts` (Visible work's plan).
+  In the page: `imagegl.ts` (develop, then present: the develop pass draws into a framebuffer upside down, so present reads it
+  flipped), `compose.ts` (the layers put together on 2D canvases, cached by what they were made from), `segment.ts` (object
+  select: MediaPipe's interactive segmenter, a lazy chunk; its wasm is imported by path from node_modules, which the package
+  does not export, and `optimizeDeps` prebundles it so the dev server does not reload), `Surfaces.tsx` (the tools on the
+  picture, marching ants, `renderPicture`), `ToolGlyph.tsx`. The model file is fetched by the server once, checked by its
+  sha256 and kept in the state folder (`/api/panacea/model/magic_touch.tflite`; `AUTORA_PANACEA_MODEL` names a local copy);
+  an object's outline is a PNG kept per chat (`/api/panacea/:session/mask`, removed with the chat). One canvas
   per chat lives in `panacea.ts` (`panacea-<session>.json`, removed with the chat; `forgetSession` calls `dropPanacea`); the library
   of learned recipes (`panacea-library.json`) and the profile (`panacea-profile.json`) are one per install. The wire is Music's:
   `PUT /doc` with the rev seen (409 when the agent changed it since), `panaceadesk` state and `panacea.command` over the socket

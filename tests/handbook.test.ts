@@ -132,15 +132,23 @@ await test("the Music manual says that with Visible work on the studio tools are
 
 await test("the Panacea manual teaches the canvas as it is: no toolbar, the library and atoms, ghosts, fading, the history", () => {
   const p = manualText("panacea");
-  for (const needle of ["no toolbar and no icons", "about twenty ready-made panels", "at most 8 controls in view", "Keep in library", "ghost", "Not now",
+  for (const needle of ["no fixed toolbar", "about twenty ready-made panels", "at most 8 controls in view", "Keep in library", "ghost", "Not now",
     "Not this", "put away", "double-click the grid or press /", "Ask Autora", "Undo, Redo", "behind More", "denser panels", "Whose choices"]) {
+    assert.ok(p.includes(needle), `the Panacea manual lacks "${needle}"`);
+  }
+});
+
+await test("the Panacea manual teaches a photo's engine: its tools and keys, the selection and its panel, layers, object select", () => {
+  const p = manualText("panacea");
+  for (const needle of ["panacea_do", "grid of tenths", "Tools panel", "Magic wand", "Object select", "marching ants", "Selection panel", "local adjustment",
+    "Layers panel", "Ctrl+J", "Remove fills in", "as shown: look before you select"]) {
     assert.ok(p.includes(needle), `the Panacea manual lacks "${needle}"`);
   }
 });
 
 await test("the Panacea manual says that with Visible work on its changes are done in the window by hand, and what has no control", () => {
   const p = manualText("panacea");
-  for (const needle of ["With Visible work on", "by your hand", "name typed in the picker", "dragging that slider", "dragged by its title bar", "finished canvas goes in", "With Visible work off"]) {
+  for (const needle of ["With Visible work on", "by your hand", "name typed in the picker", "dragging that slider", "dragged by its title bar", "finished canvas goes in", "traces the lasso", "With Visible work off"]) {
     assert.ok(p.includes(needle), `the Panacea manual lacks "${needle}"`);
   }
 });

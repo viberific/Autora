@@ -15,6 +15,9 @@ import type { HandStep } from "../../lib/panacea/handsteps";
 import { centreOf, pointerGo, pointerPlace, pointerRest, pointerTyping } from "../../lib/pointer";
 import { typingDelays, type Point } from "../../lib/humanPath";
 import type { BoardHandle } from "./Board";
+import { IMAGE_COMMANDS, TOOLS } from "../../lib/panacea/image";
+import type { RunResult } from "../../lib/panacea/rules";
+import { imageHandle } from "./Surfaces";
 
 type HandEnv = {
   root: HTMLElement;
@@ -251,4 +254,138 @@ export async function runPanaceaHand(steps: HandStep[], env: HandEnv): Promise<{
   }
   pointerRest();
   return { results };
+}
+
+// ---------------------------------------------------------- the picture --
+
+type ImageHandEnv = {
+  root: HTMLElement;
+  board: BoardHandle;
+  /** What the window's last command did: the hand's act lands there, and its result is the step's. */
+  lastRun: MutableRefObject<{ name: string; at: number; result: RunResult } | null>;
+  setOn: (surface: string, values: Record<string, Value>, label: string) => void;
+};
+
+/** The tool a command is drawn with on the picture, if it is one a hand draws. */
+const DRAWN: Record<string, string> = {
+  "select.rect": "marquee", "select.ellipse": "ellipse", "select.polygon": "lasso", "select.brush": "quick", "select.wand": "wand",
+  "select.color": "color", "select.object": "object", "layer.paint": "brush", "layer.erase_stroke": "eraser", "layer.heal_stroke": "heal",
+  "layer.text": "text", "image.crop": "crop",
+};
+
+const mods = (mode: unknown): PointerEventInit => (mode === "add" ? { shiftKey: true } : mode === "subtract" ? { altKey: true } : mode === "intersect" ? { shiftKey: true, altKey: true } : {});
+
+/** Press at the first point, through the rest a frame at a time, let go: a lasso drawn, a stroke painted. */
+async function trace(el: Element, path: Point[], extra: PointerEventInit): Promise<void> {
+  if (!path.length) return;
+  await pointerGo(path[0]!, false);
+  await sleep(rand(80, 150));
+  el.dispatchEvent(ptr("pointerdown", path[0]!, extra));
+  let last = path[0]!;
+  for (const p of path.slice(1)) {
+    const steps = Math.max(1, Math.min(12, Math.round(Math.hypot(p.x - last.x, p.y - last.y) / 10)));
+    for (let i = 1; i <= steps; i++) {
+      const q = { x: last.x + ((p.x - last.x) * i) / steps, y: last.y + ((p.y - last.y) * i) / steps };
+      pointerPlace(q);
+      el.dispatchEvent(ptr("pointermove", q, extra));
+      await sleep(12);
+    }
+    last = p;
+  }
+  await sleep(rand(50, 110));
+  el.dispatchEvent(ptr("pointerup", last, extra));
+  await sleep(rand(120, 200));
+}
+
+async function tap(el: Element, p: Point, extra: PointerEventInit): Promise<void> {
+  await pointerGo(p, true);
+  el.dispatchEvent(ptr("pointerdown", p, extra));
+  el.dispatchEvent(ptr("pointerup", p, extra));
+  await sleep(rand(120, 200));
+}
+
+/** Pick a tool as a person does: its button in a Tools panel on screen, or its key. */
+async function pickTool(env: ImageHandEnv, surface: string, tool: string, key: string): Promise<void> {
+  const btn = env.root.querySelector(`[data-atom="tools"][data-bind="@${CSS.escape(surface)}.tool"] [data-value="${CSS.escape(tool)}"]`);
+  if (btn && btn.getAttribute("aria-checked") !== "true") { await click(btn); return; }
+  if (btn) return;
+  env.root.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  await sleep(rand(160, 260));
+}
+
+/**
+ * One of the agent's commands on a picture done by hand, as a person does it, while the person watches: the tool
+ * picked from the Tools panel (or by its key), then drawn on the picture (a box dragged, a lasso traced, the wand
+ * clicked, a stroke painted, the crop frame pulled, text clicked in and typed), or the command's button pressed, or its
+ * shortcut. Null when the hand cannot (the picture is not on screen): the window then runs it straight away.
+ */
+export async function imageByHand(surface: string, name: string, args: Record<string, unknown>, env: ImageHandEnv): Promise<RunResult | null> {
+  const handle = imageHandle(surface);
+  const el = handle?.overlay();
+  const card = env.root.querySelector(`[data-surface="${CSS.escape(surface)}"]`);
+  if (!handle || !el || !card) return null;
+  const r = card.getBoundingClientRect();
+  if (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) return null;
+  const started = Date.now();
+  const landed = async (ms: number): Promise<RunResult | null> => {
+    const got = await waitFor(() => (env.lastRun.current && env.lastRun.current.at >= started ? env.lastRun.current : null), ms);
+    return got?.result ?? null;
+  };
+  const tool = DRAWN[name];
+  const spec = TOOLS.find((t) => t.name === tool);
+  try {
+    if (tool && spec) {
+      if (name === "select.color" && typeof args.x !== "number") return null;
+      if (typeof args.size === "number") env.setOn(surface, { "tool.size": args.size }, "Brush size");
+      if (args.mode === "new") env.setOn(surface, { "tool.mode": "new" }, "Selection mode");
+      await pickTool(env, surface, tool, spec.key);
+      await sleep(120);
+      const at = (x: unknown, y: unknown): Point | null => handle.toScreen(Number(x), Number(y));
+      const m = mods(args.mode);
+      if (name === "select.rect" || name === "select.ellipse") {
+        const a = at(args.x, args.y);
+        const b = at(Number(args.x) + Number(args.w), Number(args.y) + Number(args.h));
+        if (!a || !b) return null;
+        await trace(el, [a, b], m);
+      } else if (name === "image.crop") {
+        // The frame is pulled on the whole picture, which the crop tool shows.
+        const o = el.getBoundingClientRect();
+        const p = (u: number, v: number) => ({ x: o.left + u * o.width, y: o.top + v * o.height });
+        await trace(el, [p(Number(args.x), Number(args.y)), p(Number(args.x) + Number(args.w), Number(args.y) + Number(args.h))], {});
+      } else if (Array.isArray(args.points)) {
+        const path = (args.points as Array<[number, number]>).map(([x, y]) => at(x, y)).filter((p): p is Point => p !== null);
+        if (name === "select.polygon") path.push(path[0]!);
+        await trace(el, path, m);
+      } else {
+        const p = at(args.x ?? 0.5, args.y ?? 0.5);
+        if (!p) return null;
+        await tap(el, p, m);
+      }
+      const result = await landed(name === "select.object" ? 60_000 : 6000);
+      if (name === "layer.text" && result?.ok && result.layer && typeof args.text === "string") {
+        const field = await waitFor(() => env.root.querySelector<HTMLTextAreaElement | HTMLInputElement>(`[data-bind="@${CSS.escape(surface)}.layer.${CSS.escape(result.layer!)}.text"] textarea, [data-bind="@${CSS.escape(surface)}.layer.${CSS.escape(result.layer!)}.text"] input`), 2000);
+        if (field) await typeInto(field, args.text);
+        else env.setOn(surface, { [`layer.${result.layer}.text`]: args.text }, "Text");
+        // The engine's own text tool leaves the Move tool up; so does the hand.
+      }
+      return result;
+    }
+    // A command with no drawing: its button on screen when it takes nothing, else its shortcut.
+    const btn = Object.keys(args).length ? null : env.root.querySelector(`[data-action="@${CSS.escape(surface)}.${CSS.escape(name)}"]`);
+    if (btn) { await click(btn); return await landed(name === "select.subject" ? 60_000 : 6000); }
+    const key = IMAGE_COMMANDS.find((c) => c.name === name)?.key;
+    if (key && !Object.keys(args).length) {
+      const parts = key.split("+");
+      const k = parts.at(-1)!;
+      await sleep(rand(200, 360));
+      env.root.dispatchEvent(new KeyboardEvent("keydown", { key: k === "delete" ? "Delete" : k === "backspace" ? "Backspace" : k, ctrlKey: parts.includes("mod"), shiftKey: parts.includes("shift"), bubbles: true, cancelable: true }));
+      return await landed(6000);
+    }
+    return null;
+  } catch (err) {
+    if (err instanceof Skip) return null;
+    throw err;
+  } finally {
+    pointerRest();
+  }
 }

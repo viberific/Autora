@@ -1,22 +1,34 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { Value } from "../lib/panacea/atoms";
-import { estimateHeight, fade, nearestFree, refocus, removeSurface, restore, setValue, surfaceParams, uid, valueAt, valueProblem, type Panel, type Surface } from "../lib/panacea/canvas";
+import { estimateHeight, fade, nearestFree, refocus, removeSurface, restore, setValue, uid, valueAt, valueProblem, type Panel, type Surface } from "../lib/panacea/canvas";
+import { IMAGE_COMMANDS, selectionOf, TOOLS } from "../lib/panacea/image";
 import type { Recipe } from "../lib/panacea/library";
 import { BUILTINS } from "../lib/panacea/library";
 import { densityOf, newProfile, normalizeProfile, noteUse, preferredSide, quieted, usageKey, type Profile } from "../lib/panacea/profile";
 import { bindsOf, parseBind, type Node } from "../lib/panacea/recipe";
-import { addSurfaceTo, placeRecipe, type SurfaceInput } from "../lib/panacea/rules";
+import { addSurfaceTo, placeRecipe, runCommand, type RunResult, type SurfaceInput } from "../lib/panacea/rules";
 import { filteredRows, splitDelimited, tableCsv, tableFrom } from "../lib/panacea/surfaces";
+
+/** A mask as a grey PNG, to keep beside the canvas. */
+async function maskPng(mask: Uint8Array, w: number, h: number): Promise<Blob> {
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const img = new ImageData(w, h);
+  for (let i = 0; i < w * h; i++) { img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = mask[i]!; img.data[i * 4 + 3] = 255; }
+  c.getContext("2d")!.putImageData(img, 0, 0);
+  return await new Promise<Blob>((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error("no PNG"))), "image/png"));
+}
 import { onPanaceaCommand } from "../lib/panacea";
 import type { HandStep } from "../lib/panacea/handsteps";
 import { Board, type BoardHandle } from "./panacea/Board";
 import { standaloneSvg } from "./panacea/Chart";
 import { PanaceaCtx, type PanaceaApi } from "./panacea/context";
 import { History } from "./panacea/History";
-import { runPanaceaHand } from "./panacea/hand";
-import { autoSettings, renderFull } from "./panacea/imagegl";
+import { imageByHand, runPanaceaHand } from "./panacea/hand";
+import { autoSettings } from "./panacea/imagegl";
 import type { PanelActions } from "./panacea/PanelCard";
-import { pictureOf } from "./panacea/Surfaces";
+import { imageHandle, pictureOf, renderPicture } from "./panacea/Surfaces";
 import { useCanvas } from "./panacea/useCanvas";
 import { SaveButton, keptAs } from "./SaveButton";
 import { LoadButton } from "./LoadButton";
@@ -134,47 +146,88 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
     }, 650));
   }, [base, edit, live, quietly, tell]);
 
-  const act = useCallback((bind: string) => {
-    const { surface, param } = parseBind(bind);
-    const s = live.current.surfaces.find((x) => x.id === surface);
-    if (!s) return;
-    if (param === "reset" || param === "clear") {
-      const fresh = surfaceParams(s.kind, s.table);
-      edit((d) => {
-        const t = d.surfaces.find((x) => x.id === s.id)!;
-        for (const [k, v] of Object.entries(fresh)) if (param === "reset" ? k !== "compare" : k.startsWith("filter.") || k === "search") t.params[k] = v;
-      }, param === "reset" ? `Reset ${s.title}` : `Cleared filters on ${s.title}`);
-      void tell(`${param === "reset" ? "reset" : "cleared the filters on"} ${s.title}`);
-    } else if (param === "auto") {
-      const img = pictureOf(s.id);
-      if (!img) return;
-      const auto = autoSettings(img);
-      edit((d) => { const t = d.surfaces.find((x) => x.id === s.id)!; for (const [k, v] of Object.entries(auto)) t.params[k] = v; }, `Auto on ${s.title}`);
-      void tell(`pressed Auto on ${s.title}: ${Object.entries(auto).map(([k, v]) => `${k} ${v}`).join(", ")}`);
-    } else if (param === "export") {
-      void (async () => {
-        try {
-          let blob: Blob;
-          let name = s.title;
-          if (s.kind === "image") {
-            const img = pictureOf(s.id);
-            if (!img) throw new Error("The picture is not loaded yet.");
-            blob = await renderFull(img, s.params, "png");
-          } else {
-            blob = new Blob([tableCsv(s.table!.columns, filteredRows(s.table!, s.params))], { type: "text/csv" });
-            name = `${s.title}`;
-          }
-          const res = await fetch(`${base}/deliver?name=${encodeURIComponent(name)}`, { method: "POST", headers: { "Content-Type": blob.type }, body: blob });
-          const body = (await res.json().catch(() => null)) as { name?: string; error?: string } | null;
-          if (!res.ok) throw new Error(body?.error ?? `Autora answered ${res.status}`);
-          flash(`Saved ${body?.name ?? name} to the project.`);
-          void tell(`exported ${body?.name ?? name}`);
-        } catch (err) {
-          setProblem(`Not exported: ${err instanceof Error ? err.message : String(err)}`);
-        }
-      })();
+  /** A surface's values set from the surface itself (a tool, a drag), checked, as one step a quick run of them joins. */
+  const setOn = useCallback((surfaceId: string, values: Record<string, Value>, label: string) => {
+    const entries = Object.entries(values).map(([k, v]) => [`@${surfaceId}.${k}`, v] as const);
+    const bad = entries.map(([k, v]) => valueProblem(live.current, k, v)).find(Boolean);
+    if (bad) { setProblem(`That value does not fit: ${bad}.`); return; }
+    edit((d) => { for (const [k, v] of entries) setValue(d, k, v); }, label, `${surfaceId}:${Object.keys(values).join(",")}`);
+    const timers = activityTimers.current;
+    const key = `on:${surfaceId}:${Object.keys(values).join(",")}`;
+    const t = timers.get(key);
+    if (t) clearTimeout(t);
+    timers.set(key, setTimeout(() => {
+      timers.delete(key);
+      const where = live.current.surfaces.find((s) => s.id === surfaceId)?.title;
+      void tell(`${label.toLowerCase()}${where ? ` on ${where}` : ""}`);
+    }, 650));
+  }, [edit, live, tell]);
+
+  /** What the last command run here did, for the agent's hand to report. */
+  const lastRun = useRef<{ name: string; at: number; result: RunResult } | null>(null);
+  /** The agent's hand is at work: what its pointer does on the picture is the agent's, not the person's. */
+  const handing = useRef(false);
+
+  /** Export a surface to the project: the picture at full size, or the rows as filtered. */
+  const exportSurface = useCallback(async (s: Surface, format: "png" | "jpeg" = "png", given?: string) => {
+    const blob = s.kind === "image" ? await renderPicture(s, sessionId, format) : new Blob([tableCsv(s.table!.columns, filteredRows(s.table!, s.params))], { type: "text/csv" });
+    const res = await fetch(`${base}/deliver?name=${encodeURIComponent(given ?? s.title)}`, { method: "POST", headers: { "Content-Type": blob.type }, body: blob });
+    const body = (await res.json().catch(() => null)) as { name?: string; error?: string; artifact?: string } | null;
+    if (!res.ok) throw new Error(body?.error ?? `Autora answered ${res.status}`);
+    return body ?? {};
+  }, [base, sessionId]);
+
+  /**
+   * Run a surface's command: the engine's one way in, for a button, a key, a tool on the picture, and the agent's hand.
+   * What only the page can do happens here first: the model finds an object, the picture says where a selection is.
+   */
+  const run = useCallback(async (surfaceId: string, name: string, args: Record<string, unknown> = {}, label?: string, who: "person" | "agent" = "person"): Promise<RunResult> => {
+    const by = handing.current ? "agent" : who;
+    const s = live.current.surfaces.find((x) => x.id === surfaceId);
+    const done = (result: RunResult) => { lastRun.current = { name, at: Date.now(), result }; if (!result.ok) setProblem(result.error); return result; };
+    if (!s) return done({ ok: false, error: "That surface is gone." });
+    const what = label ?? IMAGE_COMMANDS.find((c) => c.name === name)?.label ?? name;
+    try {
+      if (name === "export") {
+        const out = await exportSurface(s);
+        flash(`Saved ${out.name ?? s.title} to the project.`);
+        void tell(`exported ${out.name ?? s.title}`);
+        return done({ ok: true, said: `Exported ${out.name ?? s.title}.` });
+      }
+      if (name === "auto") {
+        const img = pictureOf(s.id);
+        if (!img) return done({ ok: false, error: "The picture is not loaded yet." });
+        const auto = autoSettings(img);
+        edit((d) => { const t = d.surfaces.find((x) => x.id === s.id)!; for (const [k, v] of Object.entries(auto)) t.params[k] = v; }, `Auto on ${s.title}`);
+        void tell(`pressed Auto on ${s.title}: ${Object.entries(auto).map(([k, v]) => `${k} ${v}`).join(", ")}`);
+        return done({ ok: true, said: `Auto: ${Object.entries(auto).map(([k, v]) => `${k} ${v}`).join(", ")}.` });
+      }
+      const handle = imageHandle(s.id);
+      let given = args;
+      if ((name === "select.object" || name === "select.subject") && typeof args.mask !== "string") {
+        const work = handle?.work();
+        if (!work) return done({ ok: false, error: "The picture is not loaded yet." });
+        const seg = await import("./panacea/segment");
+        const found = name === "select.subject" ? await seg.subjectOf(work) : { mask: await seg.objectAt(work, Number(args.x), Number(args.y)), x: Number(args.x), y: Number(args.y) };
+        const png = await maskPng(found.mask, work.width, work.height);
+        const res = await fetch(`${base}/mask`, { method: "POST", headers: { "Content-Type": "image/png" }, body: png });
+        const body = (await res.json().catch(() => null)) as { id?: string; error?: string } | null;
+        if (!res.ok || !body?.id) return done({ ok: false, error: body?.error ?? "The object's outline could not be kept." });
+        given = { ...args, x: found.x, y: found.y, mask: body.id };
+      }
+      let result: RunResult = { ok: false, error: "Not done." };
+      edit((d) => { result = runCommand(d, s.id, name, given, find, { by, side: preferredSide(profile), env: handle ? { bounds: handle.bounds } : {} }); }, by === "agent" ? `Autora: ${what}` : what);
+      if (result.ok && by === "person") void tell(`${what.toLowerCase()} on ${s.title}`);
+      return done(result);
+    } catch (err) {
+      return done({ ok: false, error: `${what}: ${err instanceof Error ? err.message : String(err)}` });
     }
-  }, [base, edit, flash, live, tell]);
+  }, [base, edit, exportSurface, find, flash, live, profile, tell]);
+
+  const act = useCallback((bind: string, args?: Record<string, unknown>) => {
+    const { surface, param } = parseBind(bind);
+    if (surface) void run(surface, param, args ?? {});
+  }, [run]);
 
   const ask = useCallback((text: string, panel: Panel) => {
     const vals = [...new Set(bindsOf(panel.tree))].map((b) => `${b}=${show(valueAt(live.current, b))}`).join(", ");
@@ -188,9 +241,9 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
 
   const hold = doc.hold;
   const api: PanaceaApi = useMemo(() => ({
-    canvas, profile, sessionId, set, act, ask, hold, expand,
+    canvas, profile, sessionId, set, act, run, setOn, ask, hold, expand,
     value: (key: string) => valueAt(canvas, key),
-  }), [canvas, profile, sessionId, set, act, ask, hold, expand]);
+  }), [canvas, profile, sessionId, set, act, run, setOn, ask, hold, expand]);
 
   // ------------------------------------------------------- panel actions --
 
@@ -324,8 +377,12 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
 
   // ---------------------------------------------------------- commands --
 
+  // The command listener stays put (it says the window is ready to the server); what it calls is read fresh each time.
+  const latest = useRef({ run, setOn, exportSurface });
+  latest.current = { run, setOn, exportSurface };
   useEffect(() => {
     const off = onPanaceaCommand((cmd) => {
+      const { run, setOn, exportSurface } = latest.current;
       void (async () => {
         const claim = (await fetch(`${base}/claim?id=${encodeURIComponent(cmd.id)}`, { method: "POST" }).then((r) => r.json()).catch(() => null)) as { won?: boolean } | null;
         if (!claim?.won) return;
@@ -341,14 +398,35 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
             await reply(true, out);
           } else if (cmd.name === "render") {
             const s = live.current.surfaces.find((x) => x.id === cmd.args.surface);
-            const img = s ? pictureOf(s.id) : null;
-            if (!s || !img) throw new Error("That picture is not loaded in the window.");
-            const format = cmd.args.format === "jpeg" ? "jpeg" : "png";
-            const blob = await renderFull(img, s.params, format);
-            const res = await fetch(`${base}/deliver?name=${encodeURIComponent(String(cmd.args.name ?? s.title))}`, { method: "POST", headers: { "Content-Type": `image/${format}` }, body: blob });
-            const body = await res.json().catch(() => null);
-            if (!res.ok) throw new Error((body as { error?: string } | null)?.error ?? `Autora answered ${res.status}`);
-            await reply(true, body);
+            if (!s || !pictureOf(s.id)) throw new Error("That picture is not loaded in the window.");
+            await reply(true, await exportSurface(s, cmd.args.format === "jpeg" ? "jpeg" : "png", String(cmd.args.name ?? s.title)));
+          } else if (cmd.name === "do") {
+            // The agent's commands on a surface, by hand (Visible work) or straight away, in order; stops at the first that fails.
+            const surfaceId = String(cmd.args.surface);
+            const list = Array.isArray(cmd.args.commands) ? (cmd.args.commands as Array<{ name: string; args?: Record<string, unknown> }>) : [];
+            const results: Array<{ name: string; ok: boolean; said?: string; error?: string; hand?: boolean }> = [];
+            for (const c of list) {
+              let r: RunResult | null = null;
+              let hand = false;
+              if (cmd.args.hand === true && root.current && board.current) {
+                handing.current = true;
+                const did = await imageByHand(surfaceId, c.name, c.args ?? {}, { root: root.current, board: board.current, lastRun, setOn }).finally(() => { handing.current = false; });
+                if (did) { r = did; hand = true; }
+              }
+              r ??= await run(surfaceId, c.name, c.args ?? {}, undefined, "agent");
+              results.push({ name: c.name, ok: r.ok, ...(r.ok ? { said: r.said } : { error: r.error }), ...(hand ? { hand } : {}) });
+              if (!r.ok) break;
+            }
+            await saveNow();
+            await reply(true, { results });
+          } else if (cmd.name === "snapshot") {
+            const h = imageHandle(String(cmd.args.surface));
+            const blob = h ? await h.snapshot(cmd.args.grid !== false) : null;
+            if (!blob) throw new Error("That picture is not on screen.");
+            const bytes = new Uint8Array(await blob.arrayBuffer());
+            let bin = "";
+            for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+            await reply(true, { base64: btoa(bin) });
           } else if (cmd.name === "chart") {
             const svg = root.current?.querySelector<SVGSVGElement>(`[data-panel="${CSS.escape(String(cmd.args.panel))}"] svg.pa-chart`);
             if (!svg) throw new Error("That panel has no chart on screen.");
@@ -386,16 +464,34 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
     edit((d) => { for (const p of d.panels) if (ids.includes(p.id)) { if (grouped) delete p.group; else p.group = g; } }, grouped ? "Ungrouped panels" : "Grouped panels");
   }, [selected, edit, live]);
 
+  const focusImage = canvas.surfaces.find((s) => s.id === canvas.focus && s.kind === "image" && s.image) ?? null;
+
+  /** The picture's keys, while it is the work: a tool's letter, and the engine's shortcuts (Ctrl+D deselects, Ctrl+J copies to a layer...). */
+  const imageKey = (e: ReactKeyboardEvent): boolean => {
+    if (!focusImage || selected.size) return false;
+    const mod = e.metaKey || e.ctrlKey;
+    const k = e.key.toLowerCase();
+    const combo = `${mod ? "mod+" : ""}${e.shiftKey ? "shift+" : ""}${k}`;
+    const cmd = IMAGE_COMMANDS.find((c) => c.key === combo);
+    if (cmd && cmd.name !== "layer.erase") { e.preventDefault(); void run(focusImage.id, cmd.name); return true; }
+    if (!mod && !e.altKey && !e.shiftKey) {
+      const t = TOOLS.find((x) => x.key === k || (x.key === "Escape" && e.key === "Escape" && focusImage.params.tool !== "pointer"));
+      if (t) { e.preventDefault(); setOn(focusImage.id, { tool: t.name }, `${t.label} tool`); return true; }
+    }
+    return false;
+  };
+
   const onKey = (e: ReactKeyboardEvent) => {
     const target = e.target as HTMLElement;
     const mod = e.metaKey || e.ctrlKey;
     if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); saveRef.current?.querySelector("button")?.click(); return; }
     if (target.closest("input, textarea, select, iframe")) return;
+    if (imageKey(e)) return;
     if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); if (e.shiftKey) doc.redo(); else doc.undo(); }
     else if (mod && e.key.toLowerCase() === "y") { e.preventDefault(); doc.redo(); }
     else if (mod && e.key.toLowerCase() === "g") { e.preventDefault(); group(); }
     else if (e.key === "/") { e.preventDefault(); board.current?.summonHere(); }
-    else if (e.key === "Delete" || e.key === "Backspace") { if (selected.size) { e.preventDefault(); putAwaySelected(); } }
+    else if (e.key === "Delete" || e.key === "Backspace") { if (selected.size) { e.preventDefault(); putAwaySelected(); } else if (focusImage && selectionOf(focusImage.image!, focusImage.params)) { e.preventDefault(); void run(focusImage.id, "layer.erase"); } }
     else if (e.key === "Escape") setSelected(new Set());
   };
 

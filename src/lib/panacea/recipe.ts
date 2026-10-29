@@ -13,7 +13,9 @@
  * Shared by the server and the page, so written without DOM or Node types.
  */
 import { ATOMS, MAX_DEPTH, MAX_NODES, MAX_OPTIONS, MAX_VISIBLE_CONTROLS, type AtomKind, type ValueKind } from "./atoms";
-import { actionsOf, findParam, paramsOf, type SurfaceKind, type Table } from "./surfaces";
+import { valueFits } from "./atoms";
+import type { ImageDoc } from "./image";
+import { commandsOf, findParam, paramsOf, type SurfaceKind, type SurfaceShape, type Table } from "./surfaces";
 
 export interface Option {
   value: string;
@@ -34,7 +36,7 @@ export interface Node {
 
 /** What a tree is checked against: the surfaces on the canvas, and which one "@image" and "@data" mean here. */
 export interface CheckContext {
-  surfaces: Array<{ id: string; kind: SurfaceKind; table?: Table | null }>;
+  surfaces: Array<{ id: string; kind: SurfaceKind; table?: Table | null; image?: ImageDoc | null }>;
   /** The surface a placeholder bind ("@image.exposure", "@data.filter.Region") resolves to. */
   image?: string | null;
   data?: string | null;
@@ -163,7 +165,7 @@ export function checkTree(raw: unknown, ctx: CheckContext): Checked {
         case "surface": {
           const id = typeof value === "string" ? value.replace(/^@/, "") : "";
           const sid = resolveSurface(id, ctx);
-          const want: SurfaceKind = atom === "histogram" ? "image" : "data";
+          const want: SurfaceKind = atom === "histogram" || atom === "layers" ? "image" : "data";
           const s = ctx.surfaces.find((x) => x.id === sid);
           if (!s || s.kind !== want) { errors.push(`${where}: surface "${String(value)}" is not ${want === "image" ? "an image" : "a data"} surface on the canvas.`); break; }
           props[key] = s.id;
@@ -186,6 +188,11 @@ export function checkTree(raw: unknown, ctx: CheckContext): Checked {
           props[key] = value;
           break;
         }
+        case "args": {
+          if (!value || typeof value !== "object" || Array.isArray(value) || JSON.stringify(value).length > 4000) { errors.push(`${where}: args is an object of the command's arguments.`); break; }
+          props[key] = value;
+          break;
+        }
         case "binds": {
           const list = Array.isArray(value) ? value.filter((b): b is string => typeof b === "string").slice(0, 16) : [];
           const ok = list.map((b) => bindOk(b, null, ctx, where)).filter((b): b is string => b !== null);
@@ -201,10 +208,10 @@ export function checkTree(raw: unknown, ctx: CheckContext): Checked {
       if (sid) props.surface = sid;
       else errors.push(`${where}: there is no data surface to draw. Add one first (panacea_surface).`);
     }
-    if (atom === "histogram" && typeof props.surface !== "string") {
+    if ((atom === "histogram" || atom === "layers") && typeof props.surface !== "string") {
       const sid = resolveSurface("image", ctx);
       if (sid) props.surface = sid;
-      else errors.push(`${where}: there is no image surface for a histogram.`);
+      else errors.push(`${where}: there is no image surface for ${atom === "layers" ? "layers" : "a histogram"}.`);
     }
     if ((atom === "chart" || atom === "table") && typeof props.surface === "string") {
       const s = ctx.surfaces.find((x) => x.id === props.surface);
@@ -225,12 +232,37 @@ export function checkTree(raw: unknown, ctx: CheckContext): Checked {
         const { surface, param } = parseBind(a);
         const sid = surface ? resolveSurface(surface, ctx) : null;
         const s = ctx.surfaces.find((x) => x.id === sid);
-        if (!s || !actionsOf(s.kind).some((x) => x.name === param)) {
-          errors.push(`${where}: action "${a}" is not a surface's action. ${s ? `It has: ${actionsOf(s.kind).map((x) => x.name).join(", ")}.` : "No such surface."}`);
+        const cmd = s ? commandsOf(s).find((x) => x.name === param) : undefined;
+        if (!s || !cmd) {
+          errors.push(`${where}: action "${a}" is not a surface's command. ${s ? `It has: ${commandsOf(s).map((x) => x.name).join(", ")}.` : "No such surface."}`);
           delete props.action;
-        } else props.action = `@${s.id}.${param}`;
+          delete props.args;
+        } else {
+          props.action = `@${s.id}.${param}`;
+          // Its arguments: the ones it takes, of their kinds, and the ones it needs.
+          const given = (props.args ?? {}) as Record<string, unknown>;
+          for (const [k, v] of Object.entries(given)) {
+            const spec = cmd.args.find((x) => x.name === k);
+            if (!spec) { errors.push(`${where}: ${cmd.name} takes no argument "${k}". It takes: ${cmd.args.map((x) => x.name).join(", ") || "none"}.`); delete given[k]; }
+            else if (spec.kind !== "points2" && !valueFits(spec.kind, v)) { errors.push(`${where}: ${cmd.name}'s ${k} is ${spec.kind}.`); delete given[k]; }
+          }
+          const missing = cmd.args.filter((x) => x.required && given[x.name] === undefined).map((x) => x.name);
+          if (missing.length) errors.push(`${where}: ${cmd.name} needs ${missing.join(", ")} in args.`);
+        }
+      } else if (a.startsWith("set:@")) {
+        // Set a surface's parameter (a tool picked): the parameter must be one it has, the value of its kind.
+        const eq = a.indexOf("=");
+        const key = eq > 0 ? bindOk(a.slice(4, eq), null, ctx, where) : null;
+        let v: unknown;
+        try { v = JSON.parse(a.slice(eq + 1)); } catch { v = undefined; }
+        const { surface, param } = key ? parseBind(key) : { surface: null, param: "" };
+        const s = ctx.surfaces.find((x) => x.id === surface);
+        const p = s ? findParam(s, param) : null;
+        if (!key || !p) delete props.action;
+        else if (!valueFits(p.kind, v) || (p.kind === "choice" && p.options && !p.options.includes(v as string))) { errors.push(`${where}: ${key} cannot be ${a.slice(eq + 1)}.`); delete props.action; }
+        else props.action = `set:${key}=${JSON.stringify(v)}`;
       } else if (!/^set:[A-Za-z][\w.-]{0,39}=/.test(a)) {
-        errors.push(`${where}: action is "@<surface>.<action>" or "set:<value>=<json>".`);
+        errors.push(`${where}: action is "@<surface>.<command>", "set:<value>=<json>" or "set:@<surface>.<parameter>=<json>".`);
         delete props.action;
       }
     }
@@ -271,9 +303,9 @@ export function checkTree(raw: unknown, ctx: CheckContext): Checked {
       errors.push(`${where}: no ${isPlaceholder(surface) ? `${surface} ` : ""}surface "${surface}" on the canvas${c.surfaces.length ? ` (surfaces: ${c.surfaces.map((x) => `${x.id} ${x.kind}`).join(", ")})` : ""}.`);
       return null;
     }
-    const p = findParam(s.kind, s.table, param);
+    const p = findParam(s, param);
     if (!p) {
-      const names = paramNames(s.kind, s.table).slice(0, 40);
+      const names = paramNames(s).slice(0, 40);
       errors.push(`${where}: ${s.id} has no parameter "${param}". It has: ${names.join(", ")}.`);
       return null;
     }
@@ -289,8 +321,8 @@ export function checkTree(raw: unknown, ctx: CheckContext): Checked {
 }
 
 /** The names of every parameter a surface declares, for an error that says what it has. */
-function paramNames(kind: SurfaceKind, table: Table | null | undefined): string[] {
-  return paramsOf(kind, table).map((p) => p.name);
+function paramNames(s: SurfaceShape): string[] {
+  return paramsOf(s).map((p) => p.name);
 }
 
 /** Every bind in a tree, buttons' "set:" targets and a bespoke piece's binds included. */
@@ -341,6 +373,7 @@ export function generalize(tree: Node, kinds: Record<string, SurfaceKind>): Node
       const props = { ...n.props };
       if (typeof props.surface === "string") props.surface = `@${swap(props.surface)}`;
       if (typeof props.action === "string" && props.action.startsWith("@")) { const { surface, param } = parseBind(props.action); props.action = `@${swap(surface!)}.${param}`; }
+      if (typeof props.action === "string" && props.action.startsWith("set:@")) { const eq = props.action.indexOf("="); const { surface, param } = parseBind(props.action.slice(4, eq)); props.action = `set:@${swap(surface!)}.${param}${props.action.slice(eq)}`; }
       if (Array.isArray(props.binds)) props.binds = (props.binds as string[]).map((b) => { if (!b.startsWith("@")) return b; const { surface, param } = parseBind(b); return `@${swap(surface!)}.${param}`; });
       out.props = props;
     }

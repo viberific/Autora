@@ -8,15 +8,25 @@
  * a control of the wrong kind, is refused (src/lib/panacea/recipe.ts). That is what keeps generated UI honest: it can
  * only reach what a surface says it has.
  *
- * Version 1 has two kinds, an image and a table, each drawn by Panacea itself. Autora's other editors (Office, PDF,
- * Video, Games, 3D, Photo) join as further kinds by publishing a manifest of the same shape and applying the values
- * through the tools the agent already uses for them (docs/PANACEA.md, "Engines").
+ * Each kind is one of Panacea's own engines, drawn by Panacea itself: an image (src/lib/panacea/image.ts: layers, local
+ * adjustments, a selection, tools, commands) and a table. Every engine keeps the same contract: `paramsOf` (what binds),
+ * `commandsOf` (what can be done, with typed arguments: the map the agent and the buttons both use) and `toolsOf` (what a
+ * pointer does on it). The kinds still to come (documents, sheets, slides, PDF, video) are Panacea engines of their own
+ * built to this contract, taking the best of the editors Autora runs (docs/PANACEA.md, "Engines").
  *
  * Shared by the server and the page, so written without DOM or Node types.
  */
 import type { Value, ValueKind } from "./atoms";
+import { IMAGE_COMMANDS, imageParams, TOOLS, type ImageDoc } from "./image";
 
 export type SurfaceKind = "image" | "data";
+
+/** What a surface's manifest is worked out from: its kind, and the model it holds (a table's columns, a photo's layers). */
+export interface SurfaceShape {
+  kind: SurfaceKind;
+  table?: Table | null;
+  image?: ImageDoc | null;
+}
 
 export interface ParamSpec {
   name: string;
@@ -32,12 +42,37 @@ export interface ParamSpec {
   default: Value;
   /** A setting most people never need: a panel keeps it behind More until the person has used it a few times. */
   advanced?: boolean;
+  /** For a command's argument: it must be given. */
+  required?: boolean;
 }
 
-interface ActionSpec {
+/** A command's argument: a parameter's shape, or a list of points ([[x, y], ...]). */
+export type ArgSpec = Omit<ParamSpec, "kind"> & { kind: ValueKind | "points2" };
+
+/**
+ * Something that can be done to a surface, with typed arguments: the engine's map. The person runs one from a button, a
+ * key or a tool; the agent with panacea_do. `needs` says what it waits for: a selection, or the window (what only the
+ * page can do: read the picture, run the segmentation model).
+ */
+export interface CommandSpec {
+  name: string;
+  /** Its section in the All tools grid and the agent's index. */
+  group: string;
+  label: string;
+  about: string;
+  args: ArgSpec[];
+  needs?: "selection" | "window";
+  /** Its keyboard shortcut on the surface ("mod" is Ctrl, or Cmd on a Mac). */
+  key?: string;
+}
+
+/** What a pointer does on a surface, and which parameters are its options. */
+export interface ToolSpec {
   name: string;
   label: string;
   about: string;
+  key: string;
+  options: string[];
 }
 
 export interface Column {
@@ -103,12 +138,6 @@ const IMAGE_PARAMS: ParamSpec[] = [
   { name: "compare", kind: "bool", label: "Before / after", default: false },
 ];
 
-const IMAGE_ACTIONS: ActionSpec[] = [
-  { name: "reset", label: "Reset", about: "every adjustment back to the original" },
-  { name: "auto", label: "Auto", about: "exposure, contrast and white balance worked out from the picture" },
-  { name: "export", label: "Export", about: "the edited picture saved to the project as a PNG" },
-];
-
 /** A data surface's parameters depend on its columns: a filter per column, a sort, a row limit. */
 function dataParams(table: Table): ParamSpec[] {
   const out: ParamSpec[] = [];
@@ -127,22 +156,42 @@ function dataParams(table: Table): ParamSpec[] {
   return out;
 }
 
-const DATA_ACTIONS: ActionSpec[] = [
-  { name: "export", label: "Export CSV", about: "the rows as filtered, saved to the project as a CSV" },
-  { name: "clear", label: "Clear filters", about: "every filter off" },
+const DATA_COMMANDS: CommandSpec[] = [
+  { name: "export", group: "Table", label: "Export CSV", about: "the rows as filtered, saved to the project as a CSV", args: [] },
+  { name: "clear", group: "Table", label: "Clear filters", about: "every filter off", args: [] },
 ];
 
-export function paramsOf(kind: SurfaceKind, table?: Table | null): ParamSpec[] {
-  return kind === "image" ? IMAGE_PARAMS : dataParams(table ?? { columns: [], rows: [] });
+/** Everything a surface lets a control bind to. */
+export function paramsOf(s: SurfaceShape): ParamSpec[] {
+  return s.kind === "image" ? [...IMAGE_PARAMS, ...imageParams(s.image)] : dataParams(s.table ?? { columns: [], rows: [] });
 }
 
-export function actionsOf(kind: SurfaceKind): ActionSpec[] {
-  return kind === "image" ? IMAGE_ACTIONS : DATA_ACTIONS;
+/** Everything that can be done to a surface. */
+export function commandsOf(s: Pick<SurfaceShape, "kind">): CommandSpec[] {
+  return s.kind === "image" ? IMAGE_COMMANDS : DATA_COMMANDS;
+}
+
+/** What a pointer can be on a surface. */
+export function toolsOf(s: Pick<SurfaceShape, "kind">): ToolSpec[] {
+  return s.kind === "image" ? TOOLS : [];
 }
 
 /** The parameter a name refers to on a surface, if it declares one. */
-export function findParam(kind: SurfaceKind, table: Table | null | undefined, name: string): ParamSpec | null {
-  return paramsOf(kind, table).find((p) => p.name === name) ?? null;
+export function findParam(s: SurfaceShape, name: string): ParamSpec | null {
+  return paramsOf(s).find((p) => p.name === name) ?? null;
+}
+
+/** A surface's engine in a few lines, for the agent: its tools, its commands with their arguments, what it binds. */
+export function engineWords(s: SurfaceShape): string {
+  const tools = toolsOf(s);
+  const lines: string[] = [];
+  if (tools.length) lines.push(`Tools (@<id>.tool): ${tools.map((t) => `${t.name} (${t.label}${t.key ? `, key ${t.key}` : ""}: ${t.about})`).join("; ")}.`);
+  const groups = new Map<string, CommandSpec[]>();
+  for (const c of commandsOf(s)) groups.set(c.group, [...(groups.get(c.group) ?? []), c]);
+  for (const [g, list] of groups) {
+    lines.push(`${g}: ${list.map((c) => `${c.name}${c.args.length ? `{${c.args.map((a) => `${a.name}${a.required ? "" : "?"}`).join(", ")}}` : ""} ${c.about}${c.needs === "selection" ? " [needs a selection]" : c.needs === "window" ? " [needs the window]" : ""}`).join("; ")}.`);
+  }
+  return lines.join("\n");
 }
 
 // ---------------------------------------------------------------- tables --

@@ -322,8 +322,8 @@ const GAME = [
 ].join("\n");
 
 const PANACEA = [
-  "- Panacea (tools panacea_open, panacea_look, panacea_surface, panacea_place, panacea_set, panacea_arrange, panacea_bespoke, " +
-    "panacea_export): the canvas window, in the Panacea tab. A blank dotted grid with no toolbar and no icons: the controls come to the " +
+  "- Panacea (tools panacea_open, panacea_look, panacea_do, panacea_surface, panacea_place, panacea_set, panacea_arrange, panacea_bespoke, " +
+    "panacea_export): the canvas window, in the Panacea tab. A blank dotted grid with no fixed toolbar: the controls come to the " +
     "work and go when it moves on. Surfaces are the work on it (a photo, a table; drop or attach one, or panacea_surface); panels are " +
     "controls built from atoms (sliders, knobs, switches, segmented choices, swatches, curves, charts, lists, timelines...), bound to a " +
     "surface's parameters (\"@img1.exposure\") or to shared values (\"budget\"): every control bound to one name shows and sets the same " +
@@ -351,6 +351,19 @@ const PANACEA = [
     "that sends to this chat), and on the right the history: Undo, Redo and a track of every change, yours and theirs, to drag back " +
     "through. Panacea learns them: controls they use come out from behind More, panels go on the side they put them, ones they wave " +
     "away stop being offered, and someone at home in the advanced settings gets denser panels. Your turn note says what it has learned.",
+  "  A photo is an engine of its own (panacea_do; panacea_look with `surface` shows you the picture with a grid of tenths and lists " +
+    "every tool and command with its arguments). What the person sees: a Tools panel on the other side of the photo from its panels, " +
+    "a palette of sixteen tools (Pointer, Move, Rectangle, Ellipse, Lasso, Polygon lasso, Magic wand, Brush select, Object select, " +
+    "Colour range, Crop, Brush, Eraser, Heal, Text, Eyedropper), each with its key (M, E, L, P, W, Q, O, R, C, B, X, J, T, I, V; " +
+    "Esc puts the tool down), and a Mode (New, +, −, ∩; Shift adds and Alt takes away as they drag). A selection shows as marching " +
+    "ants and brings the Selection panel (Adjust, Copy to layer, Remove, Fill, Crop to it, Feather, Invert, Deselect); deselecting " +
+    "puts it away. Adjust keeps the selection as a local adjustment with sliders of its own, in a panel named for it (a darker " +
+    "sky, a brighter face). Object select is a click on a person, a thing or the sky: a model in their browser finds its outline " +
+    "(fetched once, kept on this machine; the picture never leaves it). Layers come with a Layers panel (show, hide, pick, " +
+    "reorder, delete, opacity and blend); text brings a panel with its words, size, colour and font; the Move tool drags the " +
+    "active layer. Ctrl+A, Ctrl+D, Ctrl+Shift+I, Ctrl+J (copy to layer), Ctrl+Shift+J (cut), Delete (the selection out of the " +
+    "active layer) work while the photo is the work. Remove fills in small things from around them; it is smooth, not a clone, " +
+    "so say so for anything large. Points you give are 0..1 across the picture as shown: look before you select.",
   "  Whose choices. A photo's technical correction and a table's charts and filters are yours to do; the look of a photo, a story, a " +
     "melody, a design are theirs: place the controls, suggest, and leave the values to them unless asked.",
   "  With Visible work on and the window open, your panacea_place, panacea_set and panacea_arrange calls are done there by your hand, " +
@@ -358,7 +371,10 @@ const PANACEA = [
     "name typed in the picker, the result clicked); a value set by dragging that slider, knob or range, pressing that switch, clicking " +
     "that segment, swatch or chip, choosing in that menu, or typing into that field; a panel dragged by its title bar; × pressed to " +
     "put one away. Then the finished canvas goes in, with what had no control on screen (a curve's points, a list, a step grid, a " +
-    "timeline, a ghost, a value no panel shows); your result says which was which. With Visible work off (or the window shut) the " +
+    "timeline, a ghost, a value no panel shows); your result says which was which. panacea_do on a photo is done by hand too: " +
+    "your cursor picks the tool in the Tools panel (or presses its key) and drags the box, traces the lasso, clicks the wand " +
+    "or the object, paints the stroke, pulls the crop frame, clicks where text goes and types it; a command with a button " +
+    "on screen is pressed, else its shortcut. With Visible work off (or the window shut) the " +
     "canvas simply changes, and values glide to where you set them.",
   "  Saving. The canvas is saved as you go; the window's top bar (Panacea, the canvas's name) also has Save, which keeps a copy in Artifacts as <canvas name>.panacea.json; beside it, Load opens a canvas they kept, or puts a photo or a table from Artifacts on this one. " +
     "Exports (panacea_export, or a panel's Export) go to the project's folder: a photo as PNG with every adjustment, a table as CSV as filtered, a chart as SVG.",

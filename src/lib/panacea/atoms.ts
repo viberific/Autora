@@ -22,7 +22,7 @@ export interface LaneItem {
 }
 
 /** The kind of value an atom holds, which is also what a surface's parameter must be for the atom to bind to it. */
-export type ValueKind = "number" | "bool" | "choice" | "choices" | "text" | "color" | "pair" | "points" | "list" | "steps" | "lanes";
+export type ValueKind = "number" | "bool" | "choice" | "choices" | "text" | "color" | "pair" | "points" | "list" | "steps" | "lanes" | "box";
 
 export type AtomKind =
   // layout
@@ -31,14 +31,14 @@ export type AtomKind =
   | "label" | "note" | "stat" | "meter" | "badge"
   // controls
   | "slider" | "knob" | "stepper" | "toggle" | "segmented" | "select" | "chips" | "swatches" | "color" | "text"
-  | "range" | "xy" | "curve" | "button" | "list" | "pads" | "lanes"
+  | "range" | "xy" | "curve" | "button" | "list" | "pads" | "lanes" | "tools"
   // views of a surface
-  | "histogram" | "chart" | "table"
+  | "histogram" | "chart" | "table" | "layers"
   // a bespoke piece: code the agent wrote with the person, run in a sandboxed frame
   | "bespoke";
 
 /** The props an atom may carry, and what each must be. */
-type PropKind = "text" | "number" | "bool" | "options" | "enum" | "column" | "columns" | "surface" | "html" | "binds";
+type PropKind = "text" | "number" | "bool" | "options" | "enum" | "column" | "columns" | "surface" | "html" | "binds" | "args";
 
 interface PropSpec {
   kind: PropKind;
@@ -98,12 +98,13 @@ export const ATOMS: Record<AtomKind, AtomSpec> = {
   xy: { kind: "xy", about: "a point dragged on a square pad (two numbers -1..1)", value: "pair", control: true, props: { label, x: { kind: "text" }, y: { kind: "text" } } },
   curve: { kind: "curve", about: "a tone curve: points dragged on a square, 0..1 in and out", value: "points", control: true, props: { label } },
   button: {
-    kind: "button", about: "an action: ask Autora, set a value, or a surface's action", control: true,
-    props: { label, ask: { kind: "text" }, action: { kind: "text" }, tone: { kind: "enum", of: ["plain", "accent"] } },
+    kind: "button", about: "an action: ask Autora, set a value, or a surface's command (with `args`)", control: true,
+    props: { label, ask: { kind: "text" }, action: { kind: "text" }, args: { kind: "args" }, tone: { kind: "enum", of: ["plain", "accent"] } },
   },
   list: { kind: "list", about: "an ordered list of short items the person can add to, reorder and tick", value: "list", control: true, props: { label, placeholder: { kind: "text" } } },
   pads: { kind: "pads", about: "a grid of steps to switch on (a drum pattern, a habit tracker)", value: "steps", control: true, props: { label, cols: { kind: "number", min: 2, max: 32 }, rows: { kind: "number", min: 1, max: 8 }, names: { kind: "options" } } },
   lanes: { kind: "lanes", about: "blocks on lanes along a ruler (a timeline, a schedule)", value: "lanes", control: true, props: { label, lanes: { kind: "options" }, length: { kind: "number", min: 1, max: 100000 }, unit } },
+  tools: { kind: "tools", about: "a surface's pointer tools as a palette (bind it to @image.tool; options narrow it)", value: "choice", control: true, props: { label, options: { kind: "options" } } },
 
   histogram: { kind: "histogram", about: "the live histogram of an image surface", props: { surface: { kind: "surface" } } },
   chart: {
@@ -114,6 +115,7 @@ export const ATOMS: Record<AtomKind, AtomSpec> = {
     },
   },
   table: { kind: "table", about: "the rows of a data surface, after its filters", props: { surface: { kind: "surface" }, columns: { kind: "columns" }, limit: { kind: "number", min: 1, max: 500 } } },
+  layers: { kind: "layers", about: "a photo's layers and local adjustments: show, hide, pick, reorder, delete", props: { surface: { kind: "surface" } } },
 
   bespoke: { kind: "bespoke", about: "a piece written for this need, run sandboxed; talks only through its binds", props: { html: { kind: "html" }, binds: { kind: "binds" }, height: { kind: "number", min: 60, max: 800 } } },
 };
@@ -138,6 +140,7 @@ export function valueFits(kind: ValueKind, v: unknown): boolean {
     case "points": return Array.isArray(v) && v.length >= 2 && v.length <= 16 && v.every((p) => Array.isArray(p) && p.length === 2 && p.every((n) => num(n) && n >= 0 && n <= 1));
     case "steps": return Array.isArray(v) && v.length <= 256 && v.every((n) => n === 0 || n === 1);
     case "lanes": return Array.isArray(v) && v.length <= 200 && v.every((it) => it && typeof it === "object" && typeof (it as LaneItem).id === "string" && num((it as LaneItem).lane) && num((it as LaneItem).start) && num((it as LaneItem).length) && typeof (it as LaneItem).label === "string");
+    case "box": return Array.isArray(v) && v.length === 4 && v.every((n) => num(n) && n >= 0 && n <= 1) && (v[2] as number) > 0 && (v[3] as number) > 0;
   }
 }
 
@@ -153,5 +156,6 @@ export function emptyValue(kind: ValueKind): Value {
     case "points": return [[0, 0], [1, 1]];
     case "steps": return [];
     case "lanes": return [];
+    case "box": return [0, 0, 1, 1];
   }
 }

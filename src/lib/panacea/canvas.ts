@@ -11,7 +11,8 @@
  */
 import { emptyValue, valueFits, type Value } from "./atoms";
 import { checkTree, kindAt, parseBind, surfacesOf, treeWords, type CheckContext, type Node } from "./recipe";
-import { findParam, paramsOf, type SurfaceKind, type Table } from "./surfaces";
+import { imageWords, newImageDoc, normalizeImageDoc, type ImageDoc } from "./image";
+import { findParam, paramsOf, type SurfaceKind, type SurfaceShape, type Table } from "./surfaces";
 
 export type PanelState = "live" | "dim" | "ghost" | "draft";
 export type Who = "agent" | "person" | "rule";
@@ -59,6 +60,8 @@ export interface Surface {
   table?: Table;
   /** An image's size in pixels. */
   px?: { w: number; h: number };
+  /** A photo's layers, local adjustments and selection (src/lib/panacea/image.ts). */
+  image?: ImageDoc;
 }
 
 export interface Canvas {
@@ -96,13 +99,13 @@ export function uid(prefix: string): string {
 }
 
 export function contextOf(canvas: Pick<Canvas, "surfaces">, image?: string | null, data?: string | null): CheckContext {
-  return { surfaces: canvas.surfaces.map((s) => ({ id: s.id, kind: s.kind, table: s.table ?? null })), image, data };
+  return { surfaces: canvas.surfaces.map((s) => ({ id: s.id, kind: s.kind, table: s.table ?? null, image: s.image ?? null })), image, data };
 }
 
 /** A surface's parameters at their defaults, then what was set. */
-export function surfaceParams(kind: SurfaceKind, table: Table | null | undefined, set: Record<string, unknown> = {}): Record<string, Value> {
+export function surfaceParams(shape: SurfaceShape, set: Record<string, unknown> = {}): Record<string, Value> {
   const out: Record<string, Value> = {};
-  for (const p of paramsOf(kind, table)) {
+  for (const p of paramsOf(shape)) {
     const v = set[p.name];
     out[p.name] = v !== undefined && valueFits(p.kind, v) ? (v as Value) : p.default;
   }
@@ -124,7 +127,7 @@ export function valueProblem(canvas: Canvas, key: string, v: unknown): string | 
   if (surface !== null) {
     const s = canvas.surfaces.find((x) => x.id === surface);
     if (!s) return `no surface ${surface}`;
-    const p = findParam(s.kind, s.table, param);
+    const p = findParam(s, param);
     if (!p) return `${surface} has no parameter ${param}`;
     if (!valueFits(p.kind, v)) return `${key} is ${p.kind}${p.options ? ` (one of ${p.options.slice(0, 12).join(", ")})` : ""}`;
     if (p.kind === "choice" && p.options && !p.options.includes(v as string)) return `${key} is one of ${p.options.slice(0, 20).join(", ")}`;
@@ -144,7 +147,7 @@ export function setValue(canvas: Canvas, key: string, v: Value): void {
   if (surface === null) { canvas.values[param] = v; return; }
   const s = canvas.surfaces.find((x) => x.id === surface);
   if (!s) return;
-  const p = findParam(s.kind, s.table, param);
+  const p = findParam(s, param);
   if (p?.kind === "number" && typeof v === "number") v = clamp(v, p.min ?? -Infinity, p.max ?? Infinity);
   s.params[param] = v;
 }
@@ -182,6 +185,8 @@ export function estimateHeight(tree: Node, w = 288): number {
       case "chart": h += Math.round((inner * 220) / 420) + 8; break;
       case "table": h += Math.min(340, 60 + 26 * Number(n.props?.limit ?? 10)); break;
       case "histogram": h += 96; break;
+      case "tools": h += 104; break;
+      case "layers": h += 210; break;
       case "curve": case "xy": h += 180; break;
       case "lanes": h += 120; break;
       case "pads": h += 28 * Number(n.props?.rows ?? 2) + 24; break;
@@ -376,7 +381,8 @@ function readSurface(raw: unknown, ids: Set<string>): Surface | null {
     table = { columns, rows };
   }
   ids.add(id);
-  const params = surfaceParams(kind, table, r.params && typeof r.params === "object" ? (r.params as Record<string, unknown>) : {});
+  const image = kind === "image" ? normalizeImageDoc(r.image) : undefined;
+  const params = surfaceParams({ kind, table, image }, r.params && typeof r.params === "object" ? (r.params as Record<string, unknown>) : {});
   const px = r.px && typeof r.px === "object" ? { w: num((r.px as Box).w, 0), h: num((r.px as Box).h, 0) } : undefined;
   return {
     id, kind,
@@ -388,6 +394,7 @@ function readSurface(raw: unknown, ids: Set<string>): Surface | null {
     params,
     ...(table ? { table } : {}),
     ...(px && px.w > 0 ? { px } : {}),
+    ...(image ? { image } : {}),
   };
 }
 
@@ -424,13 +431,13 @@ const show = (v: Value | undefined): string => {
 export function describeCanvas(canvas: Canvas, opts: { trees?: boolean } = {}): string {
   const lines: string[] = [`Canvas "${canvas.name}": ${canvas.surfaces.length} surface${canvas.surfaces.length === 1 ? "" : "s"}, ${canvas.panels.length} panel${canvas.panels.length === 1 ? "" : "s"}${canvas.focus ? `; the person is working on ${canvas.focus}` : ""}.`];
   for (const s of canvas.surfaces) {
-    const changed = paramsOf(s.kind, s.table)
+    const changed = paramsOf(s)
       .filter((p) => JSON.stringify(s.params[p.name]) !== JSON.stringify(p.default))
       .map((p) => `${p.name}=${show(s.params[p.name])}`);
     const what = s.kind === "image"
       ? `image "${s.title}"${s.px ? ` ${s.px.w}x${s.px.h}` : ""}${s.artifact ? ` (artifact ${s.artifact})` : ""}`
       : `data "${s.title}", ${s.table?.rows.length ?? 0} rows; columns ${s.table?.columns.map((c) => `${c.name} (${c.type})`).join(", ")}`;
-    lines.push(`- surface ${s.id}: ${what} at ${s.x},${s.y} ${s.w}x${s.h}. ${changed.length ? `Set: ${changed.join(", ")}.` : "Untouched."}`);
+    lines.push(`- surface ${s.id}: ${what} at ${s.x},${s.y} ${s.w}x${s.h}. ${changed.length ? `Set: ${changed.join(", ")}.` : "Untouched."}${s.kind === "image" ? ` ${imageWords(s.image ?? newImageDoc(), s.params)}` : ""}`);
   }
   for (const p of canvas.panels) {
     const flags = [p.state !== "live" ? p.state : "", p.pinned ? "pinned" : "", p.group ? `group ${p.group}` : "", p.by === "person" ? "placed by the person" : ""].filter(Boolean).join(", ");

@@ -1,7 +1,7 @@
 {
   "name": "autora",
   "private": true,
-  "version": "0.9.301",
+  "version": "0.9.302",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "@mediapipe/tasks-vision": "0.10.34",
     "@types/express": "^4.17.21",
     "@types/node": "^22.10.2",
     "@types/react": "^18.3.12",
