@@ -7673,6 +7673,30 @@ body.is-resizing iframe { pointer-events: none; }
 .pa-split-tag.is-after { right: 8px; }
 .pa-surface.is-data .pa-surface-body { overflow: hidden; }
 
+/* --- document surface --- */
+.pa-surface.is-doc .pa-surface-body { overflow: hidden; }
+.pa-doc { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--sink); }
+.pa-doc-bar { display: flex; align-items: center; gap: 10px; padding: 6px 12px; border-bottom: 1px solid var(--border); font-size: var(--fs-xs); color: var(--text-3); }
+.pa-doc-mode { border: 1px solid var(--border-strong); background: var(--s2); color: var(--text-2); border-radius: var(--r-pill); padding: 2px 10px; font-size: var(--fs-xs); cursor: pointer; transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease); }
+.pa-doc-mode:hover { color: var(--text); }
+.pa-doc-mode[aria-pressed="true"] { border-color: var(--accent-line); background: var(--accent-soft); color: var(--text); }
+.pa-doc-scroll { flex: 1; min-height: 0; overflow: auto; padding: 18px 26px 32px; }
+.pa-doc-page .ProseMirror { outline: none; min-height: 100%; color: var(--text); overflow-wrap: anywhere; }
+.pa-doc-page .ProseMirror > * + * { margin-top: 0.7em; }
+.pa-doc-page .ProseMirror p, .pa-doc-page .ProseMirror li { margin: 0; }
+.pa-doc-page .ProseMirror h1, .pa-doc-page .ProseMirror h2, .pa-doc-page .ProseMirror h3 { margin: 1.1em 0 0.3em; line-height: 1.25; font-weight: 600; }
+.pa-doc-page .ProseMirror h1 { font-size: 1.7em; }
+.pa-doc-page .ProseMirror h2 { font-size: 1.35em; }
+.pa-doc-page .ProseMirror h3 { font-size: 1.15em; }
+.pa-doc-page .ProseMirror ul, .pa-doc-page .ProseMirror ol { padding-left: 1.5em; margin-block: 0.4em; }
+.pa-doc-page .ProseMirror li > * + * { margin-top: 0.3em; }
+.pa-doc-page .ProseMirror blockquote { margin-inline: 0; padding-left: 1em; border-left: 3px solid var(--accent-line); color: var(--text-2); }
+.pa-doc-page .ProseMirror pre { margin-block: 0.6em; padding: 0.7em 0.9em; background: var(--s3); border-radius: var(--r-xs); font-family: ui-monospace, monospace; font-size: 0.9em; white-space: pre-wrap; }
+.pa-doc-page .ProseMirror code { background: var(--s3); border-radius: var(--r-2xs); padding: 0.05em 0.3em; font-family: ui-monospace, monospace; font-size: 0.92em; }
+.pa-doc-page .ProseMirror pre code { background: transparent; padding: 0; }
+.pa-doc-page .ProseMirror a { color: var(--accent-light); }
+.pa-doc-page .ProseMirror hr { border: 0; border-top: 1px solid var(--border-strong); margin-block: 1em; }
+
 /* --- panels --- */
 .pa-panel {
   position: absolute; display: flex; flex-direction: column; background: var(--s1); border: 1px solid var(--border);

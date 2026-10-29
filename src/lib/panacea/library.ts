@@ -78,6 +78,7 @@ const hist = () => n("histogram", { surface: "@image" });
 
 const I = (p: string) => `@image.${p}`;
 const D = (p: string) => `@data.${p}`;
+const DOC = (p: string) => `@doc.${p}`;
 
 const LOOK_SWATCHES = "looks";
 
@@ -174,20 +175,20 @@ const GENERAL: Recipe[] = [
 ];
 
 const DOCUMENT: Recipe[] = [
-  r("document", "type", "Typography", "font, size and weight", "font typography type size", stack(sel("doc.font", "Font", ["Inter", "Georgia", "Source Serif", "IBM Plex Sans", "JetBrains Mono"]), st("doc.size", "Size", { min: 8, max: 72, unit: "pt" }), seg("doc.weight", "Weight", ["Light", "Regular", "Bold"]))),
-  r("document", "paragraph", "Paragraph", "alignment, line height and spacing", "paragraph align line height spacing", stack(seg("doc.align", "Align", ["Left", "Centre", "Right", "Justify"]), sl("doc.leading", "Line height", { min: 1, max: 2.5, step: 0.05 }), adv(st("doc.after", "Space after", { min: 0, max: 48, unit: "pt" })))),
+  r("document", "type", "Typography", "font and size of the whole document", "font typography type size", stack(sel(DOC("font"), "Font"), st(DOC("size"), "Size", { min: 8, max: 32, unit: "pt" }))),
+  r("document", "paragraph", "Paragraph", "alignment and line height", "paragraph align line height spacing", stack(seg(DOC("align"), "Align", [{ value: "left", label: "Left" }, { value: "center", label: "Centre" }, { value: "right", label: "Right" }, { value: "justify", label: "Justify" }]), sl(DOC("leading"), "Line height", { min: 1, max: 2.5, step: 0.05 }))),
   r("document", "page", "Page setup", "size, orientation and margins", "page size margins orientation a4 letter", stack(seg("doc.paper", "Paper", ["A4", "Letter", "A5"]), seg("doc.orient", "Orientation", ["Portrait", "Landscape"]), st("doc.margin", "Margins", { min: 0, max: 60, unit: "mm" }))),
   r("document", "outline", "Outline", "the headings, in order", "outline headings structure sections", stack(lst("doc.outline", "Outline", "Add a heading"))),
   r("document", "tone", "Tone", "how it reads", "tone voice style formal", stack(sl("doc.formal", "Casual ↔ formal", { min: 0, max: 100 }), sl("doc.length", "Shorter ↔ longer", { min: -50, max: 50, centre: true }))),
   r("document", "replace", "Find & replace", "words to swap throughout", "find replace search", stack(tx("doc.find", "Find"), tx("doc.replace", "Replace with"), adv(tg("doc.case", "Match case")), ask("Replace all", "Replace every match in the document, as set in Find & replace."))),
-  r("document", "styles", "Styles", "a look for the whole document", "styles theme look design", stack(sw("doc.style", "Style", [{ value: "classic", label: "Classic", color: "#33302b" }, { value: "modern", label: "Modern", color: "#3b5bdb" }, { value: "warm", label: "Warm", color: "#c2410c" }, { value: "minimal", label: "Minimal", color: "#6b7280" }]))),
-  r("document", "lists", "Lists", "bullets or numbers, and indent", "lists bullets numbered indent", stack(seg("doc.list", "List", ["Bullets", "Numbers", "None"]), st("doc.indent", "Indent", { min: 0, max: 6 }))),
+  r("document", "styles", "Text style", "heading, quote or code, and bold, italic, underline", "style styles heading bold italic underline strike format text", stack(seg(DOC("block"), "Style", [{ value: "paragraph", label: "Text" }, { value: "h1", label: "H1" }, { value: "h2", label: "H2" }, { value: "h3", label: "H3" }, { value: "quote", label: "Quote" }, { value: "code", label: "Code" }]), row(tg(DOC("bold"), "Bold"), tg(DOC("italic"), "Italic"), tg(DOC("underline"), "Underline"), tg(DOC("strike"), "Strike")))),
+  r("document", "lists", "Lists", "bullets or numbers", "lists bullets numbered", stack(seg(DOC("list"), "List", [{ value: "none", label: "None" }, { value: "bullets", label: "Bullets" }, { value: "numbers", label: "Numbers" }]))),
   r("document", "columns", "Columns", "text in columns", "columns layout gutter", stack(st("doc.columns", "Columns", { min: 1, max: 4 }), sl("doc.gutter", "Gutter", { min: 0, max: 30, unit: "mm" }))),
   r("document", "header", "Header & footer", "what runs along every page", "header footer page numbers", stack(tg("doc.header", "Header"), tg("doc.footer", "Footer"), tg("doc.numbers", "Page numbers"))),
   r("document", "table", "Insert table", "rows, columns and a header", "table insert grid", stack(row(st("doc.rows", "Rows", { min: 1, max: 50 }), st("doc.cols", "Columns", { min: 1, max: 12 })), tg("doc.headrow", "Header row"), ask("Insert it", "Insert a table as set in the Insert table panel."))),
   r("document", "spacing", "Spacing", "space around paragraphs", "spacing before after", stack(sl("doc.before", "Before", { min: 0, max: 48, unit: "pt" }), sl("doc.after", "After", { min: 0, max: 48, unit: "pt" }))),
-  r("document", "colours", "Text colour", "text and highlight colours", "colour highlight text color", row(col("doc.ink", "Text"), col("doc.highlight", "Highlight"))),
-  r("document", "count", "Word count", "words written against a target", "word count target length", stack(stat("doc.words", "Words"), meter("doc.words", "Toward the target", 0, 2000), st("doc.target", "Target", { min: 100, max: 100000, step: 100 }))),
+  r("document", "colours", "Text colour", "the colour of the selected text", "colour text color ink", row(col(DOC("ink"), "Text"))),
+  r("document", "count", "Word count", "words, characters and reading time", "word count length reading time", stack(stat(DOC("words"), "Words"), stat(DOC("characters"), "Characters"), stat(DOC("minutes"), "Minutes to read"))),
   r("document", "review", "Review", "track changes and comments", "review track changes comments", stack(tg("doc.track", "Track changes"), tg("doc.comments", "Show comments"))),
   r("document", "export", "Export", "the format to save in", "export pdf docx save", stack(seg("doc.format", "Format", ["PDF", "DOCX", "Markdown"]), ask("Export", "Export the document in the format set in the Export panel."))),
   r("document", "citations", "Citations", "the citation style", "citations references bibliography apa mla", stack(seg("doc.cite", "Style", ["APA", "MLA", "Chicago", "Harvard"]))),

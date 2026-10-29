@@ -76,9 +76,9 @@ description: >-
   Tools page.
 
   • Panacea — a blank canvas where the controls for the work appear when they are
-  needed and go when they are not. Drop a photo or a table, or say what you want to
-  do, and you and Autora work the same sliders, switches and charts. It learns what
-  you use. Has its own switch on the Tools page.
+  needed and go when they are not. Drop a photo, a table or a document, or say what
+  you want to do, and you and Autora work the same sliders, switches and charts, or
+  the same page of text. It learns what you use. Has its own switch on the Tools page.
 
   • Autora 3D — a 3D modelling window for things to design or print. The agent
   builds shapes by sketching an outline and pulling it up (and cutting, bevelling,
@@ -193,8 +193,10 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  New: web search now has an order it cannot skip. Autora asks 4get first, then Webclaw, then its own search
-  providers, and says which one answered; a blocked, empty or failed result moves it down the list on its own. The
-  browser is no longer used as a quiet substitute for a search -- it opens a page when you ask to see one. The MCP
-  catalog also gained 4get and Fetch (a small page reader), and the app image now carries uv so those servers can
-  start.
+  New: documents in Panacea. Drop a Markdown or text file on the canvas, or ask for one, and it opens as a page you
+  type in, with panels that follow your cursor: Bold lights up where the words are bold, the style says heading in a
+  heading, and pressing them changes what you have selected. A bar on each document says whose words they are, You
+  write or Autora writes. By default the words are yours: Autora formats and structures, and does not write them;
+  switch it to Autora and it can write, every change a step you can undo, and you switch it back with one click.
+  Documents export as Markdown. Also fixed: a surface Autora added while other work was on the canvas could land off
+  screen, leaving a blank view.

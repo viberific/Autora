@@ -18,7 +18,9 @@ const NODE_HELP =
   "\"=<value name>\" to follow a shared value. At most 8 controls in view: mark the rarer ones \"advanced\": true and they wait behind More. Bindable parameters: " +
   "an image has exposure (-3..3), contrast, highlights, shadows, whites, blacks, temperature, tint, vibrance, saturation, clarity (-100..100), fade, vignette, grain " +
   "(0..100), curve (points), look, look_amount, aspect, straighten, rotate, flip_h, flip_v, zoom, compare; a table has filter.<column> (choices, or a [lo, hi] range " +
-  "for a number column), sort, descending, search.";
+  "for a number column), sort, descending, search; a document has block (paragraph|h1|h2|h3|quote|code), align (left|center|right|justify), bold, italic, " +
+  "underline, strike, code (on/off), list (none|bullets|numbers), ink (a colour), all of which follow the person's selection, and font, size (8..32), leading " +
+  "(1..2.5) for the whole document, and words, characters, minutes, which are read-only: \"@doc.words\".";
 
 export const panaceaSPECS: ToolSpec[] = [
   {
@@ -43,7 +45,8 @@ export const panaceaSPECS: ToolSpec[] = [
       "Read the canvas: its surfaces (with every parameter that is not at its default), its panels (id, place, what they work on, why they are there, and each " +
       "tree), shared values, what faded lately, what the person did on it lately, and what Panacea has learned about them. Or search the library: `library` " +
       "(words, e.g. \"crop\", \"chart trend\") and/or `domain` (photo, data, general, document, music, video, 3d, game, design) list matching recipes with their trees; " +
-      "`recipe` (an id) gives one recipe's whole tree as JSON, to change and place as your own. Read before you change anything: the person changes the canvas too. Changes nothing.",
+      "`recipe` (an id) gives one recipe's whole tree as JSON, to change and place as your own. `doc` (a document surface id) reads a document: its mode, the outline, " +
+      "and every block with the id you change it by. Read before you change anything: the person changes the canvas too. Changes nothing.",
     parameters: {
       type: "object",
       properties: {
@@ -51,6 +54,8 @@ export const panaceaSPECS: ToolSpec[] = [
         library: { type: "string", description: "Words to search the library for." },
         domain: { type: "string", description: "Only recipes for this kind of work." },
         recipe: { type: "string", description: "A recipe id: its whole tree." },
+        doc: { type: "string", description: "A document surface id: read its outline and blocks." },
+        full: { type: "boolean", description: "With `doc`: each block's whole text, not shortened." },
       },
     },
   },
@@ -61,13 +66,18 @@ export const panaceaSPECS: ToolSpec[] = [
     description:
       "Put work on the canvas, or take it off. `file` (an artifact id or a path in the working folder) adds a photo (PNG, JPEG, GIF, WebP) as an image surface or a " +
       "table (CSV, TSV, XLSX) as a data surface; `csv` adds a table from text. The panels that always help open beside it by themselves (light and colour for a " +
-      "photo; a chart and a category filter for a table), and one more is offered as a ghost: you do not need to place those. `remove` (a surface id) takes a " +
-      "surface off with its panels. Other kinds of work (documents, PDFs, video, 3D, games, music) are done in their own windows.",
+      "photo; a chart and a category filter for a table; text style and typography for a document), and one more is offered as a ghost: you do not need to place " +
+      "those. `file` also takes a Markdown or text file as a document, and `document` makes one from text (Markdown: # headings, - bullets, 1. numbers, > quotes; \"\" for " +
+      "a blank one). A document is the person's to write unless it is productivity work or they asked you to write it: pass `mode` \"agent\" only then, else leave it " +
+      "\"guide\" and format and structure it. `remove` (a surface id) takes a surface off with its panels. Other kinds of work (PDFs, video, 3D, games, music) are " +
+      "done in their own windows.",
     parameters: {
       type: "object",
       properties: {
         file: { type: "string", description: "An artifact id or a path: the photo or table to add." },
         csv: { type: "string", description: "A table as CSV or TSV text, header row first." },
+        document: { type: "string", description: "A document from text or Markdown (\"\" for a blank one)." },
+        mode: { type: "string", enum: ["guide", "agent"], description: "Who writes a new document: guide (the person; the default) or agent (you, for productivity work or when they asked)." },
         title: { type: "string", description: "What to call it on the canvas." },
         remove: { type: "string", description: "A surface id to take off the canvas." },
       },
@@ -162,6 +172,28 @@ export const panaceaSPECS: ToolSpec[] = [
         w: { type: "number" },
       },
       required: ["action"],
+    },
+  },
+  {
+    name: "panacea_doc",
+    group: "files",
+    risky: true,
+    description:
+      "Change a document on the canvas, by the block ids panacea_look doc: gives you. `ops` is a list done in order, all or none: " +
+      "{op:\"format\", id, set:{block:\"h2\", align:\"center\", bold:true, list:\"bullets\", ink:\"#c2410c\"}} formats one block (always allowed); " +
+      "{op:\"style\", set:{font:\"Georgia\", size:12, leading:1.6}} sets the whole document's type (always allowed); " +
+      "{op:\"insert\", after:<id, or leave out for the start>, markdown:\"## Title\\n\\nText\"} adds blocks; {op:\"replace\", id, text} rewrites a block's words; " +
+      "{op:\"delete\", id}; {op:\"mode\", mode:\"agent\"|\"guide\"}. Insert, replace and delete write or remove words, so they work only while the document is " +
+      "yours to write (mode agent): that is productivity work (a form, a report, minutes, a letter) or what the person asked you to write. A story, a poem or anything " +
+      "creative is theirs: format and structure it, ask questions, critique, brainstorm, and suggest changes in the chat; do not write it. Switching a document to " +
+      "agent says so to the person, and they can switch it back from the bar on the document. Every change is a step they can undo. Returns the blocks as they are now.",
+    parameters: {
+      type: "object",
+      properties: {
+        surface: { type: "string", description: "The document surface id (default: the one in focus, or the only one)." },
+        ops: { type: "array", items: { type: "object" }, description: "The changes, in order (at most 40)." },
+      },
+      required: ["ops"],
     },
   },
   {

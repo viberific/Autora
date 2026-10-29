@@ -1,7 +1,7 @@
 {
   "name": "autora",
   "private": true,
-  "version": "0.9.301",
+  "version": "0.9.302",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
@@ -24,6 +24,13 @@
     "express": "^4.21.2",
     "fflate": "^0.8.3",
     "pdfjs-dist": "^6.3.289",
+    "prosemirror-commands": "^1.7.2",
+    "prosemirror-inputrules": "^1.5.1",
+    "prosemirror-keymap": "^1.2.3",
+    "prosemirror-model": "^1.25.12",
+    "prosemirror-schema-list": "^1.5.1",
+    "prosemirror-state": "^1.4.4",
+    "prosemirror-view": "^1.42.8",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "ws": "^8.18.0"

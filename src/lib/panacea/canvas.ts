@@ -12,6 +12,7 @@
 import { emptyValue, valueFits, type Value } from "./atoms";
 import { checkTree, kindAt, parseBind, surfacesOf, treeWords, type CheckContext, type Node } from "./recipe";
 import { KINDS, findParam, isKind, paramsOf, type SurfaceKind } from "./kinds";
+import type { DocState } from "./document";
 import type { Table } from "./surfaces";
 
 export type PanelState = "live" | "dim" | "ghost" | "draft";
@@ -60,6 +61,8 @@ export interface Surface {
   table?: Table;
   /** An image's size in pixels. */
   px?: { w: number; h: number };
+  /** A document's tree, selection and who writes (`params` are read off it: kinds.ts `settle`). */
+  doc?: DocState;
 }
 
 export interface Canvas {
@@ -127,6 +130,7 @@ export function valueProblem(canvas: Canvas, key: string, v: unknown): string | 
     if (!s) return `no surface ${surface}`;
     const p = findParam(s.kind, s.table, param);
     if (!p) return `${surface} has no parameter ${param}`;
+    if (p.derived) return `${key} is worked out from the work and cannot be set`;
     if (!valueFits(p.kind, v)) return `${key} is ${p.kind}${p.options ? ` (one of ${p.options.slice(0, 12).join(", ")})` : ""}`;
     if (p.kind === "choice" && p.options && !p.options.includes(v as string)) return `${key} is one of ${p.options.slice(0, 20).join(", ")}`;
     return null;
@@ -148,6 +152,9 @@ export function setValue(canvas: Canvas, key: string, v: Value): void {
   const p = findParam(s.kind, s.table, param);
   if (p?.kind === "number" && typeof v === "number") v = clamp(v, p.min ?? -Infinity, p.max ?? Infinity);
   s.params[param] = v;
+  // Work a value is applied to (a document's style) takes it on itself, and its parameters are read back off it.
+  KINDS[s.kind].apply?.(s, param, v);
+  KINDS[s.kind].settle?.(s);
 }
 
 /** A shared value nobody has set starts as the empty value of the first control bound to it. */
@@ -371,7 +378,7 @@ function readSurface(raw: unknown, ids: Set<string>): Surface | null {
   ids.add(id);
   const params = surfaceParams(kind, table, r.params && typeof r.params === "object" ? (r.params as Record<string, unknown>) : {});
   const px = r.px && typeof r.px === "object" ? { w: num((r.px as Box).w, 0), h: num((r.px as Box).h, 0) } : undefined;
-  return {
+  const surface: Surface = {
     id, kind,
     title: str(r.title, KINDS[kind].title, 80),
     x: snap(num(r.x, 0)), y: snap(num(r.y, 0)),
@@ -380,8 +387,11 @@ function readSurface(raw: unknown, ids: Set<string>): Surface | null {
     name: str(r.name, "", 200),
     params,
     ...(table ? { table } : {}),
+    ...(extra.doc ? { doc: extra.doc } : {}),
     ...(px && px.w > 0 ? { px } : {}),
   };
+  KINDS[kind].settle?.(surface);
+  return surface;
 }
 
 /** A canvas from anywhere (disk, the page, an old version), checked and repaired; null when it is not one. */

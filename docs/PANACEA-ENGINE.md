@@ -80,6 +80,15 @@ The wish: click *design* and see the front end and the code behind it at once. T
 The agent keeps the code and the back end in the background, per `CLAUDE.md`'s rule for building an app; the person edits
 the design directly.
 
+## Status
+
+- **M0 done** (kinds registry). **M1 begun: documents** (`docs/PANACEA.md`, "Documents"): the native model, the editor, panels that
+  follow the selection, the authority split enforced in `panacea_doc`, import by drop or Load, Markdown export. Not yet in M1:
+  suggested edits as ghosts (a guided document can only be formatted, not rewritten, so there is no path yet for Autora to
+  *suggest* a rewording), an operation log of steps (the canvas history snapshots whole documents instead), tables, DOCX.
+- Found on the way: the board's two "pan into view" effects overshot when an agent added a surface and its panels together
+  (they measured mid-glide); fixed, and it would have hit tables too.
+
 ## Milestones
 
 | | What | Done when |

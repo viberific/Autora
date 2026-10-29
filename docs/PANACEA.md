@@ -67,6 +67,28 @@ manual for the window is `PANACEA` in `server/handbook.ts`.
   fixed set of tools to put on it. Its only chrome is the top bar (name, Load, Save), the ask box, the history and the put
   away chip.
 
+## Documents
+
+A third kind of surface (`src/lib/panacea/document.ts`, drawn by `src/components/panacea/DocView.tsx`): text edited on
+the canvas itself, in Panacea's own ProseMirror schema (headings, paragraphs, bullets, numbers, quotes, code, rules;
+bold, italic, underline, strike, code, link, colour). It is the first kind whose panels **follow the selection**: Bold lights
+up when the caret is in bold, the Style says H2 in a heading, and pressing either applies it to what is selected. Its
+parameters are read off the selection (`paramsFromState`) and applied to it (`applyParam`): `block`, `align`, `bold`,
+`italic`, `underline`, `strike`, `code`, `list`, `ink` follow it; `font`, `size`, `leading` are the whole document's;
+`words`, `characters`, `minutes` are read-only (`derived`). Six library panels drive it (Text style, Typography, Paragraph,
+Lists, Text colour, Word count); the other fourteen document recipes still bind to shared values nothing acts on, and are
+to be retired or built as the engine gains tables, headers, page setup, comments and Word files.
+
+**Whose words.** A document has a mode, shown as a chip on it: *You write* (`guide`, the default) or *Autora writes*
+(`agent`). In `guide` the agent formats and structures (`panacea_doc` `format`, `style`) and may not insert, replace or
+delete words; creative writing is the person's (CLAUDE.md). In `agent` it writes, undoably. The agent may switch it for
+productivity work or when asked, and says so; the person flips it back with one click. It is enforced in the tool, not the
+prompt. The agent reads a document with `panacea_look doc:` (an outline and every block with the id it changes it by).
+
+One history: the editor has no undo of its own; Ctrl+Z is the canvas's (`useCanvas`), so typing, a panel's Bold and the
+agent's edits are steps on one track. Known cost: each step holds the whole document, so a very large one makes the history
+heavy (a document over ~1.5 MB as JSON is refused); steps of changes (ProseMirror's own) are the planned answer.
+
 ## Projects
 
 Exports go to the chat's project folder in Artifacts. Every project folder has a notebook (`server/projectbook.ts`,

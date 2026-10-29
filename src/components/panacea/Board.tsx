@@ -62,8 +62,9 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
     viewRef.current = v;
     setViewState(v);
     if (glideTimer.current) clearTimeout(glideTimer.current);
+    glideTimer.current = null;
     setGlide(smooth);
-    if (smooth) glideTimer.current = setTimeout(() => setGlide(false), 450);
+    if (smooth) glideTimer.current = setTimeout(() => { glideTimer.current = null; setGlide(false); }, 450);
   }, []);
   const [drag, setDrag] = useState<{ ids: Set<string>; dx: number; dy: number } | null>(null);
   const [widen, setWiden] = useState<{ id: string; w: number } | null>(null);
@@ -122,7 +123,7 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
     const fresh = canvas.panels.filter((p) => !seenPanels.current.has(p.id) && p.state !== "ghost").map((p) => p.id);
     seenPanels.current = new Set(canvas.panels.map((p) => p.id));
     if (!fresh.length || !root.current || drag) return;
-    const frame = requestAnimationFrame(() => {
+    const reveal = () => {
       const el = root.current;
       if (!el) return;
       const r = el.getBoundingClientRect();
@@ -142,8 +143,12 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
       if (!dx && !dy) return;
       const v = viewRef.current;
       setView({ ...v, x: v.x + dx / v.zoom, y: v.y + dy / v.zoom }, true);
-    });
-    return () => cancelAnimationFrame(frame);
+    };
+    // Measured where they are drawn, so not while the view is still gliding (a surface that just came into view): their
+    // positions on screen would be where they were a moment ago, and the pan that follows would overshoot by a screen.
+    // Not cancelled by a later change to the canvas (a caret moving): the panels were already marked seen.
+    if (glideTimer.current) setTimeout(() => requestAnimationFrame(reveal), 480);
+    else requestAnimationFrame(reveal);
   }, [canvas.panels, drag, setView]);
 
   handle.current = {

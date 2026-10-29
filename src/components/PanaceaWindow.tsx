@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { Value } from "../lib/panacea/atoms";
-import { estimateHeight, fade, nearestFree, refocus, removeSurface, restore, setValue, surfaceParams, uid, valueAt, valueProblem, type Panel, type Surface } from "../lib/panacea/canvas";
+import { stateOf, toMarkdown, type DocMode, type DocState } from "../lib/panacea/document";
+import { estimateHeight, fade, nearestFree, refocus, removeSurface, restore, setValue, surfaceParams, uid, valueAt, valueProblem, type Canvas, type Panel, type Surface } from "../lib/panacea/canvas";
+import { KINDS, type SurfaceKind } from "../lib/panacea/kinds";
 import type { Recipe } from "../lib/panacea/library";
 import { BUILTINS } from "../lib/panacea/library";
 import { densityOf, newProfile, normalizeProfile, noteUse, preferredSide, quieted, usageKey, type Profile } from "../lib/panacea/profile";
@@ -160,6 +162,8 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
             const img = pictureOf(s.id);
             if (!img) throw new Error("The picture is not loaded yet.");
             blob = await renderFull(img, s.params, "png");
+          } else if (s.kind === "doc") {
+            blob = new Blob([toMarkdown(stateOf(s.doc!).doc)], { type: "text/markdown" });
           } else {
             blob = new Blob([tableCsv(s.table!.columns, filteredRows(s.table!, s.params))], { type: "text/csv" });
             name = `${s.title}`;
@@ -186,11 +190,34 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
     if (open) void tell(`opened More on "${panel.title}"`);
   }, [edit, tell]);
 
+  /** A document's words or caret moved in its view. Words are a step of history; a caret only brings its panels up to date. */
+  const writeDoc = useCallback((id: string, next: DocState, content: boolean) => {
+    const apply = (d: Canvas) => {
+      const t = d.surfaces.find((x) => x.id === id);
+      if (!t) return;
+      t.doc = next;
+      KINDS[t.kind].settle?.(t);
+    };
+    const title = live.current.surfaces.find((x) => x.id === id)?.title ?? "the document";
+    if (!content) { quietly(apply); return; }
+    edit(apply, `Edited ${title}`, `doc:${id}`);
+    const timers = activityTimers.current;
+    const t = timers.get(`doc:${id}`);
+    if (t) clearTimeout(t);
+    timers.set(`doc:${id}`, setTimeout(() => { timers.delete(`doc:${id}`); void tell(`edited the document ${title}`); }, 2500));
+  }, [edit, live, quietly, tell]);
+
+  const setMode = useCallback((id: string, mode: DocMode) => {
+    const s = live.current.surfaces.find((x) => x.id === id);
+    edit((d) => { const t = d.surfaces.find((x) => x.id === id); if (t?.doc) t.doc = { ...t.doc, mode }; }, mode === "agent" ? `Autora may write in ${s?.title ?? "the document"}` : `${s?.title ?? "The document"} is yours to write`);
+    void tell(mode === "agent" ? `let you write in the document ${s?.title ?? ""}` : `took back writing the document ${s?.title ?? ""}: you format and structure, the words are theirs`);
+  }, [edit, live, tell]);
+
   const hold = doc.hold;
   const api: PanaceaApi = useMemo(() => ({
-    canvas, profile, sessionId, set, act, ask, hold, expand,
+    canvas, profile, sessionId, set, act, ask, hold, expand, writeDoc, setMode,
     value: (key: string) => valueAt(canvas, key),
-  }), [canvas, profile, sessionId, set, act, ask, hold, expand]);
+  }), [canvas, profile, sessionId, set, act, ask, hold, expand, writeDoc, setMode]);
 
   // ------------------------------------------------------- panel actions --
 
@@ -271,7 +298,7 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
       if ("error" in made) err = made.error;
     }, `Added ${input.title ?? input.name}`);
     if (err) setProblem(err);
-    else void tell(`added ${input.kind === "image" ? "the photo" : "the table"} ${input.name}`);
+    else void tell(`added ${KINDS[input.kind].noun.replace(/^an? /, "the ")} ${input.name}`);
   }, [edit, find, profile, tell]);
 
   const onFiles = useCallback((files: File[], at: { x: number; y: number }) => {
@@ -279,9 +306,9 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
       for (const [i, f] of files.slice(0, 4).entries()) {
         try {
           const res = await fetch(`${base}/import?name=${encodeURIComponent(f.name)}`, { method: "POST", headers: { "Content-Type": f.type || "application/octet-stream" }, body: f });
-          const body = (await res.json().catch(() => null)) as { kind?: "image" | "data"; artifact?: string; name?: string; px?: { w: number; h: number } | null; table?: SurfaceInput["table"]; error?: string } | null;
+          const body = (await res.json().catch(() => null)) as { kind?: SurfaceKind; artifact?: string; name?: string; px?: { w: number; h: number } | null; table?: SurfaceInput["table"]; doc?: SurfaceInput["doc"]; error?: string } | null;
           if (!res.ok || !body?.kind) throw new Error(body?.error ?? `Autora answered ${res.status}`);
-          addSurface({ kind: body.kind, name: body.name ?? f.name, artifact: body.artifact, px: body.px, table: body.table, at: { x: at.x + i * 48, y: at.y + i * 48 } });
+          addSurface({ kind: body.kind, name: body.name ?? f.name, artifact: body.artifact, px: body.px, table: body.table, doc: body.doc, at: { x: at.x + i * 48, y: at.y + i * 48 } });
         } catch (err) {
           setProblem(`${f.name}: ${err instanceof Error ? err.message : String(err)}`);
         }

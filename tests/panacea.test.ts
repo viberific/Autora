@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { Surface } from "../src/lib/panacea/canvas";
 import type { Node } from "../src/lib/panacea/recipe";
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "autora-panacea-"));
@@ -20,6 +21,8 @@ const { BUILTINS, DOMAINS, instantiate, searchLibrary } = await import("../src/l
 const canvasLib = await import("../src/lib/panacea/canvas");
 const { contextOf, newCanvas, normalizeCanvas, placeFor, refocus, restore, setValue, surfaceParams, valueAt, valueProblem, describeCanvas } = canvasLib;
 const { addSurfaceTo, placeRecipe, suggestFor, starters } = await import("../src/lib/panacea/rules");
+const { createDoc } = await import("../src/lib/panacea/document");
+const { KINDS } = await import("../src/lib/panacea/kinds");
 const { filteredRows, aggregate, splitDelimited, tableFrom, tableCsv } = await import("../src/lib/panacea/surfaces");
 const profileLib = await import("../src/lib/panacea/profile");
 const { panaceaSteps } = await import("../src/lib/panacea/handsteps");
@@ -43,6 +46,9 @@ function withSurfaces() {
   const c = newCanvas("Test");
   c.surfaces.push({ id: "img1", kind: "image", title: "Photo", x: 0, y: 0, w: 512, h: 320, name: "p.jpg", params: surfaceParams("image", null) });
   c.surfaces.push({ id: "dat1", kind: "data", title: "Sales", x: 0, y: 600, w: 576, h: 352, name: "s.csv", params: surfaceParams("data", table), table });
+  const note: Surface = { id: "doc1", kind: "doc", title: "Notes", x: 0, y: 1400, w: 640, h: 592, name: "notes.md", params: surfaceParams("doc", null), doc: createDoc("# Notes\n\nA first line.") };
+  KINDS.doc.settle?.(note);
+  c.surfaces.push(note);
   return c;
 }
 
@@ -211,7 +217,7 @@ await test("the canvas reads back repaired: broken panels dropped, numbers snapp
   raw.panels.push({ id: "bad", tree: { atom: "wobble" } }, { id: "p" + "x", tree: { atom: "label", props: { text: "hi" } }, x: 13, y: 7, w: 5 });
   raw.surfaces.push({ id: "z", kind: "video" });
   const back = normalizeCanvas(raw)!;
-  assert.equal(back.surfaces.length, 2);
+  assert.equal(back.surfaces.length, c.surfaces.length, "every real surface kept, the unknown kind refused");
   assert.ok(!back.panels.some((x) => x.id === "bad"));
   const label = back.panels.find((x) => x.id === "px")!;
   assert.deepEqual([label.x, label.y, label.w], [16, 0, 176]);
@@ -301,7 +307,7 @@ const call = async (method: string, url: string, body?: unknown, raw?: Buffer, t
 };
 
 await test("the tools are a family of their own, read-only where they only look, and switch off with the window", () => {
-  assert.deepEqual(panaceaSPECS.map((s) => s.name), ["panacea_open", "panacea_look", "panacea_surface", "panacea_place", "panacea_set", "panacea_arrange", "panacea_bespoke", "panacea_export"]);
+  assert.deepEqual(panaceaSPECS.map((s) => s.name), ["panacea_open", "panacea_look", "panacea_surface", "panacea_place", "panacea_set", "panacea_arrange", "panacea_bespoke", "panacea_doc", "panacea_export"]);
   assert.ok(loadedFamilies({ events: [], said: "open the panacea canvas", hasPdf: false, lazy: true }).has("panacea"));
   assert.equal(looksOnly("panacea_look", {}), true);
   assert.equal(looksOnly("panacea_open", {}), true);
@@ -453,6 +459,117 @@ await test("an xlsx's first sheet reads as a table", async () => {
   const t = panacea.readTable("s.xlsx", xlsx)!;
   assert.deepEqual(t.columns, [{ name: "Name", type: "text" }, { name: "Score", type: "number" }]);
   assert.deepEqual(t.rows, [["Ada", 9.5]]);
+});
+
+// ---------------------------------------------------------------- documents --
+
+/** The document surface on this chat's canvas, as the server holds it. */
+const docOf = async () => ((await call("GET", `/api/panacea/${S}/doc`)).body.doc.surfaces as Array<{ id: string; kind: string; doc?: { mode: string; json: unknown }; params: Record<string, unknown> }>).find((x) => x.kind === "doc")!;
+const blockIds = async () => {
+  const d = await docOf();
+  const { blocksOf } = await import("../src/lib/panacea/document");
+  return blocksOf(stateOf(d.doc as never).doc);
+};
+const { stateOf } = await import("../src/lib/panacea/document");
+
+await test("panacea_surface makes a document from Markdown: the person's to write, with its starters beside it", async () => {
+  panacea.dropPanacea(S);
+  const out = await run("panacea_surface", { document: "# Minutes\n\nWe met.\n\n- agreed\n- agreed again", title: "Minutes" });
+  assert.ok(out.ok, out.summary);
+  assert.match(out.summary, /document surface doc\w+ "Minutes"/);
+  assert.match(out.summary, /person's to write/);
+  assert.match(out.summary, /Text style/);
+  const d = await docOf();
+  assert.equal(d.doc!.mode, "guide");
+  assert.equal(d.params.words, 6);
+  assert.equal(d.params.block, "h1", "the caret starts in the first block");
+});
+
+await test("panacea_look doc reads the outline and every block with its id", async () => {
+  const out = await run("panacea_look", { doc: "" });
+  assert.ok(out.ok, out.summary);
+  assert.match(out.summary, /Outline:\n\[b\w+\] Minutes/);
+  assert.match(out.summary, /h1 "Minutes"/);
+  assert.match(out.summary, /bullet "agreed"/);
+  assert.match(out.summary, /the person writes it/);
+});
+
+await test("in guide the agent formats and structures but may not write; refusals change nothing", async () => {
+  const [title, , first] = await blockIds();
+  const fmt = await run("panacea_doc", { ops: [{ op: "format", id: title!.id, set: { align: "center" } }, { op: "format", id: first!.id, set: { bold: true } }, { op: "style", set: { font: "Georgia", size: 12 } }] });
+  assert.ok(fmt.ok, fmt.summary);
+  assert.match(fmt.summary, /Blocks now/);
+  const d = await docOf();
+  assert.equal(d.params.font, "Georgia");
+  assert.equal(d.params.size, 12);
+  const before = JSON.stringify(d.doc);
+  for (const op of [{ op: "insert", markdown: "Sneaky." }, { op: "replace", id: title!.id, text: "Mine" }, { op: "delete", id: first!.id }]) {
+    const refused = await run("panacea_doc", { ops: [{ op: "format", id: title!.id, set: { align: "left" } }, op] });
+    assert.equal(refused.ok, false);
+    assert.match(refused.summary, /theirs to write/);
+  }
+  assert.equal(JSON.stringify((await docOf()).doc), before, "a refused call is all-or-nothing: even its allowed first op was undone");
+});
+
+await test("switching a document to Autora lets it write, every op checked, ids returned for the next", async () => {
+  const [title] = await blockIds();
+  const w = await run("panacea_doc", { ops: [
+    { op: "mode", mode: "agent" },
+    { op: "insert", after: title!.id, markdown: "## Decisions\n\nShip on Friday." },
+    { op: "format", id: title!.id, set: { align: "left" } },
+  ] });
+  assert.ok(w.ok, w.summary);
+  assert.match(w.summary, /switched the document to Autora writing/);
+  assert.match(w.summary, /\[b\w+\] h2 "Decisions"/);
+  const ids = await blockIds();
+  assert.deepEqual(ids.map((b) => b.kind).slice(0, 4), ["h1", "h2", "p", "p"]);
+  const decisions = ids.find((b) => b.text === "Decisions")!;
+  const rewrite = await run("panacea_doc", { ops: [{ op: "replace", id: decisions.id, text: "Decided" }, { op: "delete", id: ids.find((b) => b.text === "agreed again")!.id }] });
+  assert.ok(rewrite.ok, rewrite.summary);
+  assert.ok((await blockIds()).some((b) => b.text === "Decided") && !(await blockIds()).some((b) => b.text === "agreed again"));
+  const bad = await run("panacea_doc", { ops: [{ op: "replace", id: "nope", text: "x" }] });
+  assert.equal(bad.ok, false);
+  assert.match(bad.summary, /no block nope/);
+  assert.equal((await run("panacea_doc", { ops: [] })).ok, false);
+  assert.equal((await run("panacea_doc", { ops: [{ op: "dance" }] })).ok, false);
+  assert.equal((await run("panacea_doc", { surface: "nothing", ops: [{ op: "mode", mode: "guide" }] })).ok, false);
+});
+
+await test("panacea_set on a document parameter applies it to the selection; a read-only one is refused", async () => {
+  const d = await docOf();
+  const before = d.params.bold;
+  const set = await run("panacea_set", { values: { [`@${d.id}.bold`]: !before } });
+  assert.ok(set.ok, set.summary);
+  assert.equal((await docOf()).params.bold, !before, "read back off the selection");
+  const ro = await run("panacea_set", { values: { [`@${d.id}.words`]: 5 } });
+  assert.equal(ro.ok, false);
+  assert.match(ro.summary, /worked out/);
+});
+
+await test("a document is exported as Markdown; a dropped .md or a .txt that is not a table opens as a document, a table .txt stays a table", async () => {
+  const d = await docOf();
+  const out = await run("panacea_export", { surface: d.id });
+  assert.ok(out.ok, out.summary);
+  assert.match(out.summary, /as Markdown/);
+  const md = await call("POST", `/api/panacea/${S}/import?name=notes.md`, undefined, Buffer.from("# Notes\n\nHello **there**."), "text/markdown");
+  assert.equal(md.body.kind, "doc");
+  assert.ok(stateOf(md.body.doc).doc.textContent.includes("Hello there."));
+  const prose = await call("POST", `/api/panacea/${S}/import?name=letter.txt`, undefined, Buffer.from("Dear friend,\n\nThanks."), "text/plain");
+  assert.equal(prose.body.kind, "doc");
+  const grid = await call("POST", `/api/panacea/${S}/import?name=grid.txt`, undefined, Buffer.from("a\tb\n1\t2\n"), "text/plain");
+  assert.equal(grid.body.kind, "data", "a text file that reads as a table is still a table");
+  const huge = await call("POST", `/api/panacea/${S}/import?name=big.md`, undefined, Buffer.alloc(700_000, 97), "text/markdown");
+  assert.equal(huge.status, 413);
+});
+
+await test("a document survives the canvas going to disk and back", async () => {
+  const d = await docOf();
+  const doc = (await call("GET", `/api/panacea/${S}/doc`)).body;
+  const back = normalizeCanvas(JSON.parse(JSON.stringify(doc.doc)))!;
+  const again = back.surfaces.find((x) => x.id === d.id)!;
+  assert.equal(again.doc!.mode, "agent");
+  assert.equal(again.params.words, d.params.words);
+  assert.match(describeCanvas(back), /document "Minutes", \d+ words in \d+ blocks; Autora may write in it/);
 });
 
 server.close();

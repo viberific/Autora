@@ -28,6 +28,7 @@ import {
   setValue, snap, uid, valueProblem, PANEL_MAX_W, PANEL_MIN_W, type Canvas, type Panel, type Surface,
 } from "../src/lib/panacea/canvas";
 import { panaceaSteps, stepWords } from "../src/lib/panacea/handsteps";
+import { createDoc, docStateOf, formatBlock, insertBlocks, listing, outlineOf, applyParam, deleteBlock, replaceBlockText, stateOf, toMarkdown, type DocMode } from "../src/lib/panacea/document";
 import { KINDS, type SurfaceKind } from "../src/lib/panacea/kinds";
 import { BUILTINS, DOMAINS, libraryIndex, searchLibrary, type Domain, type Recipe } from "../src/lib/panacea/library";
 import { normalizeProfile, noteDismiss, noteSide, noteUse, preferredSide, profileWords, quieted, sideOf, usageKey, type Profile } from "../src/lib/panacea/profile";
@@ -216,7 +217,7 @@ const findRecipe = (id: string): Recipe | undefined => allRecipes().find((r) => 
  * counted), else a new one. Returns its id. `used` is false for one the agent has only placed: it is kept so the
  * hand can summon it, and forgotten in a week if nobody uses it.
  */
-function learn(tree: Node, meta: { name: string; about: string; domain: Domain; origin: "composed" | "bespoke"; w: number }, kinds: Record<string, "image" | "data">, used: boolean): string {
+function learn(tree: Node, meta: { name: string; about: string; domain: Domain; origin: "composed" | "bespoke"; w: number }, kinds: Record<string, SurfaceKind>, used: boolean): string {
   const general = generalize(tree, kinds);
   const fp = fingerprint(general);
   const builtin = BUILTINS.find((r) => fingerprint(r.tree) === fp);
@@ -476,6 +477,19 @@ function imageSize(data: Buffer): { w: number; h: number } | null {
 
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp)$/i;
 const TABLE_EXT = /\.(csv|tsv|txt|xlsx)$/i;
+/** Text Panacea opens as a document: Markdown, and a plain `.txt` that is not a table. */
+const DOC_EXT = /\.(md|markdown|txt)$/i;
+const MAX_DOC_TEXT = 600_000;
+
+/** Do most lines of this text hold the same number (at least one) of tabs, commas or semicolons? A letter with a comma in it does not. */
+function sharesDelimiter(text: string): boolean {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim()).slice(0, 30);
+  if (lines.length < 2) return false;
+  return ["\t", ",", ";"].some((d) => {
+    const counts = lines.map((l) => l.split(d).length - 1);
+    return counts[0]! > 0 && counts.filter((c) => c === counts[0]).length / lines.length >= 0.8;
+  });
+}
 
 /** The first sheet of an .xlsx as rows of strings. */
 function xlsxGrid(data: Buffer): string[][] | null {
@@ -518,6 +532,13 @@ export function readTable(name: string, data: Buffer): Table | null {
   return grid ? tableFrom(grid) : null;
 }
 
+/** The table a file holds, if it is one: a `.txt` only when its lines share a delimiter. */
+function tableIfTable(name: string, data: Buffer): Table | null {
+  if (!TABLE_EXT.test(name)) return null;
+  if (/\.txt$/i.test(name) && !sharesDelimiter(data.toString("utf8"))) return null;
+  return readTable(name, data);
+}
+
 /** A surface for a file, with its starter panels, laid out the person's way. */
 function addSurface(canvas: Canvas, input: SurfaceInput): { surface: Surface; panels: Panel[] } {
   const p = profileNow();
@@ -529,6 +550,22 @@ function addSurface(canvas: Canvas, input: SurfaceInput): { surface: Surface; pa
 const numberOr = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v)) ? Number(v) : null);
 
 const needPanel = (c: Canvas, id: unknown): Panel => c.panels.find((p) => p.id === id) ?? refuse(`There is no panel "${String(id ?? "")}". ${c.panels.length ? `Panels: ${c.panels.map((p) => `${p.id} "${p.title}"`).join("; ")}.` : "There are none."}`);
+
+const opened = (panels: Panel[]) => panels.map((x) => `${x.id} "${x.title}"${x.state === "ghost" ? " (ghost)" : ""}`).join(", ") || "nothing";
+
+/** What the agent is told when a document went on the canvas. */
+function docAdded(surface: Surface, panels: Panel[]): string {
+  const words = surface.params.words ?? 0;
+  const who = surface.doc?.mode === "agent" ? "Autora may write in it" : "it is the person's to write: you format and structure it, you do not write its words (see mode in panacea_doc)";
+  return `Added document surface ${surface.id} "${surface.title}" (${words} words); ${who}. Read it with panacea_look doc:"${surface.id}"; change it with panacea_doc. Opened beside it: ${opened(panels)}.`;
+}
+
+/** The document a call means: the one named, else the one in focus, else the only one. */
+function docSurface(c: Canvas, id: unknown): Surface {
+  const docs = c.surfaces.filter((x) => x.kind === "doc" && x.doc);
+  const s = typeof id === "string" && id ? docs.find((x) => x.id === id) : (docs.find((x) => x.id === c.focus) ?? (docs.length === 1 ? docs[0] : undefined));
+  return s ?? refuse(docs.length ? `Say which document: \`surface\` (${docs.map((x) => x.id).join(", ")}).` : "There is no document on the canvas. Add one with panacea_surface `document`.");
+}
 
 /** The edit a changing tool call asks for, done to `c` (a copy). Returns what to tell the agent. */
 function edit(session: string, name: string, c: Canvas, args: Record<string, any>, hooks: PanaceaHooks): { text: string; preview: string } {
@@ -645,19 +682,106 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
         const { surface, panels } = addSurface(c, { kind: "data", name: `${title ?? "Table"}.csv`, title: title ?? "Table", table });
         return { text: `Added data surface ${surface.id} (${table.rows.length} rows; ${table.columns.map((x) => `${x.name} ${x.type}`).join(", ")}). Opened beside it: ${panels.map((x) => `${x.id} "${x.title}"${x.state === "ghost" ? " (ghost)" : ""}`).join(", ") || "nothing"}.`, preview: surface.title };
       }
-      if (args.file === undefined) refuse("Give `file` (an artifact id or a path in the working folder), `csv` (the table as text), or `remove`.");
+      if (typeof args.document === "string") {
+        if (args.document.length > MAX_DOC_TEXT) refuse(`That is more than ${MAX_DOC_TEXT.toLocaleString()} characters; a document starts smaller.`);
+        const mode: DocMode = args.mode === "agent" ? "agent" : "guide";
+        const { surface, panels } = addSurface(c, { kind: "doc", name: `${title ?? "Document"}.md`, title: title ?? "Document", doc: createDoc(args.document, mode) });
+        return { text: docAdded(surface, panels), preview: surface.title };
+      }
+      if (args.file === undefined) refuse("Give `file` (an artifact id or a path in the working folder), `csv` (the table as text), `document` (the text, or \"\" for a blank one), or `remove`.");
       const given = readFileRef(args.file, hooks.cwd, "the file", "panacea_surface");
       if (IMAGE_EXT.test(given.name)) {
         const art = given.artifact ?? saveArtifact({ origin: "agent", name: given.name, data: given.data, mime: `image/${/png$/i.test(given.name) ? "png" : /gif$/i.test(given.name) ? "gif" : /webp$/i.test(given.name) ? "webp" : "jpeg"}`, session, note: "Opened in Panacea" });
         const { surface, panels } = addSurface(c, { kind: "image", name: given.name, title, artifact: art.id, px: imageSize(given.data) });
         return { text: `Added image surface ${surface.id} "${surface.title}"${surface.px ? ` (${surface.px.w}x${surface.px.h})` : ""}. Opened beside it: ${panels.map((x) => `${x.id} "${x.title}"${x.state === "ghost" ? " (ghost)" : ""}`).join(", ") || "nothing"}.`, preview: surface.title };
       }
-      if (TABLE_EXT.test(given.name)) {
-        const table = readTable(given.name, given.data) ?? refuse(`${given.name} has no table in it (a header row and rows).`);
+      const asTable = tableIfTable(given.name, given.data);
+      if (TABLE_EXT.test(given.name) && (asTable || !DOC_EXT.test(given.name))) {
+        const table = asTable ?? refuse(`${given.name} has no table in it (a header row and rows).`);
         const { surface, panels } = addSurface(c, { kind: "data", name: given.name, title, table, ...(given.artifact ? { artifact: given.artifact.id } : {}) });
         return { text: `Added data surface ${surface.id} (${table.rows.length} rows; ${table.columns.map((x) => `${x.name} ${x.type}`).join(", ")}). Opened beside it: ${panels.map((x) => `${x.id} "${x.title}"${x.state === "ghost" ? " (ghost)" : ""}`).join(", ") || "nothing"}.`, preview: surface.title };
       }
-      return refuse(`${given.name} is not something Panacea works on yet: a photo (PNG, JPEG, GIF, WebP) or a table (CSV, TSV, XLSX). Its other work happens in the window made for it.`);
+      if (DOC_EXT.test(given.name)) {
+        const text = given.data.toString("utf8");
+        if (text.length > MAX_DOC_TEXT) refuse(`${given.name} is more than ${MAX_DOC_TEXT.toLocaleString()} characters; Panacea opens smaller documents for now.`);
+        const { surface, panels } = addSurface(c, { kind: "doc", name: given.name, title, doc: createDoc(text, args.mode === "agent" ? "agent" : "guide"), ...(given.artifact ? { artifact: given.artifact.id } : {}) });
+        return { text: docAdded(surface, panels), preview: surface.title };
+      }
+      return refuse(`${given.name} is not something Panacea works on yet: a photo (PNG, JPEG, GIF, WebP), a table (CSV, TSV, XLSX) or a document (Markdown, text). Its other work happens in the window made for it.`);
+    }
+
+    case "panacea_doc": {
+      const s = docSurface(c, args.surface);
+      const ops: unknown[] = Array.isArray(args.ops) ? args.ops : [];
+      if (!ops.length) refuse("Pass `ops`: a list like [{\"op\": \"format\", \"id\": \"b4k2\", \"set\": {\"block\": \"h2\"}}, {\"op\": \"insert\", \"after\": \"b4k2\", \"markdown\": \"A paragraph.\"}].");
+      if (ops.length > 40) refuse("At most 40 ops in one call.");
+      let state = stateOf(s.doc!);
+      let mode = s.doc!.mode;
+      const done: string[] = [];
+      /** Words are the person's unless they gave them to Autora: formatting is never held back, writing is. */
+      const writes = (what: string) => {
+        if (mode !== "agent") refuse(`${what} changes the person's words, and "${s.title}" is theirs to write: you format and structure it. If they asked you to write it, or it is productivity work (a form, a report, minutes, a letter), switch it with {"op": "mode", "mode": "agent"} and say so; they can switch it back in the document's bar. For a story, a poem or anything creative, suggest the change in the chat and let them make it.`);
+      };
+      ops.forEach((raw, i) => {
+        const op = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+        const kind = String(op.op ?? "");
+        const where = `op ${i + 1} (${kind || "?"})`;
+        const take = (r: ReturnType<typeof insertBlocks>) => (typeof r === "string" ? refuse(`${where}: ${r}`) : r);
+        const id = typeof op.id === "string" ? op.id : "";
+        switch (kind) {
+          case "format": {
+            const set = op.set && typeof op.set === "object" ? Object.entries(op.set as Record<string, unknown>) : [];
+            if (!id || !set.length) refuse(`${where} needs \`id\` (a block) and \`set\` (e.g. {"block": "h2", "align": "center", "bold": true}).`);
+            for (const [k, v] of set) state = take(formatBlock(state, id, k, v as Value));
+            done.push(`formatted ${id}: ${set.map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(", ")}`);
+            break;
+          }
+          case "style": {
+            const set = op.set && typeof op.set === "object" ? Object.entries(op.set as Record<string, unknown>) : [];
+            if (!set.length) refuse(`${where} needs \`set\`: the whole document's font, size or leading.`);
+            for (const [k, v] of set) {
+              if (!["font", "size", "leading"].includes(k)) refuse(`${where}: ${k} is not a whole-document setting (font, size, leading). Format a block with op format.`);
+              state = applyParam(state, k, v as Value) ?? refuse(`${where}: ${k} cannot be ${JSON.stringify(v)}, or it already is.`);
+            }
+            done.push(`set the document's ${set.map(([k, v]) => `${k} to ${JSON.stringify(v)}`).join(", ")}`);
+            break;
+          }
+          case "insert": {
+            writes(where);
+            const markdown = typeof op.markdown === "string" ? op.markdown : refuse(`${where} needs \`markdown\`: the blocks to insert (# headings, - bullets, 1. numbers, > quotes, paragraphs between blank lines), and \`after\` (a block id, or omit it for the start).`);
+            const after = typeof op.after === "string" && op.after ? op.after : null;
+            state = take(insertBlocks(state, after, markdown));
+            done.push(`inserted ${after ? `after ${after}` : "at the start"}`);
+            break;
+          }
+          case "replace": {
+            writes(where);
+            const text = typeof op.text === "string" ? op.text : refuse(`${where} needs \`id\` and \`text\`: the block's new words.`);
+            if (!id) refuse(`${where} needs \`id\` and \`text\`: the block's new words.`);
+            state = take(replaceBlockText(state, id, text));
+            done.push(`rewrote ${id}`);
+            break;
+          }
+          case "delete": {
+            writes(where);
+            if (!id) refuse(`${where} needs \`id\`.`);
+            state = take(deleteBlock(state, id));
+            done.push(`removed ${id}`);
+            break;
+          }
+          case "mode": {
+            mode = op.mode === "agent" || op.mode === "guide" ? op.mode : refuse(`${where}: mode is "agent" (you may write) or "guide" (the person writes).`);
+            done.push(mode === "agent" ? "switched the document to Autora writing (the person can switch it back)" : "gave the writing back to the person");
+            break;
+          }
+          default:
+            refuse(`${where}: op is format, style, insert, replace, delete or mode.`);
+        }
+      });
+      s.doc = docStateOf(state, mode);
+      KINDS.doc.settle?.(s);
+      const blocks = listing(state.doc).split("\n");
+      return { text: `${done.join("; ")}.\nBlocks now (${blocks.length}):\n${blocks.slice(0, 80).join("\n")}${blocks.length > 80 ? "\n… (panacea_look doc: for the rest)" : ""}`, preview: done[0]! };
     }
 
     case "panacea_bespoke": {
@@ -722,6 +846,23 @@ export async function runPanaceaTool(session: string, name: string, args: Record
           if (!r) return { ok: false, summary: `There is no recipe "${args.recipe}".` };
           return { ok: true, summary: `${r.id} "${r.name}" (${r.domain}, ${r.origin}, used ${r.uses}x): ${r.about}. Width ${r.w}.\n${JSON.stringify(r.tree)}`, preview: r.name };
         }
+        if (typeof args.doc === "string") {
+          const d = docSurface(e.canvas, args.doc);
+          const state = stateOf(d.doc!);
+          const caret = state.selection.$from.parent;
+          const outline = outlineOf(state.doc).map((h) => `${"  ".repeat(h.level - 1)}[${h.id}] ${h.text}`).join("\n");
+          const text = listing(state.doc, args.full === true);
+          return {
+            ok: true,
+            summary: [
+              `Document ${d.id} "${d.title}": ${d.params.words} words; ${d.doc!.mode === "agent" ? "Autora may write in it" : "the person writes it: you format and structure, you do not write its words"}.`,
+              caret.isTextblock && caret.attrs.id ? `The person's caret is in [${String(caret.attrs.id)}].` : "",
+              outline ? `Outline:\n${outline}` : "No headings yet.",
+              `Blocks (id, kind, text; panacea_doc changes them by id):\n${text.length > 20_000 ? `${text.slice(0, 20_000)}\n… (cut; ask with \`full\` for blocks in full, or read the file)` : text}`,
+            ].filter(Boolean).join("\n"),
+            preview: d.title,
+          };
+        }
         if (typeof args.library === "string" || typeof args.domain === "string") {
           const pool = allRecipes().filter((r) => r.origin === "builtin" || r.uses > 0);
           const found = searchLibrary(pool, String(args.library ?? ""), typeof args.domain === "string" ? args.domain : null, 12);
@@ -743,6 +884,7 @@ export async function runPanaceaTool(session: string, name: string, args: Record
       case "panacea_set":
       case "panacea_arrange":
       case "panacea_surface":
+      case "panacea_doc":
       case "panacea_bespoke": {
         const next = structuredClone(e.canvas);
         const done = edit(session, name, next, args, hooks);
@@ -768,6 +910,11 @@ export async function runPanaceaTool(session: string, name: string, args: Record
           const art = saveArtifact({ origin: "agent", name: `${(typeof args.name === "string" && args.name.trim()) || s.title}.csv`, data: Buffer.from(tableCsv(s.table!.columns, rows), "utf8"), mime: "text/csv", session, note: "Exported from Panacea" });
           hooks.showFile?.({ id: art.id, name: art.name, mime: art.mime, size: art.size });
           return { ok: true, summary: `Saved ${art.name} (${rows.length} rows, as filtered) as artifact ${art.id}, in the project.`, preview: art.name };
+        }
+        if (s.kind === "doc") {
+          const art = saveArtifact({ origin: "agent", name: `${(typeof args.name === "string" && args.name.trim()) || s.title}.md`, data: Buffer.from(toMarkdown(stateOf(s.doc!).doc), "utf8"), mime: "text/markdown", session, note: "Exported from Panacea" });
+          hooks.showFile?.({ id: art.id, name: art.name, mime: art.mime, size: art.size });
+          return { ok: true, summary: `Saved ${art.name} (${s.params.words} words, as Markdown) as artifact ${art.id}, in the project.`, preview: art.name };
         }
         const format = args.format === "jpeg" ? "jpeg" : "png";
         const out = (await command(session, "render", { surface: s.id, format, name: (typeof args.name === "string" && args.name.trim()) || s.title }, 120_000)) as { artifact?: string; name?: string; size?: number; mime?: string } | null;
@@ -804,8 +951,12 @@ export function loadIntoPanacea(session: string, art: { id: string; name: string
   const next = structuredClone(e.canvas);
   try {
     if (IMAGE_EXT.test(art.name)) addSurface(next, { kind: "image", name: art.name, artifact: art.id, px: imageSize(data) });
-    else if (TABLE_EXT.test(art.name)) addSurface(next, { kind: "data", name: art.name, artifact: art.id, table: readTable(art.name, data) ?? refuse(`${art.name} has no table in it.`) });
-    else return { ok: false, error: "Panacea loads a canvas it kept, a photo or a table." };
+    else if (tableIfTable(art.name, data)) addSurface(next, { kind: "data", name: art.name, artifact: art.id, table: tableIfTable(art.name, data)! });
+    else if (DOC_EXT.test(art.name)) {
+      if (data.byteLength > MAX_DOC_TEXT) return { ok: false, error: `${art.name} is more than ${MAX_DOC_TEXT.toLocaleString()} characters; Panacea opens smaller documents for now.` };
+      addSurface(next, { kind: "doc", name: art.name, artifact: art.id, doc: createDoc(data.toString("utf8")) });
+    } else if (TABLE_EXT.test(art.name)) refuse(`${art.name} has no table in it.`);
+    else return { ok: false, error: "Panacea loads a canvas it kept, a photo, a table or a document (Markdown, text)." };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
@@ -953,13 +1104,19 @@ export function panaceaRoutes(app: Express, opts: {
       const art = saveArtifact({ origin: "user", name, data: req.body, mime, session: id, note: "Dropped on Panacea" });
       return res.json({ kind: "image", artifact: art.id, name: art.name, px: imageSize(req.body) });
     }
+    const tabular = tableIfTable(name, req.body);
+    if (!tabular && DOC_EXT.test(name)) {
+      if (req.body.byteLength > MAX_DOC_TEXT) return res.status(413).json({ error: `${name} is more than ${MAX_DOC_TEXT.toLocaleString()} characters; Panacea opens smaller documents for now.` });
+      const art = saveArtifact({ origin: "user", name, data: req.body, mime: /\.txt$/i.test(name) ? "text/plain" : "text/markdown", session: id, note: "Dropped on Panacea" });
+      return res.json({ kind: "doc", artifact: art.id, name: art.name, doc: createDoc(req.body.toString("utf8")) });
+    }
     if (TABLE_EXT.test(name)) {
-      const table = readTable(name, req.body);
+      const table = tabular;
       if (!table) return res.status(400).json({ error: `${name} has no table in it: a header row and rows.` });
       const art = saveArtifact({ origin: "user", name, data: req.body, mime: /xlsx$/i.test(name) ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "text/csv", session: id, note: "Dropped on Panacea" });
       return res.json({ kind: "data", artifact: art.id, name: art.name, table });
     }
-    res.status(415).json({ error: "Panacea works on photos (PNG, JPEG, GIF, WebP) and tables (CSV, TSV, XLSX) for now." });
+    res.status(415).json({ error: "Panacea works on photos (PNG, JPEG, GIF, WebP), tables (CSV, TSV, XLSX) and documents (Markdown, text) for now." });
   });
 
   /* Save: the canvas as it is, kept in the project's folder in Artifacts. The agent is not woken. */
@@ -982,10 +1139,10 @@ export function panaceaRoutes(app: Express, opts: {
     if (!id) return;
     if (!Buffer.isBuffer(req.body) || req.body.byteLength < 2) return res.status(400).json({ error: "empty" });
     const given = String(req.headers["content-type"] ?? "image/png").split(";")[0]!.trim();
-    const TYPES: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/svg+xml": "svg", "text/csv": "csv" };
+    const TYPES: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/svg+xml": "svg", "text/csv": "csv", "text/markdown": "md" };
     const ext = TYPES[given] ?? "png";
     const mime = Object.entries(TYPES).find(([, e]) => e === ext)![0];
-    const raw = String(req.query.name ?? "panacea").replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "-").replace(/\.(png|jpe?g|svg|csv)$/i, "").slice(0, 80) || "panacea";
+    const raw = String(req.query.name ?? "panacea").replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "-").replace(/\.(png|jpe?g|svg|csv|md)$/i, "").slice(0, 80) || "panacea";
     const art = saveArtifact({ origin: "agent", name: `${raw}.${ext}`, data: req.body, mime, session: id, note: "Exported from Panacea" });
     res.json({ artifact: art.id, name: art.name, size: art.size, mime: art.mime });
   });

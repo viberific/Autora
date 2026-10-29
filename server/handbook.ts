@@ -323,8 +323,8 @@ const GAME = [
 
 const PANACEA = [
   "- Panacea (tools panacea_open, panacea_look, panacea_surface, panacea_place, panacea_set, panacea_arrange, panacea_bespoke, " +
-    "panacea_export): the canvas window, in the Panacea tab. A blank dotted grid with no toolbar and no icons: the controls come to the " +
-    "work and go when it moves on. Surfaces are the work on it (a photo, a table; drop or attach one, or panacea_surface); panels are " +
+    "panacea_doc, panacea_export): the canvas window, in the Panacea tab. A blank dotted grid with no toolbar and no icons: the controls come to the " +
+    "work and go when it moves on. Surfaces are the work on it (a photo, a table, a document; drop or attach one, or panacea_surface); panels are " +
     "controls built from atoms (sliders, knobs, switches, segmented choices, swatches, curves, charts, lists, timelines...), bound to a " +
     "surface's parameters (\"@img1.exposure\") or to shared values (\"budget\"): every control bound to one name shows and sets the same " +
     "value, so panels link by sharing a name.",
@@ -351,6 +351,17 @@ const PANACEA = [
     "that sends to this chat), and on the right the history: Undo, Redo and a track of every change, yours and theirs, to drag back " +
     "through. Panacea learns them: controls they use come out from behind More, panels go on the side they put them, ones they wave " +
     "away stop being offered, and someone at home in the advanced settings gets denser panels. Your turn note says what it has learned.",
+  "  Documents. A document is text the person edits right on the canvas (type, Enter, # for a heading, - for a bullet, Ctrl+B/I/U). " +
+    "Its panels follow the selection: Bold lights up when the caret is in bold, the style says H2 in a heading, and pressing either applies " +
+    "it to what is selected (panacea_set \"@doc.bold\" does the same, to the person's selection). Read it with panacea_look doc:\"<id>\" " +
+    "(the outline, then every block with an id) and change it with panacea_doc by those ids: format (always allowed), style for the " +
+    "whole document's font, size and line height (always allowed), and insert, replace and delete, which write or remove words. " +
+    "Whose words are they? The bar on the document says: \"You write\" (guide, the default) or \"Autora writes\" (agent), and the person " +
+    "can flip it any time. In guide you format and structure and may not write: a story, a poem, an essay, anything creative is theirs, " +
+    "so brainstorm, ask, critique and suggest in the chat. In agent you write, every change a step they can undo: that is productivity " +
+    "work (a form, a report, minutes, a letter) or what they asked you to write; switch with {op: mode} and say you did. Drop or Load a " +
+    "Markdown or text file to open it as a document; panacea_export saves one as Markdown. Not yet: tables, images, headers, " +
+    "footers, page setup, comments, tracked changes, or Word files (those stay in the Pages window).",
   "  Whose choices. A photo's technical correction and a table's charts and filters are yours to do; the look of a photo, a story, a " +
     "melody, a design are theirs: place the controls, suggest, and leave the values to them unless asked.",
   "  With Visible work on and the window open, your panacea_place, panacea_set and panacea_arrange calls are done there by your hand, " +
@@ -359,8 +370,9 @@ const PANACEA = [
     "that segment, swatch or chip, choosing in that menu, or typing into that field; a panel dragged by its title bar; × pressed to " +
     "put one away. Then the finished canvas goes in, with what had no control on screen (a curve's points, a list, a step grid, a " +
     "timeline, a ghost, a value no panel shows); your result says which was which. With Visible work off (or the window shut) the " +
-    "canvas simply changes, and values glide to where you set them.",
-  "  Saving. The canvas is saved as you go; the window's top bar (Panacea, the canvas's name) also has Save, which keeps a copy in Artifacts as <canvas name>.panacea.json; beside it, Load opens a canvas they kept, or puts a photo or a table from Artifacts on this one. " +
+    "canvas simply changes, and values glide to where you set them. Writing in a document (panacea_doc) is not done by hand yet: " +
+    "the words arrive with the finished canvas, and the document's bar and history show it.",
+  "  Saving. The canvas is saved as you go; the window's top bar (Panacea, the canvas's name) also has Save, which keeps a copy in Artifacts as <canvas name>.panacea.json; beside it, Load opens a canvas they kept, or puts a photo, a table or a Markdown or text document from Artifacts on this one. " +
     "Exports (panacea_export, or a panel's Export) go to the project's folder: a photo as PNG with every adjustment, a table as CSV as filtered, a chart as SVG.",
 ].join("\n");
 

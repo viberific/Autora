@@ -84,6 +84,7 @@ export function thoughtForTool(name: string, args: Record<string, any> = {}): st
     case "panacea_set": return "Setting it";
     case "panacea_arrange": return "Arranging the canvas";
     case "panacea_bespoke": return "Making a piece";
+    case "panacea_doc": return "Working on the document";
     case "game_edit": return count(args.ops) > 1 ? `Making ${noun(count(args.ops), "change")}` : "Changing the game";
     case "game_look": return "Looking at the scene";
     case "photo_edit": return "Editing the picture";

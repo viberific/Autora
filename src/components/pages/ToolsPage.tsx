@@ -56,7 +56,7 @@ const WINDOWS: { key: WindowKey; name: string; icon: ReactNode; what: string; to
     name: "Panacea",
     icon: <IconSparkle size={18} />,
     what: "A blank canvas where the controls come to the work: drop a photo or a table, or say what you want to do, and the sliders, charts and switches for it appear, and go when you move on. You and the agent both use them.",
-    tools: "panacea_open, panacea_look, panacea_surface, panacea_place, panacea_set, panacea_arrange, panacea_bespoke, panacea_export",
+    tools: "panacea_open, panacea_look, panacea_surface, panacea_place, panacea_set, panacea_arrange, panacea_bespoke, panacea_doc, panacea_export",
   },
   {
     key: "pages",

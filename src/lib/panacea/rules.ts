@@ -16,6 +16,7 @@ import { contextOf, estimateHeight, MAX_SURFACES, nearestFree, placeFor, refocus
 import { instantiate, type Recipe } from "./library";
 import { checkTree, parseBind, type CheckContext, type Node } from "./recipe";
 import { KINDS, KIND_NAMES, type Offer, type Starters, type SurfaceKind } from "./kinds";
+import type { DocState } from "./document";
 import type { Table } from "./surfaces";
 
 interface PlaceOptions {
@@ -145,6 +146,7 @@ export interface SurfaceInput {
   title?: string;
   artifact?: string;
   table?: Table;
+  doc?: DocState;
   px?: { w: number; h: number } | null;
   /** Where it goes, when it was dropped somewhere; else beside what is there. */
   at?: { x: number; y: number };
@@ -173,8 +175,10 @@ export function addSurfaceTo(canvas: Canvas, input: SurfaceInput, find: (id: str
     name: input.name.slice(0, 200),
     params: surfaceParams(input.kind, input.table),
     ...(input.table ? { table: input.table } : {}),
+    ...(input.doc ? { doc: input.doc } : {}),
     ...(input.px ? { px: input.px } : {}),
   };
+  def.settle?.(surface);
   canvas.surfaces.push(surface);
   refocus(canvas, surface.id);
   const panels = placeStarters(canvas, surface, find, opts);

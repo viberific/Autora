@@ -560,7 +560,7 @@ Spectra's fetched renderer is most of what is on disk.
   actions, starters, offers, size and words; **a new kind is a new entry there**, and `Record<SurfaceKind, ...>` in the window
   and server names what else must learn of it; plan: `docs/PANACEA-ENGINE.md`), `surfaces.ts` (what the image and data each
   publish, tables: `tableFrom`, `filteredRows`, `aggregate`), `canvas.ts` (the document, `normalizeCanvas`, placement `placeFor` / `nearestFree`, `refocus` /
-  `fade` / `restore`, values), `library.ts` (180 built-in recipes, `instantiate`, `searchLibrary`), `rules.ts` (starters and offers,
+  `fade` / `restore`, values), `library.ts` (180 built-in recipes, `instantiate`, `searchLibrary`), `document.ts` (the document engine: ProseMirror schema, selection-driven parameters, `applyParam`, the agent's block-level hands; pure, runs on server and page; `tests/panacea-doc.test.ts`), `rules.ts` (starters and offers,
   `addSurfaceTo`, `placeRecipe` / `placeComposed`), `profile.ts` (what is learned), `handsteps.ts` (Visible work's plan). One canvas
   per chat lives in `panacea.ts` (`panacea-<session>.json`, removed with the chat; `forgetSession` calls `dropPanacea`); the library
   of learned recipes (`panacea-library.json`) and the profile (`panacea-profile.json`) are one per install. The wire is Music's:

@@ -12,6 +12,7 @@
  */
 import type { Value } from "./atoms";
 import type { Surface } from "./canvas";
+import { DOC_PARAMS, applyParam, blocksOf, docStateOf, paramsFromState, readDocState, stateOf, type DocState } from "./document";
 import type { Domain } from "./library";
 import {
   DATA_ACTIONS, IMAGE_ACTIONS, IMAGE_PARAMS, dataParams, distinct, normalizeTable,
@@ -59,7 +60,11 @@ interface SurfaceKindDef {
   /** The small print in its title bar. */
   meta: (surface: Surface) => string;
   /** What a saved surface carries beyond the fields every kind has, read and checked; null when it cannot be read. */
-  read: (raw: Record<string, unknown>) => { table?: Table } | null;
+  read: (raw: Record<string, unknown>) => { table?: Table; doc?: DocState } | null;
+  /** For work whose parameters are read off it (a document's, off the selection): bring `surface.params` up to date with it. */
+  settle?: (surface: Surface) => void;
+  /** For work a parameter is applied to rather than stored in: carry `value` out on the work itself. */
+  apply?: (surface: Surface, param: string, value: Value) => void;
 }
 
 const IMAGE: SurfaceKindDef = {
@@ -121,8 +126,45 @@ const DATA: SurfaceKindDef = {
   },
 };
 
+const DOC_ACTIONS: ActionSpec[] = [
+  { name: "export", label: "Export Markdown", about: "the document saved to the project as Markdown" },
+];
+
+const DOC: SurfaceKindDef = {
+  prefix: "doc",
+  domain: "document",
+  noun: "a document",
+  title: "Document",
+  params: () => DOC_PARAMS,
+  actions: DOC_ACTIONS,
+  size: () => ({ w: 640, h: 592 }),
+  starters: () => ({ live: ["document.styles", "document.type"], ghost: "document.paragraph", why: "A document arrived: text style and typography are where formatting starts." }),
+  suggest: (_s, param, value, { offer }) => {
+    if (param === "align" && value !== "left") return offer("document.paragraph", "Aligned: line height goes with it.");
+    return null;
+  },
+  describe: (s) => {
+    const blocks = s.doc ? blocksOf(stateOf(s.doc).doc).length : 0;
+    const who = s.doc?.mode === "agent" ? "Autora may write in it" : "the person writes it: format and structure it, never write its words";
+    return `document "${s.title}", ${s.params.words ?? 0} words in ${blocks} blocks; ${who}`;
+  },
+  meta: (s) => `${Number(s.params.words ?? 0).toLocaleString()} words`,
+  read: (raw) => {
+    const doc = readDocState(raw.doc);
+    return doc ? { doc } : null;
+  },
+  settle: (s) => {
+    if (s.doc) s.params = { ...s.params, ...paramsFromState(stateOf(s.doc)) };
+  },
+  apply: (s, param, value) => {
+    if (!s.doc) return;
+    const next = applyParam(stateOf(s.doc), param, value);
+    if (next) s.doc = docStateOf(next, s.doc.mode);
+  },
+};
+
 /** Every kind there is. Adding one here widens `SurfaceKind`, and the compiler lists what else has to learn of it. */
-export const KINDS = { image: IMAGE, data: DATA } as const satisfies Record<string, SurfaceKindDef>;
+export const KINDS = { image: IMAGE, data: DATA, doc: DOC } as const satisfies Record<string, SurfaceKindDef>;
 
 export type SurfaceKind = keyof typeof KINDS;
 

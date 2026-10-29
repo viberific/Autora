@@ -30,6 +30,8 @@ export interface ParamSpec {
   default: Value;
   /** A setting most people never need: a panel keeps it behind More until the person has used it a few times. */
   advanced?: boolean;
+  /** Worked out from the work (a word count), shown but never set. */
+  derived?: boolean;
 }
 
 export interface ActionSpec {

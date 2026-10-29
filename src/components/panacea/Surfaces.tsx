@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, ty
 import type { Value } from "../../lib/panacea/atoms";
 import type { Surface } from "../../lib/panacea/canvas";
 import type { SurfaceKind } from "../../lib/panacea/kinds";
+import { DocView } from "./DocView";
 import { DataTable } from "./Chart";
 import { ImageEngine, outputAspect, paletteOf, setImageStats } from "./imagegl";
 
@@ -129,6 +130,7 @@ function DataView({ surface }: { surface: Surface }) {
 const VIEWS: Record<SurfaceKind, (p: { surface: Surface; onSize: (px: { w: number; h: number }) => void }) => ReactElement> = {
   image: ({ surface, onSize }) => <ImageView surface={surface} onSize={onSize} />,
   data: ({ surface }) => <DataView surface={surface} />,
+  doc: ({ surface }) => <DocView surface={surface} />,
 };
 
 export function SurfaceView({ surface, onSize }: { surface: Surface; onSize: (px: { w: number; h: number }) => void }) {

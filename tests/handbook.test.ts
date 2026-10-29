@@ -138,6 +138,13 @@ await test("the Panacea manual teaches the canvas as it is: no toolbar, the libr
   }
 });
 
+await test("the Panacea manual teaches documents: the selection, the ids, and whose words they are", () => {
+  const p = manualText("panacea");
+  for (const needle of ["panacea_doc", "panacea_look doc", "You write", "Autora writes", "may not write", "creative", "mode", "Ctrl+B"]) {
+    assert.ok(p.toLowerCase().includes(needle.toLowerCase()), `the Panacea manual lacks "${needle}"`);
+  }
+});
+
 await test("the Panacea manual says that with Visible work on its changes are done in the window by hand, and what has no control", () => {
   const p = manualText("panacea");
   for (const needle of ["With Visible work on", "by your hand", "name typed in the picker", "dragging that slider", "dragged by its title bar", "finished canvas goes in", "With Visible work off"]) {

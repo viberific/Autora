@@ -216,6 +216,7 @@ function doing(name: string, args: Record<string, any>): string {
     case "panacea_set": return "Setting values";
     case "panacea_arrange": return Array.isArray(args.remove) && args.remove.length ? "Tidying the canvas" : "Arranging the canvas";
     case "panacea_bespoke": return args.action === "keep" ? "Keeping the piece" : args.action === "discard" ? "Discarding the draft" : "Making a piece for this";
+    case "panacea_doc": return "Working on the document";
     case "panacea_export": return "Saving from the canvas";
     case "memory_write": return args.title ? `Remembering “${brief(args.title, 6)}”` : "Remembering something";
     case "memory_search": return `Searching its memory for${quoted(args.query)}`;

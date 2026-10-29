@@ -231,6 +231,58 @@ async function main() {
       await app.api("PATCH", "/api/agent-cursor", { on: false });
     });
 
+    const docSurface = async () => (await doc()).surfaces.find((x: { kind: string }) => x.kind === "doc");
+    const editor = page.locator(".pa-surface.is-doc .ProseMirror");
+    const radio = (value: string) => page.locator(`.pa-panel [data-atom="segmented"] button[data-value="${value}"]`).first();
+
+    await test("a document is a page you can type in, and its panels follow the caret", async () => {
+      app.script = [{ tools: [{ name: "panacea_surface", args: { document: "# Plan\n\nFirst line.\n\n- one\n- two", title: "Plan" } }] }, { text: "Added." }];
+      await app.turn(s, "Open a plan document.");
+      await page.waitForSelector(".pa-surface.is-doc .ProseMirror");
+      await page.waitForSelector(".pa-panel:has(.pa-title:text-is('Text style'))");
+      assert.match(await editor.innerText(), /First line\./);
+      assert.equal(await page.locator(".pa-doc-mode").innerText(), "You write", "the words are the person's to start with");
+      await editor.locator("p", { hasText: "First line." }).click();
+      await page.keyboard.press("End");
+      await page.keyboard.type(" More words.");
+      await until("the server has what was typed", async () => JSON.stringify((await docSurface()).doc.json).includes("First line. More words."));
+      await editor.locator("h1").click();
+      await until("the style says H1", async () => (await radio("h1").getAttribute("aria-checked")) === "true");
+      await editor.locator("p", { hasText: "First line." }).click();
+      await until("and Text again", async () => (await radio("paragraph").getAttribute("aria-checked")) === "true");
+      await shot("5-document");
+    });
+
+    await test("Bold pressed on a panel bolds the selection; Ctrl+Z takes it back", async () => {
+      await editor.locator("p", { hasText: "First line." }).click();
+      await page.keyboard.press("End");
+      await page.keyboard.press("Control+Shift+ArrowLeft");
+      await page.keyboard.press("Control+Shift+ArrowLeft");
+      await page.locator(".pa-panel [data-bind$='.bold'] button[role='switch']").click();
+      await until("bold in the page", async () => /words/.test(await editor.locator("strong").first().innerText().catch(() => "")));
+      await until("bold on the server", async () => JSON.stringify((await docSurface()).doc.json).includes('"strong"'));
+      assert.equal(await page.locator(".pa-panel [data-bind$='.bold'] button[role='switch']").getAttribute("aria-checked"), "true", "the panel reads it back off the selection");
+      await page.keyboard.press("Control+z");
+      await until("undone", async () => (await editor.locator("strong").count()) === 0);
+      await until("undone on the server", async () => !JSON.stringify((await docSurface()).doc.json).includes('"strong"'));
+    });
+
+    await test("the agent formats a document but may not write in it until it is switched; the page shows both", async () => {
+      app.script = [
+        { tools: [{ name: "panacea_doc", args: { ops: [{ op: "insert", markdown: "Sneaky." }] } }] },
+        { tools: [{ name: "panacea_doc", args: { ops: [{ op: "mode", mode: "agent" }, { op: "insert", markdown: "## Added by Autora" }] } }] },
+        { text: "Done." },
+      ];
+      await app.turn(s, "Add a heading to the plan.");
+      assert.ok(toolResults().some((r) => /theirs to write/.test(r)), "refused while the words are the person's");
+      await page.waitForSelector(".pa-doc-mode:has-text('Autora writes')");
+      await until("the heading is in the page", async () => /Added by Autora/.test(await editor.locator("h2").first().innerText().catch(() => "")));
+      assert.ok(!/Sneaky/.test(await editor.innerText()), "the refused write left nothing");
+      await page.click(".pa-doc-mode");
+      await until("the person took the words back", async () => (await docSurface()).doc.mode === "guide");
+      await page.waitForSelector(".pa-doc-mode:has-text('You write')");
+    });
+
     await test("nothing went wrong in the page", async () => {
       assert.deepEqual(errors, []);
     });
