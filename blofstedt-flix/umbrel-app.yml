@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.79"
+version: "0.3.80"
 port: 8096
 # umbrelOS only hands a container the GPU when the manifest says so: with this
 # permission it adds /dev/dri plus the render/video groups those nodes belong
@@ -60,11 +60,11 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Fixes playback stalling on some shows: a show copied for playback could be
-  sent to a position its media did not actually have, so the player kept going
-  back to it and the picture hung. A copied picture now covers the span it
-  promises, and a stream that cannot be honoured is rebuilt instead of played.
+  English subtitles now appear on their own. CC is a single switch: on shows
+  the best English subtitle -- the one inside the file, one beside it, or one
+  fetched from OpenSubtitles, Subdl or Podnapisi when the file has none -- and
+  off shows none.
 
-  Also fixes the Flix logo staying over the video on some shows: the player now
-  asks whether the picture is really playing, not whether its clock moved
-  forward.
+  If one subtitle site is slow, down, or has no match it is skipped and the
+  others still answer, so subtitles still arrive when a source is having a bad
+  day.
