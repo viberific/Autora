@@ -8,15 +8,13 @@
  * a control of the wrong kind, is refused (src/lib/panacea/recipe.ts). That is what keeps generated UI honest: it can
  * only reach what a surface says it has.
  *
- * Version 1 has two kinds, an image and a table, each drawn by Panacea itself. Autora's other editors (Office, PDF,
- * Video, Games, 3D, Photo) join as further kinds by publishing a manifest of the same shape and applying the values
- * through the tools the agent already uses for them (docs/PANACEA.md, "Engines").
+ * This file holds what the image and the table each publish (their parameters, actions and the table's reading and
+ * filtering). Which kinds exist, and how each is told apart, is the registry in kinds.ts; a new kind joins there
+ * (docs/PANACEA-ENGINE.md).
  *
  * Shared by the server and the page, so written without DOM or Node types.
  */
 import type { Value, ValueKind } from "./atoms";
-
-export type SurfaceKind = "image" | "data";
 
 export interface ParamSpec {
   name: string;
@@ -34,7 +32,7 @@ export interface ParamSpec {
   advanced?: boolean;
 }
 
-interface ActionSpec {
+export interface ActionSpec {
   name: string;
   label: string;
   about: string;
@@ -76,7 +74,7 @@ const num = (name: string, label: string, min: number, max: number, extra: Parti
   ({ name, kind: "number", label, min, max, step: extra.step ?? 1, default: 0, ...extra });
 
 /** Everything an image surface lets a control change. Each is applied live on the GPU (src/components/panacea/imagegl.ts). */
-const IMAGE_PARAMS: ParamSpec[] = [
+export const IMAGE_PARAMS: ParamSpec[] = [
   num("exposure", "Exposure", -3, 3, { step: 0.05, unit: "EV" }),
   num("contrast", "Contrast", -100, 100),
   num("highlights", "Highlights", -100, 100),
@@ -103,14 +101,14 @@ const IMAGE_PARAMS: ParamSpec[] = [
   { name: "compare", kind: "bool", label: "Before / after", default: false },
 ];
 
-const IMAGE_ACTIONS: ActionSpec[] = [
+export const IMAGE_ACTIONS: ActionSpec[] = [
   { name: "reset", label: "Reset", about: "every adjustment back to the original" },
   { name: "auto", label: "Auto", about: "exposure, contrast and white balance worked out from the picture" },
   { name: "export", label: "Export", about: "the edited picture saved to the project as a PNG" },
 ];
 
 /** A data surface's parameters depend on its columns: a filter per column, a sort, a row limit. */
-function dataParams(table: Table): ParamSpec[] {
+export function dataParams(table: Table): ParamSpec[] {
   const out: ParamSpec[] = [];
   for (const c of table.columns) {
     if (c.type === "number") {
@@ -127,23 +125,10 @@ function dataParams(table: Table): ParamSpec[] {
   return out;
 }
 
-const DATA_ACTIONS: ActionSpec[] = [
+export const DATA_ACTIONS: ActionSpec[] = [
   { name: "export", label: "Export CSV", about: "the rows as filtered, saved to the project as a CSV" },
   { name: "clear", label: "Clear filters", about: "every filter off" },
 ];
-
-export function paramsOf(kind: SurfaceKind, table?: Table | null): ParamSpec[] {
-  return kind === "image" ? IMAGE_PARAMS : dataParams(table ?? { columns: [], rows: [] });
-}
-
-export function actionsOf(kind: SurfaceKind): ActionSpec[] {
-  return kind === "image" ? IMAGE_ACTIONS : DATA_ACTIONS;
-}
-
-/** The parameter a name refers to on a surface, if it declares one. */
-export function findParam(kind: SurfaceKind, table: Table | null | undefined, name: string): ParamSpec | null {
-  return paramsOf(kind, table).find((p) => p.name === name) ?? null;
-}
 
 // ---------------------------------------------------------------- tables --
 
@@ -292,6 +277,18 @@ export function tableFrom(grid: string[][]): Table | null {
   });
   // A column read as text keeps every cell as text, so "007" and "7" stay apart.
   const rows = body.map((r) => r.map((v, i) => (columns[i]!.type !== "number" && typeof v === "number" ? String(v) : columns[i]!.type === "number" && typeof v !== "number" ? null : v)));
+  return { columns, rows };
+}
+
+/** A table from anywhere (a saved canvas, the page), checked and repaired; null when it is not one. */
+export function normalizeTable(raw: unknown): Table | null {
+  const t = raw as Table | undefined;
+  if (!t || !Array.isArray(t.columns) || !Array.isArray(t.rows)) return null;
+  const columns = t.columns.filter((c) => c && typeof c.name === "string").map((c) => ({ name: c.name.slice(0, 60), type: c.type === "number" || c.type === "date" ? c.type : "text" as const }));
+  const rows = t.rows.filter(Array.isArray).slice(0, MAX_ROWS).map((row) => columns.map((_, i) => {
+    const v = row[i];
+    return typeof v === "number" && Number.isFinite(v) ? v : typeof v === "string" ? v.slice(0, 400) : null;
+  }));
   return { columns, rows };
 }
 

@@ -76,6 +76,9 @@ carries on from what was decided. No model call is made for it.
 
 ## Engines: what comes next
 
+The engine's plan (native engines, documents and code first, a work graph and operation log, selection-following binds,
+authority in the schema) is `docs/PANACEA-ENGINE.md`. What follows is the earlier note on the same direction.
+
 The direction (decided with the person who asked for Panacea): **Panacea becomes Autora's main workspace**, and the editors
 Autora already runs become surfaces on it, rather than Panacea growing its own engines.
 

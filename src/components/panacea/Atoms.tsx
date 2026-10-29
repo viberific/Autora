@@ -3,7 +3,8 @@ import { ATOMS, emptyValue, type LaneItem, type Value } from "../../lib/panacea/
 import type { Panel } from "../../lib/panacea/canvas";
 import { revealed } from "../../lib/panacea/profile";
 import { bindsOf, isRef, parseBind, type Node, type Option } from "../../lib/panacea/recipe";
-import { findParam, LOOKS, type ParamSpec } from "../../lib/panacea/surfaces";
+import { findParam } from "../../lib/panacea/kinds";
+import { LOOKS, type ParamSpec } from "../../lib/panacea/surfaces";
 import { Chart, DataTable } from "./Chart";
 import { Bespoke } from "./Bespoke";
 import { imageStats, onImageStats } from "./imagegl";

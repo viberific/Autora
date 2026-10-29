@@ -28,6 +28,7 @@ import {
   setValue, snap, uid, valueProblem, PANEL_MAX_W, PANEL_MIN_W, type Canvas, type Panel, type Surface,
 } from "../src/lib/panacea/canvas";
 import { panaceaSteps, stepWords } from "../src/lib/panacea/handsteps";
+import { KINDS, type SurfaceKind } from "../src/lib/panacea/kinds";
 import { BUILTINS, DOMAINS, libraryIndex, searchLibrary, type Domain, type Recipe } from "../src/lib/panacea/library";
 import { normalizeProfile, noteDismiss, noteSide, noteUse, preferredSide, profileWords, quieted, sideOf, usageKey, type Profile } from "../src/lib/panacea/profile";
 import { checkTree, fingerprint, generalize, treeWords, type Node } from "../src/lib/panacea/recipe";
@@ -242,12 +243,12 @@ function learn(tree: Node, meta: { name: string; about: string; domain: Domain; 
   return id;
 }
 
-const kindsOf = (canvas: Canvas): Record<string, "image" | "data"> => Object.fromEntries(canvas.surfaces.map((s) => [s.id, s.kind]));
+const kindsOf = (canvas: Canvas): Record<string, SurfaceKind> => Object.fromEntries(canvas.surfaces.map((s) => [s.id, s.kind]));
 
 /** The kind of work a panel on this canvas is about, for filing a learned recipe. */
 function domainFor(canvas: Canvas, panel: Panel): Domain {
   const s = canvas.surfaces.find((x) => x.id === panel.context);
-  if (s) return s.kind === "image" ? "photo" : "data";
+  if (s) return KINDS[s.kind].domain;
   const bind = JSON.stringify(panel.tree);
   const prefix: Array<[RegExp, Domain]> = [[/"doc\./, "document"], [/"music\./, "music"], [/"video\./, "video"], [/"model\./, "3d"], [/"game\./, "game"], [/"ui\./, "design"]];
   return prefix.find(([re]) => re.test(bind))?.[1] ?? "general";
@@ -400,7 +401,7 @@ async function suggestNow(session: string): Promise<void> {
   if (!recent.length) return;
   e.suggested.push(now);
   const focus = e.canvas.surfaces.find((s) => s.id === e.canvas.focus);
-  const domain = focus ? (focus.kind === "image" ? "photo" : "data") : null;
+  const domain = focus ? KINDS[focus.kind].domain : null;
   const p = profileNow();
   const onCanvas = new Set(e.canvas.panels.map((x) => x.recipe).filter(Boolean));
   const pool = allRecipes().filter((r) => !onCanvas.has(r.id) && !quieted(p, r.id) && (r.origin === "builtin" || r.uses > 0));

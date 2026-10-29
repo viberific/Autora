@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { GRID, PANEL_MAX_W, PANEL_MIN_W, snap, type Canvas, type Panel, type Surface } from "../../lib/panacea/canvas";
+import { KINDS } from "../../lib/panacea/kinds";
 import type { Recipe } from "../../lib/panacea/library";
 import { IconX } from "../Icons";
 import { PanelCard, type PanelActions } from "./PanelCard";
-import { DataView, ImageView } from "./Surfaces";
+import { SurfaceView } from "./Surfaces";
 import { Summon } from "./Summon";
 import type { Editor } from "./useCanvas";
 
@@ -349,15 +350,15 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
             data-surface={s.id}
             style={{ left: s.x, top: s.y, width: s.w, height: s.h }}
             onPointerDown={(e) => { if (canvas.focus !== s.id && !(e.target as HTMLElement).closest("button")) onFocus(s.id); }}
-            aria-label={`${s.title}, ${s.kind === "image" ? "a photo" : "a table"}`}
+            aria-label={`${s.title}, ${KINDS[s.kind].noun}`}
           >
             <header className="pa-surface-head">
               <span className="pa-title">{s.title}</span>
-              <span className="pa-surface-meta">{s.kind === "image" ? (s.px ? `${s.px.w} × ${s.px.h}` : "Photo") : `${s.table?.rows.length.toLocaleString() ?? 0} rows`}</span>
+              <span className="pa-surface-meta">{KINDS[s.kind].meta(s)}</span>
               <button type="button" className="pa-surface-x" aria-label={`Remove ${s.title}`} onClick={() => onRemoveSurface(s)}><IconX size={11} /></button>
             </header>
             <div className="pa-surface-body">
-              {s.kind === "image" ? <ImageView surface={s} onSize={(px) => onSurfaceSize(s, px)} /> : <DataView surface={s} />}
+              <SurfaceView surface={s} onSize={(px) => onSurfaceSize(s, px)} />
             </div>
           </section>
         ))}

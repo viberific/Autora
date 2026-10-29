@@ -13,7 +13,8 @@
  * Shared by the server and the page, so written without DOM or Node types.
  */
 import { ATOMS, MAX_DEPTH, MAX_NODES, MAX_OPTIONS, MAX_VISIBLE_CONTROLS, type AtomKind, type ValueKind } from "./atoms";
-import { actionsOf, findParam, paramsOf, type SurfaceKind, type Table } from "./surfaces";
+import { actionsOf, findParam, isKind, paramsOf, withArticle, type SurfaceKind } from "./kinds";
+import type { Table } from "./surfaces";
 
 export interface Option {
   value: string;
@@ -35,9 +36,8 @@ export interface Node {
 /** What a tree is checked against: the surfaces on the canvas, and which one "@image" and "@data" mean here. */
 export interface CheckContext {
   surfaces: Array<{ id: string; kind: SurfaceKind; table?: Table | null }>;
-  /** The surface a placeholder bind ("@image.exposure", "@data.filter.Region") resolves to. */
-  image?: string | null;
-  data?: string | null;
+  /** The surface a placeholder bind ("@image.exposure", "@data.filter.Region") resolves to, per kind; else the first of that kind. */
+  near?: Partial<Record<SurfaceKind, string | null>>;
   /** Repair what can be repaired and drop what cannot, instead of refusing: for a canvas read back from disk. */
   lenient?: boolean;
 }
@@ -75,11 +75,9 @@ export function parseBind(bind: string): BindTarget {
   return dot < 0 ? { surface: bind.slice(1), param: "" } : { surface: bind.slice(1, dot), param: bind.slice(dot + 1) };
 }
 
-const isPlaceholder = (id: string) => id === "image" || id === "data";
-
+/** A surface id, or the name of a kind ("image", "data") standing for the surface of that kind meant here. */
 function resolveSurface(id: string, ctx: CheckContext): string | null {
-  if (id === "image") return ctx.image ?? ctx.surfaces.find((s) => s.kind === "image")?.id ?? null;
-  if (id === "data") return ctx.data ?? ctx.surfaces.find((s) => s.kind === "data")?.id ?? null;
+  if (isKind(id)) return ctx.near?.[id] ?? ctx.surfaces.find((s) => s.kind === id)?.id ?? null;
   return ctx.surfaces.some((s) => s.id === id) ? id : null;
 }
 
@@ -163,9 +161,9 @@ export function checkTree(raw: unknown, ctx: CheckContext): Checked {
         case "surface": {
           const id = typeof value === "string" ? value.replace(/^@/, "") : "";
           const sid = resolveSurface(id, ctx);
-          const want: SurfaceKind = atom === "histogram" ? "image" : "data";
+          const want = spec.surfaceKind;
           const s = ctx.surfaces.find((x) => x.id === sid);
-          if (!s || s.kind !== want) { errors.push(`${where}: surface "${String(value)}" is not ${want === "image" ? "an image" : "a data"} surface on the canvas.`); break; }
+          if (!want || !s || s.kind !== want) { errors.push(`${where}: surface "${String(value)}" is not ${want ? withArticle(want) : "a"} surface on the canvas.`); break; }
           props[key] = s.id;
           break;
         }
@@ -195,17 +193,13 @@ export function checkTree(raw: unknown, ctx: CheckContext): Checked {
       }
     }
 
+    // A view of a surface draws the one meant here when it names none.
+    if (spec.surfaceKind && typeof props.surface !== "string") {
+      const sid = resolveSurface(spec.surfaceKind, ctx);
+      if (sid) props.surface = sid;
+      else errors.push(`${where}: there is no ${spec.surfaceKind} surface to draw. Add one first (panacea_surface).`);
+    }
     // The columns a chart or table names must be its surface's.
-    if ((atom === "chart" || atom === "table") && typeof props.surface !== "string") {
-      const sid = resolveSurface("data", ctx);
-      if (sid) props.surface = sid;
-      else errors.push(`${where}: there is no data surface to draw. Add one first (panacea_surface).`);
-    }
-    if (atom === "histogram" && typeof props.surface !== "string") {
-      const sid = resolveSurface("image", ctx);
-      if (sid) props.surface = sid;
-      else errors.push(`${where}: there is no image surface for a histogram.`);
-    }
     if ((atom === "chart" || atom === "table") && typeof props.surface === "string") {
       const s = ctx.surfaces.find((x) => x.id === props.surface);
       const cols = new Set((s?.table?.columns ?? []).map((c) => c.name));
@@ -268,7 +262,7 @@ export function checkTree(raw: unknown, ctx: CheckContext): Checked {
     const sid = resolveSurface(surface, c);
     const s = c.surfaces.find((x) => x.id === sid);
     if (!s) {
-      errors.push(`${where}: no ${isPlaceholder(surface) ? `${surface} ` : ""}surface "${surface}" on the canvas${c.surfaces.length ? ` (surfaces: ${c.surfaces.map((x) => `${x.id} ${x.kind}`).join(", ")})` : ""}.`);
+      errors.push(`${where}: no ${isKind(surface) ? `${surface} ` : ""}surface "${surface}" on the canvas${c.surfaces.length ? ` (surfaces: ${c.surfaces.map((x) => `${x.id} ${x.kind}`).join(", ")})` : ""}.`);
       return null;
     }
     const p = findParam(s.kind, s.table, param);

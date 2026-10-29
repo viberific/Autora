@@ -331,7 +331,7 @@ function columnTokens(table: Table | null | undefined): Record<string, string | 
  * recipe cannot be placed here (a scatter needs two numeric columns).
  */
 export function instantiate(recipe: Recipe, ctx: CheckContext): { tree: Node; values: Record<string, Value> } | { error: string } {
-  const dataId = ctx.data ?? ctx.surfaces.find((s) => s.kind === "data")?.id;
+  const dataId = ctx.near?.data ?? ctx.surfaces.find((s) => s.kind === "data")?.id;
   const table = ctx.surfaces.find((s) => s.id === dataId)?.table;
   const tokens = columnTokens(table);
   let missing: string | null = null;

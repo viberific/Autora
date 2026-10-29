@@ -11,7 +11,8 @@
  */
 import { emptyValue, valueFits, type Value } from "./atoms";
 import { checkTree, kindAt, parseBind, surfacesOf, treeWords, type CheckContext, type Node } from "./recipe";
-import { findParam, paramsOf, type SurfaceKind, type Table } from "./surfaces";
+import { KINDS, findParam, isKind, paramsOf, type SurfaceKind } from "./kinds";
+import type { Table } from "./surfaces";
 
 export type PanelState = "live" | "dim" | "ghost" | "draft";
 export type Who = "agent" | "person" | "rule";
@@ -95,8 +96,8 @@ export function uid(prefix: string): string {
   return `${prefix}${Date.now().toString(36).slice(-5)}${counter.toString(36).padStart(2, "0")}${Math.floor(Math.random() * 36).toString(36)}`;
 }
 
-export function contextOf(canvas: Pick<Canvas, "surfaces">, image?: string | null, data?: string | null): CheckContext {
-  return { surfaces: canvas.surfaces.map((s) => ({ id: s.id, kind: s.kind, table: s.table ?? null })), image, data };
+export function contextOf(canvas: Pick<Canvas, "surfaces">, near?: CheckContext["near"]): CheckContext {
+  return { surfaces: canvas.surfaces.map((s) => ({ id: s.id, kind: s.kind, table: s.table ?? null })), near };
 }
 
 /** A surface's parameters at their defaults, then what was set. */
@@ -362,25 +363,17 @@ function readSurface(raw: unknown, ids: Set<string>): Surface | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
   const id = typeof r.id === "string" && /^[\w-]{1,40}$/.test(r.id) && !ids.has(r.id) ? r.id : null;
-  const kind = r.kind === "image" || r.kind === "data" ? r.kind : null;
+  const kind = isKind(r.kind) ? r.kind : null;
   if (!id || !kind) return null;
-  let table: Table | undefined;
-  if (kind === "data") {
-    const t = r.table as Table | undefined;
-    if (!t || !Array.isArray(t.columns) || !Array.isArray(t.rows)) return null;
-    const columns = t.columns.filter((c) => c && typeof c.name === "string").map((c) => ({ name: c.name.slice(0, 60), type: c.type === "number" || c.type === "date" ? c.type : "text" as const }));
-    const rows = t.rows.filter(Array.isArray).slice(0, 20_000).map((row) => columns.map((_, i) => {
-      const v = row[i];
-      return typeof v === "number" && Number.isFinite(v) ? v : typeof v === "string" ? v.slice(0, 400) : null;
-    }));
-    table = { columns, rows };
-  }
+  const extra = KINDS[kind].read(r);
+  if (!extra) return null;
+  const table = extra.table;
   ids.add(id);
   const params = surfaceParams(kind, table, r.params && typeof r.params === "object" ? (r.params as Record<string, unknown>) : {});
   const px = r.px && typeof r.px === "object" ? { w: num((r.px as Box).w, 0), h: num((r.px as Box).h, 0) } : undefined;
   return {
     id, kind,
-    title: str(r.title, kind === "image" ? "Image" : "Table", 80),
+    title: str(r.title, KINDS[kind].title, 80),
     x: snap(num(r.x, 0)), y: snap(num(r.y, 0)),
     w: clamp(snap(num(r.w, 480)), 160, 2400), h: clamp(snap(num(r.h, 320)), 96, 2400),
     ...(typeof r.artifact === "string" && /^[\w-]{1,80}$/.test(r.artifact) ? { artifact: r.artifact } : {}),
@@ -427,10 +420,7 @@ export function describeCanvas(canvas: Canvas, opts: { trees?: boolean } = {}): 
     const changed = paramsOf(s.kind, s.table)
       .filter((p) => JSON.stringify(s.params[p.name]) !== JSON.stringify(p.default))
       .map((p) => `${p.name}=${show(s.params[p.name])}`);
-    const what = s.kind === "image"
-      ? `image "${s.title}"${s.px ? ` ${s.px.w}x${s.px.h}` : ""}${s.artifact ? ` (artifact ${s.artifact})` : ""}`
-      : `data "${s.title}", ${s.table?.rows.length ?? 0} rows; columns ${s.table?.columns.map((c) => `${c.name} (${c.type})`).join(", ")}`;
-    lines.push(`- surface ${s.id}: ${what} at ${s.x},${s.y} ${s.w}x${s.h}. ${changed.length ? `Set: ${changed.join(", ")}.` : "Untouched."}`);
+    lines.push(`- surface ${s.id}: ${KINDS[s.kind].describe(s)} at ${s.x},${s.y} ${s.w}x${s.h}. ${changed.length ? `Set: ${changed.join(", ")}.` : "Untouched."}`);
   }
   for (const p of canvas.panels) {
     const flags = [p.state !== "live" ? p.state : "", p.pinned ? "pinned" : "", p.group ? `group ${p.group}` : "", p.by === "person" ? "placed by the person" : ""].filter(Boolean).join(", ");

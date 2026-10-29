@@ -556,8 +556,10 @@ Spectra's fetched renderer is most of what is on disk.
 - `server/panacea.ts`, `server/specs/panacea.ts`, `src/lib/panacea/`, `src/components/PanaceaWindow.tsx` + `src/components/panacea/`,
   `server/projectbook.ts`: **Panacea**, the canvas window (design and plan: `docs/PANACEA.md`). The model is pure and shared
   (`src/lib/panacea/`: no DOM or Node types, imported by the server and the page): `atoms.ts` (the pieces), `recipe.ts` (the
-  rulebook `checkTree`, `fingerprint`, `generalize`), `surfaces.ts` (the image and data manifests, tables: `tableFrom`,
-  `filteredRows`, `aggregate`), `canvas.ts` (the document, `normalizeCanvas`, placement `placeFor` / `nearestFree`, `refocus` /
+  rulebook `checkTree`, `fingerprint`, `generalize`), `kinds.ts` (the registry of surface kinds: each kind's parameters,
+  actions, starters, offers, size and words; **a new kind is a new entry there**, and `Record<SurfaceKind, ...>` in the window
+  and server names what else must learn of it; plan: `docs/PANACEA-ENGINE.md`), `surfaces.ts` (what the image and data each
+  publish, tables: `tableFrom`, `filteredRows`, `aggregate`), `canvas.ts` (the document, `normalizeCanvas`, placement `placeFor` / `nearestFree`, `refocus` /
   `fade` / `restore`, values), `library.ts` (180 built-in recipes, `instantiate`, `searchLibrary`), `rules.ts` (starters and offers,
   `addSurfaceTo`, `placeRecipe` / `placeComposed`), `profile.ts` (what is learned), `handsteps.ts` (Visible work's plan). One canvas
   per chat lives in `panacea.ts` (`panacea-<session>.json`, removed with the chat; `forgetSession` calls `dropPanacea`); the library

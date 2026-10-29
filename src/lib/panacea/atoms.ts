@@ -9,6 +9,8 @@
  * Shared by the server and the page, so written without DOM or Node types.
  */
 
+import type { SurfaceKind } from "./kinds";
+
 /** What a bound control holds. */
 export type Value = number | boolean | string | string[] | number[] | Array<[number, number]> | LaneItem[] | null;
 
@@ -59,6 +61,8 @@ interface AtomSpec {
   value?: ValueKind;
   /** A control a person sets: counted against the calm limit (a panel shows at most MAX_VISIBLE_CONTROLS at once). */
   control?: boolean;
+  /** For a view of a surface: the kind of surface it draws. */
+  surfaceKind?: SurfaceKind;
   props: Record<string, PropSpec>;
 }
 
@@ -105,15 +109,15 @@ export const ATOMS: Record<AtomKind, AtomSpec> = {
   pads: { kind: "pads", about: "a grid of steps to switch on (a drum pattern, a habit tracker)", value: "steps", control: true, props: { label, cols: { kind: "number", min: 2, max: 32 }, rows: { kind: "number", min: 1, max: 8 }, names: { kind: "options" } } },
   lanes: { kind: "lanes", about: "blocks on lanes along a ruler (a timeline, a schedule)", value: "lanes", control: true, props: { label, lanes: { kind: "options" }, length: { kind: "number", min: 1, max: 100000 }, unit } },
 
-  histogram: { kind: "histogram", about: "the live histogram of an image surface", props: { surface: { kind: "surface" } } },
+  histogram: { kind: "histogram", about: "the live histogram of an image surface", surfaceKind: "image", props: { surface: { kind: "surface" } } },
   chart: {
-    kind: "chart", about: "a chart of a data surface's rows, after its filters",
+    kind: "chart", about: "a chart of a data surface's rows, after its filters", surfaceKind: "data",
     props: {
       surface: { kind: "surface" }, kind: { kind: "enum", of: CHART_KINDS }, x: { kind: "column" }, y: { kind: "columns" },
       agg: { kind: "enum", of: AGGREGATES }, label,
     },
   },
-  table: { kind: "table", about: "the rows of a data surface, after its filters", props: { surface: { kind: "surface" }, columns: { kind: "columns" }, limit: { kind: "number", min: 1, max: 500 } } },
+  table: { kind: "table", about: "the rows of a data surface, after its filters", surfaceKind: "data", props: { surface: { kind: "surface" }, columns: { kind: "columns" }, limit: { kind: "number", min: 1, max: 500 } } },
 
   bespoke: { kind: "bespoke", about: "a piece written for this need, run sandboxed; talks only through its binds", props: { html: { kind: "html" }, binds: { kind: "binds" }, height: { kind: "number", min: 60, max: 800 } } },
 };

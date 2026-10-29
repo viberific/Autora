@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
 import type { Value } from "../../lib/panacea/atoms";
 import type { Surface } from "../../lib/panacea/canvas";
+import type { SurfaceKind } from "../../lib/panacea/kinds";
 import { DataTable } from "./Chart";
 import { ImageEngine, outputAspect, paletteOf, setImageStats } from "./imagegl";
 
@@ -13,7 +14,7 @@ export const pictureOf = (surface: string) => pictures.get(surface) ?? null;
  * on, a line to drag across it shows the original on its left. Its histogram and palette are published for the panels
  * that read them.
  */
-export function ImageView({ surface, onSize }: { surface: Surface; onSize: (px: { w: number; h: number }) => void }) {
+function ImageView({ surface, onSize }: { surface: Surface; onSize: (px: { w: number; h: number }) => void }) {
   const box = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const engine = useRef<ImageEngine | null>(null);
@@ -119,7 +120,18 @@ export function ImageView({ surface, onSize }: { surface: Surface; onSize: (px: 
 }
 
 /** A data surface: the table itself, as its filters leave it. */
-export function DataView({ surface }: { surface: Surface }) {
+function DataView({ surface }: { surface: Surface }) {
   if (!surface.table) return <div className="pa-chart-empty">This table's rows are gone.</div>;
   return <DataTable table={surface.table} params={surface.params as Record<string, Value>} limit={200} />;
+}
+
+/** How each kind of surface is drawn on the board. A kind added to the registry does not compile until it has a view here. */
+const VIEWS: Record<SurfaceKind, (p: { surface: Surface; onSize: (px: { w: number; h: number }) => void }) => ReactElement> = {
+  image: ({ surface, onSize }) => <ImageView surface={surface} onSize={onSize} />,
+  data: ({ surface }) => <DataView surface={surface} />,
+};
+
+export function SurfaceView({ surface, onSize }: { surface: Surface; onSize: (px: { w: number; h: number }) => void }) {
+  const View = VIEWS[surface.kind];
+  return <View surface={surface} onSize={onSize} />;
 }

@@ -14,8 +14,9 @@
 import type { Value } from "./atoms";
 import { contextOf, estimateHeight, MAX_SURFACES, nearestFree, placeFor, refocus, seedValues, snap, surfaceParams, uid, type Canvas, type Panel, type PanelState, type Side, type Surface, type Who } from "./canvas";
 import { instantiate, type Recipe } from "./library";
-import { checkTree, parseBind, type Node } from "./recipe";
-import { distinct, type Table } from "./surfaces";
+import { checkTree, parseBind, type CheckContext, type Node } from "./recipe";
+import { KINDS, KIND_NAMES, type Offer, type Starters, type SurfaceKind } from "./kinds";
+import type { Table } from "./surfaces";
 
 interface PlaceOptions {
   near?: string | null;
@@ -32,7 +33,7 @@ interface PlaceOptions {
 }
 
 /** The surface a panel near `near` works on: `near` itself, the surface a panel near it works on, or the focus. */
-function surfaceNear(canvas: Canvas, near: string | null | undefined, kind: Surface["kind"]): string | null {
+function surfaceNear(canvas: Canvas, near: string | null | undefined, kind: SurfaceKind): string | null {
   const s = canvas.surfaces.find((x) => x.id === near && x.kind === kind);
   if (s) return s.id;
   const p = canvas.panels.find((x) => x.id === near);
@@ -41,6 +42,10 @@ function surfaceNear(canvas: Canvas, near: string | null | undefined, kind: Surf
   const focus = canvas.surfaces.find((x) => x.id === canvas.focus && x.kind === kind);
   return focus?.id ?? canvas.surfaces.filter((x) => x.kind === kind).at(-1)?.id ?? null;
 }
+
+/** For each kind, the surface of it a placeholder bind near `near` means. */
+const nearTo = (canvas: Canvas, near: string | null | undefined): NonNullable<CheckContext["near"]> =>
+  Object.fromEntries(KIND_NAMES.map((k) => [k, surfaceNear(canvas, near, k)]));
 
 /** The context a tree belongs to: the one surface it works on, or "general". */
 function contextFor(tree: Node, canvas: Canvas): string {
@@ -82,7 +87,7 @@ function placeTree(canvas: Canvas, tree: Node, title: string, w: number, opts: P
 
 /** Put a library recipe on the canvas, made ready for it. Says why not when it does not fit. */
 export function placeRecipe(canvas: Canvas, recipe: Recipe, opts: PlaceOptions): Panel | { error: string } {
-  const ctx = contextOf(canvas, surfaceNear(canvas, opts.near, "image"), surfaceNear(canvas, opts.near, "data"));
+  const ctx = contextOf(canvas, nearTo(canvas, opts.near));
   const made = instantiate(recipe, ctx);
   if ("error" in made) return made;
   return placeTree(canvas, made.tree, recipe.name, opts.w ?? recipe.w, { ...opts, values: { ...made.values, ...(opts.values ?? {}) } }, recipe.id);
@@ -90,27 +95,15 @@ export function placeRecipe(canvas: Canvas, recipe: Recipe, opts: PlaceOptions):
 
 /** Put an agent's own tree on the canvas, after the rulebook. */
 export function placeComposed(canvas: Canvas, raw: unknown, title: string, w: number, opts: PlaceOptions): Panel | { error: string } {
-  const ctx = contextOf(canvas, surfaceNear(canvas, opts.near, "image"), surfaceNear(canvas, opts.near, "data"));
+  const ctx = contextOf(canvas, nearTo(canvas, opts.near));
   const checked = checkTree(raw, ctx);
   if (!checked.tree || checked.errors.length) return { error: checked.errors.join(" ") || "That is not a panel." };
   return placeTree(canvas, checked.tree, title, w, opts);
 }
 
 /** What opens by itself beside a surface that has just arrived: the panels, and one offered as a ghost. */
-export function starters(surface: Surface): { live: string[]; ghost: string | null; why: string } {
-  if (surface.kind === "image") {
-    return { live: ["photo.light", "photo.colour"], ghost: "photo.looks", why: "A photo arrived: light and colour are where most edits start." };
-  }
-  const t = surface.table;
-  const cols = t?.columns ?? [];
-  const nums = cols.filter((c) => c.type === "number");
-  const date = cols.find((c) => c.type === "date");
-  const cats = cols.filter((c) => c.type === "text" && t && distinct(t, c.name, 13).length >= 2 && distinct(t, c.name, 13).length <= 12);
-  const live: string[] = [];
-  if (nums.length && date) live.push("data.line");
-  else if (nums.length && cats.length) live.push("data.bar");
-  if (cats.length) live.push("data.filter-category");
-  return { live, ghost: nums.length ? "data.explore" : null, why: "A table arrived: a chart of it, and a filter for its categories." };
+export function starters(surface: Surface): Starters {
+  return KINDS[surface.kind].starters(surface);
 }
 
 /** Lay out a new surface's starters: placed beside it, the person's way, skipping what they have waved away. */
@@ -131,34 +124,23 @@ function placeStarters(canvas: Canvas, surface: Surface, find: (id: string) => R
   return out;
 }
 
-const has = (canvas: Canvas, recipe: string, surface: string) => canvas.panels.some((p) => p.recipe === recipe && p.context === surface);
-
 /**
  * The person (or the agent) set a value: is there a panel worth offering for what they are doing now? One suggestion at
  * most, never one already on the canvas or waved away twice.
  */
-export function suggestFor(canvas: Canvas, key: string, value: Value, quiet: (id: string) => boolean): { recipe: string; why: string; near: string } | null {
+export function suggestFor(canvas: Canvas, key: string, value: Value, quiet: (id: string) => boolean): (Offer & { near: string }) | null {
   const { surface, param } = parseBind(key);
   if (!surface) return null;
   const s = canvas.surfaces.find((x) => x.id === surface);
   if (!s) return null;
-  const offer = (recipe: string, why: string) => (has(canvas, recipe, s.id) || quiet(recipe) ? null : { recipe, why, near: s.id });
-  if (s.kind === "image") {
-    if (param === "exposure" && typeof value === "number" && Math.abs(value) >= 1.2 && !has(canvas, "photo.curve", s.id)) {
-      return offer("photo.histogram", "Exposure is pushed a long way: the histogram shows what is clipping.");
-    }
-    if (param === "saturation" && typeof value === "number" && value <= -90) return offer("photo.mono", "It is black and white now: contrast and grain carry it from here.");
-    if (param === "aspect" && value !== "original" && value !== "free") return offer("photo.straighten", "Cropped: a level horizon matters more in a tight frame.");
-    if (param === "look" && value !== "none") return offer("photo.compare", "A look is on: compare it with the original.");
-  } else {
-    if (param.startsWith("filter.") && Array.isArray(value) && value.length === 1) return offer("data.top", `Filtered to ${String(value[0])}: its top rows.`);
-    if (param === "search" && typeof value === "string" && value.trim()) return offer("data.table", "Searching: the matching rows.");
-  }
-  return null;
+  const has = (recipe: string) => canvas.panels.some((p) => p.recipe === recipe && p.context === s.id);
+  const offer = (recipe: string, why: string) => (has(recipe) || quiet(recipe) ? null : { recipe, why });
+  const found = KINDS[s.kind].suggest(s, param, value, { has, offer });
+  return found ? { ...found, near: s.id } : null;
 }
 
 export interface SurfaceInput {
-  kind: "image" | "data";
+  kind: SurfaceKind;
   name: string;
   title?: string;
   artifact?: string;
@@ -174,16 +156,18 @@ export interface SurfaceInput {
  */
 export function addSurfaceTo(canvas: Canvas, input: SurfaceInput, find: (id: string) => Recipe | undefined, opts: { side?: Side; quiet?: (id: string) => boolean; view?: PlaceOptions["view"] } = {}): { surface: Surface; panels: Panel[] } | { error: string } {
   if (canvas.surfaces.length >= MAX_SURFACES) return { error: `The canvas already has ${MAX_SURFACES} surfaces; remove one first.` };
-  const w = input.kind === "image" ? 512 : 576;
-  const h = input.kind === "image" && input.px && input.px.w > 0 ? snap(Math.min(720, Math.max(192, (w * input.px.h) / input.px.w))) : input.kind === "image" ? 384 : 352;
+  const def = KINDS[input.kind];
+  const size = def.size(input.px);
+  const w = snap(size.w);
+  const h = snap(size.h);
   // Room for the panels that come with it, to its right.
   // Where it was dropped if that is free, else the free spot nearest it; with room for its panels to the right.
   const spot = input.at ? nearestFree(canvas, w + 336, h, { x: input.at.x + 168, y: input.at.y }) : placeFor(canvas, w + 352, h, null, "right");
   const at = { x: spot.x, y: spot.y };
   const surface: Surface = {
-    id: uid(input.kind === "image" ? "img" : "dat"),
+    id: uid(def.prefix),
     kind: input.kind,
-    title: (input.title ?? input.name.replace(/\.[a-z0-9]+$/i, "")).slice(0, 80) || (input.kind === "image" ? "Image" : "Table"),
+    title: (input.title ?? input.name.replace(/\.[a-z0-9]+$/i, "")).slice(0, 80) || def.title,
     x: at.x, y: at.y, w, h,
     ...(input.artifact ? { artifact: input.artifact } : {}),
     name: input.name.slice(0, 200),
