@@ -35,12 +35,14 @@ services:
       - "6881:6881/udp"
     environment:
       # The one address Flix will answer on. Every other host name it is
-      # reached by -- Umbrel's own app-proxy port above all -- gets a 308 here,
-      # because Umbrel's certificate covers umbrel.local only and so warns on
-      # the tailnet name. This is the Tailscale Serve route on :9443, which
-      # holds a real Let's Encrypt certificate for it. Leave empty to serve
+      # reached by -- Umbrel's own app-proxy path above all -- gets a 307/308
+      # here. This is the Cloudflare route (Access in front, real certificate).
+      # Tailscale is retired: a tailnet name here sends every domain request to
+      # a host that no longer exists, and the app looks dead after the Access
+      # login. Private IPv4, *.local and LAN_URL are exempt from the redirect,
+      # so the TV keeps working on the home network. Leave empty to serve
       # whatever address arrives. See the app's README.
-      PUBLIC_URL: "https://umbrel-1.tail16900.ts.net:9443"
+      PUBLIC_URL: "https://flix.049993.xyz"
       # Where the box is on the home network, with no certificate and no
       # proxy in the way. A Chromecast or Google TV fetches the video itself
       # and cannot reach the tailnet name, so the player hands it this instead.
