@@ -35,6 +35,10 @@ const NAME: Record<Surface, string> = {
 export const LEASE_MS = 8_000;
 /** Longer for a file: saving is not editing, and editing is slow. */
 export const FILE_LEASE_MS = 20_000;
+/** How long the browser stays the person's once they stop using it. Taking the browser and forgetting to hand it back
+    left the agent refusing every page until Autora was restarted; a page nobody has touched for this long is the
+    agent's again, and it is told so. The windows keep a hold until it is handed back: their bars say whose they are. */
+export const BROWSER_HOLD_IDLE_MS = 3 * 60_000;
 const KEEP = 80;
 
 export interface Touch {
@@ -66,6 +70,8 @@ export class Presence {
   private touches: Touch[] = [];
   private leases = new Map<string, number>();
   private held = new Set<Surface>();
+  /** When each held surface was last taken or touched, for the browser's lapse. */
+  private lastUse = new Map<Surface, number>();
   /** Control changes already said to the agent. */
   private toldHeld = new Set<Surface>();
 
@@ -81,6 +87,7 @@ export class Presence {
   ): void {
     const at = this.now();
     const tell = opts.tell !== false;
+    this.lastUse.set(surface, at);
     this.leases.set(key(surface, subject), at + (opts.leaseMs ?? (surface === "code" ? FILE_LEASE_MS : LEASE_MS)));
     // The same thing again, straight away, is one touch carried on.
     const last = this.touches[this.touches.length - 1];
@@ -97,6 +104,7 @@ export class Presence {
   hold(surface: Surface, on: boolean): void {
     if (on) {
       this.held.add(surface);
+      this.lastUse.set(surface, this.now());
       // Taking it is worth saying, even straight after handing it back.
       this.toldHeld.delete(surface);
     } else {
@@ -108,7 +116,15 @@ export class Presence {
   }
 
   holding(surface: Surface): boolean {
+    this.lapse();
     return this.held.has(surface);
+  }
+
+  /** The browser, taken and then left alone, goes back to the agent. The note says so, as a hand-back does. */
+  private lapse(): void {
+    if (!this.held.has("browser")) return;
+    if (this.now() - (this.lastUse.get("browser") ?? 0) < BROWSER_HOLD_IDLE_MS) return;
+    this.hold("browser", false);
   }
 
   private alive(surface: Surface, subject: string): number | null {
@@ -127,9 +143,11 @@ export class Presence {
    * the surface as a whole.
    */
   blocked(surface: Surface, subject?: string): string | null {
+    this.lapse();
     if (this.held.has(surface)) {
       return `The person has taken control of ${NAME[surface]}, so this was not done. Do not use ${NAME[surface]} until they hand it back; ` +
-        "carry on with other work and say what you are leaving for them.";
+        "carry on with other work and say what you are leaving for them. If you need it, tell them to press Hand back to agent " +
+        `on ${NAME[surface]}'s bar${surface === "browser" ? " (or the strip above the message box); it also comes back by itself once they have left it alone for a few minutes" : " (or the strip above the message box)"}.`;
     }
     const whole = this.alive(surface, "*");
     const one = subject && subject !== "*" ? this.alive(surface, subject) : null;
@@ -146,6 +164,7 @@ export class Presence {
   /** What the person did that the agent has not been told, once. Null when
       there is nothing. */
   note(): string | null {
+    this.lapse();
     const now = this.now();
     const fresh = this.touches.filter((t) => t.tell && !t.told);
     const lines: string[] = [];
@@ -186,6 +205,7 @@ export class Presence {
   }
 
   view(): PresenceView {
+    this.lapse();
     const active = (["pdf", "office", "app", "browser", "code"] as Surface[]).filter((s) => {
       if (this.held.has(s)) return true;
       for (const k of this.leases.keys()) {

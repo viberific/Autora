@@ -4,7 +4,7 @@
  *   npx tsx tests/presence.test.ts
  */
 import assert from "node:assert/strict";
-import { FILE_LEASE_MS, LEASE_MS, Presence, presenceFor } from "../server/presence";
+import { BROWSER_HOLD_IDLE_MS, FILE_LEASE_MS, LEASE_MS, Presence, presenceFor } from "../server/presence";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -135,6 +135,20 @@ test("recent actions are for reacting to, newest last, and only what is told", (
   p.touch("pdf", "b", "edit", "edited b");
   p.touch("app", "*", "scroll", "scrolled", { tell: false });
   assert.deepEqual(p.recent(30_000).map((t) => t.detail), ["edited b"]);
+});
+
+test("the browser, taken and left alone, comes back to the agent, which is told", () => {
+  const { p, tick } = make();
+  p.hold("browser", true);
+  assert.match(p.note()!, /taken control of the browser/);
+  tick(BROWSER_HOLD_IDLE_MS - 1000);
+  p.touch("browser", "*", "click", "clicked Sign in");
+  tick(BROWSER_HOLD_IDLE_MS - 1000);
+  assert.match(p.blocked("browser") ?? "", /Hand back to agent/, "still theirs while they use it, and the way back is named");
+  tick(2000);
+  assert.equal(p.blocked("browser"), null, "left alone, it is the agent's again");
+  assert.deepEqual(p.view().held, []);
+  assert.match(p.note()!, /handed the browser back/);
 });
 
 test("each chat has its own", () => {

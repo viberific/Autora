@@ -35,6 +35,7 @@ import { Dock } from "./components/Dock";
 import { Rail, pageLabel, PAGES, type PageId } from "./components/Rail";
 import { isSystemTab, type SystemTab } from "./lib/systemTabs";
 import { TodoDock } from "./components/TodoDock";
+import { HeldStrip } from "./components/HeldStrip";
 
 /* The pages behind the rail are loaded when they are opened rather than with
    the app: together they are a third of the bundle, and most sessions never
@@ -448,7 +449,12 @@ export function App() {
       queued = [];
       setEvents((prev) => mergeEvents(prev, batch));
     };
+    /* The backlog arrives in pieces (BACKLOG_CHUNK on the server) and is held until the server says "live", so a
+       conversation opened again lands whole, in one render, at its end. Let in piece by piece, each piece grew the
+       thread under a smooth scroll still chasing the last one: a long chat loaded in a judder of jumps. */
+    let catchingUp = true;
     const schedule = () => {
+      if (catchingUp) return;
       if (frame !== null || timer !== null) return;
       const wait = EVENT_BATCH_MS - (performance.now() - lastFlush);
       if (wait <= 0) frame = requestAnimationFrame(flush);
@@ -477,7 +483,14 @@ export function App() {
         if (document.visibilityState === "hidden") flush();
         else schedule();
       },
-      onStatus: setStatus,
+      onStatus: (next) => {
+        if (next.state === "connecting") catchingUp = true;
+        else if (catchingUp) {
+          catchingUp = false;
+          flush();
+        }
+        setStatus(next);
+      },
       onFrame: (frame) => {
         // The app window's video is its own feed: the browser card's would
         // otherwise show the app.
@@ -2149,6 +2162,7 @@ export function App() {
             // pinned stage above the thread.
             onOpenWidget={phoneLayout ? undefined : openWidgetWindow}
             outbox={outbox}
+            loading={status.state === "connecting"}
             // The thread stays mounted under the other pages: told which of them is
             // on screen, so a row that was answered elsewhere catches up.
             showing={page === "chat"}
@@ -2226,6 +2240,7 @@ export function App() {
                 </button>
               </div>
             )}
+            {sessionId && <HeldStrip sessionId={sessionId} live={live} />}
             {liveOn ? (
               <>
               {/* In talk mode too. A spoken turn costs what a typed one does,

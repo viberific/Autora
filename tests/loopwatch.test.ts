@@ -5,7 +5,7 @@
  *   npx tsx tests/loopwatch.test.ts
  */
 import assert from "node:assert/strict";
-import { LOOP_DEFAULTS, LoopWatch } from "../server/loopwatch";
+import { LOOP_DEFAULTS, LoopWatch, isLookup } from "../server/loopwatch";
 import { mergeLoop } from "../server/state";
 
 let passed = 0;
@@ -158,6 +158,28 @@ test("rounds that change nothing earn a stall note, and a change resets the coun
   assert.equal(watch.endRound(), null);
   assert.equal(watch.endRound(), null, "the count started again from the change");
   assert.match(watch.endRound() ?? "", /\[Stall\]/);
+});
+
+test("rounds of nothing but searching earn an answer check; a round of real work resets it", () => {
+  const watch = new LoopWatch({ stallAfter: 50, checkEvery: 500 });
+  const search = (q: string) => watch.record("web_search", { query: q }, true, `results for ${q}`);
+  search("a"); assert.equal(watch.endRound(), null);
+  search("b"); watch.record("todo", { items: [] }, true, "ok"); assert.equal(watch.endRound(), null, "bookkeeping beside a search is still a search round");
+  watch.record("browser_read", {}, true, "page"); search("c");
+  assert.match(watch.endRound() ?? "", /\[Answer check\] The last 3 rounds.*answer now/);
+  search("d"); watch.record("terminal", { command: "npm test" }, true, "ok");
+  assert.equal(watch.endRound(), null, "a round that did more than look");
+  search("e"); assert.equal(watch.endRound(), null);
+  search("f"); assert.equal(watch.endRound(), null, "the count started again");
+});
+
+test("what counts as looking something up", () => {
+  assert.ok(isLookup("web_search"));
+  assert.ok(isLookup("http_request", { method: "GET" }));
+  assert.ok(!isLookup("http_request", { method: "POST" }), "a POST does something");
+  assert.ok(isLookup("mcp__fetch__fetch"));
+  assert.ok(!isLookup("browser_click"), "a click may be a form being sent");
+  assert.ok(!isLookup("terminal", { command: "cat package.json" }), "the project's own files are work, not a hunt");
 });
 
 test("the stall setting is clamped", () => {

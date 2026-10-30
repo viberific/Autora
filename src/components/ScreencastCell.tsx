@@ -569,7 +569,7 @@ export function ScreencastCell({
             onClick={() => void holdSurface(sessionId, "browser", !mine)}
             title={mine ? "Let the agent use the browser again" : "Use the browser yourself; the agent carries on with other work"}
           >
-            {mine ? "Hand back" : "Take control"}
+            {mine ? "Hand back to agent" : "Take control"}
           </button>
         ))}
         {held && feed && (

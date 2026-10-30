@@ -308,7 +308,7 @@ export function unfinishedTodos(list: TodoList | null): string | null {
   return [
     `(Autora: the to-do list still shows ${open.length} of ${list.items.length} items not completed:`,
     ...open.map((i) => `- ${i.id}. ${i.title} (${i.status})`),
-    "If they are done, mark them completed with todo now. If not, carry on with them, " +
+    "If they are done, or your reply already settles them, mark them completed with todo now and give your reply -- no more work for them. If not, carry on with them, " +
       "or take them off the list and say in your reply why they are left.)",
   ].join("\n");
 }
