@@ -1261,8 +1261,9 @@ const COLOUR = /\u001b\[[0-?]*[ -/]*[@-~]/g;
 /** Stay in the conversation even while a page is being worked: things the
     person has to answer or act on, and the pictures handed over. They sit
     beside the card without ending it -- a sign-in is part of working the
-    page. Everything else said or done meanwhile is shown inside the card. */
-const KEPT_OUT = new Set<Cell["kind"]>(["ask", "permission", "todo", "images", "widget", "app", "mode", "said"]);
+    page. Everything else said or done meanwhile is shown inside the card -- the person's own words added mid-turn
+    too: kept out, a message sat under the card while every reply to it streamed in above, inside the card. */
+const KEPT_OUT = new Set<Cell["kind"]>(["ask", "permission", "todo", "images", "widget", "app", "mode"]);
 
 /** The screen card a still-running turn is working in, if it is in one. */
 const openBoxes = new WeakMap<Bucket, ScreenCell>();

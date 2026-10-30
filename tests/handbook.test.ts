@@ -30,6 +30,13 @@ await test("every window has a manual that names its tools", () => {
   for (const id of MANUAL_IDS) for (const needle of expect[id]) assert.ok(manualText(id).includes(needle), `${id} lacks ${needle}`);
 });
 
+await test("the browser manual says who has the browser and how it comes back", () => {
+  const browser = manualText("browser");
+  for (const needle of ["Take control", "Hand back to agent", "strip", "above the message box", "I'm done", "by itself", "never ask"]) {
+    assert.ok(browser.includes(needle), `the browser manual lacks "${needle}"`);
+  }
+});
+
 await test("the PDF manual teaches the window as it is now: the bar, the grid, the trays, tap to redact, sign", () => {
   const pdf = manualText("pdf");
   for (const needle of ["All tools", "colour wheel", "Redact N regions", "pending", "never an image", "replaces the old toolbar", "Shapes has a round button", "pin any tool", "Reset bar", "down the right side on a desktop", "page thumbnails", "Merge, Add pages, Split"]) {

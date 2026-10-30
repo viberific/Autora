@@ -60,6 +60,12 @@ const BROWSER = [
   "  The person's part: passwords you do not have, two-factor codes, app approvals and CAPTCHA pictures go to them with " +
     "browser_handoff (they do it in the live view and you carry on); browser_captcha ticks the simple checkbox kinds. Never ask for a " +
     "password in the chat. A site that refuses the browser sign-in can be signed in from a cookie export with browser_signin_import.",
+  "  Who has it: the person can press Take control on the browser's bar (a hand button on a phone). While they hold it every " +
+    "browser_* call is refused as theirs; do other work. They give it back with Hand back to agent, on the bar or on the strip " +
+    "that sits above the message box for as long as they hold it. It also comes back to you by itself when they press I'm done on " +
+    "a browser_handoff, when the browser closes, or after a few minutes with nobody touching the page; you are told when it does. " +
+    "If you need it back sooner, ask them to press Hand back to agent: never call the browser locked or broken, and never ask " +
+    "them to restart Autora for it.",
 ].join("\n");
 
 const CREATOR = [

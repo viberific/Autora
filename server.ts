@@ -1909,7 +1909,16 @@ function askPerson(session: Session, request: AskRequest): Promise<AskAnswer> {
       settleAsk(askId, { cancelled: true, choices: [], text: "", who: "timeout" });
     }, ASK_TIMEOUT_MS);
     timer.unref?.();
-    awaitingAsk.set(askId, { sessionId: session.id, settle: resolve, timer });
+    /* "I'm done" on a page the agent handed over gives the browser back, a hold taken while doing it included: a
+       Take control pressed during a sign-in used to outlast it, and every page after was refused as the person's. */
+    const settle = request.kind !== "browser" ? resolve : (answer: AskAnswer) => {
+      if (presenceFor(session.id).holding("browser")) {
+        presenceFor(session.id).hold("browser", false);
+        announcePresence(session.id);
+      }
+      resolve(answer);
+    };
+    awaitingAsk.set(askId, { sessionId: session.id, settle, timer });
     // Something the page itself can answer -- a CAPTCHA passing -- settles
     // the question the moment it does, rather than waiting to be told.
     const watch = request.watch;
@@ -1934,11 +1943,13 @@ function askPerson(session: Session, request: AskRequest): Promise<AskAnswer> {
     show a feed rather than the last screenshot -- and stop when there is not. */
 function broadcastBrowserState(session: Session) {
   const live = browsers.get(session.id);
-  sendEphemeral(session.id, {
-    type: "browser",
-    session: session.id,
-    state: live ? live.status() : { available: false, open: false, url: null, title: null, detail: null, fps: 0, viewport: VIEWPORT, fields: [] },
-  });
+  const state = live ? live.status() : { available: false, open: false, url: null, title: null, detail: null, fps: 0, viewport: VIEWPORT, fields: [] };
+  sendEphemeral(session.id, { type: "browser", session: session.id, state });
+  /* A closed browser is nobody's: a hold on it outlived its card, and with no card there was no Hand back to press. */
+  if (!state.open && presenceFor(session.id).holding("browser")) {
+    presenceFor(session.id).hold("browser", false);
+    announcePresence(session.id);
+  }
 }
 
 // ---------------------------------------------------------------- desktop --

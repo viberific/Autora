@@ -709,7 +709,10 @@ body::before {
 .thread-content {
   display: flex; flex-direction: column; gap: 18px; min-width: 0;
   width: 100%; max-width: var(--read); margin: 0 auto;
+  transition: opacity var(--dur-1) var(--ease);
 }
+/* A conversation being opened, until it sits still at its end (Thread's landing): then it fades in, already there. */
+.thread.is-landing .thread-content { opacity: 0; transition: none; }
 .turn { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .turn .msg + .msg { margin-top: 14px; }
 
@@ -2693,6 +2696,31 @@ label + .jf-hint { margin-top: -5px; }
 /* The to-do list docked to the top of the message box (TodoDock): a tab a
    little narrower than the box, joined to it, holding one line -- the task
    being worked. Tapped, the whole list opens above that line. */
+/* Something the person took from the agent (HeldStrip): said above the box with the way to give it back, on screen
+   wherever the thread is scrolled to. */
+.held-strip {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  width: calc(100% - 28px); margin: 0 auto 8px; padding: 8px 10px 8px 12px;
+  background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: var(--r-md);
+  font-size: var(--fs-sm); line-height: 1.4; color: var(--text-2);
+  animation: rise var(--dur-2) var(--ease) both;
+}
+.held-strip-ico { display: grid; place-items: center; color: var(--accent); flex: 0 0 auto; }
+.held-strip-text { flex: 1 1 200px; min-width: 0; }
+.held-strip-text b { color: var(--text); font-weight: 600; }
+.held-strip-btn {
+  flex: 0 0 auto; height: 30px; padding: 0 12px; border-radius: var(--r-pill);
+  background: var(--accent); border: 0; color: var(--on-accent); cursor: pointer;
+  font: inherit; font-size: var(--fs-sm); font-weight: 600;
+}
+.held-strip-btn:hover { filter: brightness(1.1); }
+/* A window held by the person, on a phone: the way back said in words (TakeControl). */
+.held-pill {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px;
+  height: 26px; padding: 0 10px; border: 0; border-radius: var(--r-pill);
+  background: var(--accent); color: var(--on-accent); cursor: pointer;
+  font: inherit; font-size: var(--fs-xs); font-weight: 600; white-space: nowrap;
+}
 .todo-dock {
   position: relative; z-index: 1;
   width: calc(100% - 28px); margin: 0 auto -1px;

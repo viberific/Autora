@@ -232,6 +232,21 @@ test("a message added while the agent works joins its turn as the person's own m
   assert.equal(said()?.kind === "said" && said()?.read, true, "read once the agent has taken it in");
 });
 
+test("a message added while the agent works a page flows with what it says there, not under the card", () => {
+  const events: AutoraEvent[] = [];
+  const add = (seq: number, kind: string, payload: Record<string, any>) =>
+    events.push({ seq, ts: 1_700_000_000 + seq, kind, actor: "user", span: null, payload, blob: null });
+  add(1, Kind.UserMessage, { text: "find me a flight" });
+  add(2, Kind.BrowserAction, { action: "open", url: "https://example.com" });
+  add(3, Kind.AgentText, { text: "Looking at the fares." });
+  add(4, Kind.Amend, { text: "only direct ones" });
+  add(5, Kind.AgentText, { text: "Filtering to direct flights." });
+  const cells = derive(events).buckets[0].cells;
+  assert.deepEqual(cells.map((c) => c.kind), ["screen"], "nothing is left under the card");
+  const log = cells[0].kind === "screen" ? cells[0].log : [];
+  assert.deepEqual(log.map((c) => c.kind), ["reply", "said", "reply"], "the message sits between what came before and after it");
+});
+
 test("an agent called from the chat joins it by name and, when done, says its own report there", () => {
   const events: AutoraEvent[] = [];
   const add = (seq: number, kind: string, payload: Record<string, any>) =>

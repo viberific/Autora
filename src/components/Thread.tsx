@@ -39,6 +39,9 @@ import { LearnedCell } from "./LearnedCell";
 import { NAME, Stage, StageStub } from "./Stage";
 import { busiestSurface, cellKey, newestSurface, pickSurfaces, usePhone, type Surface, type SurfaceKind } from "../lib/stage";
 
+/** How long the content must hold its size before a conversation being opened is shown, and the longest it is hidden. */
+const LAND_QUIET_MS = 120;
+const LAND_MAX_MS = 900;
 /** Within this many pixels of the bottom counts as "watching the live edge". */
 const STICK_ZONE = 80;
 /** How long a touch counts as still on the thread after the finger has gone. */
@@ -81,6 +84,7 @@ export function Thread({
   widgetHeld = "",
   onOpenWidget,
   outbox = NO_OUTGOING,
+  loading = false,
   ...work
 }: {
   /** A desktop has a work area beside the conversation (see WorkFeed), so what the agent looks at and does is shown
@@ -102,6 +106,8 @@ export function Thread({
   onOpenWidget?: () => void;
   /** Sent from this page and not in the log yet: shown with one tick until it is. */
   outbox?: Outgoing[];
+  /** The conversation is still arriving: an empty thread is not yet an empty chat, so the welcome is not shown. */
+  loading?: boolean;
   busy: boolean;
   /** What it is on right now, in a few words (see lib/activity.ts). */
   doing?: string | null;
@@ -126,10 +132,15 @@ export function Thread({
   /* Another conversation opens at its live edge with nothing unread: where
      the last one was left, and what arrived in it, say nothing about this. */
   const [shownSession, setShownSession] = useState(sessionId);
+  /* Opening a conversation lands at its end, hidden until the layout has settled. Turns off screen are laid out at a
+     guessed height (content-visibility in styles.css) and take their real one as they come near: shown straight away,
+     the thread jumped about while those guesses were put right. Kept until the content has held its size a moment. */
+  const [landing, setLanding] = useState(true);
   if (shownSession !== sessionId) {
     setShownSession(sessionId);
     setStuck(true);
     setUnread(false);
+    setLanding(true);
   }
   // While the page in the thread is yours to use, the thread holds still:
   // following the live edge would slide the page out from under your finger
@@ -337,9 +348,33 @@ export function Thread({
     // A finger on the thread is in charge of where it sits; the catch-up is
     // in touchEnd, once it has gone. A whole new turn is worth an animated
     // move; a token landing is not, and re-targeting a smooth scroll 40 times
-    // a second feels seasick.
-    if (!finger.current) toBottom(isNewTurn ? "smooth" : "auto");
-  }, [count, tailLength, busy, stuck, toBottom]);
+    // a second feels seasick. Nor is a conversation being opened: it is
+    // already at its end when it is first seen.
+    if (!finger.current) toBottom(isNewTurn && !landing ? "smooth" : "auto");
+  }, [count, tailLength, busy, stuck, toBottom, landing]);
+
+  // Shown once the content has kept its size for LAND_QUIET_MS, or at LAND_MAX_MS whatever it is doing.
+  const hasContent = count > 0 || outbox.length > 0;
+  useEffect(() => {
+    if (!landing || !hasContent) return;
+    const content = contentRef.current;
+    let quiet = 0;
+    const done = () => setLanding(false);
+    const settle = () => {
+      toBottom("auto");
+      window.clearTimeout(quiet);
+      quiet = window.setTimeout(done, LAND_QUIET_MS);
+    };
+    const cap = window.setTimeout(done, LAND_MAX_MS);
+    settle();
+    const observer = content && typeof ResizeObserver !== "undefined" ? new ResizeObserver(settle) : null;
+    if (content) observer?.observe(content);
+    return () => { observer?.disconnect(); window.clearTimeout(quiet); window.clearTimeout(cap); };
+  }, [landing, hasContent, toBottom]);
+  // An empty chat, once it is known to be empty, has nothing to land: its first message is shown as it is sent.
+  useEffect(() => {
+    if (landing && !loading && !hasContent) setLanding(false);
+  }, [landing, loading, hasContent]);
 
   /** Where the scroller was last time, so a scroll that was not the reader's
       doing can be told from one that was. */
@@ -385,6 +420,7 @@ export function Thread({
   }, [stuck, toBottom, count]);
 
   if (buckets.length === 0 && !busy && outbox.length === 0) {
+    if (loading) return <div className="empty" aria-busy="true" />;
     return (
       <div className="empty">
         {/* Still: the sidebar mark is the one that breathes at rest. */}
@@ -440,7 +476,7 @@ export function Thread({
         />
       )}
       <div
-        className="thread"
+        className={`thread${landing ? " is-landing" : ""}`}
         ref={scrollerRef}
         onScroll={onScroll}
         onTouchStart={touchStart}
