@@ -3607,7 +3607,7 @@ select.set-select {
      as a highlighted row in the rail. */
   .top .session-btn {
     background: none; border-color: transparent; height: 36px;
-    font-size: var(--fs-md); font-weight: 600; padding: 0 10px;
+    font-size: var(--fs-base); font-weight: 600; padding: 0 10px;
   }
   .top .session-btn:hover { background: var(--s2); border-color: var(--border); }
   .session-name { max-width: 520px; }

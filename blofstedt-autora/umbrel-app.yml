@@ -198,4 +198,5 @@ releaseNotes: >-
   across the chat and the work area now follows one scale: every sentence in the chat (messages, notes, the
   question a card asks) is the same size as the rest of the app, details are one step smaller, and the work
   area's lines no longer drop below that. A question card right after your message now has the same space
-  above it as a reply does. Phones keep their larger touch sizes.
+  above it as a reply does, and the chat's name at the top is the same size as the menu beside it. Phones keep
+  their larger touch sizes.
