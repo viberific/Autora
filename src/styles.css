@@ -6483,7 +6483,7 @@ button.dock-card:hover { border-color: var(--border-strong); }
 .pane-pick-tab {
   position: relative; flex: 0 0 auto;
   max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font: inherit; font-size: var(--fs-sm); font-weight: 550; height: 30px; padding: 0 16px;
+  font: inherit; font-size: var(--fs-base); font-weight: 550; height: 30px; padding: 0 16px;
   border-radius: var(--r-md) var(--r-md) 0 0; cursor: pointer;
   border: 1px solid var(--border); border-bottom: 0; background: var(--s2); color: var(--text-3);
 }
@@ -6499,7 +6499,7 @@ button.dock-card:hover { border-color: var(--border-strong); }
 .pane-pick-item.is-on .pane-pick-x { height: 34px; }
 .pane-pick-x:hover { color: var(--text); background: var(--s3); }
 .pane-pick-tab.is-on {
-  height: 34px; margin-bottom: -1px; z-index: 1; font-weight: 650;
+  height: 34px; margin-bottom: -1px; z-index: 1; font-weight: 600;
   color: var(--text); background: var(--bg); border-color: var(--border-strong);
   box-shadow: 0 2px 0 -1px var(--accent-line) inset;
 }
@@ -6509,7 +6509,7 @@ button.dock-card:hover { border-color: var(--border-strong); }
   display: inline-flex; align-items: center; gap: 6px;
   height: 26px; padding: 0 11px; border-radius: var(--r-pill);
   border: 1px solid var(--border); background: var(--s1); color: var(--text-3);
-  font: inherit; font-size: var(--fs-sm); font-weight: 600; cursor: pointer;
+  font: inherit; font-size: var(--fs-base); font-weight: 600; cursor: pointer;
 }
 .pane-follow:hover { color: var(--text); }
 .pane-follow.is-on { color: var(--live); border-color: rgba(var(--live-rgb), 0.45); background: rgba(var(--live-rgb), 0.1); }
