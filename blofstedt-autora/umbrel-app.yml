@@ -208,3 +208,7 @@ releaseNotes: >-
   place. Long chats cost less, because old file reads are only trimmed when that saves more than it costs, and
   Autora now knows how full a conversation really is: it counts the tool list and the turn's notes, and learns
   each model's own way of counting, so it condenses in time instead of silently dropping older messages.
+  Autora also helps you spend less: when a long chat gets a message about something new, a card offers to start
+  a new chat for it in one click. A change that names the file and what to do skips planning, a task that does
+  not say when it is finished gets a "Finished when" line you can correct, and it stops re-checking something
+  that is still in progress.

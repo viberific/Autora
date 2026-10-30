@@ -96,6 +96,7 @@ export const Kind = {
   AgentBack: "agent.back",
   TodoUpdate: "todo.update",
   ModeSwitch: "mode.switch",
+  ChatFresh: "chat.fresh",
   PreviewOpen: "preview.open",
   /** Recorded before the to-do list; still read. */
   KanbanUpdate: "kanban.update",

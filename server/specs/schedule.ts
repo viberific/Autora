@@ -314,6 +314,11 @@ export const scheduleSPECS: ToolSpec[] = [
           items: { type: "object", properties: { id: { type: "string" }, why: { type: "string" } }, required: ["id"] },
         },
         reopen: { type: "array", items: { type: "string" }, description: "Ids to open again." },
+        done_when: {
+          type: "string",
+          description: "How to tell the whole task is finished, in one line that can be checked (\"npm test passes and the page shows the count\"): " +
+            "the person's own, or worked out from the request when they did not say. It is shown to them. \"\" clears it.",
+        },
       },
     },
   },

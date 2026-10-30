@@ -23,6 +23,8 @@ export interface Scripted {
   slow?: boolean;
   /** Answer with an HTTP error instead. */
   status?: number;
+  /** The prompt size the fake vendor reports for this reply (default 100): for a chat that has grown long. */
+  promptTokens?: number;
   error?: string;
 }
 
@@ -135,7 +137,7 @@ export async function startApp(opts: { env?: Record<string, string> } = {}): Pro
         chunks.push({ choices: [{ delta: { tool_calls: [{ index: i, id: `call_${seen.length}_${i}`, type: "function", function: { name: t.name, arguments: JSON.stringify(t.args ?? {}) } }] } }] });
       });
       chunks.push({ choices: [{ delta: {}, finish_reason: reply.tools?.length ? "tool_calls" : "stop" }] });
-      chunks.push({ choices: [], usage: { prompt_tokens: 100, completion_tokens: 20 } });
+      chunks.push({ choices: [], usage: { prompt_tokens: reply.promptTokens ?? 100, completion_tokens: 20 } });
       let i = 0;
       const pump = () => {
         if (res.writableEnded || res.destroyed) return;

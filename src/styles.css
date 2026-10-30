@@ -2328,6 +2328,16 @@ label + .jf-hint { margin-top: -5px; }
 .cell-note.tone-bad { border-color: rgba(var(--danger-rgb), 0.3); color: var(--danger); }
 .cell-note.tone-warn { border-color: rgba(var(--warn-rgb), 0.3); color: var(--warn); }
 .cell-note svg { flex: 0 0 auto; margin-top: 2px; }
+/* A long chat sent something new: the offer to give it a chat of its own (Thread's FreshChat). */
+.fresh-cell { margin: 8px 0; padding: 10px 12px; border: 1px solid var(--accent-line); border-radius: var(--r-md); background: var(--accent-soft); color: var(--text-2); font-size: var(--fs-sm); line-height: 1.45; }
+.fresh-cell p { margin: 0; }
+.fresh-cell b { color: var(--text); font-weight: 600; }
+.fresh-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.fresh-acts button { border: 1px solid var(--border-strong); background: var(--s2); color: var(--text); border-radius: var(--r-pill); padding: 3px 12px; font-size: var(--fs-xs); cursor: pointer; transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); }
+.fresh-acts button:hover { border-color: var(--accent-line); }
+.fresh-acts button.is-accent { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.fresh-acts button:disabled { opacity: 0.6; cursor: default; }
+.fresh-fail { color: var(--danger); font-size: var(--fs-xs); }
 
 /* ------------------------------------------------------------------ diff -- */
 .diff-name {

@@ -208,9 +208,13 @@ export class LoopWatch {
         note:
           `[Loop check] This is the ${ordinal(times)} time you have made this ` +
           "exact call and got the same result. Running it again will not " +
-          "change the outcome. Do not repeat it. Work out why it is not " +
-          "working and try something genuinely different, or stop and tell " +
-          "the person what is blocking you and what you need from them. " +
+          "change the outcome. Do not repeat it. If you are waiting for " +
+          "something to change (a build, a release, an app updating), checking " +
+          "again does not make it come sooner: wait on it in one call " +
+          "(background_output wait), or set a check with the schedule tool, or " +
+          "tell the person it is still going and stop here. Otherwise work out " +
+          "why it is not working and try something genuinely different, or stop " +
+          "and tell the person what is blocking you and what you need from them. " +
           `The turn will be stopped if this call repeats ${stopHere - times} ` +
           "more time(s).",
         log: once(`repeat:${pair}`, `Loop check: ${label} has come back the same ${times} times; the agent was told to change approach.`),

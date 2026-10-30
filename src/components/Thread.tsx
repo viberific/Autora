@@ -1288,6 +1288,8 @@ const CellView = memo(function CellView({
       );
     case "said":
       return <UserMessage text={cell.text} receipt={cell.read ? "read" : "received"} />;
+    case "fresh":
+      return <FreshChat sessionId={sessionId} text={cell.text} tokens={cell.tokens} first={cell.first} live={live} />;
     case "note":
       return (
         <div className={`cell-note tone-${cell.tone}`}>
@@ -1297,6 +1299,44 @@ const CellView = memo(function CellView({
       );
   }
 });
+
+const thousands = (n: number) => `${Math.round(n / 1000)}k`;
+
+/**
+ * The offer to move a message that starts something new out of a chat that has grown long: what this chat now sends on
+ * every step against what it began with, and one button that starts a chat of its own with the message (same mode,
+ * same project and its notes) and opens it. Keep it here just puts the card away.
+ */
+function FreshChat({ sessionId, text, tokens, first, live }: { sessionId: string; text: string; tokens: number; first: number; live: boolean }) {
+  const [state, setState] = useState<"offered" | "moving" | "kept" | "failed">("offered");
+  if (state === "kept") return null;
+  const move = async () => {
+    setState("moving");
+    const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/fresh`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }),
+    }).catch(() => null);
+    const id = res?.ok ? ((await res.json().catch(() => null)) as { id?: string } | null)?.id : null;
+    if (!id) { setState("failed"); return; }
+    window.dispatchEvent(new CustomEvent("autora-open-session", { detail: id }));
+  };
+  return (
+    <div className="fresh-cell" role="note">
+      <p>
+        <b>This looks like a new task.</b> This chat now sends about {thousands(tokens)} tokens on every step
+        {first > 0 ? ` (it began at ${thousands(first)})` : ""}, and a new chat would start small again.
+      </p>
+      {live && (
+        <span className="fresh-acts">
+          <button type="button" className="is-accent" disabled={state === "moving"} onClick={() => void move()}>
+            {state === "moving" ? "Starting…" : "Start a new chat for this"}
+          </button>
+          <button type="button" onClick={() => setState("kept")}>Keep it here</button>
+          {state === "failed" && <span className="fresh-fail">Could not start one.</span>}
+        </span>
+      )}
+    </div>
+  );
+}
 
 /**
  * What the agent said, with its reasoning one tap away.

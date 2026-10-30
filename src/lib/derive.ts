@@ -290,6 +290,8 @@ export type Cell =
   | { kind: "mode"; seq: number; to: "plan" | "build"; reason: string;
       /** The model taking over: only on switches logged when Settings could name a planner. */
       model?: string }
+  /** A long chat was sent something new: the offer to give it a chat of its own (server.ts offerFreshChat). */
+  | { kind: "fresh"; seq: number; text: string; tokens: number; first: number }
   /** The app window was opened here: a preview of what is being built. The
       window itself is live state (lib/preview.ts); this marks where. */
   | { kind: "app"; seq: number; url: string }
@@ -467,6 +469,8 @@ export function derive(events: AutoraEvent[]): Derived {
   const tokens = { in: 0, out: 0, cached: 0 };
   let context: ContextGauge | null = null;
   let condensed = 0;
+  /** The finish line last said in the thread, so a list update that keeps it says nothing new. */
+  let finishLine = "";
   const gauge = (raw: any) => {
     const used = Number(raw?.used);
     const limit = Number(raw?.limit);
@@ -1146,6 +1150,20 @@ export function derive(events: AutoraEvent[]): Derived {
           reason: typeof e.payload.reason === "string" ? e.payload.reason.slice(0, 160) : "",
           ...(typeof e.payload.model === "string" && e.payload.model ? { model: e.payload.model.slice(0, 120) } : {}),
         });
+        break;
+
+      case "requirements.update": {
+        // The finish line, said in the thread when it is set or changed, so the person can correct it.
+        const line = typeof e.payload.doneWhen === "string" ? e.payload.doneWhen : "";
+        if (line && line !== finishLine) push({ kind: "note", seq: e.seq, tone: "plain", text: `Finished when: ${line}` });
+        finishLine = line;
+        break;
+      }
+
+      case Kind.ChatFresh:
+        if (typeof e.payload.text === "string" && e.payload.text) {
+          push({ kind: "fresh", seq: e.seq, text: e.payload.text, tokens: Number(e.payload.tokens) || 0, first: Number(e.payload.first) || 0 });
+        }
         break;
 
       case Kind.ContextNote:
