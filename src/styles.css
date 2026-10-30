@@ -715,6 +715,9 @@ body::before {
 .thread.is-landing .thread-content { opacity: 0; transition: none; }
 .turn { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .turn .msg + .msg { margin-top: 14px; }
+/* A card (a question, a note, a tool) straight after your message gets the same
+   room a reply does, not the 2px the turn keeps between you and the reply's name. */
+.turn > .msg + .work > :first-child:not(.msg) { margin-top: 12px; }
 
 /* Turns scrolled out of view are not styled, laid out or painted.
    Without this, every frame of any animation -- the presence mark breathing
@@ -3604,10 +3607,10 @@ select.set-select {
      as a highlighted row in the rail. */
   .top .session-btn {
     background: none; border-color: transparent; height: 36px;
-    font-size: var(--fs-md); font-weight: 600; padding: 0 10px;
+    font-size: var(--fs-base); font-weight: 600; padding: 0 10px;
   }
   .top .session-btn:hover { background: var(--s2); border-color: var(--border); }
-  .session-name { max-width: 520px; }
+  .session-name { max-width: none; }
 
   /* Slim: the work window on the right gets the room. */
   .rail-slot { flex-basis: clamp(160px, 10.5vw, 172px); }
@@ -3856,8 +3859,12 @@ input.shot-where[readonly] { cursor: default; }
 .ask-detail { margin: 0; font-size: var(--fs-base); line-height: 1.55; color: var(--text-2); overflow-wrap: anywhere; }
 .ask-where { margin: 12px 0 0; font-size: var(--fs-base); color: var(--live-light); }
 
+/* Two columns by the card's own width, not the window's: on a desktop the chat
+   is a narrow column beside the work area, and a viewport query split the
+   options into tiles too thin for their words. */
+.ask:not(.is-settled) { container-type: inline-size; }
 .ask-options { display: grid; gap: 8px; margin-top: 16px; }
-@media (min-width: 700px) {
+@container (min-width: 560px) {
   .ask-options.is-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 .ask-option {
@@ -4074,6 +4081,15 @@ input.shot-where[readonly] { cursor: default; }
 @media (min-width: 681px) {
   .top { background: var(--s1); backdrop-filter: none; }
 }
+/* The name takes the room the header has, so a long one is read in full and the
+   whole stretch is the target for switching chats; the chevron stays at its far
+   end like a select's. The permissions pill sits just after it. */
+@media (min-width: 681px) {
+  .top .session-btn { flex: 1 1 0; justify-content: flex-start; }
+  .top .session-btn svg { margin-left: auto; }
+  .top .session-btn ~ .spacer { flex: 0 0 0; }
+}
+
 @media (min-width: 1180px) {
   .rail { background: var(--s1); border-right-color: var(--border); }
   .rail-top { height: 52px; }
@@ -6476,7 +6492,7 @@ button.dock-card:hover { border-color: var(--border-strong); }
 .pane-pick-tab {
   position: relative; flex: 0 0 auto;
   max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font: inherit; font-size: var(--fs-sm); font-weight: 550; height: 30px; padding: 0 16px;
+  font: inherit; font-size: var(--fs-base); font-weight: 550; height: 30px; padding: 0 16px;
   border-radius: var(--r-md) var(--r-md) 0 0; cursor: pointer;
   border: 1px solid var(--border); border-bottom: 0; background: var(--s2); color: var(--text-3);
 }
@@ -6492,7 +6508,7 @@ button.dock-card:hover { border-color: var(--border-strong); }
 .pane-pick-item.is-on .pane-pick-x { height: 34px; }
 .pane-pick-x:hover { color: var(--text); background: var(--s3); }
 .pane-pick-tab.is-on {
-  height: 34px; margin-bottom: -1px; z-index: 1; font-weight: 650;
+  height: 34px; margin-bottom: -1px; z-index: 1; font-weight: 600;
   color: var(--text); background: var(--bg); border-color: var(--border-strong);
   box-shadow: 0 2px 0 -1px var(--accent-line) inset;
 }
@@ -6502,7 +6518,7 @@ button.dock-card:hover { border-color: var(--border-strong); }
   display: inline-flex; align-items: center; gap: 6px;
   height: 26px; padding: 0 11px; border-radius: var(--r-pill);
   border: 1px solid var(--border); background: var(--s1); color: var(--text-3);
-  font: inherit; font-size: var(--fs-sm); font-weight: 600; cursor: pointer;
+  font: inherit; font-size: var(--fs-base); font-weight: 600; cursor: pointer;
 }
 .pane-follow:hover { color: var(--text); }
 .pane-follow.is-on { color: var(--live); border-color: rgba(var(--live-rgb), 0.45); background: rgba(var(--live-rgb), 0.1); }
@@ -7244,7 +7260,39 @@ body.is-resizing iframe { pointer-events: none; }
 @media (pointer: fine) {
   .composer { padding: 2px 14px 6px; }
   .composer-box { gap: 2px; padding: 8px 8px 5px 14px; border-radius: var(--r-lg); }
-  .composer textarea { min-height: 22px; font-size: var(--fs-md); line-height: 1.45; padding-top: 0; }
+  .composer textarea { min-height: 22px; font-size: var(--fs-base); line-height: 1.45; padding-top: 0; }
+  /* The conversation reads at the size the rest of the desktop app does (the
+     menu, the panels, the work feed), not a step above it. Phones keep their
+     larger reading size (max-width: 680px above). */
+  .msg-text { font-size: var(--fs-base); }
+  /* One scale beside it: every sentence in the chat is body size (a note, the
+     question a card asks and why), detail under it one step down, labels one
+     more; and the work feed's lines are the detail size, not a step smaller. */
+  .cell-note { font-size: var(--fs-base); }
+  .cell-line-text, .cell-line-body, .steps-title { font-size: var(--fs-sm); }
+
+  /* Asking the person, at desktop scale: the same card, sized for a pointer
+     and a narrow chat column rather than a thumb. */
+  .ask { padding: 12px 14px 10px; border-radius: var(--r-lg); }
+  .ask-head { gap: 8px; }
+  .ask-badge { width: 24px; height: 24px; border-radius: var(--r-sm); }
+  .ask-waiting { display: none; }
+  .ask-title { margin: 10px 0 2px; font-size: var(--fs-base); line-height: 1.5; }
+  .ask-detail, .ask-where { font-size: var(--fs-base); }
+  .ask-options { gap: 6px; margin-top: 10px; }
+  .ask-option { min-height: 0; gap: 10px; padding: 8px 10px; align-items: center; }
+  .ask-option:hover:not(:disabled) { transform: none; }
+  .ask-tick { width: 20px; height: 20px; margin-top: 0; }
+  .ask-option-text { gap: 0; }
+  .ask-option-text b { font-size: var(--fs-base); }
+  .ask-option-text span { font-size: var(--fs-sm); line-height: 1.4; }
+  .ask-compose { margin-top: 8px; padding: 4px 4px 4px 12px; }
+  .ask-compose textarea { font-size: var(--fs-base); padding: 5px 0; }
+  .ask-send { height: 28px; min-width: 28px; font-size: var(--fs-sm); }
+  .ask-foot { margin-top: 4px; }
+  .ask-skip { font-size: var(--fs-sm); padding: 4px 0; }
+  .ask-actions { gap: 8px; margin-top: 10px; }
+  .ask-primary, .ask-secondary { height: 34px; padding: 0 14px; font-size: var(--fs-base); }
   .composer-send { width: 30px; height: 30px; }
   .composer-tools .btn.icon { width: 28px; height: 28px; }
   .composer-tools .composer-strip .btn.icon { min-width: 28px; }
@@ -7255,7 +7303,7 @@ body.is-resizing iframe { pointer-events: none; }
 .work-feed { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; padding: 14px 18px 28px; display: flex; flex-direction: column; gap: 14px; background: var(--bg); }
 .work-feed-turn { display: flex; flex-direction: column; gap: 10px; }
 .work-feed-prompt {
-  margin: 0; font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.02em; color: var(--text-3);
+  margin: 0; font-size: var(--fs-sm); font-weight: 600; letter-spacing: 0.02em; color: var(--text-3);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
