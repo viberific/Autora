@@ -111,6 +111,66 @@ test("a missing file, missing edits and an empty path are said plainly, with a p
   assert.match(near.summary, /Near it the file has:/);
 });
 
+test("the edits of one call are found in the file as it was read, and made together", () => {
+  // From the logs: edit 2 named text edit 1 had already changed, and was told it was not in the file.
+  write("e.ts", "export class RateLimitError extends Error {}\nexport class IpNotAuthorizedError extends Error {}\n\nconst x = 1;\n");
+  const r = editFile({ path: "e.ts", edits: [
+    { old: "const x = 1;", new: "const x = 2;" },
+    { old: "export class RateLimitError extends Error {}\n", new: "/** Too many calls. */\nexport class RateLimitError extends Error {}\n" },
+  ] }, deps());
+  assert.equal(r.ok, true, r.summary);
+  assert.equal(read("e.ts"), "/** Too many calls. */\nexport class RateLimitError extends Error {}\nexport class IpNotAuthorizedError extends Error {}\n\nconst x = 2;\n");
+  // An edit that names what an earlier one wrote still works, made in turn.
+  write("f.ts", "a();\n");
+  const chain = editFile({ path: "f.ts", edits: [{ old: "a();", new: "a();\nb();" }, { old: "b();", new: "c();" }] }, deps());
+  assert.equal(chain.ok, true, chain.summary);
+  assert.equal(read("f.ts"), "a();\nc();\n");
+  // Two edits of the same lines are named as that, not as text that is missing.
+  write("g.ts", "one\ntwo\nthree\n");
+  const clash = editFile({ path: "g.ts", edits: [{ old: "one\ntwo", new: "1\n2" }, { old: "two\nthree", new: "II\nIII" }] }, deps());
+  assert.equal(clash.ok, false);
+  assert.match(clash.summary, /Edits 1 and 2 change the same text \(around line 2\): make them one edit/);
+  assert.equal(read("g.ts"), "one\ntwo\nthree\n");
+});
+
+test("a failing edit's hint is about that edit, not the first one", () => {
+  write("h.ts", "function alpha() {}\nfunction beta() {}\nfunction gamma() {}\n");
+  const r = editFile({ path: "h.ts", edits: [{ old: "function alpha() {}", new: "function alpha() { return 1 }" }, { old: "function gamma () {}", new: "x" }] }, deps());
+  assert.equal(r.ok, false);
+  assert.match(r.summary, /^Edit 2: that text is not in the file\. Near it the file has:[\s\S]*3: function gamma\(\) \{\}/);
+  assert.doesNotMatch(r.summary, /1: function alpha/);
+});
+
+test("a block sent with different indentation is matched line for line and moved to fit, and the result says so", () => {
+  // From the logs: the agent's block was two spaces out from the file's.
+  write("i.ts", "async function call() {\n  let body: any\n  try { body = JSON.parse(text) } catch {\n    throw new Error('no JSON')\n  }\n}\n");
+  const r = editFile({ path: "i.ts", edits: [{
+    old: "    try { body = JSON.parse(text) } catch {\n      throw new Error('no JSON')\n    }",
+    new: "    try { body = JSON.parse(text) } catch {\n      // An empty body.\n      throw new Error('no JSON body')\n    }",
+  }] }, deps());
+  assert.equal(r.ok, true, r.summary);
+  assert.equal(read("i.ts"), "async function call() {\n  let body: any\n  try { body = JSON.parse(text) } catch {\n    // An empty body.\n    throw new Error('no JSON body')\n  }\n}\n");
+  assert.match(r.summary, /indentation differs from what you sent, and was moved to fit: check it/);
+  // Whole lines deleted with their newline, spacing aside.
+  write("j.ts", "a\n  b\nc\n");
+  assert.equal(editFile({ path: "j.ts", edits: [{ old: "    b\n", new: "" }] }, deps()).ok, true);
+  assert.equal(read("j.ts"), "a\nc\n");
+  // Not guessed when the spacing-free lines fit more than one place, or the words differ.
+  write("k.ts", "  x()\n    x()\n");
+  assert.match(editFile({ path: "k.ts", edits: [{ old: "x()\n", new: "y()\n" }] }, deps()).summary, /in 2 places/);
+  assert.match(editFile({ path: "k.ts", edits: [{ old: "z()", new: "y()" }] }, deps()).summary, /not in the file/);
+});
+
+test("a file with Windows line ends takes an edit written with plain ones, and keeps its own", () => {
+  write("w.txt", "one\r\ntwo\r\nthree\r\n");
+  const r = editFile({ path: "w.txt", edits: [{ old: "one\ntwo", new: "one\nTWO" }] }, deps());
+  assert.equal(r.ok, true, r.summary);
+  assert.equal(read("w.txt"), "one\r\nTWO\r\nthree\r\n");
+  write("w2.txt", "  one\r\n  two\r\n");
+  assert.equal(editFile({ path: "w2.txt", edits: [{ old: "one\ntwo", new: "one\nbig two" }] }, deps()).ok, true);
+  assert.equal(read("w2.txt"), "  one\r\n  big two\r\n");
+});
+
 test("the file's permissions survive the edit", () => {
   write("x.sh", "echo hi\n");
   fs.chmodSync(path.join(root, "x.sh"), 0o755);

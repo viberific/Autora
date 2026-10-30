@@ -50,24 +50,136 @@ export interface EditResult {
 
 const MAX_BYTES = 1024 * 1024;
 
-const count = (hay: string, needle: string) => (needle ? hay.split(needle).length - 1 : 0);
-
-function apply(text: string, edits: TextEdit[]): { text: string } | { error: string } {
-  let out = text;
-  for (const [i, e] of edits.entries()) {
-    if (typeof e.old !== "string" || e.old === "") return { error: `Edit ${i + 1} has no "old" text: say exactly what to replace.` };
-    const n = count(out, e.old);
-    if (n === 0) return { error: `Edit ${i + 1}: that text is not in the file.` };
-    if (n > 1 && !e.all) return { error: `Edit ${i + 1}: that text is in ${n} places. Add more around it to pick one, or set all to replace every one.` };
-    out = e.all ? out.split(e.old).join(String(e.new ?? "")) : out.replace(e.old, () => String(e.new ?? ""));
-  }
-  return { text: out };
+/** One place an edit was found, and what goes there. */
+interface Spot {
+  start: number;
+  end: number;
+  text: string;
 }
 
-/** The lines nearest to what the agent was looking for, to help it find the place. */
-function hint(disk: string, edits: TextEdit[]): string {
+type Found = { spots: Spot[]; how: "exact" | "crlf" | "indent" } | { missing: true } | { many: number };
+
+/** Every place `needle` starts in `hay`, not overlapping. */
+function places(hay: string, needle: string): number[] {
+  const out: number[] = [];
+  for (let at = hay.indexOf(needle); at >= 0; at = hay.indexOf(needle, at + needle.length)) out.push(at);
+  return out;
+}
+
+const indentOf = (line: string) => /^[ \t]*/.exec(line)![0];
+
+/**
+ * Where an edit goes in `text`: exactly, else with Windows line ends, else line for line with only the indentation
+ * different (the commonest near miss: the agent reproduced a block two spaces in from where it is). The last is taken
+ * only when every line matches once its spacing is set aside, and the new text is moved in or out by the same amount.
+ */
+function locate(text: string, e: TextEdit): Found {
+  const old = e.old;
+  const replacement = String(e.new ?? "");
+  const exact = places(text, old);
+  const settle = (at: number[], from: string, to: string, how: "exact" | "crlf"): Found =>
+    at.length > 1 && !e.all ? { many: at.length } : { spots: at.map((i) => ({ start: i, end: i + from.length, text: to })), how };
+  if (exact.length) return settle(exact, old, replacement, "exact");
+  if (text.includes("\r\n") && !old.includes("\r") && old.includes("\n")) {
+    const crOld = old.replace(/\n/g, "\r\n");
+    const at = places(text, crOld);
+    if (at.length) return settle(at, crOld, replacement.replace(/\r?\n/g, "\r\n"), "crlf");
+  }
+  // Line for line, spacing aside.
+  const endsLine = old.endsWith("\n");
+  const want = (endsLine ? old.slice(0, -1) : old).split("\n").map((l) => l.replace(/\r$/, ""));
+  if (!want.some((l) => l.trim())) return { missing: true };
+  const lines = text.split("\n");
+  const offsets: number[] = [];
+  let off = 0;
+  for (const l of lines) { offsets.push(off); off += l.length + 1; }
+  const hits: number[] = [];
+  for (let i = 0; i + want.length <= lines.length; i++) {
+    let same = true;
+    for (let j = 0; j < want.length && same; j++) same = lines[i + j]!.replace(/\r$/, "").trim() === want[j]!.trim();
+    if (same) { hits.push(i); i += want.length - 1; }
+  }
+  if (!hits.length) return { missing: true };
+  if (hits.length > 1 && !e.all) return { many: hits.length };
+  const first = want.findIndex((l) => l.trim());
+  const spots = hits.map((i): Spot => {
+    const theirs = indentOf(lines[i + first]!);
+    const ours = indentOf(want[first]!);
+    const nl = lines[i]!.endsWith("\r") ? "\r\n" : "\n";
+    const body = (endsLine && replacement.endsWith("\n") ? replacement.slice(0, -1) : replacement).split(/\r?\n/)
+      .map((l) => (!l.trim() ? l : l.startsWith(ours) ? theirs + l.slice(ours.length) : l))
+      .join(nl);
+    const last = i + want.length - 1;
+    const lineEnd = offsets[last]! + lines[last]!.replace(/\r$/, "").length;
+    // The line's own newline goes with it when the old text took it, as an exact match would.
+    if (endsLine && last + 1 < lines.length) return { start: offsets[i]!, end: offsets[last + 1]!, text: body + (replacement.endsWith("\n") ? nl : "") };
+    return { start: offsets[i]!, end: lineEnd, text: body };
+  });
+  return { spots, how: "indent" };
+}
+
+type Applied = { text: string; notes: string[] } | { error: string; edit: number };
+
+const notFound = (i: number) => `Edit ${i + 1}: that text is not in the file.`;
+const tooMany = (i: number, n: number) => `Edit ${i + 1}: that text is in ${n} places. Add more around it to pick one, or set all to replace every one.`;
+const looseNote = (i: number, how: string) =>
+  how === "indent" ? `edit ${i + 1} matched lines whose indentation differs from what you sent, and was moved to fit` : `edit ${i + 1} was matched across Windows line ends`;
+
+/** One after another, each in the text the edits before it left: for edits that build on each other. */
+function inTurn(text: string, edits: TextEdit[]): Applied {
+  let out = text;
+  const notes: string[] = [];
+  for (const [i, e] of edits.entries()) {
+    const found = locate(out, e);
+    if ("missing" in found) return { error: notFound(i), edit: i };
+    if ("many" in found) return { error: tooMany(i, found.many), edit: i };
+    for (const s of [...found.spots].sort((a, b) => b.start - a.start)) out = out.slice(0, s.start) + s.text + out.slice(s.end);
+    if (found.how !== "exact") notes.push(looseNote(i, found.how));
+  }
+  return { text: out, notes };
+}
+
+/**
+ * The edits made to a file. Models write every edit of a call against the file as they read it, so each is found in
+ * that text first, and they are made together when they do not touch; only when that fails are they made in turn (an
+ * edit that names what an earlier one wrote). In the logs of 0.9.236-0.9.303, edit 2 or 3 of a call failed "not in the
+ * file" while the text was there: an earlier edit of the same call had already changed it.
+ */
+function apply(text: string, edits: TextEdit[]): Applied {
+  for (const [i, e] of edits.entries()) {
+    if (typeof e?.old !== "string" || e.old === "") return { error: `Edit ${i + 1} has no "old" text: say exactly what to replace.`, edit: i };
+  }
+  const found = edits.map((e) => locate(text, e));
+  const spots = found.flatMap((f, i) => ("spots" in f ? f.spots.map((s) => ({ ...s, edit: i })) : []));
+  const whole = found.every((f) => "spots" in f);
+  const sorted = [...spots].sort((a, b) => a.start - b.start);
+  const clash = sorted.findIndex((s, k) => k > 0 && s.start < sorted[k - 1]!.end);
+  if (whole && clash < 0) {
+    let out = text;
+    for (const s of [...sorted].reverse()) out = out.slice(0, s.start) + s.text + out.slice(s.end);
+    const notes = found.flatMap((f, i) => ("how" in f && f.how !== "exact" ? [looseNote(i, f.how)] : []));
+    return { text: out, notes };
+  }
+  const turn = inTurn(text, edits);
+  if ("text" in turn) return turn;
+  // Neither way works: say why in the terms that help.
+  if (whole && clash >= 0) {
+    const a = sorted[clash - 1]!, b = sorted[clash]!;
+    const line = text.slice(0, b.start).split("\n").length;
+    return { error: `Edits ${Math.min(a.edit, b.edit) + 1} and ${Math.max(a.edit, b.edit) + 1} change the same text (around line ${line}): make them one edit, or name in the later one the text the earlier one leaves.`, edit: b.edit };
+  }
+  const bad = found.findIndex((f) => !("spots" in f));
+  if (bad >= 0 && bad !== turn.edit) {
+    const f = found[bad]!;
+    return { error: "many" in f ? tooMany(bad, f.many) : notFound(bad), edit: bad };
+  }
+  return turn;
+}
+
+/** The lines nearest to what the failing edit was looking for, to help it find the place. */
+function hint(disk: string, edit: TextEdit | undefined): string {
   const squash = (t: string) => t.replace(/\s+/g, "");
-  const want = squash(String(edits.find((e) => e?.old)?.old ?? "").split("\n").find((l) => l.trim().length > 3) ?? "").slice(0, 16);
+  const want = squash(String(edit?.old ?? "").split("\n").find((l) => l.trim().length > 3) ?? "").slice(0, 16);
   if (!want) return "";
   const lines = disk.split("\n");
   // Whitespace is ignored: a near miss is usually spacing or indentation.
@@ -114,6 +226,8 @@ export function editFile(args: EditArgs, deps: EditDeps): EditResult {
   const diverged = disk !== null && base !== null && base !== disk;
   let ours: string;
   let note = "";
+  /** Said when an edit was matched other than exactly. */
+  let loose = "";
   /** The agent's edit only made sense against the file as it is now: it was working from that. */
   let fromDisk = false;
 
@@ -135,8 +249,9 @@ export function editFile(args: EditArgs, deps: EditDeps): EditResult {
         fromDisk = true;
       }
     }
-    if ("error" in made) return { ok: false, summary: `${made.error}${hint(disk, args.edits)}` };
+    if ("error" in made) return { ok: false, summary: `${made.error}${hint(disk, args.edits[made.edit])}` };
     ours = made.text;
+    if (made.notes.length) loose = ` (${made.notes.join("; ")}: check it.)`;
   } else {
     return { ok: false, summary: "Give edits (what to replace with what) or content (a whole file)." };
   }
@@ -184,6 +299,6 @@ export function editFile(args: EditArgs, deps: EditDeps): EditResult {
     wrote: { path: rel, created: disk === null },
     summary:
       `${disk === null ? "Created" : "Edited"} ${given}` +
-      `${args.edits?.length ? ` (${args.edits.length} edit${args.edits.length === 1 ? "" : "s"})` : ""}: ${disk === null ? `${now} lines` : `${was} -> ${now} lines`}.${note}`,
+      `${args.edits?.length ? ` (${args.edits.length} edit${args.edits.length === 1 ? "" : "s"})` : ""}: ${disk === null ? `${now} lines` : `${was} -> ${now} lines`}.${loose}${note}`,
   };
 }

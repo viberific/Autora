@@ -134,6 +134,14 @@ const STALE_MIN_CHARS = 2_000;
 /** Old reading worth one break of the cache, in characters (about 6,000 tokens). */
 const STALE_BATCH_CHARS = 24_000;
 const STALE_HEAD_CHARS = 400;
+/* When a break of the cache pays for itself. Stubbing re-bills everything from the first stubbed result to the end at
+   the full price, and saves the stubbed tokens on every later call at the cached price, which providers charge at about
+   a tenth. So it is worth it once the saving is a third of what is re-billed (paid back within about 30 calls), or when
+   the window is half-way to the fold, which would break the cache anyway and lose more. Before this it broke whenever
+   24,000 characters had piled up: in two weeks of logs the cache was rebuilt 3 to 16 times per 100 calls in long
+   sessions (one 1,018-call session: 96 times, never past 4% of its 1M window), about 70M tokens re-billed. */
+const STALE_WORTH = 1 / 3;
+const STALE_PRESSURE = 0.5;
 const STALE_MARK = "[Older result:";
 
 const CHARS_PER_TOKEN = 4;
@@ -626,6 +634,11 @@ export class ContextEngine {
       }
     }
     if (chars < STALE_BATCH_CHARS) return 0;
+    const first = this.active.findIndex((m) => (m.replies ?? []).includes(stale[0]!));
+    const rebilled = estimateTokens("", this.active.slice(first));
+    const saved = Math.round((chars - stale.length * (STALE_HEAD_CHARS + 160)) / CHARS_PER_TOKEN);
+    const pressed = estimateTokens("", this.active) >= this.limitTokens * this.config.highWaterPct * STALE_PRESSURE;
+    if (!pressed && saved < rebilled * STALE_WORTH) return 0;
     for (const reply of stale) {
       const id = this.vault.put(reply.result);
       const head = reply.result.slice(0, STALE_HEAD_CHARS).trimEnd();

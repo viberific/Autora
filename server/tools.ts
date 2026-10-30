@@ -1638,7 +1638,9 @@ async function runAgents(args: Record<string, any>, ctx: ToolContext): Promise<T
     const kept = remember(who.id, args.text, ["fact", "lesson", "tip", "colleague"].includes(String(args.kind)) ? (args.kind as NoteKind) : "lesson");
     return kept
       ? { ok: true, summary: `Kept for ${who.name}: "${kept.text}". It will be in front of ${who.name} next time.`, preview: "noted" }
-      : { ok: false, summary: "Nothing to keep: say it in a sentence (text)." };
+      /* With the whole call to copy: a model that sent only {"action":"note"} sent it again seventeen times in one chat when
+         told only the field's name. */
+      : { ok: false, summary: "Nothing to keep: the sentence goes in text, beside action, in the same call: {\"action\":\"note\",\"kind\":\"lesson\",\"text\":\"...\"}." };
   }
   if (["hire", "edit", "merge", "remove", "move"].includes(action)) return shapeOrganization(action, args, ctx);
   if (action !== "run") return { ok: false, summary: `Unknown agents action "${action}". Use list, run, domains, teach, note, hire, edit, merge, remove or move.` };

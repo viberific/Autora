@@ -175,7 +175,8 @@ export const filesSPECS: ToolSpec[] = [
       "agent when its 'call it when' fits the job and it would do the part better than you; for anything you can do in " +
       "a step or two, do it yourself. Prefer edit or merge to hire. An agent cannot be started from inside a chain " +
       "more than three deep. run needs all of action, agent and task: " +
-      "{\"action\":\"run\",\"agent\":\"Sabrina\",\"task\":\"...\"}.",
+      "{\"action\":\"run\",\"agent\":\"Sabrina\",\"task\":\"...\"}; note needs action and text: " +
+      "{\"action\":\"note\",\"kind\":\"lesson\",\"text\":\"...\"}.",
     parameters: {
       type: "object",
       properties: {

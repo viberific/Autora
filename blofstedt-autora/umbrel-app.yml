@@ -203,4 +203,6 @@ releaseNotes: >-
   read (sed -n, git branch -a, git -C, diff, test -f and others) instead of being refused, load a skill's
   instructions, and run its own tools that it marked as only reading. It can wait for a background command to
   finish in one step instead of checking over and over, and a memory a little over its length limit is kept
-  rather than sent back to be rewritten.
+  rather than sent back to be rewritten. File edits fail less: several changes in one edit are matched against the
+  file as it was read, a block with different indentation is fitted in, and a failed edit points at the right
+  place. Long chats cost less, because old file reads are only trimmed when that saves more than it costs.

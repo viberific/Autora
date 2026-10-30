@@ -387,6 +387,24 @@ test("a little old reading is left alone, since changing it would only break the
   assert.equal(engine.supersedeReads(true), 0);
 });
 
+test("old reads in a long chat are left whole when stubbing them would re-bill more than it saves, unless the window is filling", () => {
+  // From the logs: a few reads early in a long chat, stubbed, re-billed everything after them at full price.
+  const history = (): { message: any; seq: number }[] => {
+    const h: { message: any; seq: number }[] = [{ message: { role: "user", text: "go" }, seq: 1 }];
+    for (let i = 0; i < 3; i += 1) h.push({ message: { role: "tool", replies: [{ id: `r${i}`, name: "read_file", ok: true, result: "file text\n".repeat(1_000) }] }, seq: 2 + i });
+    for (let i = 0; i < 40; i += 1) h.push({ message: { role: "tool", replies: [{ id: `t${i}`, name: "terminal", ok: true, result: "build output\n".repeat(700) }] }, seq: 10 + i });
+    return h;
+  };
+  const roomy = new ContextEngine();
+  roomy.setWindow(1_000_000, "model");
+  roomy.load(history());
+  assert.equal(roomy.supersedeReads(true), 0, "30,000 characters of old reads are not worth re-billing 90,000 tokens after them");
+  const tight = new ContextEngine();
+  tight.setWindow(200_000, "model");
+  tight.load(history());
+  assert.equal(tight.supersedeReads(true), 3, "half-way to the fold, they go: the fold would break the cache and lose more");
+});
+
 test("the message count that starts a fold grows with the window, never below the configured one", () => {
   const engine = new ContextEngine();
   const base = engine.messageLimit;
