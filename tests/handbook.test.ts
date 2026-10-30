@@ -159,6 +159,14 @@ await test("the Panacea manual says whose words a panel's fields are, how to swi
   }
 });
 
+await test("the Panacea manual teaches boards: cards, links, questions, the panel, and whose words they are", () => {
+  const p = manualText("panacea");
+  for (const needle of ["Boards.", "panacea_surface board:", "panacea_look board:", "panacea_board", "Autora asks", "drag from the dot", "Answer", "Tidy",
+    "Ask me questions", "(op ask: a question, ending with ?", "may not add, rewrite or remove their cards", "Markdown outline"]) {
+    assert.ok(p.includes(needle), `the Panacea manual lacks "${needle}"`);
+  }
+});
+
 await test("the Panacea manual says that with Visible work on its changes are done in the window by hand, and what has no control", () => {
   const p = manualText("panacea");
   for (const needle of ["With Visible work on", "by your hand", "name typed in the picker", "dragging that slider", "dragged by its title bar", "finished canvas goes in", "With Visible work off"]) {

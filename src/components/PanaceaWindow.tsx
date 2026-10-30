@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { Value } from "../lib/panacea/atoms";
 import { stateOf, toMarkdown, type DocMode, type DocState } from "../lib/panacea/document";
+import { boardMarkdown, createBoard, tidy, type BoardState } from "../lib/panacea/board";
 import { estimateHeight, fade, nearestFree, refocus, removeSurface, restore, setValue, surfaceParams, uid, valueAt, valueProblem, type Canvas, type Panel, type Surface } from "../lib/panacea/canvas";
 import { KINDS, type SurfaceKind } from "../lib/panacea/kinds";
 import type { Recipe } from "../lib/panacea/library";
@@ -12,6 +13,7 @@ import { filteredRows, splitDelimited, tableCsv, tableFrom } from "../lib/panace
 import { onPanaceaCommand } from "../lib/panacea";
 import type { HandStep } from "../lib/panacea/handsteps";
 import { Board, type BoardHandle } from "./panacea/Board";
+import { BOARD_PIECE } from "./panacea/Summon";
 import { standaloneSvg } from "./panacea/Chart";
 import { PanaceaCtx, type PanaceaApi } from "./panacea/context";
 import { History } from "./panacea/History";
@@ -147,6 +149,10 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
         for (const [k, v] of Object.entries(fresh)) if (param === "reset" ? k !== "compare" : k.startsWith("filter.") || k === "search") t.params[k] = v;
       }, param === "reset" ? `Reset ${s.title}` : `Cleared filters on ${s.title}`);
       void tell(`${param === "reset" ? "reset" : "cleared the filters on"} ${s.title}`);
+    } else if (param === "tidy") {
+      if (!s.board) return;
+      edit((d) => { const t = d.surfaces.find((x) => x.id === s.id); if (t?.board) t.board = tidy(t.board); }, `Tidied ${s.title}`);
+      void tell(`tidied the board ${s.title}`);
     } else if (param === "auto") {
       const img = pictureOf(s.id);
       if (!img) return;
@@ -164,6 +170,8 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
             blob = await renderFull(img, s.params, "png");
           } else if (s.kind === "doc") {
             blob = new Blob([toMarkdown(stateOf(s.doc!).doc)], { type: "text/markdown" });
+          } else if (s.kind === "board") {
+            blob = new Blob([boardMarkdown(s.board!, s.title)], { type: "text/markdown" });
           } else {
             blob = new Blob([tableCsv(s.table!.columns, filteredRows(s.table!, s.params))], { type: "text/csv" });
             name = `${s.title}`;
@@ -209,15 +217,39 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
 
   const setMode = useCallback((id: string, mode: DocMode) => {
     const s = live.current.surfaces.find((x) => x.id === id);
-    edit((d) => { const t = d.surfaces.find((x) => x.id === id); if (t?.doc) t.doc = { ...t.doc, mode }; }, mode === "agent" ? `Autora may write in ${s?.title ?? "the document"}` : `${s?.title ?? "The document"} is yours to write`);
-    void tell(mode === "agent" ? `let you write in the document ${s?.title ?? ""}` : `took back writing the document ${s?.title ?? ""}: you format and structure, the words are theirs`);
+    const what = s?.kind === "board" ? "board" : "document";
+    edit((d) => {
+      const t = d.surfaces.find((x) => x.id === id);
+      if (t?.doc) t.doc = { ...t.doc, mode };
+      if (t?.board) t.board = { ...t.board, mode };
+    }, mode === "agent" ? `Autora may write in ${s?.title ?? `the ${what}`}` : `${s?.title ?? `The ${what}`} is yours to write`);
+    void tell(mode === "agent"
+      ? `let you write in the ${what} ${s?.title ?? ""}`
+      : `took back writing the ${what} ${s?.title ?? ""}: ${what === "board" ? "arrange, link and ask questions" : "you format and structure"}, the words are theirs`);
   }, [edit, live, tell]);
+
+  /** A board changed in its view: a step of history with its label, or (a selection) only its panels brought up to date. */
+  const writeBoard = useCallback((id: string, next: BoardState, label: string | null) => {
+    const apply = (d: Canvas) => {
+      const t = d.surfaces.find((x) => x.id === id);
+      if (!t) return;
+      t.board = next;
+      KINDS[t.kind].settle?.(t);
+    };
+    if (!label) { quietly(apply); return; }
+    const title = live.current.surfaces.find((x) => x.id === id)?.title ?? "the board";
+    edit(apply, `${label} on ${title}`);
+    const timers = activityTimers.current;
+    const t = timers.get(`board:${id}`);
+    if (t) clearTimeout(t);
+    timers.set(`board:${id}`, setTimeout(() => { timers.delete(`board:${id}`); void tell(`worked on the board ${title} (${label.toLowerCase()})`); }, 2500));
+  }, [edit, live, quietly, tell]);
 
   const hold = doc.hold;
   const api: PanaceaApi = useMemo(() => ({
-    canvas, profile, sessionId, set, act, ask, hold, expand, writeDoc, setMode,
+    canvas, profile, sessionId, set, act, ask, hold, expand, writeDoc, writeBoard, setMode,
     value: (key: string) => valueAt(canvas, key),
-  }), [canvas, profile, sessionId, set, act, ask, hold, expand, writeDoc, setMode]);
+  }), [canvas, profile, sessionId, set, act, ask, hold, expand, writeDoc, writeBoard, setMode]);
 
   // ------------------------------------------------------- panel actions --
 
@@ -271,6 +303,18 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
 
   const onPick = useCallback((r: Recipe, at: { x: number; y: number }) => {
     const forced = pending.current;
+    // Not a panel: a board, a surface of its own, where it was asked for.
+    if (r.id === BOARD_PIECE && !forced) {
+      let err: string | null = null;
+      edit((d) => {
+        // Where it can be seen whole, as an agent's surface is: a board is too big to hang off the point they double-clicked.
+        const made = addSurfaceTo(d, { kind: "board", name: "Board", board: createBoard() }, find, { side: preferredSide(profile), quiet: (id) => quieted(profile, id), view: board.current?.viewRect() });
+        if ("error" in made) err = made.error;
+      }, "Added a board");
+      if (err) setProblem(err);
+      else void tell("added a board to think on");
+      return;
+    }
     let recipe = r;
     if (r.id.startsWith("blank.")) {
       // A blank piece gets a value of its own, so two sliders summoned are two values.
@@ -288,7 +332,7 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
       else placed = p;
     }, `Summoned ${r.name}`);
     if (placed && !forced) void tell(`summoned "${r.name}"`, { kind: "use", recipe: r.id });
-  }, [edit, live, profile, tell]);
+  }, [edit, find, live, profile, tell]);
 
   const onFocus = useCallback((id: string) => {
     const s = live.current.surfaces.find((x) => x.id === id);

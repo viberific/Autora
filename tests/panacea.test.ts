@@ -22,6 +22,7 @@ const canvasLib = await import("../src/lib/panacea/canvas");
 const { contextOf, newCanvas, normalizeCanvas, placeFor, refocus, restore, setValue, surfaceParams, valueAt, valueProblem, describeCanvas } = canvasLib;
 const { addSurfaceTo, placeRecipe, suggestFor, starters } = await import("../src/lib/panacea/rules");
 const { createDoc } = await import("../src/lib/panacea/document");
+const { createBoard } = await import("../src/lib/panacea/board");
 const { KINDS } = await import("../src/lib/panacea/kinds");
 const { filteredRows, aggregate, splitDelimited, tableFrom, tableCsv } = await import("../src/lib/panacea/surfaces");
 const profileLib = await import("../src/lib/panacea/profile");
@@ -49,6 +50,9 @@ function withSurfaces() {
   const note: Surface = { id: "doc1", kind: "doc", title: "Notes", x: 0, y: 1400, w: 640, h: 592, name: "notes.md", params: surfaceParams("doc", null), doc: createDoc("# Notes\n\nA first line.") };
   KINDS.doc.settle?.(note);
   c.surfaces.push(note);
+  const board: Surface = { id: "brd1", kind: "board", title: "Ideas", x: 0, y: 2100, w: 832, h: 560, name: "Ideas", params: surfaceParams("board", null), board: createBoard() };
+  KINDS.board.settle?.(board);
+  c.surfaces.push(board);
   return c;
 }
 
@@ -307,7 +311,7 @@ const call = async (method: string, url: string, body?: unknown, raw?: Buffer, t
 };
 
 await test("the tools are a family of their own, read-only where they only look, and switch off with the window", () => {
-  assert.deepEqual(panaceaSPECS.map((s) => s.name), ["panacea_open", "panacea_look", "panacea_surface", "panacea_place", "panacea_set", "panacea_arrange", "panacea_bespoke", "panacea_doc", "panacea_export"]);
+  assert.deepEqual(panaceaSPECS.map((s) => s.name), ["panacea_open", "panacea_look", "panacea_surface", "panacea_place", "panacea_set", "panacea_arrange", "panacea_bespoke", "panacea_doc", "panacea_board", "panacea_export"]);
   assert.ok(loadedFamilies({ events: [], said: "open the panacea canvas", hasPdf: false, lazy: true }).has("panacea"));
   assert.equal(looksOnly("panacea_look", {}), true);
   assert.equal(looksOnly("panacea_open", {}), true);

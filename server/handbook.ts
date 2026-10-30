@@ -329,7 +329,7 @@ const GAME = [
 
 const PANACEA = [
   "- Panacea (tools panacea_open, panacea_look, panacea_surface, panacea_place, panacea_set, panacea_arrange, panacea_bespoke, " +
-    "panacea_doc, panacea_export): the canvas window, in the Panacea tab. A blank dotted grid with no toolbar and no icons: the controls come to the " +
+    "panacea_doc, panacea_board, panacea_export): the canvas window, in the Panacea tab. A blank dotted grid with no toolbar and no icons: the controls come to the " +
     "work and go when it moves on. Surfaces are the work on it (a photo, a table, a document; drop or attach one, or panacea_surface); panels are " +
     "controls built from atoms (sliders, knobs, switches, segmented choices, swatches, curves, charts, lists, timelines...), bound to a " +
     "surface's parameters (\"@img1.exposure\") or to shared values (\"budget\"): every control bound to one name shows and sets the same " +
@@ -368,6 +368,18 @@ const PANACEA = [
     "work (a form, a report, minutes, a letter) or what they asked you to write; switch with {op: mode} and say you did. Drop or Load a " +
     "Markdown or text file to open it as a document; panacea_export saves one as Markdown. Not yet: tables, images, headers, " +
     "footers, page setup, comments, tracked changes, or Word files (those stay in the Pages window).",
+  "  Boards. A board is a surface for thinking in space: cards anywhere on it, lines linking them, and your questions as dashed cards " +
+    "marked \"Autora asks\". It is the place for a brainstorm, a mind map, a story's who / what / where / when, a plan laid out before " +
+    "it is written: make one with panacea_surface board:\"<title>\" (or the person double-clicks the grid and picks Board). What the " +
+    "person does on it: double-click the space for a card and type (Enter keeps it, Shift+Enter a new line, Esc leaves it), double-" +
+    "click a card to change it, drag a card to move it, drag from the dot on its right edge onto another card to link them, click a " +
+    "card or a link and press Delete to take it away; a question has Answer (a new card linked to it) and × (wave it away). The Board " +
+    "panel beside it sets the selected card's colour, counts cards, links and questions, and has Tidy (each set of linked cards a " +
+    "column) and Ask me questions. Read it with panacea_look board:\"<id>\" (every card with its id, place, colour and links) and " +
+    "change it with panacea_board by those ids. Whose words? Its bar says, as a document's does: \"You write\" (guide, the default) " +
+    "or \"Autora writes\" (agent). In guide you may move, colour, link, unlink and tidy, and ask (op ask: a question, ending with ?, " +
+    "for them to answer with cards of their own); you may not add, rewrite or remove their cards or label a link. Switch it with " +
+    "{op: mode} only for productivity work or when asked, and say you did. panacea_export saves a board as a Markdown outline.",
   "  Whose choices. A photo's technical correction and a table's charts and filters are yours to do; the look of a photo, a story, a " +
     "melody, a design are theirs: place the controls, suggest, and leave the values to them unless asked. A panel with text or list " +
     "fields (Notes, a brainstorm's Who / What / Where / When, a story's characters) shows whose words they are by its title: \"You write\" " +
@@ -383,9 +395,10 @@ const PANACEA = [
     "put one away. Then the finished canvas goes in, with what had no control on screen (a curve's points, a list, a step grid, a " +
     "timeline, a ghost, a value no panel shows); your result says which was which. With Visible work off (or the window shut) the " +
     "canvas simply changes, and values glide to where you set them. Writing in a document (panacea_doc) is not done by hand yet: " +
-    "the words arrive with the finished canvas, and the document's bar and history show it.",
+    "the words arrive with the finished canvas, and the document's bar and history show it. Nor is a board's (panacea_board): its " +
+    "cards, links and questions arrive with the finished canvas.",
   "  Saving. The canvas is saved as you go; the window's top bar (Panacea, the canvas's name) also has Save, which keeps a copy in Artifacts as <canvas name>.panacea.json; beside it, Load opens a canvas they kept, or puts a photo, a table or a Markdown or text document from Artifacts on this one. " +
-    "Exports (panacea_export, or a panel's Export) go to the project's folder: a photo as PNG with every adjustment, a table as CSV as filtered, a chart as SVG.",
+    "Exports (panacea_export, or a panel's Export) go to the project's folder: a photo as PNG with every adjustment, a table as CSV as filtered, a chart as SVG, a document or a board as Markdown.",
 ].join("\n");
 
 const PHOTO = [

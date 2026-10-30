@@ -96,6 +96,25 @@ One history: the editor has no undo of its own; Ctrl+Z is the canvas's (`useCanv
 agent's edits are steps on one track. Known cost: each step holds the whole document, so a very large one makes the history
 heavy (a document over ~1.5 MB as JSON is refused); steps of changes (ProseMirror's own) are the planned answer.
 
+## Boards
+
+A fourth kind of surface (`src/lib/panacea/board.ts`, drawn by `src/components/panacea/BoardView.tsx`) for thinking in space:
+**cards** anywhere on it (a few words each, a colour), **links** between them, and Autora's **questions** as dashed cards for the
+person to answer. It is the place for work that is not yet a document: a brainstorm, a mind map, a story's who / what / where /
+when, a plan laid out. The person double-clicks the space for a card, double-clicks a card to change it, drags cards, drags from
+a card's dot onto another to link them, and deletes what is selected; the picker (double-click the grid) offers Board. Its one
+starter panel (`general.board`) follows the selection: the selected card's colour, the counts, Tidy and Ask me questions.
+
+**Whose words**, as for documents: a board is *You write* (`guide`, the default) or *Autora writes* (`agent`), on its bar. In
+`guide`, `panacea_board` lets the agent move, colour, link, unlink and tidy cards and **ask** (a card that must be a question,
+removable by the agent or waved away by the person), and refuses adding, rewriting or removing the person's cards and labelling
+links. That is the tutor's part of the core principle in the tool itself: it structures the brainstorm and asks, the ideas are
+the person's. `panacea_look board:` reads it; `panacea_export` saves it as a Markdown outline (each cluster of linked cards a
+heading, then the open questions).
+
+Not yet: by hand with Visible work on (`docs/VISIBLE-WORK.md`), frames or groups drawn round cards, images on cards, arrows with
+a direction, and a board's history being lighter than whole snapshots.
+
 ## Projects
 
 Exports go to the chat's project folder in Artifacts. Every project folder has a notebook (`server/projectbook.ts`,

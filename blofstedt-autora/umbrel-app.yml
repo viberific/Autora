@@ -193,8 +193,9 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  Panacea is now where Autora goes for work no other window was made for: ask to brainstorm, make a mind map or a
-  mood board, or organise your ideas, and it builds the panels for it on the canvas. Panels with text or list fields
-  now say whose words they are by their title: You write (the default) or Autora writes. While it says You write,
-  Autora asks, suggests and critiques but cannot fill those fields for you; press it to let Autora write, for a
-  packing list or anything you want it to fill, and press it again to take the words back.
+  New in Panacea: boards. A board is a space for thinking: double-click for a card, drag cards where you like, and
+  drag from one card's dot onto another to link them. Autora can ask you questions on the board, tidy it into
+  groups and export it as a Markdown outline, but the ideas are yours: while the board says You write, it cannot
+  add, change or remove your cards. Press it to let Autora write. Panacea is also now where Autora goes for work no
+  other window was made for (a brainstorm, a mind map, organising your ideas), and panels with text or list fields
+  say whose words they are in the same way.

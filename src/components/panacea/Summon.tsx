@@ -2,7 +2,10 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboa
 import { DOMAIN_NAMES, searchLibrary, type Recipe } from "../../lib/panacea/library";
 import type { Node } from "../../lib/panacea/recipe";
 
-/** Pieces with nothing in them yet: a single control on a value of its own, for when the person just wants one. */
+/** The picker's way to a board: not a panel but a surface, which the window adds where the person double-clicked. */
+export const BOARD_PIECE = "blank.board";
+
+/** Pieces with nothing in them yet: a single control on a value of its own, for when the person just wants one; and a board. */
 function blankPieces(name: string): Recipe[] {
   const piece = (id: string, title: string, about: string, tree: Node, w = 256): Recipe =>
     ({ id: `blank.${id}`, name: title, domain: "general", about, tags: [id], tree, w, origin: "builtin", uses: 0 });
@@ -13,6 +16,7 @@ function blankPieces(name: string): Recipe[] {
     piece("notes", "Notes", "somewhere to write", { atom: "text", bind: name, props: { label: "Notes", multiline: true } }, 288),
     piece("checklist", "Checklist", "a list to tick", { atom: "list", bind: name, props: { label: "List" } }, 288),
     piece("colour", "Colour", "a colour", { atom: "color", bind: name, props: { label: "Colour" } }),
+    { ...piece("board", "Board", "cards and links to think with: a brainstorm, a map of ideas", { atom: "note", props: { text: "A board" } }), id: BOARD_PIECE, tags: ["board", "brainstorm", "map", "cards", "ideas", "mind"] },
   ];
 }
 
@@ -41,7 +45,8 @@ export function Summon({ x, y, recipes, onPick, onClose }: {
   const found = useMemo(() => {
     const words = q.trim();
     const lib = words ? searchLibrary(recipes, words, null, 9) : searchLibrary(recipes, "", null, 6);
-    const extra = words ? blanks.filter((b) => b.name.toLowerCase().startsWith(words.toLowerCase())) : blanks;
+    const w = words.toLowerCase();
+    const extra = words ? blanks.filter((b) => b.name.toLowerCase().startsWith(w) || b.tags.some((t) => t.startsWith(w))) : blanks;
     return [...lib, ...extra];
   }, [q, recipes, blanks]);
   useEffect(() => setAt(0), [q]);

@@ -1,6 +1,7 @@
 import { createContext, useContext } from "react";
 import type { Value } from "../../lib/panacea/atoms";
 import type { Canvas, Panel } from "../../lib/panacea/canvas";
+import type { BoardState } from "../../lib/panacea/board";
 import type { DocMode, DocState } from "../../lib/panacea/document";
 import type { Profile } from "../../lib/panacea/profile";
 
@@ -22,7 +23,9 @@ export interface PanaceaApi {
   expand: (panel: Panel, open: boolean) => void;
   /** A document's text or caret changed in its view; `content` says words changed (a step of history) and not only the caret. */
   writeDoc: (surface: string, doc: DocState, content: boolean) => void;
-  /** Who writes a document: the person (`guide`) or Autora (`agent`). */
+  /** A board changed in its view; `label` names the step in the history, or null for a selection only. */
+  writeBoard: (surface: string, board: BoardState, label: string | null) => void;
+  /** Who writes a document or a board: the person (`guide`) or Autora (`agent`). */
   setMode: (surface: string, mode: DocMode) => void;
   /** The chat, for the routes a bespoke piece or an export calls. */
   sessionId: string;

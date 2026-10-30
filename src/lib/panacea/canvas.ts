@@ -12,6 +12,7 @@
 import { emptyValue, valueFits, type Value } from "./atoms";
 import { checkTree, kindAt, parseBind, surfacesOf, treeWords, type CheckContext, type Node } from "./recipe";
 import { KINDS, findParam, isKind, paramsOf, type SurfaceKind } from "./kinds";
+import type { BoardState } from "./board";
 import type { DocState } from "./document";
 import type { Table } from "./surfaces";
 
@@ -66,6 +67,8 @@ export interface Surface {
   px?: { w: number; h: number };
   /** A document's tree, selection and who writes (`params` are read off it: kinds.ts `settle`). */
   doc?: DocState;
+  /** A board's cards, links and who writes them (`params` are read off it, as a document's are). */
+  board?: BoardState;
 }
 
 export interface Canvas {
@@ -411,6 +414,7 @@ function readSurface(raw: unknown, ids: Set<string>): Surface | null {
     params,
     ...(table ? { table } : {}),
     ...(extra.doc ? { doc: extra.doc } : {}),
+    ...(extra.board ? { board: extra.board } : {}),
     ...(px && px.w > 0 ? { px } : {}),
   };
   KINDS[kind].settle?.(surface);

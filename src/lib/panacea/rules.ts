@@ -16,6 +16,7 @@ import { contextOf, estimateHeight, MAX_SURFACES, nearestFree, placeFor, refocus
 import { instantiate, type Recipe } from "./library";
 import { checkTree, parseBind, type CheckContext, type Node } from "./recipe";
 import { KINDS, KIND_NAMES, type Offer, type Starters, type SurfaceKind } from "./kinds";
+import type { BoardState } from "./board";
 import type { DocState } from "./document";
 import type { Table } from "./surfaces";
 
@@ -147,6 +148,7 @@ export interface SurfaceInput {
   artifact?: string;
   table?: Table;
   doc?: DocState;
+  board?: BoardState;
   px?: { w: number; h: number } | null;
   /** Where it goes, when it was dropped somewhere; else beside what is there. */
   at?: { x: number; y: number };
@@ -176,6 +178,7 @@ export function addSurfaceTo(canvas: Canvas, input: SurfaceInput, find: (id: str
     params: surfaceParams(input.kind, input.table),
     ...(input.table ? { table: input.table } : {}),
     ...(input.doc ? { doc: input.doc } : {}),
+    ...(input.board ? { board: input.board } : {}),
     ...(input.px ? { px: input.px } : {}),
   };
   def.settle?.(surface);
