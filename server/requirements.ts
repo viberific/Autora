@@ -251,7 +251,8 @@ export function finishAudit(list: RequirementList): string | null {
   return [
     "[Before you finish] These asks are not marked done:",
     ...open.map((r) => `- ${r.id}: ${r.text}`),
-    "For each one: finish it now, or mark it done with how you checked it, or drop it with the reason " +
+    "For each one: if your reply already does it (a question answered counts), mark it done with how and give that " +
+      "reply again -- no more work for it; otherwise finish it now, or drop it with the reason " +
       "(the person changed their mind, or it cannot be done and why). Use the requirements tool, then " +
       "give your answer. Do not end with an ask silently skipped; if something is left undone, say so plainly.",
   ].join("\n");

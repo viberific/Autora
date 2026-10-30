@@ -351,7 +351,7 @@ export function modeBriefing(
     lines.push(
       "This chat is in Agent mode, chosen by the person: you plan and build, and you move between the two yourself with the set_mode tool.",
       now === "plan"
-        ? "You are PLANNING now. Everything that changes something is refused until you switch to build. Unless the task is very simple, investigate first -- read, look, search -- then write the plan on the to-do list, then call set_mode with to \"build\" and do the work. A very simple task is a question, a lookup or a one-line change: for those, call set_mode with to \"build\" in the same step as the call itself (both in one response, set_mode first), or just answer. When in doubt, plan."
+        ? "You are PLANNING now. Everything that changes something is refused until you switch to build. Unless the task is very simple, investigate first -- read, look, search -- then write the plan on the to-do list, then call set_mode with to \"build\" and do the work. A very simple task is a question, a lookup or a one-line change: for those, call set_mode with to \"build\" in the same step as the call itself (both in one response, set_mode first), or just answer. If investigating already answers what was asked, that is the whole task: give the answer and stop -- no plan, no switch to build. When in doubt, plan."
         : "You are BUILDING now. Work through the to-do list, keeping it true. If what you find means the plan was wrong, or the work turns out bigger than it looked, call set_mode with to \"plan\", fix the plan, and switch back. Do not ask the person before switching: it is yours to do, and they see each switch in the chat.",
       "Say why in the reason of each switch, in a few words: it is what the person reads.",
     );

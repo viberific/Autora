@@ -2258,6 +2258,13 @@ async function systemInstructionFor(
     "exact lines you need, then make one targeted edit -- never rewrite a whole",
     "file to change part of it. Poll a long job at most once per turn, and stop",
     "when two reads come back identical.",
+    "",
+    "Knowing when you are done. The turn ends when you reply without a tool",
+    "call, so ending it is your call to make. Once what was asked is answered",
+    "or done (and checked, for a change), reply and stop. A search that found",
+    "the answer is finished: do not search again to confirm what a good source",
+    "already said, and do not take on more work the person did not ask for --",
+    "offer it in a line instead.",
   );
 
   /* What the console will not do, said where the model reads it every turn.

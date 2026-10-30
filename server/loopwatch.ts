@@ -39,6 +39,24 @@ export const LOOP_DEFAULTS: LoopWatchConfig = {
   stallStops: 4,
 };
 
+/** Rounds in a row of nothing but looking things up before the agent is asked whether it already has its answer. */
+export const LOOKUP_ROUNDS = 3;
+
+/** Bookkeeping rides along with any round and says nothing about whether it was a search. */
+const NEUTRAL = new Set(["todo", "requirements", "ledger", "set_mode", "memory_write", "memory_search"]);
+
+/**
+ * A call that looks something up out in the world: a search, a page read, a fetch. Reading the project's own files
+ * is not one -- that is work towards a change, not a hunt for an answer.
+ */
+export function isLookup(name: string, args: Record<string, any> = {}): boolean {
+  if (name === "web_search" || name === "research") return true;
+  if (name === "http_request") return ["GET", "HEAD"].includes(String(args.method ?? "GET").toUpperCase());
+  if (["browser_open", "browser_read", "browser_scroll", "browser_back", "browser_screenshot", "browser_tabs"].includes(name)) return true;
+  // A connected server's fetch or search tool (MCP Fetch, Webclaw).
+  return name.startsWith("mcp") && /fetch|webclaw|search|scrape|crawl/i.test(name);
+}
+
 interface LoopVerdict {
   /** Appended to what the model reads back from this call. */
   note: string | null;
@@ -95,6 +113,10 @@ export class LoopWatch {
       row have not. */
   private advanced = false;
   private idleRounds = 0;
+  /** Whether the round in progress looked something up, and did nothing else; and how many rounds in a row have. */
+  private lookedUp = false;
+  private onlyLooked = true;
+  private lookupRounds = 0;
 
   constructor(config: Partial<LoopWatchConfig> = {}) {
     this.config = { ...LOOP_DEFAULTS, ...config };
@@ -143,6 +165,8 @@ export class LoopWatch {
     const call = `${name}\u0000${stable(args)}`;
     const label = describe(name, args);
     const pair = `${call}\u0000${sameness(ok, result)}`;
+    if (isLookup(name, (args ?? {}) as Record<string, any>)) this.lookedUp = true;
+    else if (!NEUTRAL.has(name)) this.onlyLooked = false;
 
     const times = (this.seen.get(pair) ?? 0) + 1;
     this.seen.set(pair, times);
@@ -270,12 +294,25 @@ export class LoopWatch {
     this.rounds += 1;
     this.idleRounds = this.advanced ? 0 : this.idleRounds + 1;
     this.advanced = false;
+    this.lookupRounds = this.lookedUp && this.onlyLooked ? this.lookupRounds + 1 : 0;
+    this.lookedUp = false;
+    this.onlyLooked = true;
     if (this.idleRounds > 0 && this.idleRounds % this.config.stallAfter === 0) {
       return (
         `[Stall] The last ${this.idleRounds} rounds changed nothing: no file written, ` +
         "no command with an effect, no plan or notes updated. If you have what you need, " +
         "answer now. If you are still searching, say what you are looking for and why " +
         "the last searches did not find it, then try a different way of looking."
+      );
+    }
+    /* A search that found the answer and kept going: each new query is a different call, so nothing above sees it,
+       and the stall note comes eight rounds in. Asked early, and again every few rounds while it goes on. */
+    if (this.lookupRounds > 0 && this.lookupRounds % LOOKUP_ROUNDS === 0) {
+      return (
+        `[Answer check] The last ${this.lookupRounds} rounds were all looking things up. Before another search, ` +
+        "read back what you have: if it already answers what the person asked, stop searching and answer now. " +
+        "A second source that agrees with a good first one is not needed unless the person asked for it or the " +
+        "sources disagree. Search again only for one specific fact that is still missing, and say which."
       );
     }
     if (this.rounds % this.config.checkEvery !== 0) return null;
