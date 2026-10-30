@@ -1,5 +1,5 @@
 import { memo, useState, type PointerEvent as ReactPointerEvent } from "react";
-import type { Panel } from "../../lib/panacea/canvas";
+import { holdsWords, type Panel } from "../../lib/panacea/canvas";
 import { IconPin, IconX } from "../Icons";
 import { Atom } from "./Atoms";
 
@@ -17,6 +17,8 @@ export interface PanelActions {
   keep: (panel: Panel) => void;
   discard: (panel: Panel) => void;
   wake: (panel: Panel) => void;
+  /** "You write" / "Autora writes": who fills its text and list fields. */
+  writes: (panel: Panel) => void;
 }
 
 const WHO: Record<Panel["by"], string> = { agent: "Autora placed it", person: "You placed it", rule: "It came with the work" };
@@ -24,7 +26,8 @@ const WHO: Record<Panel["by"], string> = { agent: "Autora placed it", person: "Y
 /**
  * A panel on the canvas: a title bar to move it by, its ⓘ (why it is here, and Not this), a pin, ×, and the atoms. A
  * ghost (an offer) shows its reason with Add and Not now, and cannot be used until taken; a draft (a bespoke piece being
- * worked out) offers Keep in library and Discard; a dim one (the work moved on) wakes with a click.
+ * worked out) offers Keep in library and Discard; a dim one (the work moved on) wakes with a click. One with text or list fields
+ * says whose words they are ("You write", the default, or "Autora writes"), and a press switches it.
  */
 export const PanelCard = memo(function PanelCard({ panel, selected, fresh, offset, width, actions }: {
   panel: Panel;
@@ -59,6 +62,18 @@ export const PanelCard = memo(function PanelCard({ panel, selected, fresh, offse
       <header className="pa-head" onPointerDown={(e) => { if ((e.target as HTMLElement).closest("button")) return; actions.grab(panel, e); }}>
         <span className="pa-title">{panel.title}</span>
         {draft && <span className="pa-draft-tag">Draft</span>}
+        {!ghost && holdsWords(panel.tree) && (
+          <button
+            type="button"
+            className="pa-writes"
+            data-act="writes"
+            aria-pressed={panel.writes === "agent"}
+            title={panel.writes === "agent" ? "Autora may fill these fields, and you can undo it. Press to write them yourself." : "The words here are yours; Autora asks and suggests. Press to let Autora fill them."}
+            onClick={() => actions.writes(panel)}
+          >
+            {panel.writes === "agent" ? "Autora writes" : "You write"}
+          </button>
+        )}
         <span className="pa-head-acts">
           <button type="button" data-act="why" className={why ? "is-on" : ""} aria-label="Why is this here?" aria-expanded={why} onClick={() => setWhy(!why)}>i</button>
           {!ghost && !draft && <button type="button" data-act="pin" className={panel.pinned ? "is-on" : ""} aria-label={panel.pinned ? "Unpin" : "Pin: keep it"} aria-pressed={!!panel.pinned} onClick={() => actions.pin(panel)}><IconPin size={11} /></button>}

@@ -38,7 +38,7 @@ import { FAMILIES, familyIds, loadedFamilies, loadedFromLog, mcpServerOf, preloa
 import { applyLedger, latestLedger, ledgerBriefing, renderLedger, touched as touchedThings } from "./server/ledger";
 import { applyTodos, latestTodos, todoBriefing, unfinishedTodos } from "./server/todos";
 import {
-  addRequirements, amendmentNote, applyRequirements, autoAsks, finishAudit, latestRequirements, requirementsBriefing,
+  addRequirements, amendmentNote, applyRequirements, autoAsks, finishAudit, latestRequirements, openRequirements, requirementsBriefing,
 } from "./server/requirements";
 import { replyStyle, standingBlock, standingReminder } from "./server/prompt";
 import { WebPush } from "./server/webpush";
@@ -87,6 +87,7 @@ import { readActivity } from "./src/lib/activity";
 import { mcpRoutes } from "./server/routes/mcp";
 import { artifactRoutes } from "./server/routes/artifacts";
 import { chatTitles, folderOfChat, setChatFolder } from "./server/folders";
+import { freshWorth, isTask, pinpointed, saysWhenDone } from "./server/taskshape";
 import { projectNotebookRefs, recordProjectTurn } from "./server/projectbook";
 import { systemRoutes } from "./server/routes/system";
 import {
@@ -96,7 +97,7 @@ import {
   MAX_FRAME_BYTES, clearFrame, putFrame,
 } from "./server/liveview";
 import {
-  CONTEXT_WINDOW_SETTING, ContextEngine, stripAnsi,
+  CONTEXT_WINDOW_SETTING, ContextEngine, calibrate as calibrateTokens, stripAnsi,
   type CompactionReport, type WindowSource,
 } from "./server/context";
 import {
@@ -2449,7 +2450,10 @@ async function systemInstructionFor(
   /* What the person asked for, word for word: the asks the to-do list is
      written from, kept apart so one the agent leaves off its plan is still
      here. */
-  const asked = own ? requirementsBriefing(latestRequirements(own.events)) : null;
+  /* A task that does not say when it is finished, in a chat with no finish line on record: the agent works one out and
+     records it where the person sees it, or asks (server/taskshape.ts). A pinpointed change is its own finish line. */
+  const askFinish = Boolean(said) && isTask(said) && !saysWhenDone(said) && !pinpointed(said);
+  const asked = own ? requirementsBriefing(latestRequirements(own.events), askFinish) : null;
   if (asked) notes.push(asked);
   /* Sites the message names, and whether anything current is stored about how each works. */
   const grounding = state.groundFirst ? groundingNote(said, mindForId(sessionId)) : null;
@@ -3709,6 +3713,32 @@ function noteAsks(session: Session, text: string, duringWork: boolean) {
   if (next.items.length !== have.items.length) emitEvent(session, "requirements.update", "system", next as any);
 }
 
+/**
+ * Offer a message a chat of its own when the chat it was sent in has grown long and it starts something new: every
+ * step of a long chat re-sends all of it, and in two weeks of logs 16 long chats took 43% of every input token. Only
+ * offered -- a card in the thread with what it would save and one button; the turn goes on as asked meanwhile. Not
+ * again until five more messages have passed.
+ */
+function offerFreshChat(session: Session, text: string) {
+  let first = 0, last = 0, since = 0;
+  const earlier: string[] = [];
+  for (let i = session.events.length - 1; i >= 0; i -= 1) {
+    const e = session.events[i];
+    if (e.kind === "chat.fresh" && since < 6) return;
+    if (e.kind === "usage.turn") {
+      const input = Number(e.payload?.input_tokens) || 0;
+      if (!last) last = input;
+      first = input;
+    } else if (e.kind === "turn.user") {
+      since += 1;
+      // The newest is this message itself.
+      if (since > 1 && earlier.length < 6) earlier.push(String(e.payload?.text ?? ""));
+    }
+  }
+  if (!freshWorth(first, last, text, earlier)) return;
+  emitEvent(session, "chat.fresh", "system", { text: text.slice(0, 4000), tokens: last, first });
+}
+
 /** Whether a message sent now can be added to the running turn instead of stopping it. */
 function canAmend(session: Session): boolean {
   const turn = running.get(session.id);
@@ -3904,14 +3934,29 @@ function runTurnFor(
 ): Promise<TurnResult> {
   autoLoadTools(session, text);
   if (!opts.automated) noteAsks(session, text, Boolean(unfinished));
+  if (!opts.automated && !unfinished && !session.incognito) offerFreshChat(session, text);
+  /* A new task after everything before it is done: the old finish line is not this one's. */
+  if (!opts.automated && !unfinished) {
+    const was = latestRequirements(session.events);
+    if (was.doneWhen && openRequirements(was).length === 0) {
+      const { doneWhen: _old, ...rest } = was;
+      emitEvent(session, "requirements.update", "system", rest as any);
+    }
+  }
   /* A hello or a thank-you is answered at once: nothing to plan, nothing to think over. */
   const quick = opts.quick ?? (!opts.automated && !unfinished && attachments.length === 0 && isSmallTalk(text));
   /* Agent mode starts every turn planning, whatever the last one ended in:
      the agent decides again whether this task needs a plan. Small talk does not need one,
      and the round it would spend switching to build is most of the wait. */
+  /* A change whose place and content the message already names (a file or a function, and what to do there) is built
+     straight away too: a plan would only write down what the person wrote. The switch shows in the thread, with why. */
+  const exact = !quick && !unfinished && !opts.automated && attachments.length === 0 && pinpointed(text);
   if (workMode(session.mode) === "agent" && !(unfinished && session.phase === "build")) {
     if (quick) {
       session.phase = "build";
+    } else if (exact) {
+      session.phase = "build";
+      emitEvent(session, "mode.switch", "system", { from: null, to: "build", reason: "It names the place and the change, so there is nothing to plan." });
     } else {
       session.phase = "plan";
       emitEvent(session, "mode.switch", "system", { from: null, to: "plan", reason: "" });
@@ -4360,6 +4405,11 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
                the head of the history, so a fold leaves the system prompt and the tools in the vendor's cache. The size
                of both together is what messagesFor keeps inside the window. */
             const system = context.systemFor(pinned);
+            const sentTools = tools.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters }));
+            /* Counted with the request, and corrected by what this model reports it as (server/context.ts calibrate). */
+            context.useRequest(answering.model, sentTools);
+            const sent = context.messagesFor(system, { anchorInMessages: true });
+            const sentEstimate = context.estimateSent(pinned, sent);
             const turn = await streamChat({
               provider: answering.provider,
               model: answering.model,
@@ -4367,7 +4417,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
               baseUrl: answering.baseUrl,
               endpoint: endpointPinFor(answering.provider, answering.model),
               system: pinned,
-              messages: context.messagesFor(system, { anchorInMessages: true }),
+              messages: sent,
               temperature: 0.7,
               maxTokens: outputTokens,
               thinkingBudget: THINKING_BUDGET,
@@ -4386,11 +4436,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
               /* Small talk is answered without thinking, in every round of the turn. */
               ...(opts.quick ? { thinking: "off" as const } : {}),
               signal: running.get(session.id)?.signal,
-              tools: tools.map((t) => ({
-                name: t.name,
-                description: t.description,
-                parameters: t.parameters,
-              })),
+              tools: sentTools,
             }, (piece) => {
               // The client coalesces these deltas into one reply (see
               // derive.ts), so a chunk per emit is a sentence appearing,
@@ -4435,6 +4481,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
             // figure that was in force when the call was made. One entry
             // per model call, so a turn that used six tools is billed as
             // the six calls it actually was.
+            if (!turn.usage.estimated) calibrateTokens(answering.model, sentEstimate, turn.usage.input);
             const { cost, priced, cache } = charge(answering.model, turn.usage, answering.provider);
             emitEvent(session, "usage.turn", "system", {
               provider: answering.provider,
@@ -4444,6 +4491,8 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
               cached_tokens: cache.read,
               cache_write_tokens: cache.write,
               tools_changed: lastToolKey !== null && lastToolKey !== tools.map((t) => t.name).join(","),
+              /* Our estimate of the request beside the vendor's count: how far apart they are is what calibrate learns. */
+              estimated_input: sentEstimate,
               cost_usd: cost,
               priced,
               estimated: turn.usage.estimated,
@@ -6728,6 +6777,38 @@ async function startServer() {
     broadcastLiveStatus(session);
     emitEvent(session, "system.log", "system", { message: "Turn interrupted by user" });
     res.json({ interrupted: wasBusy });
+  });
+
+  /**
+   * The message a "Start a new chat for this" card offered, moved to a chat of its own: the same mode, permissions and
+   * project folder (with its notebook, so what was decided carries over), the long chat's turn stopped, and a line left
+   * there saying where it went.
+   */
+  app.post("/api/sessions/:id/fresh", (req: Request, res: Response) => {
+    const from = sessions.get(req.params.id);
+    if (!from) return res.status(404).json({ error: "Session not found" });
+    const text = String(req.body?.text ?? "").trim();
+    if (!text) return res.status(400).json({ error: "Say what to start the new chat with." });
+    if (from.busy) {
+      stopTurn(from.id);
+      from.busy = false;
+      broadcastLiveStatus(from);
+    }
+    const to = newSession("New Session", false);
+    to.mode = from.mode;
+    to.permissions = from.permissions;
+    if (from.askWhen) to.askWhen = from.askWhen;
+    if (to.mode === "agent") to.phase = "plan";
+    saveMeta(metaOf(to));
+    const folder = folderOfChat(from.id);
+    if (folder) setChatFolder(to.id, folder);
+    const notebooks = folder ? projectNotebookRefs([folder]) : [];
+    emitEvent(from, "system.log", "system", { message: "Moved to a new chat, to keep this one from growing: the message went with it." });
+    const oneLine = text.replace(/\s+/g, " ");
+    to.title = oneLine.length > 40 ? `${oneLine.slice(0, 37)}...` : oneLine;
+    saveMeta(metaOf(to));
+    res.json({ id: to.id });
+    void startTurn(to, text, [], notebooks.length ? { notebooks } : {});
   });
 
   /** An answer to a question the agent asked. */

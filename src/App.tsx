@@ -947,6 +947,19 @@ export function App() {
     setSessionsOpen(false);
   }, [endIncognito]);
 
+  /* A card in the thread moved a message to a chat of its own (Thread's FreshChat): open it, and list it at once. */
+  useEffect(() => {
+    const open = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail;
+      if (typeof id !== "string" || !id) return;
+      navigate("chat");
+      pickSession(id);
+      void fetch("/api/sessions").then((r) => r.json()).then(setSessions).catch(() => undefined);
+    };
+    window.addEventListener("autora-open-session", open);
+    return () => window.removeEventListener("autora-open-session", open);
+  }, [navigate, pickSession]);
+
   /** The open chat is an incognito one. */
   const incognito = Boolean(incognitoId) && sessionId === incognitoId;
 

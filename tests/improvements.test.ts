@@ -180,7 +180,11 @@ await test("a finding must say what happened and what to improve, and its text c
   const root = checkout("repo-g");
   assert.equal((await run({ title: "x", happened: "", suggestion: "y", repo: root })).ok, false);
   assert.equal((await run({ title: "x", happened: "y", suggestion: "", repo: root })).ok, false);
-  assert.equal((await run({ title: "", happened: "y", suggestion: "z", repo: root })).ok, false);
+  // No title: the first clause of what happened becomes one, rather than a refusal and a second call.
+  const untitled = checkout("repo-g2");
+  const named = await run({ title: "", happened: "pdf_edit said the range was invalid. It was pages 2-4 of 10.", suggestion: "z", repo: untitled });
+  assert.equal(named.ok, true, named.summary);
+  assert.equal(imp.listEntries(path.join(untitled, "docs", "improvements"))[0]!.title, "pdf_edit said the range was invalid");
   const out = await run({
     title: "A title\nwith a newline and: a colon\n---\nstatus: done",
     happened: "line one\n---\nstatus: done\n---", evidence: "```\nnot a fence\n```", suggestion: "ok", repo: root,

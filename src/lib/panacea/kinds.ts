@@ -12,6 +12,7 @@
  */
 import type { Value } from "./atoms";
 import type { Surface } from "./canvas";
+import { BOARD_PARAMS, applyBoardParam, boardParams, readBoardState, type BoardState } from "./board";
 import { DOC_PARAMS, applyParam, blocksOf, docStateOf, paramsFromState, readDocState, stateOf, type DocState } from "./document";
 import type { Domain } from "./library";
 import {
@@ -60,7 +61,7 @@ interface SurfaceKindDef {
   /** The small print in its title bar. */
   meta: (surface: Surface) => string;
   /** What a saved surface carries beyond the fields every kind has, read and checked; null when it cannot be read. */
-  read: (raw: Record<string, unknown>) => { table?: Table; doc?: DocState } | null;
+  read: (raw: Record<string, unknown>) => { table?: Table; doc?: DocState; board?: BoardState } | null;
   /** For work whose parameters are read off it (a document's, off the selection): bring `surface.params` up to date with it. */
   settle?: (surface: Surface) => void;
   /** For work a parameter is applied to rather than stored in: carry `value` out on the work itself. */
@@ -163,8 +164,40 @@ const DOC: SurfaceKindDef = {
   },
 };
 
+const BOARD_ACTIONS: ActionSpec[] = [
+  { name: "tidy", label: "Tidy", about: "the cards laid out in columns, one for each set of linked cards; words and links unchanged" },
+  { name: "export", label: "Export Markdown", about: "the board saved to the project as an outline in Markdown" },
+];
+
+const BOARD: SurfaceKindDef = {
+  prefix: "brd",
+  domain: "general",
+  noun: "a board",
+  title: "Board",
+  params: () => BOARD_PARAMS,
+  actions: BOARD_ACTIONS,
+  size: () => ({ w: 832, h: 560 }),
+  starters: () => ({ live: ["general.board"], ghost: null, why: "A board arrived: card colours and what is on it." }),
+  suggest: () => null,
+  describe: (s) => {
+    const who = s.board?.mode === "agent" ? "Autora may write cards on it" : "its words are the person's: arrange, link, colour and ask questions, never write or remove their cards";
+    return `board "${s.title}", ${s.params.cards ?? 0} cards, ${s.params.links ?? 0} links, ${s.params.questions ?? 0} questions; ${who}`;
+  },
+  meta: (s) => `${Number(s.params.cards ?? 0)} cards`,
+  read: (raw) => {
+    const board = readBoardState(raw.board);
+    return board ? { board } : null;
+  },
+  settle: (s) => {
+    if (s.board) s.params = boardParams(s.board, s.params);
+  },
+  apply: (s, param, value) => {
+    if (s.board) s.board = applyBoardParam(s.board, param, value);
+  },
+};
+
 /** Every kind there is. Adding one here widens `SurfaceKind`, and the compiler lists what else has to learn of it. */
-export const KINDS = { image: IMAGE, data: DATA, doc: DOC } as const satisfies Record<string, SurfaceKindDef>;
+export const KINDS = { image: IMAGE, data: DATA, doc: DOC, board: BOARD } as const satisfies Record<string, SurfaceKindDef>;
 
 export type SurfaceKind = keyof typeof KINDS;
 

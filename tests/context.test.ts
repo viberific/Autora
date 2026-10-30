@@ -5,7 +5,7 @@
  *   npx tsx tests/context.test.ts
  */
 import assert from "node:assert/strict";
-import { ContextEngine, DEFAULT_CONTEXT_TOKENS, pageSnapshotAt } from "../server/context";
+import { ContextEngine, DEFAULT_CONTEXT_TOKENS, calibrate, pageSnapshotAt, predictTokens } from "../server/context";
 import { contextWindow, costOf, rememberModels } from "../server/providers";
 import { compactJson, htmlToText, textParts } from "../server/pages";
 import { outlineOf, type Ref } from "../server/browser";
@@ -385,6 +385,60 @@ test("a little old reading is left alone, since changing it would only break the
     ...Array.from({ length: 12 }, (_, i) => ({ message: { role: "user" as const, text: `m${i}` }, seq: 3 + i })),
   ]);
   assert.equal(engine.supersedeReads(true), 0);
+});
+
+test("old reads in a long chat are left whole when stubbing them would re-bill more than it saves, unless the window is filling", () => {
+  // From the logs: a few reads early in a long chat, stubbed, re-billed everything after them at full price.
+  const history = (): { message: any; seq: number }[] => {
+    const h: { message: any; seq: number }[] = [{ message: { role: "user", text: "go" }, seq: 1 }];
+    for (let i = 0; i < 3; i += 1) h.push({ message: { role: "tool", replies: [{ id: `r${i}`, name: "read_file", ok: true, result: "file text\n".repeat(1_000) }] }, seq: 2 + i });
+    for (let i = 0; i < 40; i += 1) h.push({ message: { role: "tool", replies: [{ id: `t${i}`, name: "terminal", ok: true, result: "build output\n".repeat(700) }] }, seq: 10 + i });
+    return h;
+  };
+  const roomy = new ContextEngine();
+  roomy.setWindow(1_000_000, "model");
+  roomy.load(history());
+  assert.equal(roomy.supersedeReads(true), 0, "30,000 characters of old reads are not worth re-billing 90,000 tokens after them");
+  const tight = new ContextEngine();
+  tight.setWindow(200_000, "model");
+  tight.load(history());
+  assert.equal(tight.supersedeReads(true), 3, "half-way to the fold, they go: the fold would break the cache and lose more");
+});
+
+test("what a model reports a request weighs corrects the estimate: a fixed amount, a ratio, or both", () => {
+  // The three shapes in the logs: one model ~50,000 over the estimate whatever its size, one half again of it.
+  assert.equal(predictTokens("model-new", 10_000), 10_000, "nothing reported yet: the estimate as it is");
+  for (const est of [10_000, 30_000, 60_000, 90_000]) calibrate("model-flat", est, est + 50_000);
+  assert.ok(Math.abs(predictTokens("model-flat", 40_000) - 90_000) < 1_000);
+  for (const est of [10_000, 30_000, 60_000, 90_000]) calibrate("model-ratio", est, Math.round(est * 1.5));
+  assert.ok(Math.abs(predictTokens("model-ratio", 80_000) - 120_000) < 1_000);
+  // Requests all of one size give the offset only, not a slope fitted to noise.
+  for (const y of [61_000, 59_000, 60_500]) calibrate("model-same", 40_000, y);
+  assert.ok(Math.abs(predictTokens("model-same", 80_000) - 100_000) < 1_500);
+  // A report that cannot be the whole request (a proxy counting only what was not cached) is not learned from.
+  for (const est of [10_000, 50_000, 90_000]) calibrate("model-odd", est, 100);
+  assert.equal(predictTokens("model-odd", 40_000), 40_000);
+});
+
+test("the gauge and the fold count the turn's note and the tools sent, and a model's own count; the backstop cuts by it", () => {
+  const history = Array.from({ length: 34 }, (_, i) => ({ message: { role: (i % 2 ? "assistant" : "user") as "user" | "assistant", text: "w".repeat(8_000) }, seq: i + 1 }));
+  const plain = new ContextEngine();
+  plain.setWindow(100_000, "model");
+  plain.load(history);
+  const bare = plain.gauge("").used;
+  plain.setTurnNote("n".repeat(4_000));
+  plain.useRequest("model-tools", [{ name: "t", description: "d".repeat(40_000), parameters: {} }]);
+  assert.ok(plain.gauge("").used >= bare + 11_000, "the note (1,000) and the tools (10,000) are in it");
+  // On a 100k window a model that counts 40,000 more than the estimate is near the edge at 60,000 estimated.
+  for (const est of [20_000, 50_000, 80_000]) calibrate("model-heavy", est, est + 40_000);
+  const heavy = new ContextEngine();
+  heavy.setWindow(100_000, "model");
+  heavy.load(history);
+  heavy.useRequest("model-heavy", []);
+  assert.ok(heavy.gauge("").used > 95_000, "what the vendor will count, not the old estimate of 68,000");
+  const sent = heavy.messagesFor("");
+  assert.ok(sent.length < history.length, "cut to fit what the vendor will count");
+  assert.ok(heavy.estimateSent("", sent) + 40_000 <= 100_000 + 4_000);
 });
 
 test("the message count that starts a fold grows with the window, never below the configured one", () => {

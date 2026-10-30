@@ -427,6 +427,11 @@ Spectra's fetched renderer is most of what is on disk.
     rebuilding from words, and its recap skips them. The anchored record goes at
     the head of the history (`messagesFor(..., { anchorInMessages })`), not in
     the system text, so a fold keeps the system prompt and tools cached.
+    How big a request is (the gauge, when to fold, the overflow backstop, `supersedeReads`) counts the turn note and the
+    tool definitions as well as the history (`useRequest`), and is corrected per model by `calibrate` /
+    `predictTokens`: a line fitted through that model's last 40 requests, estimate against the vendor's own count
+    (`estimated_input` beside `input_tokens` in `usage.turn`). Old reads are stubbed only when that saves a third of what
+    the cache break re-bills, or the window is half-way to the fold.
   - `ledger.ts` (`ledger` tool): the agent's working notes (goal, decisions,
     facts, next) in the log as `ledger.update`, plus what it touched, read off
     its calls; said every turn so interrupts and restarts lose nothing.
@@ -560,7 +565,7 @@ Spectra's fetched renderer is most of what is on disk.
   actions, starters, offers, size and words; **a new kind is a new entry there**, and `Record<SurfaceKind, ...>` in the window
   and server names what else must learn of it; plan: `docs/PANACEA-ENGINE.md`), `surfaces.ts` (what the image and data each
   publish, tables: `tableFrom`, `filteredRows`, `aggregate`), `canvas.ts` (the document, `normalizeCanvas`, placement `placeFor` / `nearestFree`, `refocus` /
-  `fade` / `restore`, values), `library.ts` (180 built-in recipes, `instantiate`, `searchLibrary`), `document.ts` (the document engine: ProseMirror schema, selection-driven parameters, `applyParam`, the agent's block-level hands; pure, runs on server and page; `tests/panacea-doc.test.ts`), `rules.ts` (starters and offers,
+  `fade` / `restore`, values), `library.ts` (180 built-in recipes, `instantiate`, `searchLibrary`), `document.ts` (the document engine: ProseMirror schema, selection-driven parameters, `applyParam`, the agent's block-level hands; pure, runs on server and page; `tests/panacea-doc.test.ts`), `board.ts` (the board: cards, links, Autora's questions, who writes, tidy and the Markdown outline; pure; drawn by `components/panacea/BoardView.tsx`; `tests/panacea-board.test.ts`), `rules.ts` (starters and offers,
   `addSurfaceTo`, `placeRecipe` / `placeComposed`), `profile.ts` (what is learned), `handsteps.ts` (Visible work's plan). One canvas
   per chat lives in `panacea.ts` (`panacea-<session>.json`, removed with the chat; `forgetSession` calls `dropPanacea`); the library
   of learned recipes (`panacea-library.json`) and the profile (`panacea-profile.json`) are one per install. The wire is Music's:

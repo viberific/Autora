@@ -193,10 +193,22 @@ repo: https://github.com/blofstedt/Autora
 support: https://github.com/blofstedt/Autora/issues
 gallery: []
 releaseNotes: >-
-  Fixed: a conversation opened again now appears whole, already at its end, instead of loading in pieces with a
-  choppy scroll. A message you send while Autora is working in the browser now sits in line with its replies instead
-  of sticking under the browser card. The browser can no longer get stuck as yours: while you hold it, a strip above
-  the message box says so with a Hand back to agent button; it comes back by itself when you press I'm done, when the
-  browser closes, or after a few minutes untouched, and on a phone the hand button now says Hand back in words.
-  And Autora is better at knowing when it is finished: once a search has found the answer it answers and stops,
-  instead of searching on to confirm it or taking on work nobody asked for.
+  New in Panacea: boards. A board is a space for thinking: double-click for a card, drag cards where you like, and
+  drag from one card's dot onto another to link them. Autora can ask you questions on the board, tidy it into
+  groups and export it as a Markdown outline, but the ideas are yours: while the board says You write, it cannot
+  add, change or remove your cards. Press it to let Autora write. Panacea is also now where Autora goes for work no
+  other window was made for (a brainstorm, a mind map, organising your ideas), and panels with text or list fields
+  say whose words they are in the same way.
+  Less wasted work, from two weeks of chat logs: while it plans, Autora can now run many more commands that only
+  read (sed -n, git branch -a, git -C, diff, test -f and others) instead of being refused, load a skill's
+  instructions, and run its own tools that it marked as only reading. It can wait for a background command to
+  finish in one step instead of checking over and over, and a memory a little over its length limit is kept
+  rather than sent back to be rewritten. File edits fail less: several changes in one edit are matched against the
+  file as it was read, a block with different indentation is fitted in, and a failed edit points at the right
+  place. Long chats cost less, because old file reads are only trimmed when that saves more than it costs, and
+  Autora now knows how full a conversation really is: it counts the tool list and the turn's notes, and learns
+  each model's own way of counting, so it condenses in time instead of silently dropping older messages.
+  Autora also helps you spend less: when a long chat gets a message about something new, a card offers to start
+  a new chat for it in one click. A change that names the file and what to do skips planning, a task that does
+  not say when it is finished gets a "Finished when" line you can correct, and it stops re-checking something
+  that is still in progress.

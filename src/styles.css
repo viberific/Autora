@@ -2328,6 +2328,16 @@ label + .jf-hint { margin-top: -5px; }
 .cell-note.tone-bad { border-color: rgba(var(--danger-rgb), 0.3); color: var(--danger); }
 .cell-note.tone-warn { border-color: rgba(var(--warn-rgb), 0.3); color: var(--warn); }
 .cell-note svg { flex: 0 0 auto; margin-top: 2px; }
+/* A long chat sent something new: the offer to give it a chat of its own (Thread's FreshChat). */
+.fresh-cell { margin: 8px 0; padding: 10px 12px; border: 1px solid var(--accent-line); border-radius: var(--r-md); background: var(--accent-soft); color: var(--text-2); font-size: var(--fs-sm); line-height: 1.45; }
+.fresh-cell p { margin: 0; }
+.fresh-cell b { color: var(--text); font-weight: 600; }
+.fresh-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.fresh-acts button { border: 1px solid var(--border-strong); background: var(--s2); color: var(--text); border-radius: var(--r-pill); padding: 3px 12px; font-size: var(--fs-xs); cursor: pointer; transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); }
+.fresh-acts button:hover { border-color: var(--accent-line); }
+.fresh-acts button.is-accent { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.fresh-acts button:disabled { opacity: 0.6; cursor: default; }
+.fresh-fail { color: var(--danger); font-size: var(--fs-xs); }
 
 /* ------------------------------------------------------------------ diff -- */
 .diff-name {
@@ -7708,6 +7718,40 @@ body.is-resizing iframe { pointer-events: none; }
 .pa-doc-mode { border: 1px solid var(--border-strong); background: var(--s2); color: var(--text-2); border-radius: var(--r-pill); padding: 2px 10px; font-size: var(--fs-xs); cursor: pointer; transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease); }
 .pa-doc-mode:hover { color: var(--text); }
 .pa-doc-mode[aria-pressed="true"] { border-color: var(--accent-line); background: var(--accent-soft); color: var(--text); }
+/* A board: cards anywhere, links between them (BoardView.tsx). */
+.pa-surface.is-board .pa-surface-body { overflow: hidden; }
+.pa-brd-wrap { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--sink); }
+.pa-brd { flex: 1; min-height: 0; overflow: auto; position: relative; outline: none; cursor: default; }
+.pa-brd:focus-visible { box-shadow: inset 0 0 0 1px var(--accent-line); }
+.pa-brd-space { position: relative; min-width: 100%; min-height: 100%; }
+.pa-brd-links { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.pa-brd-links line { stroke: var(--border-strong); stroke-width: 2; }
+.pa-brd-links line.pa-brd-hit { stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
+.pa-brd-links g.is-on line:not(.pa-brd-hit) { stroke: var(--accent); }
+.pa-brd-links line.is-pulling { stroke: var(--accent); stroke-dasharray: 5 4; }
+.pa-brd-links text { fill: var(--text-3); font-size: var(--fs-2xs); text-anchor: middle; }
+.pa-brd-card {
+  position: absolute; box-sizing: border-box; min-height: 56px; padding: 10px 12px; border-radius: var(--r-sm); border: 1px solid var(--border-strong);
+  background: var(--s2); color: var(--text); font-size: var(--fs-sm); line-height: 1.4; box-shadow: var(--shadow-sm); cursor: grab; user-select: none;
+  transition: box-shadow var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+.pa-brd-card p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pa-brd-card p i { color: var(--text-3); }
+.pa-brd-card.is-yellow { background: color-mix(in srgb, var(--warn) 18%, var(--s2)); }
+.pa-brd-card.is-green { background: color-mix(in srgb, var(--live) 18%, var(--s2)); }
+.pa-brd-card.is-blue { background: color-mix(in srgb, var(--accent-2) 20%, var(--s2)); }
+.pa-brd-card.is-pink { background: color-mix(in srgb, var(--danger) 16%, var(--s2)); }
+.pa-brd-card.is-violet { background: color-mix(in srgb, var(--accent) 20%, var(--s2)); }
+.pa-brd-card.is-ask { background: var(--sink); border-style: dashed; border-color: var(--accent-line); color: var(--text-2); }
+.pa-brd-card.is-selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-line), var(--shadow); }
+.pa-brd-card.is-moving { cursor: grabbing; box-shadow: var(--shadow); z-index: 2; }
+.pa-brd-card textarea { width: 100%; min-height: 3.2em; box-sizing: border-box; resize: none; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; outline: none; }
+.pa-brd-tag { display: block; margin-bottom: 4px; font-size: var(--fs-2xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); }
+.pa-brd-acts { display: flex; gap: 6px; margin-top: 8px; }
+.pa-brd-acts button { display: inline-grid; place-items: center; border: 1px solid var(--border-strong); background: var(--s2); color: var(--text-2); border-radius: var(--r-pill); padding: 1px 9px; font-size: var(--fs-2xs); cursor: pointer; }
+.pa-brd-acts button:hover { color: var(--text); border-color: var(--accent-line); }
+.pa-brd-dot { position: absolute; right: -6px; top: 50%; width: 10px; height: 10px; margin-top: -5px; border-radius: 50%; background: var(--s1); border: 2px solid var(--accent-line); cursor: crosshair; opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+.pa-brd-card:hover .pa-brd-dot, .pa-brd-card.is-selected .pa-brd-dot { opacity: 1; }
 .pa-doc-scroll { flex: 1; min-height: 0; overflow: auto; padding: 18px 26px 32px; }
 .pa-doc-page .ProseMirror { outline: none; min-height: 100%; color: var(--text); overflow-wrap: anywhere; }
 .pa-doc-page .ProseMirror > * + * { margin-top: 0.7em; }
@@ -7749,6 +7793,9 @@ body.is-resizing iframe { pointer-events: none; }
 .pa-head:active { cursor: grabbing; }
 .pa-title { flex: 1; min-width: 0; font-size: var(--fs-sm); font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pa-draft-tag { font-size: var(--fs-2xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); border: 1px solid var(--accent-line); border-radius: var(--r-pill); padding: 0 6px; }
+.pa-writes { flex: none; border: 1px solid var(--border-strong); background: var(--s2); color: var(--text-3); border-radius: var(--r-pill); padding: 0 7px; font-size: var(--fs-2xs); cursor: pointer; transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease); }
+.pa-writes:hover { color: var(--text); }
+.pa-writes[aria-pressed="true"] { border-color: var(--accent-line); background: var(--accent-soft); color: var(--text); }
 .pa-head-acts { display: flex; gap: 2px; }
 .pa-head-acts button {
   display: grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: var(--r-xs); background: transparent;

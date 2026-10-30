@@ -22,6 +22,7 @@ const canvasLib = await import("../src/lib/panacea/canvas");
 const { contextOf, newCanvas, normalizeCanvas, placeFor, refocus, restore, setValue, surfaceParams, valueAt, valueProblem, describeCanvas } = canvasLib;
 const { addSurfaceTo, placeRecipe, suggestFor, starters } = await import("../src/lib/panacea/rules");
 const { createDoc } = await import("../src/lib/panacea/document");
+const { createBoard } = await import("../src/lib/panacea/board");
 const { KINDS } = await import("../src/lib/panacea/kinds");
 const { filteredRows, aggregate, splitDelimited, tableFrom, tableCsv } = await import("../src/lib/panacea/surfaces");
 const profileLib = await import("../src/lib/panacea/profile");
@@ -49,6 +50,9 @@ function withSurfaces() {
   const note: Surface = { id: "doc1", kind: "doc", title: "Notes", x: 0, y: 1400, w: 640, h: 592, name: "notes.md", params: surfaceParams("doc", null), doc: createDoc("# Notes\n\nA first line.") };
   KINDS.doc.settle?.(note);
   c.surfaces.push(note);
+  const board: Surface = { id: "brd1", kind: "board", title: "Ideas", x: 0, y: 2100, w: 832, h: 560, name: "Ideas", params: surfaceParams("board", null), board: createBoard() };
+  KINDS.board.settle?.(board);
+  c.surfaces.push(board);
   return c;
 }
 
@@ -307,7 +311,7 @@ const call = async (method: string, url: string, body?: unknown, raw?: Buffer, t
 };
 
 await test("the tools are a family of their own, read-only where they only look, and switch off with the window", () => {
-  assert.deepEqual(panaceaSPECS.map((s) => s.name), ["panacea_open", "panacea_look", "panacea_surface", "panacea_place", "panacea_set", "panacea_arrange", "panacea_bespoke", "panacea_doc", "panacea_export"]);
+  assert.deepEqual(panaceaSPECS.map((s) => s.name), ["panacea_open", "panacea_look", "panacea_surface", "panacea_place", "panacea_set", "panacea_arrange", "panacea_bespoke", "panacea_doc", "panacea_board", "panacea_export"]);
   assert.ok(loadedFamilies({ events: [], said: "open the panacea canvas", hasPdf: false, lazy: true }).has("panacea"));
   assert.equal(looksOnly("panacea_look", {}), true);
   assert.equal(looksOnly("panacea_open", {}), true);
@@ -370,6 +374,32 @@ await test("panacea_set checks each value; panacea_arrange moves, puts away (not
   assert.match(back.summary, /brought back/);
   const unknown = await run("panacea_arrange", { remove: ["nope"] });
   assert.equal(unknown.ok, false);
+});
+
+await test("a panel's words are the person's: set and place refuse them until it says Autora writes, and the person can take it back", async () => {
+  const map = { atom: "row", children: ["who", "what", "where", "when"].map((k) => ({ atom: "list", bind: `map.${k}`, props: { label: k } })) };
+  const placed = await run("panacea_place", { title: "Story map", why: "To gather who, what, where and when.", tree: map, values: { "map.who": ["Mara"] } });
+  assert.ok(placed.ok, placed.summary);
+  assert.match(placed.summary, /Values not set: map\.who: the words in "Story map" \(\w+\) are the person's to write/);
+  const id = /panel (\w+) "Story map"/.exec(placed.summary)![1]!;
+  const refused = await run("panacea_set", { values: { "map.what": ["A heist"] } });
+  assert.equal(refused.ok, false);
+  assert.match(refused.summary, /person's to write.*panacea_arrange writes/);
+  assert.match((await run("panacea_look", {})).summary, /"Story map".*its words are the person's/);
+  assert.ok((await run("panacea_set", { values: { budget: 800 } })).ok, "other values are still the agent's to set");
+
+  const let_ = await run("panacea_arrange", { writes: { [id]: "agent" } });
+  assert.ok(let_.ok, let_.summary);
+  assert.ok((await run("panacea_set", { values: { "map.what": ["A heist"] } })).ok);
+  assert.match((await run("panacea_look", {})).summary, /"Story map".*you may write in it/);
+  assert.ok((await run("panacea_arrange", { writes: { [id]: "person" } })).ok);
+  assert.equal((await run("panacea_set", { values: { "map.when": ["1920"] } })).ok, false, "given back, refused again");
+
+  const todo = await run("panacea_place", { recipe: "general.todo", why: "The packing list you asked for.", writes: "agent", values: { todo: ["Passport"] } });
+  assert.ok(todo.ok && !/Values not set/.test(todo.summary), todo.summary);
+  assert.equal((await run("panacea_arrange", { writes: { [id]: "maybe" } })).ok, false);
+  const doc = (await call("GET", `/api/panacea/${S}/doc`)).body.doc;
+  assert.equal(doc.panels.find((p: { title: string }) => p.title === "To do").writes, "agent", "kept on the canvas");
 });
 
 await test("a person's save is refused when the agent changed the canvas since; a fresh one is taken", async () => {

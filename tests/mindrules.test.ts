@@ -38,10 +38,13 @@ test("a title is put under its subject, and a body that holds a secret is refuse
   assert.ok(!secret.ok);
 });
 
-test("a body that is too long is sent back to be split, by the limit for its kind", () => {
-  const v = checkEntry({ title: "Docker: things", body: "x".repeat(700), kind: "fact" });
+test("a body that is too long is sent back to be split, by the limit for its kind, with room for a miscount", () => {
+  const v = checkEntry({ title: "Docker: things", body: "x".repeat(800), kind: "fact" });
   assert.ok(!v.ok);
-  if (!v.ok) assert.match(v.error, /Too long for a fact \(700 characters; at most 600\).*split/);
+  if (!v.ok) assert.match(v.error, /Too long for a fact \(800 characters; at most 600\).*split/);
+  // A model that wrote 700 for "at most 600" miscounted: taken, rather than a rewrite and a second call.
+  assert.ok(checkEntry({ title: "Docker: networks", body: "x".repeat(700), kind: "fact" }).ok);
+  assert.ok(!checkEntry({ title: "Docker: networks", body: "x".repeat(751), kind: "fact" }).ok);
   assert.ok(checkEntry({ title: "Docker: how", body: "y".repeat(1100), kind: "procedure" }).ok);
 });
 

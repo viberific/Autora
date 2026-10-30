@@ -30,6 +30,8 @@ interface CustomTool {
   updated: number;
   /** The session it was written in. */
   session: string | null;
+  /** Its writer said it only reads (checks, lists, fetches): it may run while the agent plans its own work (modes.ts). */
+  readsOnly?: boolean;
   /** Kept by the server: how it has gone. */
   runs: number;
   failures: number;
@@ -106,7 +108,7 @@ export function undeclaredArgs(script: string, params: CustomParam[]): string[] 
 
 /** Save a tool, or replace the one of the same name. Throws with the reason. */
 export function defineCustomTool(input: {
-  name: unknown; description: unknown; params?: unknown; script: unknown; session?: string | null;
+  name: unknown; description: unknown; params?: unknown; script: unknown; session?: string | null; readsOnly?: unknown;
 }): { tool: CustomTool; replaced: boolean; warnings: string[] } {
   let name = String(input.name ?? "").trim().toLowerCase();
   if (name.startsWith(PREFIX)) name = name.slice(PREFIX.length);
@@ -133,15 +135,18 @@ export function defineCustomTool(input: {
   const warnings = missing.length
     ? [`The script reads ${missing.map((m) => "$" + m).join(", ")}, but no argument of that name is declared, so ${missing.length === 1 ? "it" : "they"} will always be empty. Declare ${missing.length === 1 ? "it" : "them"} in parameters and save again.`]
     : [];
+  const readsOnly = input.readsOnly === true;
   const existing = tools.find((t) => t.name === name);
   if (existing) {
     Object.assign(existing, { description, params, script, updated: now });
+    if (readsOnly) existing.readsOnly = true;
+    else delete existing.readsOnly;
     save();
     return { tool: existing, replaced: true, warnings };
   }
   const tool: CustomTool = {
     name, description, params, script, created: now, updated: now,
-    session: input.session ?? null, runs: 0, failures: 0,
+    session: input.session ?? null, runs: 0, failures: 0, ...(readsOnly ? { readsOnly: true } : {}),
   };
   tools.push(tool);
   generation += 1;

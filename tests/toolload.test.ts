@@ -92,6 +92,13 @@ test("the person's words bring a set in", () => {
   assert.ok(loadedFamilies({ events: [], said: "fill in this PDF form for me" , lazy: true}).has("pdf"));
   assert.ok(loadedFamilies({ events: [], said: "run this every morning" , lazy: true}).has("schedule"));
   assert.ok(loadedFamilies({ events: [], said: "make a chart of sales" , lazy: true}).has("widgets"));
+  for (const said of ["make a who what where when writing map for brainstorming", "help me brainstorm names", "a mind map of my thesis", "I need a mood board",
+    "let's organise my ideas for the novel", "a story board of the plot", "map out my thoughts"]) {
+    assert.ok(loadedFamilies({ events: [], said, lazy: true }).has("panacea"), said);
+  }
+  for (const said of ["edit the storyboard of the video", "what is the weather", "write me an email"]) {
+    assert.ok(!loadedFamilies({ events: [], said, lazy: true }).has("panacea"), said);
+  }
   assert.equal(loadedFamilies({ events: [], said: "fix the failing test" , lazy: true}).size, 0);
 });
 

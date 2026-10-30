@@ -31,6 +31,9 @@ export interface Requirement {
 
 export interface RequirementList {
   items: Requirement[];
+  /** How to tell the work is finished, in one checkable line: said by the person, or worked out by the agent and shown
+      to them (requirements done_when). Cleared when a new task starts after everything before it is done. */
+  doneWhen?: string;
 }
 
 interface RequirementEvent {
@@ -70,7 +73,8 @@ export function latestRequirements(events: readonly RequirementEvent[]): Require
         source: r?.source === "amend" || r?.source === "agent" ? r.source : "request",
       });
     }
-    return { items };
+    const doneWhen = oneLine(events[i].payload?.doneWhen, MAX_NOTE);
+    return { items, ...(doneWhen ? { doneWhen } : {}) };
   }
   return { items: [] };
 }
@@ -110,7 +114,7 @@ export function addRequirements(
     have.add(text.toLowerCase());
     items.push({ id: nextId({ items }), text, status: "open", note: "", source });
   }
-  return { items: trimmed(items) };
+  return { ...list, items: trimmed(items) };
 }
 
 const LIST_LINE = /^\s*(?:\d{1,2}[.)]|[-*•])\s+(\S.*)$/;
@@ -161,13 +165,18 @@ export function autoAsks(message: string, list: RequirementList, duringWork: boo
  */
 export function applyRequirements(prev: RequirementList, action: Record<string, any>): RequirementResult {
   const a = action ?? {};
-  const touchedAny = ["add", "edit", "done", "drop", "reopen"].some((k) => a[k] !== undefined);
+  const touchedAny = ["add", "edit", "done", "drop", "reopen", "done_when"].some((k) => a[k] !== undefined);
   if (!touchedAny) {
     return { ok: true, summary: prev.items.length ? describeRequirements(prev) : "No requirements are recorded yet." };
   }
-  let list: RequirementList = { items: prev.items.map((r) => ({ ...r })) };
+  let list: RequirementList = { ...prev, items: prev.items.map((r) => ({ ...r })) };
   const said: string[] = [];
   const problems: string[] = [];
+  if (a.done_when !== undefined) {
+    const line = oneLine(a.done_when, MAX_NOTE);
+    if (line) { list.doneWhen = line; said.push("finish line set"); }
+    else if (list.doneWhen) { delete list.doneWhen; said.push("finish line cleared"); }
+  }
 
   const asArray = (v: unknown): unknown[] => (v === undefined || v === null ? [] : Array.isArray(v) ? v : [v]);
   const find = (id: unknown) => list.items.find((r) => r.id.toLowerCase() === String(id ?? "").trim().toLowerCase());
@@ -220,16 +229,36 @@ export function applyRequirements(prev: RequirementList, action: Record<string, 
 }
 
 export function describeRequirements(list: RequirementList): string {
-  if (list.items.length === 0) return "No requirements are recorded yet.";
+  const finish = list.doneWhen ? `Finished when: ${list.doneWhen}\n` : "";
+  if (list.items.length === 0) return finish ? finish.trim() : "No requirements are recorded yet.";
+  return finish + describeItems(list);
+}
+
+function describeItems(list: RequirementList): string {
   const mark = (r: Requirement) => (r.status === "done" ? "[done]" : r.status === "dropped" ? "[dropped]" : "[open]");
   return list.items
     .map((r) => `${r.id} ${mark(r)} ${r.text}${r.note ? ` -- ${r.note}` : ""}`)
     .join("\n");
 }
 
-/** What the agent is told every turn: the asks still open, word for word, and a count of the rest. */
-export function requirementsBriefing(list: RequirementList): string | null {
-  if (list.items.length === 0) return null;
+/** Asked of the agent when a task arrives without a finish line and none is recorded. */
+const FINISH_ASK =
+  "This message asks for work and does not say when it is finished. Before you start, work out its finish line -- one " +
+  "line that can be checked: a test that passes, what the page shows, a file that exists, a command that succeeds -- and " +
+  "record it with requirements done_when; the person sees it, so they can correct it. Stop when it holds. If you cannot " +
+  "tell what finished looks like, ask them in one short question (ask_user) rather than guess.";
+
+/** What the agent is told every turn: the finish line, the asks still open, word for word, and a count of the rest. */
+export function requirementsBriefing(list: RequirementList, askFinish = false): string | null {
+  const finish = list.doneWhen
+    ? `Finished when: ${list.doneWhen} -- check that it holds before you say the work is done, and stop there.`
+    : askFinish ? FINISH_ASK : null;
+  if (list.items.length === 0) return finish;
+  const rest = itemsBriefing(list);
+  return finish ? `${finish}\n${rest}` : rest;
+}
+
+function itemsBriefing(list: RequirementList): string {
   const open = openRequirements(list);
   const done = list.items.filter((r) => r.status === "done").length;
   const dropped = list.items.filter((r) => r.status === "dropped").length;

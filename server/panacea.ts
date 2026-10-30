@@ -25,9 +25,10 @@ import { unzipSync, strFromU8 } from "fflate";
 import type { Value } from "../src/lib/panacea/atoms";
 import {
   contextOf, describeCanvas, fade, MAX_PANELS, newCanvas, normalizeCanvas, refocus, removeSurface, restore,
-  setValue, snap, uid, valueProblem, PANEL_MAX_W, PANEL_MIN_W, type Canvas, type Panel, type Surface,
+  setValue, snap, uid, valueProblem, wordsOwner, PANEL_MAX_W, PANEL_MIN_W, type Canvas, type Panel, type Surface,
 } from "../src/lib/panacea/canvas";
 import { panaceaSteps, stepWords } from "../src/lib/panacea/handsteps";
+import { addCard, boardListing, boardMarkdown, createBoard, editCard, linkCards, moveCard, removeCard, tidy, unlink, type BoardMode, type BoardState } from "../src/lib/panacea/board";
 import { createDoc, docStateOf, formatBlock, insertBlocks, listing, outlineOf, applyParam, deleteBlock, replaceBlockText, stateOf, toMarkdown, type DocMode } from "../src/lib/panacea/document";
 import { KINDS, type SurfaceKind } from "../src/lib/panacea/kinds";
 import { BUILTINS, DOMAINS, libraryIndex, searchLibrary, type Domain, type Recipe } from "../src/lib/panacea/library";
@@ -275,7 +276,7 @@ export function panaceaTurnNote(session: string): string | null {
 /** The capability line for the system prompt: paid for on every turn, so short. */
 export function panaceaBriefing(on: boolean): string {
   if (!on) return "- Panacea (canvas window): switched off on the Tools page; if asked, say so.";
-  return "- Panacea (canvas window): panacea_* tools (tools_enable panacea). Controls appear for the work and go when it moves on; compose from the library's atoms only.";
+  return "- Panacea (canvas window): panacea_* tools (tools_enable panacea). Controls appear for the work and go when it moves on; compose from the library's atoms only. When no window fits what is asked (a brainstorm, a map of ideas, a tracker), it goes here.";
 }
 
 function act(session: string, e: Entry, text: string) {
@@ -452,6 +453,16 @@ interface Outcome {
 class Refuse extends Error {}
 const refuse = (message: string): never => { throw new Refuse(message); };
 
+/** Why the agent may not set a value, or null: its kind (`valueProblem`), or words that are the person's to write (`wordsOwner`). */
+function agentProblem(c: Canvas, key: string, v: unknown): string | null {
+  const owner = wordsOwner(c, key);
+  if (owner) {
+    return `the words in "${owner.title}" (${owner.id}) are the person's to write. Ask, suggest and critique in the chat and let them type it; if they asked ` +
+      `you to fill it, or it is productivity work (a packing list, minutes), switch it with panacea_arrange writes: {"${owner.id}": "agent"} and say so`;
+  }
+  return valueProblem(c, key, v);
+}
+
 /** The pixel size of a PNG, JPEG, GIF or WebP from its first bytes; null when it cannot tell. */
 function imageSize(data: Buffer): { w: number; h: number } | null {
   if (data.length > 24 && data.readUInt32BE(0) === 0x89504e47) return { w: data.readUInt32BE(16), h: data.readUInt32BE(20) };
@@ -567,6 +578,15 @@ function docSurface(c: Canvas, id: unknown): Surface {
   return s ?? refuse(docs.length ? `Say which document: \`surface\` (${docs.map((x) => x.id).join(", ")}).` : "There is no document on the canvas. Add one with panacea_surface `document`.");
 }
 
+/** The board a call means: the one named, else the one in focus, else the only one. */
+function boardSurface(c: Canvas, id: unknown): Surface {
+  const boards = c.surfaces.filter((x) => x.kind === "board" && x.board);
+  const s = typeof id === "string" && id ? boards.find((x) => x.id === id) : (boards.find((x) => x.id === c.focus) ?? (boards.length === 1 ? boards[0] : undefined));
+  return s ?? refuse(boards.length ? `Say which board: \`surface\` (${boards.map((x) => x.id).join(", ")}).` : "There is no board on the canvas. Add one with panacea_surface `board`.");
+}
+
+const boardWho = (b: BoardState) => (b.mode === "agent" ? "Autora may write cards on it" : "its words are the person's: you arrange, link, colour and ask questions; you do not write, rewrite or remove their cards");
+
 /** The edit a changing tool call asks for, done to `c` (a copy). Returns what to tell the agent. */
 function edit(session: string, name: string, c: Canvas, args: Record<string, any>, hooks: PanaceaHooks): { text: string; preview: string } {
   const p = profileNow();
@@ -594,11 +614,12 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
       } else return refuse("Give `recipe` (a library id) or `tree` (a panel composed of atoms).");
       if ("error" in placed) refuse(placed.error);
       const panel = placed as Panel;
+      if (args.writes === "agent") panel.writes = "agent";
       // Values it opens with: checked like any other.
       const problems: string[] = [];
       for (const [k, v] of Object.entries(values)) {
         const key = k.replace(/^@(image|data)\./, (_, kind: string) => `@${panel.context !== "general" ? panel.context : c.surfaces.find((s) => s.kind === kind)?.id ?? kind}.`);
-        const bad = valueProblem(c, key, v);
+        const bad = agentProblem(c, key, v);
         if (bad) problems.push(`${k}: ${bad}`);
         else setValue(c, key, v);
       }
@@ -614,7 +635,7 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
       const done: string[] = [];
       const problems: string[] = [];
       for (const [k, v] of given.slice(0, 40)) {
-        const bad = valueProblem(c, k, v);
+        const bad = agentProblem(c, k, v);
         if (bad) problems.push(`${k}: ${bad}`);
         else { setValue(c, k, v as Value); done.push(`${k}=${JSON.stringify(v).slice(0, 40)}`); }
       }
@@ -654,6 +675,14 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
           if (typeof t === "string" && t.trim()) { needPanel(c, id).title = t.trim().slice(0, 60); done.push(`retitled ${id}`); }
         }
       }
+      if (args.writes && typeof args.writes === "object") {
+        for (const [id, who] of Object.entries(args.writes as Record<string, unknown>)) {
+          const panel = needPanel(c, id);
+          if (who === "agent") { panel.writes = "agent"; done.push(`you may write in ${panel.id} (say so: the person can take it back on the panel)`); }
+          else if (who === "person") { delete panel.writes; done.push(`${panel.id}'s words are the person's again`); }
+          else refuse(`writes: {"${id}": "agent"} lets you fill its fields, "person" gives them back.`);
+        }
+      }
       // Put away last, so a call that also groups or retitles a panel it puts away still does those.
       for (const id of Array.isArray(args.remove) ? args.remove : []) {
         const panel = needPanel(c, id);
@@ -667,7 +696,7 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
         const r = refocus(c, f);
         done.push(`focus on ${f ?? "nothing"} (${r.dimmed} dimmed, ${r.gone} put away, ${r.back} back)`);
       }
-      if (!done.length) refuse("Nothing to do: pass move, remove, restore, accept, group, ungroup, titles, focus or name.");
+      if (!done.length) refuse("Nothing to do: pass move, remove, restore, accept, group, ungroup, titles, writes, focus or name.");
       return { text: `${done.join("; ")}.`, preview: done[0]! };
     }
 
@@ -688,7 +717,13 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
         const { surface, panels } = addSurface(c, { kind: "doc", name: `${title ?? "Document"}.md`, title: title ?? "Document", doc: createDoc(args.document, mode) });
         return { text: docAdded(surface, panels), preview: surface.title };
       }
-      if (args.file === undefined) refuse("Give `file` (an artifact id or a path in the working folder), `csv` (the table as text), `document` (the text, or \"\" for a blank one), or `remove`.");
+      if (typeof args.board === "string") {
+        const mode: BoardMode = args.mode === "agent" ? "agent" : "guide";
+        const name = args.board.trim().slice(0, 80) || title || "Board";
+        const { surface, panels } = addSurface(c, { kind: "board", name, title: name, board: createBoard(mode) });
+        return { text: `Added board ${surface.id} "${surface.title}"; ${boardWho(surface.board!)}. Read it with panacea_look board:"${surface.id}"; change it with panacea_board. Opened beside it: ${opened(panels)}.`, preview: surface.title };
+      }
+      if (args.file === undefined) refuse("Give `file` (an artifact id or a path in the working folder), `csv` (the table as text), `document` (the text, or \"\" for a blank one), `board` (a title), or `remove`.");
       const given = readFileRef(args.file, hooks.cwd, "the file", "panacea_surface");
       if (IMAGE_EXT.test(given.name)) {
         const art = given.artifact ?? saveArtifact({ origin: "agent", name: given.name, data: given.data, mime: `image/${/png$/i.test(given.name) ? "png" : /gif$/i.test(given.name) ? "gif" : /webp$/i.test(given.name) ? "webp" : "jpeg"}`, session, note: "Opened in Panacea" });
@@ -784,6 +819,92 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
       return { text: `${done.join("; ")}.\nBlocks now (${blocks.length}):\n${blocks.slice(0, 80).join("\n")}${blocks.length > 80 ? "\n… (panacea_look doc: for the rest)" : ""}`, preview: done[0]! };
     }
 
+    case "panacea_board": {
+      const s = boardSurface(c, args.surface);
+      const ops: unknown[] = Array.isArray(args.ops) ? args.ops : [];
+      if (!ops.length) refuse("Pass `ops`: a list like [{\"op\": \"ask\", \"text\": \"Who is in it?\"}, {\"op\": \"link\", \"from\": \"c1\", \"to\": \"c2\"}].");
+      if (ops.length > 40) refuse("At most 40 ops in one call.");
+      let b = s.board!;
+      const done: string[] = [];
+      /** The cards' words are the person's unless they gave them to Autora: arranging is never held back, writing is. */
+      const writes = (what: string) => {
+        if (b.mode !== "agent") refuse(`${what} writes or removes the person's words, and "${s.title}" is theirs: you arrange, link, colour and ask questions on it. If they asked you to fill it, or it is productivity work (a plan from a meeting, a sorted list), switch it with {"op": "mode", "mode": "agent"} and say so; they can switch it back on the board's bar. On a brainstorm or a story, ask a question ({"op": "ask"}) or suggest in the chat and let them write the card.`);
+      };
+      ops.forEach((raw, i) => {
+        const op = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+        const kind = String(op.op ?? "");
+        const where = `op ${i + 1} (${kind || "?"})`;
+        const take = <T,>(r: T | string): T => (typeof r === "string" ? refuse(`${where}: ${r}`) : r);
+        const id = typeof op.id === "string" ? op.id : "";
+        const near = typeof op.near === "string" ? op.near : undefined;
+        const xy = numberOr(op.x) !== null && numberOr(op.y) !== null ? { x: numberOr(op.x)!, y: numberOr(op.y)! } : {};
+        switch (kind) {
+          case "move":
+            if (!id || xy.x === undefined) refuse(`${where} needs \`id\`, \`x\` and \`y\`.`);
+            b = take(moveCard(b, id, xy.x!, xy.y!));
+            done.push(`moved ${id}`);
+            break;
+          case "tone":
+            b = take(editCard(b, id, { tone: op.tone }));
+            done.push(`coloured ${id} ${String(op.tone)}`);
+            break;
+          case "link": {
+            const label = typeof op.label === "string" ? op.label.trim() : "";
+            if (label) writes(`${where} (a label)`);
+            b = take(linkCards(b, String(op.from ?? ""), String(op.to ?? ""), label)).board;
+            done.push(`linked ${String(op.from)} and ${String(op.to)}`);
+            break;
+          }
+          case "unlink":
+            b = take(unlink(b, typeof op.link === "string" ? op.link : null, { from: String(op.from ?? ""), to: String(op.to ?? "") }));
+            done.push(`unlinked ${String(op.from ?? op.link)}${op.to ? ` and ${String(op.to)}` : ""}`);
+            break;
+          case "tidy":
+            b = tidy(b);
+            done.push("tidied the board into columns of linked cards");
+            break;
+          case "ask": {
+            const text = typeof op.text === "string" ? op.text.trim() : "";
+            if (!text.endsWith("?")) refuse(`${where}: a question for the person, ending with "?". To put your own idea on their board, the board must be yours to write (mode agent).`);
+            const made = take(addCard(b, { text, near, ...xy, tone: "plain", ask: true, by: "agent" }));
+            b = made.board;
+            done.push(`asked ${made.card.id}: ${text.slice(0, 40)}`);
+            break;
+          }
+          case "add": {
+            writes(where);
+            const made = take(addCard(b, { text: typeof op.text === "string" ? op.text : "", near, ...xy, tone: op.tone, by: "agent" }));
+            b = made.board;
+            done.push(`added ${made.card.id}`);
+            break;
+          }
+          case "edit":
+            writes(where);
+            if (!id || typeof op.text !== "string") refuse(`${where} needs \`id\` and \`text\`.`);
+            b = take(editCard(b, id, { text: op.text as string }));
+            done.push(`rewrote ${id}`);
+            break;
+          case "remove": {
+            const card = b.cards.find((x) => x.id === id) ?? refuse(`${where}: there is no card "${id}".`);
+            if (!(card.ask && card.by === "agent")) writes(where);
+            b = take(removeCard(b, id));
+            done.push(`removed ${id}`);
+            break;
+          }
+          case "mode":
+            b = { ...b, mode: op.mode === "agent" || op.mode === "guide" ? op.mode : refuse(`${where}: mode is "agent" (you may write cards) or "guide" (the person writes).`) };
+            done.push(b.mode === "agent" ? "switched the board to Autora writing (the person can switch it back)" : "gave the board's words back to the person");
+            break;
+          default:
+            refuse(`${where}: op is move, tone, link, unlink, tidy, ask, add, edit, remove or mode.`);
+        }
+      });
+      s.board = b;
+      KINDS.board.settle?.(s);
+      const list = boardListing(b).split("\n");
+      return { text: `${done.join("; ")}.\nCards now (${b.cards.length}):\n${list.slice(0, 80).join("\n")}${list.length > 80 ? "\n… (panacea_look board: for the rest)" : ""}`, preview: done[0]! };
+    }
+
     case "panacea_bespoke": {
       const action = String(args.action ?? "");
       if (action === "draft") {
@@ -863,6 +984,15 @@ export async function runPanaceaTool(session: string, name: string, args: Record
             preview: d.title,
           };
         }
+        if (typeof args.board === "string") {
+          const b = boardSurface(e.canvas, args.board);
+          const list = boardListing(b.board!);
+          return {
+            ok: true,
+            summary: `Board ${b.id} "${b.title}": ${b.params.cards} cards, ${b.params.links} links, ${b.params.questions} questions; ${boardWho(b.board!)}.\nCards (id, place, colour, words, links; panacea_board changes them by id):\n${list.length > 20_000 ? `${list.slice(0, 20_000)}\n… (cut)` : list}`,
+            preview: b.title,
+          };
+        }
         if (typeof args.library === "string" || typeof args.domain === "string") {
           const pool = allRecipes().filter((r) => r.origin === "builtin" || r.uses > 0);
           const found = searchLibrary(pool, String(args.library ?? ""), typeof args.domain === "string" ? args.domain : null, 12);
@@ -885,6 +1015,7 @@ export async function runPanaceaTool(session: string, name: string, args: Record
       case "panacea_arrange":
       case "panacea_surface":
       case "panacea_doc":
+      case "panacea_board":
       case "panacea_bespoke": {
         const next = structuredClone(e.canvas);
         const done = edit(session, name, next, args, hooks);
@@ -915,6 +1046,11 @@ export async function runPanaceaTool(session: string, name: string, args: Record
           const art = saveArtifact({ origin: "agent", name: `${(typeof args.name === "string" && args.name.trim()) || s.title}.md`, data: Buffer.from(toMarkdown(stateOf(s.doc!).doc), "utf8"), mime: "text/markdown", session, note: "Exported from Panacea" });
           hooks.showFile?.({ id: art.id, name: art.name, mime: art.mime, size: art.size });
           return { ok: true, summary: `Saved ${art.name} (${s.params.words} words, as Markdown) as artifact ${art.id}, in the project.`, preview: art.name };
+        }
+        if (s.kind === "board") {
+          const art = saveArtifact({ origin: "agent", name: `${(typeof args.name === "string" && args.name.trim()) || s.title}.md`, data: Buffer.from(boardMarkdown(s.board!, s.title), "utf8"), mime: "text/markdown", session, note: "Exported from Panacea" });
+          hooks.showFile?.({ id: art.id, name: art.name, mime: art.mime, size: art.size });
+          return { ok: true, summary: `Saved ${art.name} (${s.params.cards} cards, as a Markdown outline) as artifact ${art.id}, in the project.`, preview: art.name };
         }
         const format = args.format === "jpeg" ? "jpeg" : "png";
         const out = (await command(session, "render", { surface: s.id, format, name: (typeof args.name === "string" && args.name.trim()) || s.title }, 120_000)) as { artifact?: string; name?: string; size?: number; mime?: string } | null;

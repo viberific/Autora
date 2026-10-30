@@ -28,6 +28,8 @@
  * the person and read by the server, and the agent is told what they are.
  */
 
+import { getCustomTool, PREFIX as CUSTOM_PREFIX } from "./customtools";
+
 export type WorkMode = "build" | "plan" | "agent";
 export type Permissions = "yolo" | "ask";
 /** What the agent is doing right now: the state Agent mode switches between. */
@@ -195,13 +197,32 @@ const LOOKS_ONLY = new Set([
 /** Commands that only read: what a terminal call may run in planning, so the
     agent can look at a file it made (cat, head, ls, grep...) without a way to
     change anything. Anything not here is a change. */
+/* Widened at 0.9.304 from the chat logs: planning refused 471 terminal calls in two weeks, most of them reads the old list
+   did not know (sed -n 1,80p, git -C <dir> status, git branch -a, diff, test -f), each one a model round trip spent
+   being told no. */
 const READ_COMMANDS = new Set([
   "cat", "head", "tail", "ls", "tree", "pwd", "wc", "file", "stat", "du", "df", "grep", "egrep", "fgrep", "rg",
   "sort", "uniq", "cut", "tr", "nl", "jq", "realpath", "basename", "dirname", "md5sum", "sha256sum", "sha1sum",
   "strings", "od", "hexdump", "echo", "printf", "date", "which", "whoami", "uname", "ps", "id", "cd", "find",
   "pdftotext", "pdfinfo", "identify", "git",
+  "sed", "diff", "cmp", "comm", "tac", "rev", "column", "xxd", "env", "printenv", "test", "[", "true", "false", "seq",
+  "uptime", "hostname", "free", "type", "command", "readlink",
 ]);
-const READ_GIT = new Set(["status", "log", "diff", "show", "ls-files", "rev-parse", "blame"]);
+const READ_GIT = new Set([
+  "status", "log", "diff", "show", "ls-files", "rev-parse", "blame", "describe", "rev-list", "shortlog", "grep", "ls-remote",
+  "ls-tree", "cat-file", "merge-base", "whatchanged", "reflog", "for-each-ref", "name-rev",
+]);
+/** Git subcommands that list when asked only to list, and change something otherwise (`git branch x` makes one). */
+const GIT_LISTS: Record<string, (rest: string[]) => boolean> = {
+  branch: (r) => r.every((w) => /^(-a|-r|-v|-vv|--all|--remotes|--list|--show-current|--merged|--no-merged|--contains|-l)$/.test(w) || /^--(sort|format)=/.test(w)),
+  remote: (r) => r.length === 0 || r.every((w) => w === "-v" || w === "--verbose") || (r[0] === "get-url" && r.length <= 3) || (r[0] === "show" && r.length <= 2),
+  tag: (r) => r.length > 0 && (r[0] === "-l" || r[0] === "--list") || (r.length === 0),
+  stash: (r) => r[0] === "list" || r[0] === "show",
+  worktree: (r) => r[0] === "list",
+  config: (r) => r.some((w) => /^(--get|--get-all|--get-regexp|--list|-l)$/.test(w)) && !r.some((w) => /^--(add|unset|replace-all|rename-section|remove-section|edit|-e)$/.test(w)),
+};
+/** A program asked only for its version (node -v, python3 --version): reading, whatever the program. */
+const VERSION_ONLY = /^(node|npm|npx|pnpm|yarn|bun|deno|python3?|pip3?|go|cargo|rustc|java|ruby|php|docker|gh|tsc|git|bash|psql|sqlite3)$/;
 
 /** Whether a shell command only reads: every part of it is a known reading
     command, and nothing writes (no redirect, substitution or in-place flag).
@@ -217,7 +238,33 @@ export function readOnlyCommand(command: string): boolean {
     if (words.length === 0) continue;
     if (/&/.test(part)) return false;
     const [cmd, ...rest] = words;
+    if (rest.length === 1 && /^(-v|-V|--version|version)$/.test(rest[0]!) && VERSION_ONLY.test(cmd!)) continue;
     if (!READ_COMMANDS.has(cmd)) return false;
+    /* sed reads only as `sed -n <lines>p` (or `<n>q`): its `w` and `e` commands write files and run programs, and -i
+       edits in place, so anything beyond printing a range is a change. */
+    if (cmd === "sed") {
+      const flags = rest.filter((w) => w.startsWith("-"));
+      const script = rest.find((w) => !w.startsWith("-"))?.replace(/^(['"])(.*)\1$/, "$2") ?? "";
+      if (flags.some((w) => !/^(-n|--quiet|--silent|-E|-r)$/.test(w)) || !/^((\d+|\$)(,(\d+|\$))?[pq=]|\/[^/]*\/[p=])$/.test(script)) return false;
+    }
+    // `command -v x` and `type x` say where a program is; `command x` runs it.
+    if (cmd === "command" && rest[0] !== "-v" && rest[0] !== "-V") return false;
+    // env with an argument runs it (`env FOO=1 make`); printenv only prints.
+    if (cmd === "env" && rest.length > 0) return false;
+    // xxd -r writes the bytes back out; two files is input and output.
+    if (cmd === "xxd" && (rest.some((w) => /^-r|^-revert/.test(w)) || rest.filter((w) => !w.startsWith("-")).length > 1)) return false;
+    if ((cmd === "hostname" || cmd === "date") && rest.some((w) => !w.startsWith("-") && !w.startsWith("+"))) return false;
+    if (cmd === "git") {
+      // `git -C <dir>` and `--no-pager` only say where and how it reads.
+      const args = [...rest];
+      while (args[0] === "-C" || args[0] === "--no-pager" || args[0]?.startsWith("--git-dir=") || args[0]?.startsWith("--work-tree=")) args.splice(0, args[0] === "-C" ? 2 : 1);
+      const sub = args.shift() ?? "";
+      // Options that write a file or run another program: a pager, an external diff, a filter, a remote's upload-pack.
+      if (rest.some((w) => /^--(output|ext-diff|textconv|filters|exec-path|open-files-in-pager|upload-pack|exec)\b|^-O/.test(w))) return false;
+      if (READ_GIT.has(sub)) continue;
+      if (GIT_LISTS[sub]?.(args)) continue;
+      return false;
+    }
     if (cmd === "find" && rest.some((w) => /^-(exec|execdir|ok|okdir|delete|fprint\w*|fls)$/.test(w))) return false;
     if (cmd === "sort" && rest.some((w) => /^-\w*o|^--output/.test(w))) return false;
     /* Commands that read, but take a second file to write to, or a flag that
@@ -232,7 +279,6 @@ export function readOnlyCommand(command: string): boolean {
     if (cmd === "file" && rest.some((w) => /^(-\w*C|--compile)/.test(w))) return false;
     // ImageMagick reads "ephemeral:" and "msl:" names as instructions (the first deletes the file it reads).
     if (cmd === "identify" && rest.some((w) => /^(-write|-script)|^[a-z]+:/i.test(w) && !/^[a-z]:[\\/]/i.test(w))) return false;
-    if (cmd === "git" && (!READ_GIT.has(rest.find((w) => !w.startsWith("-")) ?? "") || rest.some((w) => /^--(output|ext-diff|textconv)/.test(w)))) return false;
   }
   return true;
 }
@@ -270,6 +316,8 @@ export function looksOnly(name: string, args: Record<string, any> = {}): boolean
   if (name === "panacea_open") return !String(args.new ?? "").trim();
   // A command that only reads (cat a file, list a folder) is looking.
   if (name === "terminal") return readOnlyCommand(String(args.command ?? ""));
+  // Loading a skill's instructions, reading one of its files and searching for one are looking; writing one is not.
+  if (name === "skill") return ["use", "read", "list"].includes(String(args.action ?? "").trim().toLowerCase());
   // Reading notebooks is looking; filing into one is not.
   if (name === "notebook") return ["list", "read"].includes(String(args.action ?? "").trim().toLowerCase());
   // Listing the organization and reading Threads look; starting an agent, posting, commenting and liking do not.
@@ -289,15 +337,19 @@ export function looksOnly(name: string, args: Record<string, any> = {}): boolean
 export function planRefusal(work: WorkMode, phase: Phase | undefined, name: string, args: Record<string, any> = {}): string | null {
   if (phaseFor(work, phase) !== "plan") return null;
   if (looksOnly(name, args)) return null;
+  /* A tool the agent wrote and saved as only reading (tool_create reads_only) runs while it plans its own work: its own
+     word is enough for its own planning, not for Plan, which the person chose. */
+  if (work === "agent" && getCustomTool(name)?.readsOnly === true) return null;
   if (work === "agent") {
     return "Not run: you are planning, and planning changes nothing" +
-      (name === "terminal" ? " (a command that only reads -- cat, ls, head, grep, git status -- does run; pdf_look shows a PDF's pages)" : "") +
+      (name === "terminal" ? " (a command that only reads -- cat, ls, head, sed -n 1,80p, grep, git status/log/diff/branch -a, diff, test -f -- does run; pdf_look shows a PDF's pages)" : "") +
+      (name.startsWith(CUSTOM_PREFIX) && getCustomTool(name) ? ` (${name} is yours: if it only reads, save it again with tool_create reads_only: true and it runs while you plan)` : "") +
       ". Finish the plan on the to-do " +
       "list, then call set_mode with to \"build\" and make this call again. If the task is small " +
       "enough not to need a plan, switch to build now.";
   }
   return "Not run: this chat is in Plan mode, and nothing is changed there" +
-    (name === "terminal" ? " (a command that only reads -- cat, ls, head, grep, git status -- does run; pdf_look shows a PDF's pages)" : "") +
+    (name === "terminal" ? " (a command that only reads -- cat, ls, head, sed -n 1,80p, grep, git status/log/diff/branch -a, diff, test -f -- does run; pdf_look shows a PDF's pages)" : "") +
     ". Do not retry it and do " +
     "not look for another way to do the same thing. Put what you would do on the to-do list -- the " +
     "files, the commands, the order, the risks -- and say it in your reply, then stop: the person " +
