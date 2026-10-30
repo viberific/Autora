@@ -3610,7 +3610,7 @@ select.set-select {
     font-size: var(--fs-base); font-weight: 600; padding: 0 10px;
   }
   .top .session-btn:hover { background: var(--s2); border-color: var(--border); }
-  .session-name { max-width: 520px; }
+  .session-name { max-width: none; }
 
   /* Slim: the work window on the right gets the room. */
   .rail-slot { flex-basis: clamp(160px, 10.5vw, 172px); }
@@ -4081,6 +4081,15 @@ input.shot-where[readonly] { cursor: default; }
 @media (min-width: 681px) {
   .top { background: var(--s1); backdrop-filter: none; }
 }
+/* The name takes the room the header has, so a long one is read in full and the
+   whole stretch is the target for switching chats; the chevron stays at its far
+   end like a select's. The permissions pill sits just after it. */
+@media (min-width: 681px) {
+  .top .session-btn { flex: 1 1 0; justify-content: flex-start; }
+  .top .session-btn svg { margin-left: auto; }
+  .top .session-btn ~ .spacer { flex: 0 0 0; }
+}
+
 @media (min-width: 1180px) {
   .rail { background: var(--s1); border-right-color: var(--border); }
   .rail-top { height: 52px; }
