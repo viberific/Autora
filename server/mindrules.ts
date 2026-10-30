@@ -33,6 +33,12 @@ const MAX_BODY: Record<string, number> = {
   reference: 1500,
 };
 
+/* How far past its limit a record is still taken. Models count characters badly: of 137 records refused as too long in
+   the logs of 0.9.236-0.9.303, the median was 1.2 times the limit and 77 were within a quarter of it, each refusal a
+   rewrite and a second call. The limit the agent is told stays as it is; what is enforced allows for the miscount. */
+const SLACK = 1.25;
+const hardLimit = (kind: string) => Math.round((MAX_BODY[kind] ?? 600) * SLACK);
+
 /** How long a reference is trusted before it is read from its source again.
     Where to click moves faster than what an API is called. */
 export const REFERENCE_FRESH_DAYS: Record<Facet, number> = {
@@ -129,7 +135,7 @@ export function checkText(kind: string, title: string, body: string): string | n
     return "That holds what looks like a password, key or token. Secrets are never written to memory; say where it is kept instead.";
   }
   const limit = MAX_BODY[kind] ?? 600;
-  if (body.length > limit) {
+  if (body.length > hardLimit(kind)) {
     return `Too long for a ${kind} (${body.length} characters; at most ${limit}). One topic per memory: split it into separate records, each with a title naming what it covers, or keep only what will matter again.`;
   }
   if (kind !== "reference" && (EPHEMERAL.test(title) || EPHEMERAL.test(body))) {
@@ -272,7 +278,7 @@ export function tidyRecords(records: MemoryRecord[], at = Math.floor(Date.now() 
     }
 
     const limit = MAX_BODY[r.kind] ?? 600;
-    if (r.body.length > limit) problems.push(`${r.body.length} characters is too long for a ${r.kind} (at most ${limit}): split it, one topic each`);
+    if (r.body.length > hardLimit(r.kind)) problems.push(`${r.body.length} characters is too long for a ${r.kind} (at most ${limit}): split it, one topic each`);
     if (r.kind !== "reference" && (EPHEMERAL.test(r.title) || EPHEMERAL.test(r.body))) problems.push("reads as a note about a moment, not something durable");
     if (SECRET.test(r.body)) problems.push("looks like it holds a secret");
     if (!r.subject) problems.push("no subject: edit it to say what it is about");

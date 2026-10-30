@@ -104,7 +104,7 @@ export const terminalSPECS: ToolSpec[] = [
     description:
       "What a background command has printed, and how it ended. Give the " +
       "job id run_background returned. For a job still running this is what " +
-      "it has printed so far, not the finished output.",
+      "it has printed so far, not the finished output; pass wait to wait for it to end in the same call.",
     parameters: {
       type: "object",
       properties: {
@@ -112,6 +112,10 @@ export const terminalSPECS: ToolSpec[] = [
         lines: {
           type: "number",
           description: "How many lines from the end to return. Default 40, at most 500.",
+        },
+        wait: {
+          type: "number",
+          description: "Seconds to wait for the job to end before answering, at most 120: it answers as soon as the job ends. Use this instead of calling again or sleeping in the terminal.",
         },
       },
       required: ["id"],
@@ -163,6 +167,10 @@ export const terminalSPECS: ToolSpec[] = [
           },
         },
         script: { type: "string", description: "The shell script." },
+        reads_only: {
+          type: "boolean",
+          description: "True when the script only looks (checks a status, lists, fetches a page) and changes nothing: it then runs while you plan, as cat and git status do.",
+        },
       },
       required: ["name", "description", "script"],
     },

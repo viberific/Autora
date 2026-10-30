@@ -114,4 +114,25 @@ await test("a job is described in one sentence, and finished ones age out of the
   assert.equal(bg.backgroundBriefing(old.started + 3 * 24 * 3600 * 1000).includes("job-x1"), false);
 });
 
+await test("background_output waits for a job to end in one call, and stops waiting when the turn is stopped", async () => {
+  const { findTool, runTool } = await import("../server/tools");
+  const spec = findTool("background_output")!;
+  const ctx = (stopped = false) => ({ session: "session-test", cancelled: () => stopped, memory: { incognito: false } }) as any;
+  const slow = bg.startJob({ command: "sleep 1.2; echo done-at-last", cwd, session: "session-test" }).job!;
+  const asked = Date.now();
+  const out = await runTool(spec, { id: slow.id, wait: 20 }, ctx());
+  assert.ok(Date.now() - asked < 8000, "answered when the job ended, not when the wait ran out");
+  assert.ok(out.ok, out.summary);
+  assert.match(out.summary, /ended while waiting/);
+  assert.match(out.summary, /done-at-last/);
+  const still = bg.startJob({ command: "sleep 30", cwd, session: "session-test" }).job!;
+  const quick = await runTool(spec, { id: still.id }, ctx());
+  assert.match(quick.summary, /still running: .*pass wait/, "without wait it says it can wait");
+  const at = Date.now();
+  const cut = await runTool(spec, { id: still.id, wait: 60 }, ctx(true));
+  assert.ok(Date.now() - at < 2000, "a stopped turn does not wait");
+  assert.match(cut.summary, /still running/);
+  bg.stopJob(still.id);
+});
+
 console.log(`\n${passed} passed`);

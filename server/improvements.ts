@@ -181,8 +181,10 @@ interface Recorded {
  * word before it touches disk: an entry is read by other agents and may be committed.
  */
 export function recordFinding(dir: string, f: Finding, origin: Origin, redact: (text: string) => string, now: Date = new Date()): Recorded {
-  const title = oneLine(redact(f.title), MAX_TITLE);
   const happened = redact(block(f.happened, MAX_FIELD));
+  /* No title: the first clause of what happened is one. 27 records in the logs failed on the title alone, and every
+     one was sent again with only that added. */
+  const title = oneLine(redact(f.title), MAX_TITLE) || oneLine(happened.split(/(?<=[.!?:;])\s|\n/)[0]!.replace(/[.!?:;]$/, ""), Math.min(MAX_TITLE, 80));
   const suggestion = redact(block(f.suggestion, MAX_FIELD));
   if (!title) throw new Error("Give the finding a short title.");
   if (!happened) throw new Error("Say what happened (happened).");

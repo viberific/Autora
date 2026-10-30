@@ -196,6 +196,11 @@ async function main() {
       "cat /data/out/report.txt", "ls -la ~/project", "head -n 20 notes.md | grep todo", "cd app && ls && git status",
       "git log --oneline -5", "find . -name '*.pdf'", "pdftotext out.pdf - 2>&1 | head", "wc -l a b 2>/dev/null",
       "uniq -c words.txt", "sort -u list.txt", "date +%s", "rg -n todo src",
+      // Reads the logs showed refused in planning (471 terminal calls in two weeks) until 0.9.304.
+      "sed -n 1,80p README.md", "sed -n '120,180p' src/x.ts", "git -C /data/work/a2 status", "git branch -a", "git branch --show-current",
+      "git remote -v", "git tag --list", "git describe --tags", "git rev-list --count HEAD", "git stash list", "git --no-pager log -5",
+      "git config --get remote.origin.url", "diff a.txt b.txt", "test -f x && echo yes", "[ -d dist ] && ls dist", "node -v",
+      "npm --version", "command -v git", "printenv HOME", "uptime",
     ]) {
       assert.equal(m.planRefusal("plan", undefined, "terminal", { command }), null, command);
       assert.equal(m.planRefusal("agent", "plan", "terminal", { command }), null, command);
@@ -207,11 +212,29 @@ async function main() {
       // Readers that write to a second file, or run something, when asked the right way.
       "pdftotext in.pdf /etc/cron.d/x", "pdftotext in.pdf", "uniq in.txt out.txt", "rg --pre ./evil.sh x .",
       "sort --compress-program=sh -S 1k f", "identify ephemeral:photo.jpg", "date -s '2000-01-01'", "file -C -m magic",
+      // The same programs asked to write or run something.
+      "sed 's/a/b/' f", "sed -n 1w out.txt f", "sed -n '1e rm x' f", "git branch new-feature", "git branch -D main", "git tag v1",
+      "git stash", "git config user.name x", "git -c core.pager=sh log", "git grep -Ocat x", "git ls-remote --upload-pack=sh origin",
+      "git -C /x commit -m y", "env FOO=1 make", "command rm x", "xxd -r a b", "hostname evil", "npm version patch", "node x.js",
     ]) {
       assert.match(m.planRefusal("plan", undefined, "terminal", { command }) ?? "", /Not run/, command);
     }
+    assert.match(m.planRefusal("agent", "plan", "terminal", { command: "touch x" }) ?? "", /sed -n 1,80p/, "the refusal names the reads that do run");
     assert.equal(m.askAbout("ask", "", "terminal", { command: "cat file" }), "skip");
     assert.equal(m.askAbout("ask", "", "terminal", { command: "rm file" }), "hold");
+  });
+
+  const { defineCustomTool } = await import("../server/customtools");
+  test("loading a skill is looking, writing one is not; a tool the agent saved as only reading runs while it plans", () => {
+    for (const action of ["use", "read", "list"]) assert.equal(m.planRefusal("agent", "plan", "skill", { action, name: "x" }), null, action);
+    assert.match(m.planRefusal("agent", "plan", "skill", { action: "write", name: "x" }) ?? "", /Not run/);
+    defineCustomTool({ name: "release_status", description: "Says how the release is going.", script: "echo ok", readsOnly: true });
+    defineCustomTool({ name: "deploy", description: "Ships it.", script: "echo ship" });
+    assert.equal(m.planRefusal("agent", "plan", "my_release_status", {}), null);
+    assert.match(m.planRefusal("plan", undefined, "my_release_status", {}) ?? "", /Not run/, "the person's Plan does not take the agent's word for it");
+    assert.match(m.planRefusal("agent", "plan", "my_deploy", {}) ?? "", /save it again with tool_create reads_only: true/);
+    defineCustomTool({ name: "release_status", description: "Says how the release is going.", script: "echo ok" });
+    assert.match(m.planRefusal("agent", "plan", "my_release_status", {}) ?? "", /Not run/, "saved again without it, it is a change again");
   });
 
   console.log(`\n${passed} modes cases passed.`);

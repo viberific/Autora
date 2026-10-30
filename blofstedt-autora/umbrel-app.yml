@@ -199,3 +199,8 @@ releaseNotes: >-
   add, change or remove your cards. Press it to let Autora write. Panacea is also now where Autora goes for work no
   other window was made for (a brainstorm, a mind map, organising your ideas), and panels with text or list fields
   say whose words they are in the same way.
+  Less wasted work, from two weeks of chat logs: while it plans, Autora can now run many more commands that only
+  read (sed -n, git branch -a, git -C, diff, test -f and others) instead of being refused, load a skill's
+  instructions, and run its own tools that it marked as only reading. It can wait for a background command to
+  finish in one step instead of checking over and over, and a memory a little over its length limit is kept
+  rather than sent back to be rewritten.

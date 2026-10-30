@@ -95,6 +95,11 @@ await test("the agent sees each skill's name and description every turn, and loa
   assert.match(miss.summary, /Did you mean invoice-from-timesheet/);
   const list = await runTool(findTool("skill")!, { action: "list", query: "bill a client" }, ctx());
   assert.match(list.summary, /invoice-from-timesheet/);
+  // The name under the key a model reaches for, and no name at all: told which skills there are, not only that one is missing.
+  assert.ok((await runTool(findTool("skill")!, { action: "use", skill: "invoice-from-timesheet" }, ctx())).ok);
+  const nameless = await runTool(findTool("skill")!, { action: "use" }, ctx());
+  assert.equal(nameless.ok, false);
+  assert.match(nameless.summary, /use needs the skill's name in `name`\. Skills: .*invoice-from-timesheet/);
 });
 
 await test("an agent writes a skill as a draft, improves it with the old text kept, and it goes live by working", async () => {

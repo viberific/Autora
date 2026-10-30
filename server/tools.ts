@@ -1546,9 +1546,20 @@ function welcomeToThreads(a: { id: string; name: string; role: string; when: str
 }
 
 /** The skill library (server/skills.ts), as the agent uses it. Any agent may use or write any skill; who wrote what is kept. */
+/** The longest background_output waits for a job to end, and how often it looks. */
+const MAX_JOB_WAIT_S = 120;
+const JOB_POLL_MS = 500;
+
 function runSkill(args: Record<string, any>, ctx: ToolContext): ToolOutcome {
   const action = String(args.action ?? "").trim();
-  const name = String(args.name ?? "").trim();
+  /* The name, under whatever key it came: models send skill or skill_name about as often as name (38 calls in the logs
+     of 0.9.236-0.9.303 failed "use needs the skill's name" and were sent again the same way). */
+  const name = String(args.name ?? args.skill ?? args.skill_name ?? args.id ?? "").trim();
+  /** Which names there are, for a call that gave none. */
+  const known = () => {
+    const some = findSkills("", 12).map((s) => s.name);
+    return some.length ? ` Skills: ${some.join(", ")}.` : " There are no skills yet.";
+  };
   switch (action) {
     case "list": {
       const found = findSkills(String(args.query ?? ""), 15);
@@ -1560,14 +1571,14 @@ function runSkill(args: Record<string, any>, ctx: ToolContext): ToolOutcome {
       };
     }
     case "use": {
-      if (!name) return { ok: false, summary: "use needs the skill's name." };
+      if (!name) return { ok: false, summary: `use needs the skill's name in \`name\`.${known()}` };
       const got = skillForUse(name);
       if (!got.ok) return { ok: false, summary: got.error };
       if (!ctx.memory.incognito) noteSkillUsed(got.skill.name);
       return { ok: true, summary: got.text, preview: got.skill.name };
     }
     case "read": {
-      if (!name || !args.path) return { ok: false, summary: "read needs the skill's name and a path inside it." };
+      if (!name || !args.path) return { ok: false, summary: `read needs the skill's name in \`name\` and a file in it in \`path\` (e.g. references/api.md).${name ? "" : known()}` };
       const got = readSkillFile(name, String(args.path));
       return got.ok ? { ok: true, summary: got.text, preview: `${name}/${args.path}` } : { ok: false, summary: got.error };
     }
@@ -2414,12 +2425,27 @@ async function runToolUnredacted(
       case "background_output": {
         const id = String(args.id ?? "").trim();
         if (!id) return { ok: false, summary: "No job id was given." };
-        const job = findJob(id);
+        let job = findJob(id);
         if (!job) {
           return {
             ok: false,
             summary: `There is no background job ${id}. background_jobs lists the ones there are.`,
           };
+        }
+        /* Waiting here, not in a loop of calls: the logs had 215 background_output calls repeated exactly and streaks of
+           up to seven polls (often with a sleep between), each a model round trip that only learned "still running".
+           It returns as soon as the job ends, or when the time is up, or when the turn is stopped. */
+        const waitFor = Math.min(Math.max(Number(args.wait ?? 0) || 0, 0), MAX_JOB_WAIT_S);
+        let waited = 0;
+        if (waitFor > 0 && job.state === "running") {
+          const until = Date.now() + waitFor * 1000;
+          const started = Date.now();
+          while (Date.now() < until && !ctx.cancelled()) {
+            await new Promise((r) => setTimeout(r, JOB_POLL_MS));
+            job = findJob(id) ?? job;
+            if (job.state !== "running") break;
+          }
+          waited = Math.round((Date.now() - started) / 1000);
         }
         const wanted = Math.min(Math.max(Number(args.lines ?? 40) || 40, 1), 500);
         const text = readTail(job, 200_000).replace(/\s+$/, "");
@@ -2431,7 +2457,9 @@ async function runToolUnredacted(
           exitCode: job.exit ?? undefined,
           summary:
             `${describeJob(job)}\n` +
-            (job.state === "running" ? "(still running: this is what it has printed so far)\n" : "") +
+            (job.state === "running"
+              ? `(still running${waited ? ` after ${waited}s of waiting` : ""}: this is what it has printed so far${waitFor ? "" : "; pass wait (seconds) to wait for it to end in one call"})\n`
+              : waited ? `(ended while waiting, after ${waited}s)\n` : "") +
             omitted + (shown || "(nothing printed)"),
           preview: `${job.id} · ${job.state}${job.exit === null ? "" : ` · exit ${job.exit}`}`,
         };
@@ -3766,7 +3794,7 @@ async function runToolUnredacted(
         try {
           const { tool, replaced, warnings } = defineCustomTool({
             name: args.name, description: args.description, params: args.parameters,
-            script: args.script, session: ctx.session,
+            script: args.script, session: ctx.session, readsOnly: args.reads_only,
           });
           return {
             ok: true,
