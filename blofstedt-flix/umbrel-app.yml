@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.84"
+version: "0.3.85"
 port: 8096
 # umbrelOS only hands a container the GPU when the manifest says so: with this
 # permission it adds /dev/dri plus the render/video groups those nodes belong
@@ -60,9 +60,12 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  The Android Auto player is rebuilt around the picture: it fills the screen
-  beside the car's own buttons instead of underneath them, with the controls
-  in a panel to the side, so nothing is hidden and nothing needs fullscreen.
+  The Android Auto screen now carries Flix's own header in the car's strip, so
+  the mark is there instead of a bare title, and it leads home.
 
-  Audio delay can be nudged from the car screen while something is playing,
-  and the Play build now compiles against SDK 36.
+  The player panel is cleaner, and the maximised picture fills the screen,
+  cropped rather than letterboxed, with no Back button over it and the rating
+  alone at the top left. Fade the bar and the strip drops to the Flix mark.
+
+  The shell cache moves to v57, so the new layout replaces the old one in an
+  installed app instead of waiting behind it.
