@@ -7749,6 +7749,9 @@ body.is-resizing iframe { pointer-events: none; }
 .pa-head:active { cursor: grabbing; }
 .pa-title { flex: 1; min-width: 0; font-size: var(--fs-sm); font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pa-draft-tag { font-size: var(--fs-2xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); border: 1px solid var(--accent-line); border-radius: var(--r-pill); padding: 0 6px; }
+.pa-writes { flex: none; border: 1px solid var(--border-strong); background: var(--s2); color: var(--text-3); border-radius: var(--r-pill); padding: 0 7px; font-size: var(--fs-2xs); cursor: pointer; transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease); }
+.pa-writes:hover { color: var(--text); }
+.pa-writes[aria-pressed="true"] { border-color: var(--accent-line); background: var(--accent-soft); color: var(--text); }
 .pa-head-acts { display: flex; gap: 2px; }
 .pa-head-acts button {
   display: grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: var(--r-xs); background: transparent;

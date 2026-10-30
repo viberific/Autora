@@ -93,7 +93,8 @@ export const panaceaSPECS: ToolSpec[] = [
       "compose when none fits, and keep it small: two to six controls, the rest advanced. `why` is required: one sentence to the person, shown under the panel's " +
       "ⓘ, so they can say \"not this\". `ghost: true` offers it instead (dashed, with the why; the person takes it with a click or it drifts away): use that for " +
       "anything they did not ask for. `values` sets what it opens with. Creative work stays the person's: on their story, melody or design, place controls and " +
-      "suggest; do not set their creative values for them unless asked. " + NODE_HELP,
+      "suggest; do not set their creative values for them unless asked. The words in a panel's text and list fields are the person's (the panel says " +
+      "\"You write\"): `values` for them are refused unless you pass `writes: \"agent\"`, for productivity work or when they asked you to fill it. " + NODE_HELP,
     parameters: {
       type: "object",
       properties: {
@@ -104,6 +105,7 @@ export const panaceaSPECS: ToolSpec[] = [
         near: { type: "string", description: "A surface or panel id to put it beside (default: what the person is working on)." },
         ghost: { type: "boolean", description: "Offer it as a suggestion rather than place it." },
         values: { type: "object", description: "Values it opens with: {\"@image.exposure\": 0.3, \"budget\": 900}." },
+        writes: { type: "string", enum: ["agent"], description: "Let yourself fill its text and list fields: only for productivity work or when the person asked; say so." },
         w: { type: "number", description: "Width in pixels (176-960)." },
       },
       required: ["why"],
@@ -115,7 +117,9 @@ export const panaceaSPECS: ToolSpec[] = [
     risky: true,
     description:
       "Set values on the canvas: surface parameters (\"@img1.exposure\": 0.4, \"@dat1.filter.Region\": [\"EU\"]) and shared values (\"budget\": 1200). Each is checked " +
-      "against what it is (a number in range, one of a choice's options) and the controls bound to it move. With Visible work on, your cursor moves the " +
+      "against what it is (a number in range, one of a choice's options) and the controls bound to it move. Words in a text or list field are refused " +
+      "while its panel says \"You write\" (a brainstorm, a story's characters): ask and suggest in the chat; panacea_arrange writes lets you fill it when " +
+      "they asked or it is productivity work. With Visible work on, your cursor moves the " +
       "person's own sliders and switches to the values while they watch.",
     parameters: {
       type: "object",
@@ -129,7 +133,8 @@ export const panaceaSPECS: ToolSpec[] = [
     risky: true,
     description:
       "Arrange the canvas. `move`: [{id, x, y, w}]; `remove`: panel ids to put away (they fade into the corner, where the person can bring them back; pinned " +
-      "panels stay); `restore`: bring faded panels back; `accept`: take ghosts; `group` / `ungroup`: panels that move together; `titles`: {id: title}; `focus`: " +
+      "panels stay); `restore`: bring faded panels back; `accept`: take ghosts; `group` / `ungroup`: panels that move together; `titles`: {id: title}; `writes`: {id: \"agent\"} to fill a panel's text and list fields yourself (only when they asked, or for " +
+      "productivity work; say so), {id: \"person\"} to give them back; `focus`: " +
       "the surface the work is on (the old work's panels dim, and go when the work moves on again); `name`: the canvas's name. Keep the canvas to what is in use: " +
       "put away what the work no longer needs.",
     parameters: {
@@ -142,6 +147,7 @@ export const panaceaSPECS: ToolSpec[] = [
         group: { type: "array", items: { type: "string" } },
         ungroup: { type: "array", items: { type: "string" } },
         titles: { type: "object" },
+        writes: { type: "object", description: "{panel id: \"agent\" | \"person\"}: who writes the words in its text and list fields." },
         focus: { type: ["string", "null"] },
         name: { type: "string" },
       },

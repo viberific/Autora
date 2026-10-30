@@ -43,6 +43,9 @@ export interface Panel {
   touched?: number;
   /** More is open. */
   expanded?: boolean;
+  /** "agent": Autora may fill its text and list fields (the person let it, or it is productivity work). Absent, the words
+   * in them are the person's: the agent's panacea_set and panacea_place refuse them (`wordsOwner`). */
+  writes?: "agent";
 }
 
 export interface Surface {
@@ -120,6 +123,25 @@ export function valueAt(canvas: Canvas, key: string): Value | undefined {
   const { surface, param } = parseBind(key);
   if (surface === null) return canvas.values[param];
   return canvas.surfaces.find((s) => s.id === surface)?.params[param];
+}
+
+/** Value kinds that hold the person's words: a text field, a list. */
+const WORDS = new Set(["text", "list"]);
+
+/** A panel has fields of words: the only panels the "You write" switch is shown on. */
+export function holdsWords(tree: Node): boolean {
+  const walk = (n: Node): boolean => (!!n.bind && parseBind(n.bind).surface === null && WORDS.has(kindAt(n, n.bind) ?? "")) || !!n.children?.some(walk);
+  return walk(tree);
+}
+
+/**
+ * The panel whose words are at a shared key and are the person's to write, or null when the agent may set it. Only text and
+ * list fields bound to shared values count: a surface's parameters (a search box over a table) and other controls are not words.
+ */
+export function wordsOwner(canvas: Canvas, key: string): Panel | null {
+  const { surface, param } = parseBind(key);
+  if (surface !== null) return null;
+  return canvas.panels.find((p) => p.writes !== "agent" && WORDS.has(kindAt(p.tree, param) ?? "")) ?? null;
 }
 
 /** Why a value cannot go at a key, or null when it can: the parameter's kind, or the kind of the controls bound to a shared value. */
@@ -363,6 +385,7 @@ function readPanel(raw: unknown, ctx: CheckContext, ids: Set<string>): Panel | n
     at: num(r.at, Date.now()),
     ...(typeof r.touched === "number" ? { touched: r.touched } : {}),
     ...(r.expanded === true ? { expanded: true } : {}),
+    ...(r.writes === "agent" ? { writes: "agent" as const } : {}),
   };
 }
 
@@ -433,7 +456,7 @@ export function describeCanvas(canvas: Canvas, opts: { trees?: boolean } = {}): 
     lines.push(`- surface ${s.id}: ${KINDS[s.kind].describe(s)} at ${s.x},${s.y} ${s.w}x${s.h}. ${changed.length ? `Set: ${changed.join(", ")}.` : "Untouched."}`);
   }
   for (const p of canvas.panels) {
-    const flags = [p.state !== "live" ? p.state : "", p.pinned ? "pinned" : "", p.group ? `group ${p.group}` : "", p.by === "person" ? "placed by the person" : ""].filter(Boolean).join(", ");
+    const flags = [p.state !== "live" ? p.state : "", p.pinned ? "pinned" : "", p.group ? `group ${p.group}` : "", p.by === "person" ? "placed by the person" : "", holdsWords(p.tree) ? (p.writes === "agent" ? "you may write in it" : "its words are the person's") : ""].filter(Boolean).join(", ");
     lines.push(`- panel ${p.id} "${p.title}"${p.recipe ? ` (recipe ${p.recipe})` : ""} on ${p.context} at ${p.x},${p.y} w${p.w}${flags ? ` [${flags}]` : ""}${p.why ? ` -- why: ${p.why}` : ""}${opts.trees ? `\n    ${treeWords(p.tree)}` : ""}`);
   }
   const shared = Object.entries(canvas.values);

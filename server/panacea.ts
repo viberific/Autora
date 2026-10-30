@@ -25,7 +25,7 @@ import { unzipSync, strFromU8 } from "fflate";
 import type { Value } from "../src/lib/panacea/atoms";
 import {
   contextOf, describeCanvas, fade, MAX_PANELS, newCanvas, normalizeCanvas, refocus, removeSurface, restore,
-  setValue, snap, uid, valueProblem, PANEL_MAX_W, PANEL_MIN_W, type Canvas, type Panel, type Surface,
+  setValue, snap, uid, valueProblem, wordsOwner, PANEL_MAX_W, PANEL_MIN_W, type Canvas, type Panel, type Surface,
 } from "../src/lib/panacea/canvas";
 import { panaceaSteps, stepWords } from "../src/lib/panacea/handsteps";
 import { createDoc, docStateOf, formatBlock, insertBlocks, listing, outlineOf, applyParam, deleteBlock, replaceBlockText, stateOf, toMarkdown, type DocMode } from "../src/lib/panacea/document";
@@ -275,7 +275,7 @@ export function panaceaTurnNote(session: string): string | null {
 /** The capability line for the system prompt: paid for on every turn, so short. */
 export function panaceaBriefing(on: boolean): string {
   if (!on) return "- Panacea (canvas window): switched off on the Tools page; if asked, say so.";
-  return "- Panacea (canvas window): panacea_* tools (tools_enable panacea). Controls appear for the work and go when it moves on; compose from the library's atoms only.";
+  return "- Panacea (canvas window): panacea_* tools (tools_enable panacea). Controls appear for the work and go when it moves on; compose from the library's atoms only. When no window fits what is asked (a brainstorm, a map of ideas, a tracker), it goes here.";
 }
 
 function act(session: string, e: Entry, text: string) {
@@ -452,6 +452,16 @@ interface Outcome {
 class Refuse extends Error {}
 const refuse = (message: string): never => { throw new Refuse(message); };
 
+/** Why the agent may not set a value, or null: its kind (`valueProblem`), or words that are the person's to write (`wordsOwner`). */
+function agentProblem(c: Canvas, key: string, v: unknown): string | null {
+  const owner = wordsOwner(c, key);
+  if (owner) {
+    return `the words in "${owner.title}" (${owner.id}) are the person's to write. Ask, suggest and critique in the chat and let them type it; if they asked ` +
+      `you to fill it, or it is productivity work (a packing list, minutes), switch it with panacea_arrange writes: {"${owner.id}": "agent"} and say so`;
+  }
+  return valueProblem(c, key, v);
+}
+
 /** The pixel size of a PNG, JPEG, GIF or WebP from its first bytes; null when it cannot tell. */
 function imageSize(data: Buffer): { w: number; h: number } | null {
   if (data.length > 24 && data.readUInt32BE(0) === 0x89504e47) return { w: data.readUInt32BE(16), h: data.readUInt32BE(20) };
@@ -594,11 +604,12 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
       } else return refuse("Give `recipe` (a library id) or `tree` (a panel composed of atoms).");
       if ("error" in placed) refuse(placed.error);
       const panel = placed as Panel;
+      if (args.writes === "agent") panel.writes = "agent";
       // Values it opens with: checked like any other.
       const problems: string[] = [];
       for (const [k, v] of Object.entries(values)) {
         const key = k.replace(/^@(image|data)\./, (_, kind: string) => `@${panel.context !== "general" ? panel.context : c.surfaces.find((s) => s.kind === kind)?.id ?? kind}.`);
-        const bad = valueProblem(c, key, v);
+        const bad = agentProblem(c, key, v);
         if (bad) problems.push(`${k}: ${bad}`);
         else setValue(c, key, v);
       }
@@ -614,7 +625,7 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
       const done: string[] = [];
       const problems: string[] = [];
       for (const [k, v] of given.slice(0, 40)) {
-        const bad = valueProblem(c, k, v);
+        const bad = agentProblem(c, k, v);
         if (bad) problems.push(`${k}: ${bad}`);
         else { setValue(c, k, v as Value); done.push(`${k}=${JSON.stringify(v).slice(0, 40)}`); }
       }
@@ -654,6 +665,14 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
           if (typeof t === "string" && t.trim()) { needPanel(c, id).title = t.trim().slice(0, 60); done.push(`retitled ${id}`); }
         }
       }
+      if (args.writes && typeof args.writes === "object") {
+        for (const [id, who] of Object.entries(args.writes as Record<string, unknown>)) {
+          const panel = needPanel(c, id);
+          if (who === "agent") { panel.writes = "agent"; done.push(`you may write in ${panel.id} (say so: the person can take it back on the panel)`); }
+          else if (who === "person") { delete panel.writes; done.push(`${panel.id}'s words are the person's again`); }
+          else refuse(`writes: {"${id}": "agent"} lets you fill its fields, "person" gives them back.`);
+        }
+      }
       // Put away last, so a call that also groups or retitles a panel it puts away still does those.
       for (const id of Array.isArray(args.remove) ? args.remove : []) {
         const panel = needPanel(c, id);
@@ -667,7 +686,7 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
         const r = refocus(c, f);
         done.push(`focus on ${f ?? "nothing"} (${r.dimmed} dimmed, ${r.gone} put away, ${r.back} back)`);
       }
-      if (!done.length) refuse("Nothing to do: pass move, remove, restore, accept, group, ungroup, titles, focus or name.");
+      if (!done.length) refuse("Nothing to do: pass move, remove, restore, accept, group, ungroup, titles, writes, focus or name.");
       return { text: `${done.join("; ")}.`, preview: done[0]! };
     }
 

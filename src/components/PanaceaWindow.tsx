@@ -231,6 +231,11 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
 
   const actions = useMemo<Omit<PanelActions, "grab" | "widen">>(() => ({
     pin: (panel) => edit((d) => { const p = d.panels.find((x) => x.id === panel.id); if (p) p.pinned = !p.pinned; }, panel.pinned ? `Unpinned ${panel.title}` : `Pinned ${panel.title}`),
+    writes: (panel) => {
+      const agent = panel.writes !== "agent";
+      edit((d) => { const p = d.panels.find((x) => x.id === panel.id); if (!p) return; if (agent) p.writes = "agent"; else delete p.writes; }, agent ? `Autora may write in ${panel.title}` : `${panel.title} is yours to write`);
+      void tell(agent ? `let you fill "${panel.title}"` : `took back writing "${panel.title}": ask and suggest, the words are theirs`);
+    },
     close: (panel) => {
       edit((d) => { fade(d, panel.id); }, `Put away ${panel.title}`);
       void tell(`put away "${panel.title}"`);

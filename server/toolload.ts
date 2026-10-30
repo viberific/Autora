@@ -47,9 +47,10 @@ export const FAMILIES: Family[] = [
   },
   {
     id: "panacea",
-    about: "Panacea: the canvas window, where controls for the work appear and go -- photos and tables as surfaces, panels from the library or composed from atoms, values set, bespoke pieces",
+    about: "Panacea: the canvas window, where controls for the work appear and go -- photos and tables as surfaces, panels from the library or composed from atoms, values set, bespoke pieces; the place for work no other window was made for (a brainstorm, a map of ideas, a planner, a tracker)",
     match: (n) => n.startsWith("panacea_"),
-    words: /\bpanacea\b|\bcanvas\b|\bgenerative ui\b|\b(?:sliders?|knobs?|toggles?|controls?) (?:for|to)\b|\b(?:control )?panels? for\b|\bdotted grid\b|\bmiro\b|\bfigma\b/i,
+    // Its own name and look, and the open-ended work it is the home for: brainstorms, maps and boards of ideas, organising thoughts.
+    words: /\bpanacea\b|\bcanvas\b|\bgenerative ui\b|\b(?:sliders?|knobs?|toggles?|controls?) (?:for|to)\b|\b(?:control )?panels? for\b|\bdotted grid\b|\bmiro\b|\bfigma\b|\bbrainstorm|\bmind ?maps?\b|\bmood ?boards?\b|\bwhiteboard\b|\bsticky notes?\b|\b(?:idea|story|plot|writing|concept|planning|vision) (?:maps?|boards?)\b|\bwho,? what,? (?:where|when|why)\b|\b(?:organi[sz]e|map out|lay out|sort out|structure) (?:my |the |these |our |some )?(?:ideas|thoughts|notes)\b/i,
   },
   {
     id: "office",

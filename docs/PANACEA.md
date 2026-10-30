@@ -62,7 +62,14 @@ manual for the window is `PANACEA` in `server/handbook.ts`.
   pressing that switch, clicking that segment, swatch or chip, choosing in that menu, typing in that field; panels dragged by
   their title bars and put away with ×. What has no control on screen goes in with the finished canvas, and the result says so.
 - **Creative work stays theirs** (CLAUDE.md, the core principle): for a photo's look, a story, a melody or a design, the agent
-  places controls and suggests; it does not set the creative values unless asked.
+  places controls and suggests; it does not set the creative values unless asked. Words are enforced in the tool: a panel with
+  text or list fields bound to shared values shows **You write** (the default) or **Autora writes** by its title, and while it
+  says You write, `panacea_set` and `panacea_place` refuse those fields (`wordsOwner` in `src/lib/panacea/canvas.ts`). The
+  agent switches it (`panacea_arrange` `writes`, or `writes: "agent"` on placing) only when asked or for productivity work, and
+  says so; the person switches it back with one click. Not covered: a bespoke piece setting its binds from inside its frame.
+- **The home for the unplanned.** Work no other window was made for (a brainstorm, a map of ideas, a planner) comes here: the
+  words that bring the Panacea tools in (`server/toolload.ts`) include brainstorms, mind maps, boards of ideas and organising
+  thoughts, and the tool index and the prompt's line both say so.
 - **No tool rail.** Panacea is the one window without the floating tool bar of `docs/TOOL-RAIL.md`, on purpose: there is no
   fixed set of tools to put on it. Its only chrome is the top bar (name, Load, Save), the ask box, the history and the put
   away chip.
