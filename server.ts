@@ -96,7 +96,7 @@ import {
   MAX_FRAME_BYTES, clearFrame, putFrame,
 } from "./server/liveview";
 import {
-  CONTEXT_WINDOW_SETTING, ContextEngine, stripAnsi,
+  CONTEXT_WINDOW_SETTING, ContextEngine, calibrate as calibrateTokens, stripAnsi,
   type CompactionReport, type WindowSource,
 } from "./server/context";
 import {
@@ -4360,6 +4360,11 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
                the head of the history, so a fold leaves the system prompt and the tools in the vendor's cache. The size
                of both together is what messagesFor keeps inside the window. */
             const system = context.systemFor(pinned);
+            const sentTools = tools.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters }));
+            /* Counted with the request, and corrected by what this model reports it as (server/context.ts calibrate). */
+            context.useRequest(answering.model, sentTools);
+            const sent = context.messagesFor(system, { anchorInMessages: true });
+            const sentEstimate = context.estimateSent(pinned, sent);
             const turn = await streamChat({
               provider: answering.provider,
               model: answering.model,
@@ -4367,7 +4372,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
               baseUrl: answering.baseUrl,
               endpoint: endpointPinFor(answering.provider, answering.model),
               system: pinned,
-              messages: context.messagesFor(system, { anchorInMessages: true }),
+              messages: sent,
               temperature: 0.7,
               maxTokens: outputTokens,
               thinkingBudget: THINKING_BUDGET,
@@ -4386,11 +4391,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
               /* Small talk is answered without thinking, in every round of the turn. */
               ...(opts.quick ? { thinking: "off" as const } : {}),
               signal: running.get(session.id)?.signal,
-              tools: tools.map((t) => ({
-                name: t.name,
-                description: t.description,
-                parameters: t.parameters,
-              })),
+              tools: sentTools,
             }, (piece) => {
               // The client coalesces these deltas into one reply (see
               // derive.ts), so a chunk per emit is a sentence appearing,
@@ -4435,6 +4436,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
             // figure that was in force when the call was made. One entry
             // per model call, so a turn that used six tools is billed as
             // the six calls it actually was.
+            if (!turn.usage.estimated) calibrateTokens(answering.model, sentEstimate, turn.usage.input);
             const { cost, priced, cache } = charge(answering.model, turn.usage, answering.provider);
             emitEvent(session, "usage.turn", "system", {
               provider: answering.provider,
@@ -4444,6 +4446,8 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
               cached_tokens: cache.read,
               cache_write_tokens: cache.write,
               tools_changed: lastToolKey !== null && lastToolKey !== tools.map((t) => t.name).join(","),
+              /* Our estimate of the request beside the vendor's count: how far apart they are is what calibrate learns. */
+              estimated_input: sentEstimate,
               cost_usd: cost,
               priced,
               estimated: turn.usage.estimated,

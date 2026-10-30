@@ -205,4 +205,6 @@ releaseNotes: >-
   finish in one step instead of checking over and over, and a memory a little over its length limit is kept
   rather than sent back to be rewritten. File edits fail less: several changes in one edit are matched against the
   file as it was read, a block with different indentation is fitted in, and a failed edit points at the right
-  place. Long chats cost less, because old file reads are only trimmed when that saves more than it costs.
+  place. Long chats cost less, because old file reads are only trimmed when that saves more than it costs, and
+  Autora now knows how full a conversation really is: it counts the tool list and the turn's notes, and learns
+  each model's own way of counting, so it condenses in time instead of silently dropping older messages.

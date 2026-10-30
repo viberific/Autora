@@ -145,6 +145,50 @@ const STALE_PRESSURE = 0.5;
 const STALE_MARK = "[Older result:";
 
 const CHARS_PER_TOKEN = 4;
+
+/*
+ * What a request really weighs, learned from what the vendor reports.
+ *
+ * The estimate (characters / 4 of the instructions and the history) left out two things every request carries: the
+ * turn's note and the tool definitions. And vendors count the same request differently, tool definitions most of all,
+ * since each renders them into its own template. Measured over 21,159 calls (0.9.236-0.9.303), the vendor's count ran
+ * ahead of the estimate by a fixed ~50,000 tokens on one model, ~22,000 on another, and by half again of the history on a
+ * third. So the fold came late, and on a 100k window the overflow backstop cut the oldest messages from hundreds of
+ * requests (each cut also breaking the cache), where it was meant for one in a thousand.
+ *
+ * Now everything sent is counted, and the count is corrected per model by a line fitted through its recent requests: the
+ * estimate against what the vendor said it was. Kept per model, not per chat, since it is a fact about the model.
+ */
+const CALIBRATION_SAMPLES = 40;
+const calibration = new Map<string, Array<[estimated: number, reported: number]>>();
+
+/** A request the vendor reported the size of: what it was estimated at, and what it was. */
+export function calibrate(model: string, estimated: number, reported: number): void {
+  if (!model || !(estimated > 0) || !(reported > 0)) return;
+  /* A count far below the estimate is a vendor or proxy reporting part of it (the uncached part, or nothing); learning
+     from it would fold late. Far above, it is not this request. Either way it is left out. */
+  if (reported < estimated * 0.5 || reported > estimated * 4 + 100_000) return;
+  const list = calibration.get(model) ?? [];
+  list.push([estimated, reported]);
+  if (list.length > CALIBRATION_SAMPLES) list.shift();
+  calibration.set(model, list);
+}
+
+/** What the vendor will count for a request estimated at `estimated`, by what this model has reported so far. */
+export function predictTokens(model: string, estimated: number): number {
+  const list = calibration.get(model);
+  if (!list || list.length < 3) return estimated;
+  const n = list.length;
+  const mx = list.reduce((a, [x]) => a + x, 0) / n;
+  const my = list.reduce((a, [, y]) => a + y, 0) / n;
+  const sxx = list.reduce((a, [x]) => a + (x - mx) ** 2, 0);
+  // Requests all of a size say how far off the estimate is, not how that grows: the offset alone, then.
+  let slope = 1;
+  if (sxx / n > 2_000 ** 2) slope = list.reduce((a, [x, y]) => a + (x - mx) * (y - my), 0) / sxx;
+  slope = Math.min(2.5, Math.max(0.8, slope));
+  const offset = my - slope * mx;
+  return Math.max(Math.round(estimated * 0.5), Math.round(offset + slope * estimated));
+}
 /** A worker that failed is not retried until this has passed, so a vendor
     that is down does not get a compaction request before every step. */
 const RETRY_AFTER_MS = 60_000;
@@ -365,6 +409,10 @@ export class ContextEngine {
   private active: ChatMessage[] = [];
   /** What the console tells the model about this turn in particular. */
   private turnNote = "";
+  /** The tool definitions sent with each request, in characters: counted with it, though the history never holds them. */
+  private toolChars = 0;
+  /** The model the requests go to, whose own count corrects the estimate (predictTokens). */
+  private model = "";
   /* The message the turn note was first sent on. It stays there for the rest of the turn, and is written into it when
      the turn ends: moving it to a later message would change an earlier one, and every token after that point would be
      paid for again instead of read from the vendor's cache. */
@@ -482,6 +530,27 @@ export class ContextEngine {
    * belongs as late in the prompt as possible, so everything before it still
    * matches: set once when the turn starts, it stays put for every round.
    */
+  /** The model the next request goes to, and the tool definitions it carries. */
+  useRequest(model: string, tools: readonly unknown[]): void {
+    this.model = model;
+    this.toolChars = JSON.stringify(tools).length;
+  }
+
+  /** The estimate of a request of these messages, all of it: the note and the tools as well as the words. */
+  private raw(system: string, messages: readonly ChatMessage[]): number {
+    return estimateTokens(system, messages) + Math.round((this.turnNote.length + this.toolChars) / CHARS_PER_TOKEN);
+  }
+
+  /** What the vendor will count for a request of these messages. */
+  private weigh(system: string, messages: readonly ChatMessage[]): number {
+    return predictTokens(this.model, this.raw(system, messages));
+  }
+
+  /** The estimate of a request already built (system and messages as sent), for calibrate once the vendor reports it. */
+  estimateSent(system: string, messages: readonly ChatMessage[]): number {
+    return estimateTokens(system, messages) + Math.round(this.toolChars / CHARS_PER_TOKEN);
+  }
+
   setTurnNote(note: string) {
     this.turnNote = note.trim();
     this.noteOn = null;
@@ -637,7 +706,7 @@ export class ContextEngine {
     const first = this.active.findIndex((m) => (m.replies ?? []).includes(stale[0]!));
     const rebilled = estimateTokens("", this.active.slice(first));
     const saved = Math.round((chars - stale.length * (STALE_HEAD_CHARS + 160)) / CHARS_PER_TOKEN);
-    const pressed = estimateTokens("", this.active) >= this.limitTokens * this.config.highWaterPct * STALE_PRESSURE;
+    const pressed = this.weigh("", this.active) >= this.limitTokens * this.config.highWaterPct * STALE_PRESSURE;
     if (!pressed && saved < rebilled * STALE_WORTH) return 0;
     for (const reply of stale) {
       const id = this.vault.put(reply.result);
@@ -745,7 +814,7 @@ export class ContextEngine {
    * condensing starts: the context gauge in the sidebar. `used` defaults to
    * the prompt as it stands now.
    */
-  gauge(pinned: string, used = estimateTokens(this.systemFor(pinned), this.active)) {
+  gauge(pinned: string, used = this.weigh(this.systemFor(pinned), this.active)) {
     return {
       used,
       limit: this.limitTokens,
@@ -794,11 +863,11 @@ export class ContextEngine {
   messagesFor(system: string, opts: { anchorInMessages?: boolean } = {}): ChatMessage[] {
     let out = [...this.active];
     const limit = this.limitTokens;
-    if (estimateTokens(system, out) > limit) {
+    if (this.weigh(system, out) > limit) {
       let cut = 0;
       while (
         out.length - cut > this.config.protectedRecent &&
-        estimateTokens(system, out.slice(cut)) > limit
+        this.weigh(system, out.slice(cut)) > limit
       ) {
         cut += 1;
       }
@@ -856,7 +925,7 @@ export class ContextEngine {
     if (this.writing > 0) return false;
 
     const system = this.systemFor(pinned);
-    const tokens = estimateTokens(system, this.active);
+    const tokens = this.weigh(system, this.active);
     const overTokens = tokens >= this.limitTokens * this.config.highWaterPct;
     /* The count only folds a prompt that is already a real fraction of the
        window. Measured over 9,533 calls: not one of 559 folds was near the
@@ -976,7 +1045,7 @@ export class ContextEngine {
          ran, so measuring "before" when the fold was asked for and "after"
          when it landed compared two different histories -- and could
          report the context growing, as in "6,000 tokens down to 7,500". */
-      const promptBefore = estimateTokens(this.systemFor(pinned), this.active);
+      const promptBefore = this.weigh(this.systemFor(pinned), this.active);
       const before = this.active.length;
       this.anchored = written;
       this.failedFolds = 0;
@@ -997,7 +1066,7 @@ export class ContextEngine {
         folded: before - this.active.length,
         kept: this.active.length,
         tokensBefore: promptBefore,
-        tokensAfter: estimateTokens(this.systemFor(pinned), this.active),
+        tokensAfter: this.weigh(this.systemFor(pinned), this.active),
       };
     } catch (err: any) {
       // Nothing is dropped on failure: the turns stay raw until a later
