@@ -197,4 +197,5 @@ releaseNotes: >-
   column, with its options in one readable list instead of a cramped grid, and buttons sized for a mouse. Text
   across the chat and the work area now follows one scale: every sentence in the chat (messages, notes, the
   question a card asks) is the same size as the rest of the app, details are one step smaller, and the work
-  area's lines no longer drop below that. Phones keep their larger touch sizes.
+  area's lines no longer drop below that. A question card right after your message now has the same space
+  above it as a reply does. Phones keep their larger touch sizes.

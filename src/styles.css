@@ -715,6 +715,9 @@ body::before {
 .thread.is-landing .thread-content { opacity: 0; transition: none; }
 .turn { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .turn .msg + .msg { margin-top: 14px; }
+/* A card (a question, a note, a tool) straight after your message gets the same
+   room a reply does, not the 2px the turn keeps between you and the reply's name. */
+.turn > .msg + .work > :first-child:not(.msg) { margin-top: 12px; }
 
 /* Turns scrolled out of view are not styled, laid out or painted.
    Without this, every frame of any animation -- the presence mark breathing
