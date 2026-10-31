@@ -34,6 +34,7 @@ import { setFollowing, useFollowing } from "./lib/follow";
 import { setFullscreen } from "./lib/fullscreen";
 import { Thread, type Outgoing } from "./components/Thread";
 import { ConversationFlow } from "./components/panacea/ConversationFlow";
+import { useChatLayout } from "./components/panacea/chatLayout";
 import { Dock } from "./components/Dock";
 import { Rail, pageLabel, PAGES, type PageId } from "./components/Rail";
 import { isSystemTab, type SystemTab } from "./lib/systemTabs";
@@ -232,6 +233,8 @@ export function App() {
   const creatingSession = useRef<Promise<string> | null>(null);
   const [workNavigationHost, setWorkNavigationHost] = useState<HTMLDivElement | null>(null);
   const [chatCollapsed, setChatCollapsed] = useState(false);
+  // How wide the docked conversation panel is (desktop) and how tall its sheet opens (phone); remembered.
+  const chatLayout = useChatLayout();
   const nativeWorkspaceActions = useRef<NativeWorkspaceActions | null>(null);
   /** The notebook open on the Notebooks page. */
   const [notebookOpen, setNotebookOpen] = useState<string | null>(
@@ -2193,7 +2196,10 @@ export function App() {
             it and coming back keeps your place in the thread. */}
         <div className="chat-view pw-full-workspace" role="main" hidden={page !== "chat"}>
 
-        <ConversationFlow collapsed={chatCollapsed && !requiresInput} onToggle={retractChat} conversation={<>
+        <ConversationFlow collapsed={chatCollapsed && !requiresInput} onToggle={retractChat}
+          phone={phoneLayout} width={chatLayout.width} onWidth={chatLayout.setWidth}
+          sheet={chatLayout.sheet} onSheet={chatLayout.setSheet} locked={requiresInput}
+          conversation={<>
           {openWindows.length === 0 && !view.buckets.some((bucket) => bucket.prompt || bucket.attachments.length > 0) && (
             <div className="pw-launch">
               <button type="button" className="btn ghost" onClick={() => void openPanaceaChooser()}

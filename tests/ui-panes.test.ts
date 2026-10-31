@@ -101,7 +101,7 @@ async function main() {
       await p2.reload();
       await p2.waitForSelector(".conversation-flow__entry");
       assert.equal(await w(".panacea-workspace"), sceneBefore, "obsolete chat allocation cannot reduce workspace room");
-      assert.equal(await w(".conversation-flow__entry"), entryBefore, "the centered entry keeps its usable width");
+      assert.equal(await w(".conversation-flow__entry"), entryBefore, "the docked entry keeps its usable width");
       await p2.getByRole("button", { name: "Fold the menu to icons" }).click();
       await sleep(400);
       assert.equal(await w(".conversation-flow__entry"), entryBefore, "rail folding cannot resize the main entry");
@@ -109,7 +109,7 @@ async function main() {
       assert.match(await p2.locator(".pa-surface.is-doc .ProseMirror").innerText(), /Memo[\s\S]*Hello/, "the rail resize preserves the document");
       const scene = (await p2.locator(".panacea-workspace").boundingBox())!;
       const entry = (await p2.locator(".conversation-flow__entry").boundingBox())!;
-      assert.ok(Math.abs(entry.x + entry.width / 2 - (scene.x + scene.width / 2)) < 2, "entry stays centered over the work");
+      assert.ok(entry.x >= scene.x + scene.width - 2, "the docked entry sits beside the work, never over it");
       await p2.getByRole("button", { name: "Show the whole menu" }).click();
     });
 

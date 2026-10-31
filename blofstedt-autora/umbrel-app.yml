@@ -204,10 +204,8 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  When Autora turns a connection away because it does not come from Umbrel's
-  proxy or a trusted tunnel connector (for example a Cloudflare Tunnel showing
-  "502 Bad gateway"), the reason is now written to the container log with the
-  refused container's name, once a minute per address. Before, it was only in
-  Autora's own log, which you cannot open while you are locked out. Run
-  `docker logs blofstedt-autora_app_1 2>&1 | grep TRUSTED_PEERS` to see what
-  to trust.
+  The conversation no longer covers the canvas. On desktop it is a panel docked
+  at the right that the workspace resizes around: drag its edge to change the
+  width (remembered), retract it to a slim strip that keeps the Ask bar and the
+  to-do list, and reopen it from the "Show conversation" tab. On a phone it is a
+  bottom sheet in three heights: half, full, and canvas-only.

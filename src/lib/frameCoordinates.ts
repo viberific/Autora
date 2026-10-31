@@ -41,7 +41,9 @@ export function workViewport(board: Element): { left: number; top: number; width
   const rect = board.getBoundingClientRect();
   const entry = document.querySelector(".conversation-flow__entry-area")?.getBoundingClientRect();
   const navigation = document.querySelector(".conversation-flow__work-navigation")?.getBoundingClientRect();
-  const bottom = entry && entry.height > 0 ? Math.min(rect.bottom, entry.top - 8) : rect.bottom;
-  const right = navigation && navigation.width > 0 ? Math.min(rect.right, navigation.left - 8) : rect.right;
+  // The conversation is docked beside or under the canvas, so its entry only costs room where it really overlaps.
+  const overlaps = (other: DOMRect) => other.left < rect.right && other.right > rect.left && other.top < rect.bottom && other.bottom > rect.top;
+  const bottom = entry && entry.height > 0 && overlaps(entry) ? Math.min(rect.bottom, entry.top - 8) : rect.bottom;
+  const right = navigation && navigation.width > 0 && overlaps(navigation) ? Math.min(rect.right, navigation.left - 8) : rect.right;
   return { left: rect.left, top: rect.top, width: Math.max(0, right - rect.left), height: Math.max(0, bottom - rect.top) };
 }

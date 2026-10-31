@@ -575,8 +575,10 @@ Spectra's fetched renderer is most of what is on disk.
   `frameCoordinates.ts` applies the camera scale to engine cursor reports and prevents off-camera hand consumers claiming work.
   `src/lib/workspace.ts` maps capability ids to their context and phone file-kind aliases. Retained Office, PDF, video, music,
   3D, game, photo, app and browser engines run inside that shell alongside the native Canvas; their models, APIs, hand-work
-  handlers and sandboxing are not replaced. `panacea/ConversationFlow.tsx` hosts the original Thread and centered composer as floating
-  bubbles/entry over the scene, keeps complete history mounted when retracted, and attaches TODO above the entry.
+  handlers and sandboxing are not replaced. `panacea/ConversationFlow.tsx` hosts the original Thread and composer docked beside the scene
+  (a right-hand panel on desktop, width draggable and remembered via `panacea/chatLayout.ts`; a three-height bottom sheet on a
+  phone), never over it. It keeps complete history mounted when retracted (edge tab on desktop, canvas-only on a phone) and
+  attaches TODO above the entry. `lib/frameCoordinates.ts` subtracts the entry and rail only where they overlap the board.
   `src/lib/steps.ts` contracts all tool/output/file activity in chat and lifts nested browser questions/permissions out of folds;
   there is no Activity work card or left chat column. The native canvas model is pure and shared
   (`src/lib/panacea/`: no DOM or Node types, imported by the server and the page): `atoms.ts` (the pieces), `recipe.ts` (the

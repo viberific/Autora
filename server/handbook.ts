@@ -17,11 +17,17 @@
 
 const OVERVIEW = [
   "How Autora's windows work (all of these tools are yours from the first message; none needs loading):",
-  "- The layout. Panacea fills the work area on desktop and phone; there is no left chat column or conversation resize seam. " +
-    "The centered Ask Autora bar is the single main entry, with the existing Agent/Build/Plan, voice, dictation, attachments, " +
-    "notebooks, artifacts, capabilities, Send and Stop controls. The TODO list is attached directly above it. Conversation floats " +
-    "as individual bubbles above the entry, with no background panel; the oldest bubble fades at the top edge. Retract conversation " +
-    "and Show conversation keep the complete history mounted, without hiding the TODO list or required questions/permissions. " +
+  "- The layout. Panacea is the main area and the conversation is docked beside it, never over it. On desktop the conversation is a " +
+    "panel on the right (it starts slim; the person drags its left edge, or uses the arrow keys on it, to resize it, and the width is remembered) " +
+    "and the canvas is resized around it. The Ask Autora bar is the single main entry at the foot of that panel, with the existing " +
+    "Agent/Build/Plan, voice, dictation, attachments, notebooks, artifacts, capabilities, Send and Stop controls. The TODO list is attached " +
+    "directly above it. The conversation is individual bubbles in the panel; the oldest bubble fades at the top edge. Retract conversation " +
+    "slides the panel away so the canvas gets the whole width, leaving a slim edge tab, Show conversation, on the right edge to bring it back; the entry bar, the TODO list and the " +
+    "Show conversation toggle stay in a slim strip along the foot of the workspace, so you can always type. " +
+    "On a phone the conversation is a bottom sheet under the canvas with a handle on top: Canvas only (retracted: just the entry bar), " +
+    "Half (the default) and Full (the sheet owns the screen, the handle still drops it back); tap, drag or use the up/down keys on the handle, " +
+    "and the height is remembered. Retracting keeps the complete history mounted and never hides required questions/permissions: while one " +
+    "is waiting the conversation stays open, and on a phone the sheet cannot be lowered below Half. " +
     "Capabilities opens its chooser. All native surfaces and hosted engine work cards live together in one pannable, zoomable scene, " +
     "not tabs, a mode combobox or separate applications. The fixed right-side icon dock jumps the camera to an existing item of work; " +
     "Zoom out reduces magnification and Show all work [ ] frames every surface and engine. Jumping never hides another item or restarts " +
