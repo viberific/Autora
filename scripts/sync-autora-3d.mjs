@@ -1,5 +1,5 @@
 /**
- * Brings Autora 3D's source in from its own repository (github.com/blofstedt/3D-Modeling).
+ * Brings Autora 3D's source in from the standalone 3D-Modeling repository.
  *
  *   node scripts/sync-autora-3d.mjs [path to a checkout of 3D-Modeling]     (default: ../3D-Modeling)
  *
@@ -55,7 +55,7 @@ try {
 } catch {
   // Not a git checkout: the copy still works, it just cannot say where it came from.
 }
-writeFileSync(path.join(to, "SOURCE.json"), JSON.stringify({ repo: "blofstedt/3D-Modeling", commit }, null, 2) + "\n");
+writeFileSync(path.join(to, "SOURCE.json"), JSON.stringify({ repo: "3D-Modeling", commit }, null, 2) + "\n");
 
 // 3. The agent's tools, written from what the copy declares.
 const scratch = path.join(os.tmpdir(), `autora-3d-sync-${process.pid}`);

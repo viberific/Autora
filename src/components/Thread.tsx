@@ -23,11 +23,15 @@ import { usePreviewState } from "../lib/preview";
 import { useDeskState } from "../lib/pdfdesk";
 import { useVideoState } from "../lib/opencut";
 import { useOfficeState, type OfficeKind } from "../lib/officedesk";
-import { AppPreview, CadWindow, GameWindow, OfficeWindow, OpenCutWindow, PhotoWindow, SpectraWindow, StudioWindow, TerminalWindow } from "./lazyWindows";
+import { AppPreview, CadWindow, GameWindow, OfficeWindow, OpenCutWindow, PhotoWindow, SpectraWindow, StudioWindow } from "./lazyWindows";
 import { useCadState } from "../lib/caddesk";
 import { useGameState } from "../lib/gamedesk";
 import { usePhotoState } from "../lib/photodesk";
-import { useTermState } from "../lib/termdesk";
+import { usePanaceaState } from "../lib/panacea";
+import { lastWorkedPane } from "../lib/followPane";
+import { workspaceSurface } from "../lib/workspace";
+import { conversationCells } from "../lib/workspaceThread";
+import { useWorkspaceFocus, workspaceToolKey } from "../lib/workspaceFocus";
 import { useStudioState } from "../lib/studio";
 import { PermissionCell } from "./PermissionCell";
 import { ImageCell } from "./ImageCell";
@@ -66,6 +70,7 @@ function phaseGlyph(phase: MarkPhase) {
  */
 export function Thread({
   chatOnly = false,
+  workspaceHosted = false,
   buckets,
   busy,
   doing,
@@ -78,6 +83,7 @@ export function Thread({
   live,
   onPermissionDecide,
   onSuggest,
+  onWorkspaceAsk,
   placeholder,
   dock,
   dockedPlanKey = "",
@@ -90,9 +96,13 @@ export function Thread({
   /** A desktop has a work area beside the conversation (see WorkFeed), so what the agent looks at and does is shown
       there and the conversation keeps only the talking. A phone has one column and shows both. */
   chatOnly?: boolean;
+  /** The app hosts all work in one scene; Thread must not mount a second phone Stage. */
+  workspaceHosted?: boolean;
   buckets: Bucket[];
   /** Sends a follow-up chip's words, as though typed. */
   onSuggest?: (text: string, title?: string) => void;
+  /** Draft an intention from Panacea's capability chooser, without starting a turn. */
+  onWorkspaceAsk?: (text: string) => void;
   /** What an empty session shows: the setup card, or tasks to start from. */
   placeholder?: ReactNode;
   /** The pinned corner widgets, if any: they sit in the pane's corners, over
@@ -168,8 +178,8 @@ export function Thread({
   const gameSince = gameOpen.open ? gameOpen.since ?? 0 : null;
   const photoOpen = usePhotoState();
   const photoSince = photoOpen.open ? photoOpen.since ?? 0 : null;
-  const termOpen = useTermState();
-  const termSince = termOpen.open ? termOpen.since ?? 0 : null;
+  const panacea = usePanaceaState();
+  const panaceaSince = panacea.open ? panacea.since ?? 0 : null;
   const studioOpen = useStudioState();
   const studioSince = studioOpen.open ? studioOpen.since ?? 0 : null;
   const office = useOfficeState();
@@ -181,7 +191,7 @@ export function Thread({
     // TodoDock), on every screen, so the stage holds only the page, the app
     // and the explainer.
     () => {
-      if (!phone || !live) return [];
+      if (workspaceHosted || !phone || !live) return [];
       const held = pickSurfaces(buckets, browserOpen ? liveBrowserSeq : null, appOpen).filter((s) => s.kind !== "plan");
       // The PDF window is live state, not a card in the log: it is added here,
       // after the app (the order the tabs sit in).
@@ -192,7 +202,7 @@ export function Thread({
         ...(cadSince === null ? [] : [{ kind: "cad" as const, cell: { kind: "cad" as const, seq: cadSince }, key: `cad-${cadSince}` }]),
         ...(gameSince === null ? [] : [{ kind: "game" as const, cell: { kind: "game" as const, seq: gameSince }, key: `game-${gameSince}` }]),
         ...(photoSince === null ? [] : [{ kind: "photo" as const, cell: { kind: "photo" as const, seq: photoSince }, key: `photo-${photoSince}` }]),
-        ...(termSince === null ? [] : [{ kind: "term" as const, cell: { kind: "term" as const, seq: termSince }, key: `term-${termSince}` }]),
+        ...(panaceaSince === null ? [] : [{ kind: "panacea" as const, cell: { kind: "panacea" as const, seq: panaceaSince }, key: `panacea-${panaceaSince}` }]),
         ...(studioSince === null ? [] : [{ kind: "studio" as const, cell: { kind: "studio" as const, seq: studioSince }, key: `studio-${studioSince}` }]),
         ...(officeSince === "" ? [] : officeSince.split("|").map((w) => {
           const [kind, since] = w.split(":") as [OfficeKind, string];
@@ -203,12 +213,17 @@ export function Thread({
       const at = held.findIndex((s) => s.kind !== "app");
       return at < 0 ? [...held, ...windows] : [...held.slice(0, at), ...windows, ...held.slice(at)];
     },
-    [phone, live, buckets, browserOpen, liveBrowserSeq, appOpen, pdfSince, videoSince, cadSince, gameSince, photoSince, termSince, studioSince, officeSince],
+    [workspaceHosted, phone, live, buckets, browserOpen, liveBrowserSeq, appOpen, pdfSince, videoSince, cadSince, gameSince, photoSince, panaceaSince, studioSince, officeSince],
   );
   const held = surfaces.map((s) => s.key).join("|");
   /* What the thread shows as a stub rather than the card: whatever the stage
      holds, and the plan docked above the message box. */
-  const docked = [held, dockedPlanKey, widgetHeld].filter(Boolean).join("|");
+  const workspaceHeld = workspaceHosted
+    ? buckets.flatMap((bucket) => bucket.cells.filter((cell) =>
+      (cell.kind === "screen" && cell.source === "browser" && cell.seq === liveBrowserSeq && browserOpen) ||
+      (cell.kind === "app" && appOpen)).map(cellKey)).join("|")
+    : "";
+  const docked = [held, workspaceHeld, dockedPlanKey, widgetHeld].filter(Boolean).join("|");
   const [stageView, setStageView] = useState<{ held: string; pick: SurfaceKind | null; folded: boolean; expanded: boolean }>(
     { held: "", pick: null, folded: false, expanded: false },
   );
@@ -221,11 +236,28 @@ export function Thread({
   // A page handed to the person is what they are here to use: never folded away.
   const folded = !handedPage && stageFresh && stageView.folded;
   const expanded = stageFresh && stageView.expanded;
+  const workedMode = lastWorkedPane(buckets, office.windows.map((w) => ({
+    pane: w.kind === "docx" ? "pages" as const : w.kind === "xlsx" ? "sheets" as const : "slides" as const,
+    working: w.working, name: w.name,
+  })));
+  const workedSurface = workedMode ? workspaceSurface(workedMode) as SurfaceKind : null;
+  const changedMode = useWorkspaceFocus([
+    { mode: "panacea", open: panacea.open, since: panacea.since, revision: panacea.by === "agent" ? panacea.rev : undefined },
+    { mode: "pdf", open: desk.open, since: desk.since, revision: desk.rev },
+    { mode: "video", open: video.open, since: video.since, revision: `${video.projectId ?? ""}:${video.name ?? ""}` },
+    { mode: "cad", open: cadOpen.open, since: cadOpen.since, revision: cadOpen.by === "agent" ? cadOpen.rev : undefined },
+    { mode: "game", open: gameOpen.open, since: gameOpen.since, revision: gameOpen.by === "agent" ? gameOpen.rev : undefined },
+    { mode: "photo", open: photoOpen.open, since: photoOpen.since, revision: photoOpen.by === "agent" ? photoOpen.rev : undefined },
+    { mode: "studio", open: studioOpen.open, since: studioOpen.since, revision: studioOpen.by === "agent" ? studioOpen.rev : undefined },
+    ...office.windows.map((w) => ({ mode: w.kind === "docx" ? "pages" as const : w.kind === "xlsx" ? "sheets" as const : "slides" as const,
+      open: w.open, since: w.since, revision: w.loadRev })),
+  ], workspaceToolKey(buckets));
+  const changedSurface = changedMode ? workspaceSurface(changedMode) as SurfaceKind : null;
   const activeKind: SurfaceKind | null = handedPage
     ? "browser"
     : follow && surfaces.length > 1
-      ? busiestSurface(surfaces)?.kind ?? null
-      : (stageFresh && surfaces.find((s) => s.kind === stageView.pick)?.kind) || newestSurface(surfaces)?.kind || null;
+      ? surfaces.find((s) => s.kind === changedSurface)?.kind ?? surfaces.find((s) => s.kind === workedSurface)?.kind ?? busiestSurface(surfaces)?.kind ?? null
+      : surfaces.find((s) => s.kind === stageView.pick)?.kind || newestSurface(surfaces)?.kind || null;
   const pickTab = useCallback((kind: SurfaceKind) => {
     setFollowing(false);
     setStageView((v) => ({ held, pick: kind, folded: false, expanded: v.held === held && v.expanded }));
@@ -235,11 +267,17 @@ export function Thread({
     setStageView((v) => ({ held, pick: v.held === held ? v.pick : null, folded: false, expanded: v.held === held && v.expanded }));
   }, [held, follow]);
   const foldStage = useCallback(
-    () => setStageView((v) => ({ held, pick: v.held === held ? v.pick : null, folded: !(v.held === held && v.folded), expanded: v.held === held && v.expanded })),
+    () => {
+      setFullscreen(false);
+      setStageView((v) => ({ held, pick: v.held === held ? v.pick : null, folded: !(v.held === held && v.folded), expanded: v.held === held && v.expanded }));
+    },
     [held],
   );
   const expandStage = useCallback(
-    () => setStageView((v) => ({ held, pick: v.held === held ? v.pick : null, folded: false, expanded: !(v.held === held && v.expanded) })),
+    () => {
+      setFullscreen(false);
+      setStageView((v) => ({ held, pick: v.held === held ? v.pick : null, folded: false, expanded: !(v.held === held && v.expanded) }));
+    },
     [held],
   );
 
@@ -250,15 +288,15 @@ export function Thread({
   const [fullscreen] = useFullscreen();
   const immersive = phone && live && fullscreen && activeKind !== null;
   useEffect(() => {
-    if (fullscreen && (!phone || activeKind === null)) setFullscreen(false);
-  }, [fullscreen, phone, activeKind]);
+    if (!workspaceHosted && fullscreen && (!phone || activeKind === null)) setFullscreen(false);
+  }, [fullscreen, phone, activeKind, workspaceHosted]);
   /* A tool that opens on a phone opens full screen -- the page, the PDF, the
      document, the app -- whether the agent opened it or the person did from
      the wrench: a strip a third of the screen deep is no way to look at one,
      and the way out is the control in the window's own bar (Back to the
      conversation). Only an opening does it: a reload, or a window already up
      when the screen arrives, leaves the conversation where the person put it. */
-  const windowsUp = `${pdfSince ?? ""}|${videoSince ?? ""}|${cadSince ?? ""}|${gameSince ?? ""}|${photoSince ?? ""}|${termSince ?? ""}|${studioSince ?? ""}|${officeSince}|${appOpen ? 1 : 0}`;
+  const windowsUp = `${pdfSince ?? ""}|${videoSince ?? ""}|${cadSince ?? ""}|${gameSince ?? ""}|${photoSince ?? ""}|${panaceaSince ?? ""}|${studioSince ?? ""}|${officeSince}|${appOpen ? 1 : 0}`;
   /* What was open when this screen arrived, and the first thing that happens to it.
      The desk, the document and the app a session already had are sent with the
      session, so on a reload or a phone opening the session the window lands a moment
@@ -269,12 +307,12 @@ export function Thread({
   useEffect(() => {
     const seen = windowsSeen.current;
     windowsSeen.current = windowsUp;
-    if (!phone || !live) return;
+    if (workspaceHosted || !phone || !live) return;
     if (seen === null) return;
     if (!settled.current) { settled.current = true; return; }
     if (seen === windowsUp) return;
-    if (pdfSince !== null || videoSince !== null || termSince !== null || officeSince !== "" || appOpen) setFullscreen(true);
-  }, [windowsUp, pdfSince, videoSince, termSince, officeSince, appOpen, phone, live]);
+    if (pdfSince !== null || videoSince !== null || panaceaSince !== null || officeSince !== "" || appOpen) setFullscreen(true);
+  }, [windowsUp, pdfSince, videoSince, panaceaSince, officeSince, appOpen, phone, live, workspaceHosted]);
   useEffect(() => { windowsSeen.current = null; settled.current = false; }, [sessionId]);
   useEffect(() => () => setFullscreen(false), [sessionId]);
   const lastSaid = tail?.replies.length ? tail.replies[tail.replies.length - 1].text : "";
@@ -448,6 +486,8 @@ export function Thread({
       )}
       {activeKind && (
         <Stage
+          sessionId={sessionId}
+          onAsk={onWorkspaceAsk}
           surfaces={surfaces}
           active={activeKind}
           collapsed={folded}
@@ -671,18 +711,6 @@ const FilesCell = memo(function FilesCell({ files }: { files: Attachment[] }) {
  * The agent looking at something or doing something: a command, a page, a picture, a file it made, a change to code,
  * a widget, any other tool. On a desktop these are shown in the work area beside the conversation (WorkFeed).
  */
-const isWorkCell = (cell: Cell) =>
-  cell.kind === "terminal" || cell.kind === "screen" || cell.kind === "images" || cell.kind === "files"
-  || cell.kind === "widget" || cell.kind === "file" || cell.kind === "tool" || cell.kind === "app";
-
-/** What stays in the conversation: the talking. What the agent said while it worked a page stays too. */
-function chatCells(cells: Cell[]): Cell[] {
-  return cells.flatMap((cell) => (cell.kind === "screen" ? cell.log.filter((c) => !isWorkCell(c)) : isWorkCell(cell) ? [] : [cell]));
-}
-
-/** Whether a session has anything for the work area to show. */
-export const hasWork = (buckets: Bucket[]) => buckets.some((b) => b.cells.some(isWorkCell));
-
 const TurnBucket = memo(function TurnBucket({
   bucket,
   chatOnly = false,
@@ -712,7 +740,7 @@ const TurnBucket = memo(function TurnBucket({
   // landing after the reply does not mean the agent has stopped, and anchoring
   // to the last cell made the mark settle the moment one appeared -- a finish
   // in the middle of the work.
-  const cells = useMemo(() => (chatOnly ? chatCells(bucket.cells) : bucket.cells), [chatOnly, bucket.cells]);
+  const cells = useMemo(() => (chatOnly ? conversationCells(bucket.cells) : bucket.cells), [chatOnly, bucket.cells]);
   const speaking = cells.map((c) => c.kind).lastIndexOf("reply");
 
   return (
@@ -801,12 +829,21 @@ type CellContext = {
 
 const stepStatus = (cell: Cell) =>
   cell.kind === "terminal" ? cell.status
-    : cell.kind === "tool" ? cell.span.status : "ok";
+    : cell.kind === "tool" ? cell.span.status
+    : cell.kind === "screen" ? cell.live ? "running" : "ok"
+    : cell.kind === "chime" ? !cell.done ? "running" : cell.ok ? "ok" : "error" : "ok";
 
 /** The line of a step that is worth showing without opening it. */
 const stepLine = (cell: Cell) =>
   cell.kind === "terminal" ? cell.command
-    : cell.kind === "tool" ? describeArgs(cell.span.args) : "";
+    : cell.kind === "tool" ? describeArgs(cell.span.args)
+    : cell.kind === "screen" ? cell.url ?? `${cell.source} view`
+    : cell.kind === "file" ? cell.file.path
+    : cell.kind === "files" ? `${cell.files.length} files`
+    : cell.kind === "images" ? `${cell.pictures.length} images`
+    : cell.kind === "widget" ? cell.widget.title
+    : cell.kind === "app" ? "App preview"
+    : cell.kind === "chime" ? cell.name : cell.kind;
 
 /** What the steps took, added up. Only counted where it was reported. */
 function stepsTook(steps: Cell[]): number | null {
@@ -939,7 +976,7 @@ const StepGroup = memo(function StepGroup({ steps, unfolded = false, ...cell }: 
   const running = cell.open && steps.some((s) => stepStatus(s) === "running");
   // Marked running in a turn that is over: it never reported back. Saying
   // "running" forever would be a lie.
-  const orphaned = !cell.open && steps.some((s) => stepStatus(s) === "running");
+  const orphaned = !cell.open && steps.some((s) => (s.kind === "terminal" || s.kind === "tool") && stepStatus(s) === "running");
   const failed = steps.filter((s) =>
     stepStatus(s) === "error"
     || (s.kind === "terminal" && s.exitCode !== null && s.exitCode !== 0)).length;
@@ -1003,73 +1040,6 @@ const StepRun = memo(function StepRun({
 function OfficeStage({ sessionId, kind }: { sessionId: string; kind: OfficeKind }) {
   return <Suspense fallback={null}><OfficeWindow sessionId={sessionId} kind={kind} phone /></Suspense>;
 }
-
-/**
- * The work area's feed, on a desktop: what the agent looked at and did, as it happens -- commands, pages, pictures,
- * the files it made, changes to code, widgets and every other tool -- in the window beside the conversation, newest
- * at the bottom and followed while it is. The conversation beside it keeps only the talking (`chatOnly`).
- */
-export const WorkFeed = memo(function WorkFeed({
-  buckets, sessionId, liveBrowserSeq, browserOpen, live, phase, onPermissionDecide, widgetHeld = "", onOpenWidget, ...work
-}: {
-  buckets: Bucket[];
-  busy: boolean;
-  doing?: string | null;
-  sessionId: string;
-  liveBrowserSeq: number | null;
-  /** The page is shown in its own window beside this one, so its card is not repeated here. */
-  browserOpen: boolean;
-  live: boolean;
-  phase: MarkPhase;
-  onPermissionDecide?: (requestId: string, approved: boolean, response?: string) => void;
-  /** The widget in its own window beside this one, so the feed keeps only a card for it. */
-  widgetHeld?: string;
-  onOpenWidget?: () => void;
-} & WorkState) {
-  const scroller = useRef<HTMLDivElement>(null);
-  const follow = useRef(true);
-  const rows = useMemo(
-    () => buckets
-      .map((b) => ({ b, cells: b.cells.filter((c) => isWorkCell(c) && !(browserOpen && c.kind === "screen" && c.source === "browser")) }))
-      .filter((r) => r.cells.length > 0),
-    [buckets, browserOpen],
-  );
-  const latest = rows.length > 0 ? rows[rows.length - 1].cells.length : 0;
-  // Followed while the person is at the bottom; scrolling up lets go.
-  useEffect(() => {
-    const el = scroller.current;
-    if (el && follow.current) el.scrollTop = el.scrollHeight;
-  }, [rows.length, latest, buckets]);
-  const onScroll = () => {
-    const el = scroller.current;
-    if (el) follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
-  };
-  return (
-    <div className="work-feed" ref={scroller} onScroll={onScroll}>
-      {rows.length === 0 && <p className="work-feed-empty">What the agent looks at and does shows up here as it happens.</p>}
-      {rows.map(({ b, cells }) => (
-        <section className="work-feed-turn" key={b.seq}>
-          {b.prompt && <h4 className="work-feed-prompt" title={b.prompt}>{b.prompt}</h4>}
-          <StepRun
-            cells={cells}
-            activeKey={null}
-            unfolded
-            sessionId={sessionId}
-            liveBrowserSeq={liveBrowserSeq}
-            live={live}
-            docked={widgetHeld}
-            open={b.open}
-            phase={phase}
-            turnSeq={b.seq}
-            onPermissionDecide={onPermissionDecide}
-            onOpenWidget={onOpenWidget}
-            {...work}
-          />
-        </section>
-      ))}
-    </div>
-  );
-});
 
 const CellView = memo(function CellView({
   cell,
@@ -1254,8 +1224,8 @@ const CellView = memo(function CellView({
       return stage ? <Suspense fallback={null}><SpectraWindow sessionId={sessionId} phone /></Suspense> : null;
     case "video":
       return stage ? <Suspense fallback={null}><OpenCutWindow sessionId={sessionId} phone /></Suspense> : null;
-    case "term":
-      return stage ? <Suspense fallback={null}><TerminalWindow sessionId={sessionId} phone /></Suspense> : null;
+    case "panacea":
+      return null; // Native surfaces are rendered once by the shared spatial workspace.
     case "cad":
       return stage ? <Suspense fallback={null}><CadWindow sessionId={sessionId} phone /></Suspense> : null;
     case "game":

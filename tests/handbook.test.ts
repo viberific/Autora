@@ -6,10 +6,12 @@
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
-process.env.AUTORA_STATE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "autora-handbook-test-"));
+const stateDir = path.resolve(`.test-handbook-${process.pid}`);
+fs.mkdirSync(stateDir, { recursive: true });
+process.once("exit", () => fs.rmSync(stateDir, { recursive: true, force: true }));
+process.env.AUTORA_STATE_DIR = stateDir;
 const { MANUAL_IDS, manualId, manualText, windowsOverview } = await import("../server/handbook");
 const { capabilityBriefing, runTool, findTool } = await import("../server/tools");
 
@@ -20,7 +22,7 @@ async function test(name: string, fn: () => Promise<void> | void) {
 
 await test("every window has a manual that names its tools", () => {
   const expect: Record<string, string[]> = {
-    browser: ["Autora Browser", "browser_handoff"], creator: ["Autora Creator", "app_preview"], terminal: ["Autora Terminal", "run_background"],
+    browser: ["Autora Browser", "browser_handoff"], creator: ["Autora Creator", "app_preview"], terminal: ["Shell commands", "run_background"],
     pdf: ["Autora PDF", "pdf_compose"], video: ["Autora Video", "video_ui"], studio: ["Autora Music", "studio_make"],
     panacea: ["Panacea", "panacea_bespoke"],
     office: ["Pages, Sheets and Slides", "office_create"], cad: ["Autora 3D", "cad_shape_measure"], game: ["Autora Games", "game_catalog"], photo: ["Autora Photo", "photo_edit"],
@@ -34,6 +36,14 @@ await test("the browser manual says who has the browser and how it comes back", 
   const browser = manualText("browser");
   for (const needle of ["Take control", "Hand back to agent", "strip", "above the message box", "I'm done", "by itself", "never ask"]) {
     assert.ok(browser.includes(needle), `the browser manual lacks "${needle}"`);
+  }
+});
+
+await test("every retained engine's manual identifies its integrated Panacea work mode", () => {
+  for (const id of MANUAL_IDS.filter((id) => id !== "terminal" && id !== "panacea")) {
+    const text = manualText(id);
+    assert.ok(text.startsWith("Panacea ·"), `the ${id} manual must describe its workspace mode`);
+    assert.ok(text.includes("not separate applications"), `the ${id} manual must not claim a standalone app`);
   }
 });
 
@@ -109,11 +119,12 @@ await test("every window's manual says where its Save is and what it keeps; the 
   }
 });
 
-await test("the Terminal manual says that with Visible work on the command is typed into the person's own shell", () => {
+await test("the shell manual teaches collapsible conversation runs, not an interactive terminal window", () => {
   const t = manualText("terminal");
-  for (const needle of ["With Visible work on", "typed by your hand", "runs in their shell", "Typed into the shell", "Ctrl+C", "with Visible work off"]) {
+  for (const needle of ["collapsible card in the conversation", "Show output", "Hide output", "Copy output", "no standalone terminal", "does not persist", "no TTY", "timeout", "run_background"]) {
     assert.ok(t.includes(needle), `the Terminal manual lacks "${needle}"`);
   }
+  assert.doesNotMatch(t, /Typed into the shell|their Terminal tab|live pseudo-terminal/);
 });
 
 await test("the Video manual says which edits are done in the window by hand with Visible work on", () => {
@@ -139,7 +150,7 @@ await test("the Music manual says that with Visible work on the studio tools are
 
 await test("the Panacea manual teaches the canvas as it is: no toolbar, the library and atoms, ghosts, fading, the history", () => {
   const p = manualText("panacea");
-  for (const needle of ["no toolbar and no icons", "about twenty ready-made panels", "at most 8 controls in view", "Keep in library", "ghost", "Not now",
+  for (const needle of ["single workspace", "Capabilities", "share one camera", "no nested canvas", "right-side icons", "same dotted grid", "about twenty ready-made panels", "at most 8 controls in view", "Keep in library", "ghost", "Not now",
     "Not this", "put away", "double-click the grid or press /", "Ask Autora", "Undo, Redo", "behind More", "denser panels", "Whose choices"]) {
     assert.ok(p.includes(needle), `the Panacea manual lacks "${needle}"`);
   }
@@ -149,6 +160,13 @@ await test("the Panacea manual teaches documents: the selection, the ids, and wh
   const p = manualText("panacea");
   for (const needle of ["panacea_doc", "panacea_look doc", "You write", "Autora writes", "may not write", "creative", "mode", "Ctrl+B"]) {
     assert.ok(p.toLowerCase().includes(needle.toLowerCase()), `the Panacea manual lacks "${needle}"`);
+  }
+});
+
+await test("the Panacea manual teaches nested native composition and stable context-aware adaptation", () => {
+  const text = manualText("panacea");
+  for (const needle of ["panacea_place parts", "one root", "recipe, tree or parts", "focused surface kind", "Typing and dragging", "pinned panels", "person's caret"]) {
+    assert.ok(text.includes(needle), `the Panacea manual lacks ${needle}`);
   }
 });
 
@@ -164,6 +182,11 @@ await test("the Panacea manual teaches boards: cards, links, questions, the pane
   for (const needle of ["Boards.", "panacea_surface board:", "panacea_look board:", "panacea_board", "Autora asks", "drag from the dot", "Answer", "Tidy",
     "Ask me questions", "(op ask: a question, ending with ?", "may not add, rewrite or remove their cards", "Markdown outline"]) {
     assert.ok(p.includes(needle), `the Panacea manual lacks "${needle}"`);
+  }
+});
+await test("the Panacea manual distinguishes real flowcharts from idea boards", () => {
+  for (const text of ["Flowcharts are explicit", "not renamed mind maps", "Shape", "connector", "SVG by default", "guide/agent"]) {
+    assert.ok(manualText("panacea").includes(text), `flowchart manual lacks ${text}`);
   }
 });
 
@@ -234,7 +257,10 @@ await test("a tool finds its window's manual, and a tool with no window finds no
 
 await test("the overview every turn explains the layout and points at the manuals", async () => {
   const overview = windowsOverview();
-  assert.ok(overview.includes("x on its tab") && overview.includes("Follow") && overview.includes("tool_manual"));
+  for (const needle of ["Panacea fills the work area", "Open Panacea", "without a message", "Capabilities", "right-side icon dock", "stay mounted", "manual jump", "Follow", "tool_manual", "Shell commands", "Show all work", "centered Ask Autora", "TODO", "Retract conversation", "contracted by default"]) {
+    assert.ok(overview.includes(needle), `the overview lacks ${needle}`);
+  }
+  assert.doesNotMatch(overview, /x on its tab|Autora Terminal|Working on/);
   // The switch beside Follow, and what turning it off changes for the agent.
   assert.ok(overview.includes("Visible work on") && overview.includes("Visible work off you work at speed"));
   // Video: the name is in the window's bar, the editor's own row is the projects menu and Export.
@@ -271,4 +297,5 @@ await test("the general manual says every window has Load, and what the composer
 });
 
 console.log(`\n${passed} passed`);
+fs.rmSync(stateDir, { recursive: true, force: true });
 process.exit(0);

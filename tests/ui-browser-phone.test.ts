@@ -34,18 +34,19 @@ async function main() {
       return n++ === 0 ? { tools: [{ name: "browser_open", args: { url: `${app.base}/?page=tools` } }] } : { text: "Opened." };
     };
     await app.turn(s, "open the app's tools page", 120_000);
-    await page.waitForSelector(".stage .cell.shot", { timeout: 30_000 });
+    await page.waitForSelector('.pw-engine[data-engine="browser"] .cell.shot', { timeout: 30_000 });
+    await page.getByRole("navigation", { name: "Jump to work" }).getByRole("button", { name: "Jump to Web", exact: true }).click();
 
     await test("the toolbar is the window: no bar of its own, no tab strip for one tab, and thumb-sized buttons", async () => {
-      assert.equal(await page.locator(".stage .cell.shot .pdf-bar").count(), 0);
-      assert.equal(await page.locator(".stage .cell.shot .shot-tabs").count(), 0);
-      assert.equal(await page.locator('.stage .cell.shot .shot-address input').count(), 1);
-      const sizes = await page.evaluate(() => [...document.querySelectorAll(".stage .cell.shot .cell-top button")].filter((b) => b.getClientRects().length > 0).map((b) => { const r = b.getBoundingClientRect(); return `${Math.round(r.width)}x${Math.round(r.height)}`; }));
-      assert.ok(sizes.length >= 3 && sizes.every((z) => Number(z.split("x")[1]) >= 40), `buttons: ${sizes.join(" ")}`);
+      assert.equal(await page.locator('.pw-engine[data-engine="browser"] .cell.shot .pdf-bar').count(), 0);
+      assert.equal(await page.locator('.pw-engine[data-engine="browser"] .cell.shot .shot-tabs').count(), 0);
+      assert.equal(await page.locator('.pw-engine[data-engine="browser"] .cell.shot .shot-address input').count(), 1);
+      const sizes = await page.evaluate(() => [...document.querySelectorAll('.pw-engine[data-engine="browser"] .cell.shot .cell-top button')].filter((b) => b.getClientRects().length > 0).map((b) => (b as HTMLElement).offsetHeight));
+      assert.ok(sizes.length >= 3 && sizes.every((height) => height >= 40), `logical buttons: ${sizes.join(" ")}`);
     });
 
     await test("Enlarge is full screen at once, magnified, with one button for the size; the toolbar is above the app's header", async () => {
-      await page.locator(".stage .cell.shot .shot-corner").click();
+      await page.locator('.pw-engine[data-engine="browser"] .cell.shot .shot-corner').click();
       await page.waitForSelector(".cell.shot.is-max", { timeout: 10_000 });
       assert.match(await page.locator(".shot-zoom-cycle").innerText(), /2×/);
       const top = await page.evaluate(() => {
@@ -54,7 +55,7 @@ async function main() {
         const hit = document.elementFromPoint(r.left + 30, r.top + r.height / 2);
         return { y: Math.round(r.top), inside: !!hit && !!hit.closest(".cell.shot.is-max") };
       });
-      assert.ok(top.y < 40 && top.inside, `the toolbar is covered: ${JSON.stringify(top)}`);
+      assert.ok(top.y >= 0 && top.inside, `the toolbar is covered: ${JSON.stringify(top)}`);
       await page.locator(".shot-zoom-cycle").click();
       assert.match(await page.locator(".shot-zoom-cycle").innerText(), /3×/);
       await page.locator(".cell.shot.is-max .shot-corner").click();

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ansiToLines, ansiToText } from "../lib/ansi";
 import { IconCheck, IconChevron, IconTerminal, IconX } from "./Icons";
 
@@ -24,6 +24,8 @@ export function TerminalCell({
   live: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [outputOpen, setOutputOpen] = useState(false);
+  const outputId = useId();
   const [copied, setCopied] = useState(false);
   const bodyRef = useRef<HTMLPreElement>(null);
 
@@ -40,12 +42,13 @@ export function TerminalCell({
   const folded = !expanded && lines.length > FOLD_AT;
   const shown = folded ? lines.slice(lines.length - FOLD_AT) : lines;
 
+
   // While it runs, the end is the interesting part.
   useLayoutEffect(() => {
-    if (!live || expanded) return;
+    if (!live || !outputOpen || expanded) return;
     const el = bodyRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [output, live, expanded]);
+  }, [output, live, expanded, outputOpen]);
 
   useEffect(() => {
     if (!copied) return;
@@ -64,6 +67,10 @@ export function TerminalCell({
       <header className="cell-top">
         <IconTerminal size={13} />
         <code className="term-cmd" title={command}>{command || "terminal"}</code>
+        <button className="cell-act" type="button" aria-expanded={outputOpen} aria-controls={outputId}
+          onClick={() => setOutputOpen((on) => !on)} title={outputOpen ? "Collapse command output" : "Expand command output"}>
+          <IconChevron size={11} /> {outputOpen ? "Hide output" : "Show output"}
+        </button>
         <div className="spacer" />
         {orphaned ? (
           <em className="cell-chip">no result</em>
@@ -90,12 +97,18 @@ export function TerminalCell({
         </button>
       </header>
 
+      <div id={outputId} hidden={!outputOpen}>
       {lines.length > 0 && (
         <>
           {folded && (
             <button className="term-more" onClick={() => setExpanded(true)}>
               <IconChevron size={11} />
               {lines.length - FOLD_AT} earlier lines
+            </button>
+          )}
+          {expanded && lines.length > FOLD_AT && (
+            <button className="term-more" type="button" onClick={() => setExpanded(false)}>
+              Show last {FOLD_AT} lines
             </button>
           )}
           <pre className={`term-body ${expanded ? "is-open" : ""}`} ref={bodyRef}>
@@ -125,6 +138,7 @@ export function TerminalCell({
       {lines.length === 0 && status !== "running" && (
         <p className="cell-quiet">no output</p>
       )}
+      </div>
     </section>
   );
 }

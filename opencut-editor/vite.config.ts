@@ -65,7 +65,7 @@ const markSources = (): Plugin => ({
   transform(code, id) {
     const marks = MARKS.filter((m) => id.endsWith(m.file));
     if (!marks.length) return null;
-    let out = code;
+    let out = code.replace(/\r\n/g, "\n");
     for (const m of marks) {
       if (!out.includes(m.from)) throw new Error(`autora-patch-sources: ${m.file} no longer has ${m.from}`);
       out = out.replace(m.from, m.to);

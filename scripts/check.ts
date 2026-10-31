@@ -32,17 +32,22 @@ const failed: string[] = [];
 function step(name: string, cmd: string, args: string[]) {
   const started = Date.now();
   console.log(`\n== ${name}`);
-  const r = spawnSync(cmd, args, { cwd: root, stdio: "inherit" });
+  const npm = cmd === "npm" ? process.env.npm_execpath : undefined;
+  const r = spawnSync(npm ? process.execPath : cmd, npm ? [npm, ...args] : args, {
+    cwd: root, stdio: "inherit", shell: !npm && cmd === "npm" && process.platform === "win32",
+  });
+  if (r.error) console.error(`${name} could not start: ${r.error.message}`);
   const ok = r.status === 0;
   console.log(`${ok ? "ok  " : "FAIL"} ${name} (${((Date.now() - started) / 1000).toFixed(0)}s)`);
   if (!ok) failed.push(name);
 }
 
 console.log(`${changed.length} files changed against ${base}.`);
-const bin = (name: string) => path.join(root, "node_modules", ".bin", name);
-step("types: client", bin("tsc"), ["--noEmit"]);
-step("types: server", bin("tsc"), ["--noEmit", "-p", "tsconfig.server.json"]);
-step("types: tests", bin("tsc"), ["--noEmit", "-p", "tsconfig.test.json"]);
+const tool = (pkg: string, script: string) => path.join(root, "node_modules", pkg, "bin", script);
+const tsc = tool("typescript", "tsc");
+step("types: client", process.execPath, [tsc, "--noEmit"]);
+step("types: server", process.execPath, [tsc, "--noEmit", "-p", "tsconfig.server.json"]);
+step("types: tests", process.execPath, [tsc, "--noEmit", "-p", "tsconfig.test.json"]);
 for (const e of EDITORS) {
   if (!changed.some(e.touches)) { console.log(`\n-- ${e.dir}: nothing it uses changed, skipped`); continue; }
   if (!fs.existsSync(path.join(root, e.dir, "node_modules"))) {
@@ -52,14 +57,14 @@ for (const e of EDITORS) {
   }
   step(`types: ${e.dir}`, "npm", ["--prefix", e.dir, "run", "typecheck"]);
 }
-step("eslint", bin("eslint"), ["."]);
-step("unused code (knip)", bin("knip"), ["--no-progress"]);
+step("eslint", process.execPath, [tool("eslint", "eslint.js"), "."]);
+step("unused code (knip)", process.execPath, [tool("knip", "knip.js"), "--no-progress"]);
 step("release", "python3", [".github/scripts/check_release.py", "--base", base, "--head", "HEAD"]);
 if (!process.argv.includes("--no-tests")) {
   /* The ui-* tests drive the built app: without a build they would fail on its absence, not on the change. */
   const built = fs.existsSync(path.join(root, "dist", "index.html"));
   if (!built) console.log("\n-- ui-* tests skipped: no build here (npm run build, then npm test -- ui-)");
-  step("tests a change can reach", bin("tsx"), ["tests/run.ts", "--changed", base, "-j", "4", ...(built ? [] : ["--no-ui"])]);
+  step("tests a change can reach", process.execPath, ["--import", "tsx", path.join(root, "tests", "run.ts"), "--changed", base, "-j", "4", ...(built ? [] : ["--no-ui"])]);
 }
 
 console.log(failed.length ? `\n${failed.length} step(s) failed: ${failed.join(", ")}` : "\nEvery step passed.");

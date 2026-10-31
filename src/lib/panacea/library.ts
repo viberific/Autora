@@ -13,8 +13,9 @@
  *
  * Shared by the server and the page, so written without DOM or Node types.
  */
-import type { Value } from "./atoms";
-import { checkTree, type CheckContext, type Node } from "./recipe";
+import { MAX_DEPTH, type Value } from "./atoms";
+import { INTENTS, type RecipeNext, type RecipeWhen } from "./intent";
+import { checkTree, fingerprint, MAX_RECIPE_PARTS, type CheckContext, type Node, type RecipePart } from "./recipe";
 import type { Table } from "./surfaces";
 
 export const DOMAINS = ["photo", "data", "general", "document", "music", "video", "3d", "game", "design"] as const;
@@ -40,6 +41,10 @@ export interface Recipe {
   /** Its shape (recipe.ts `fingerprint`), which dedupes the library. */
   fp?: string;
   at?: number;
+  /** Local contextual intent; absent on old and learned recipes. */
+  when?: RecipeWhen[];
+  /** One-hop follow-ups, considered only when the source panel has actually been used. */
+  next?: RecipeNext[];
 }
 
 // ------------------------------------------------------------ the builder --
@@ -83,7 +88,8 @@ const DOC = (p: string) => `@doc.${p}`;
 const LOOK_SWATCHES = "looks";
 
 function r(domain: Domain, id: string, name: string, about: string, tags: string, tree: Node, w = 288, values?: Record<string, Value>): Recipe {
-  return { id: `${domain}.${id}`, name, domain, about, tags: tags.split(" ").filter(Boolean), tree, w, ...(values ? { values } : {}), origin: "builtin", uses: 0 };
+  const key = `${domain}.${id}`;
+  return { id: key, name, domain, about, tags: tags.split(" ").filter(Boolean), tree, w, ...(values ? { values } : {}), ...(INTENTS[key] ? { when: INTENTS[key] } : {}), origin: "builtin", uses: 0 };
 }
 
 // -------------------------------------------------------------- recipes --
@@ -168,6 +174,10 @@ const GENERAL: Recipe[] = [
   r("general", "board", "Board", "card colours, what is on the board, and tidying it", "board cards brainstorm map ideas sticky notes mind map",
     stack(sel("@board.tone", "Card colour", ["yellow", "green", "blue", "pink", "violet", "plain"]), row(stat("@board.cards", "Cards"), stat("@board.links", "Links"), stat("@board.questions", "Questions")),
       row(act("Tidy", "@board.tidy"), ask("Ask me questions", "Ask me questions on the board that help me think this through. Do not answer them for me.")), adv(act("Export Markdown", "@board.export")))),
+  r("general", "flowchart", "Flowchart", "native process, decision, start and end nodes with directed connectors", "flowchart diagram workflow process decision arrows",
+    stack(sel("@board.tone", "Node colour", ["yellow", "green", "blue", "pink", "violet", "plain"]), row(stat("@board.cards", "Nodes"), stat("@board.links", "Connectors")),
+      note("Select a node to change its shape. Select a connector to change its direction or label. Double-click to edit words."),
+      adv(row(ask("Export SVG", "Export this flowchart as a standalone SVG using panacea_export format svg. Keep its native graph editable."), ask("Export Markdown", "Export this flowchart's nodes and connectors as Markdown using panacea_export format markdown."))))),
   r("general", "brief", "Brief", "the goal, who it is for, and the tone", "brief goal audience tone", stack(tx("brief.goal", "Goal", { multiline: true }), tx("brief.audience", "For"), seg("brief.tone", "Tone", ["Friendly", "Neutral", "Formal"]))),
   r("general", "voice", "Tone of voice", "formal or casual, short or long", "tone voice writing style", stack(sl("voice.formal", "Casual ↔ formal", { min: 0, max: 100 }), sl("voice.length", "Short ↔ detailed", { min: 0, max: 100 }))),
   r("general", "notes", "Notes", "somewhere to jot", "notes jot scratch memo", stack(tx("notes", "Notes", { multiline: true }))),
@@ -317,6 +327,16 @@ const DESIGN: Recipe[] = [
 
 export const BUILTINS: Recipe[] = [...PHOTO, ...DATA, ...GENERAL, ...DOCUMENT, ...MUSIC, ...VIDEO, ...THREE_D, ...GAME, ...DESIGN];
 
+// Follow-ups are alternatives to offer, not automatic additions or creative edits.
+for (const [id, recipe, why] of [
+  ["photo.histogram", "photo.curve", "You are using the histogram: a tone curve can give finer control."],
+  ["data.table", "data.sort", "You are using the matching rows: sorting may make them easier to compare."],
+  ["document.paragraph", "document.lists", "You are using paragraph formatting: bullets or numbering are available if they fit your structure."],
+] as const) {
+  const source = BUILTINS.find((r) => r.id === id);
+  if (source) source.next = [{ recipe, weight: 4, why }];
+}
+
 // ---------------------------------------------------------- using them --
 
 /** The columns a data recipe's "$text", "$number", "$number2" and "$date" mean for a table. */
@@ -361,6 +381,39 @@ export function instantiate(recipe: Recipe, ctx: CheckContext): { tree: Node; va
   const checked = checkTree(tree, ctx);
   if (!checked.tree || checked.errors.length) return { error: `"${recipe.name}" does not fit this canvas: ${checked.errors.slice(0, 3).join(" ")}` };
   return { tree: checked.tree, values };
+}
+
+/**
+ * Lego-like assembly of existing library recipes under native layout atoms. The result is an ordinary composed
+ * recipe: placement, generalization, fingerprint deduplication and learning need no new storage or drawing path.
+ * Defaults must agree; assembly never writes over the person's existing values.
+ */
+export function assembleRecipe(part: RecipePart, list: Recipe[], ctx: CheckContext, meta: Pick<Recipe, "id" | "name" | "domain" | "about" | "tags" | "w">): Recipe | { error: string } {
+  let count = 0;
+  const values: Record<string, Value> = {};
+  const errors: string[] = [];
+  const walk = (p: RecipePart, depth: number): Node | null => {
+    if (++count > MAX_RECIPE_PARTS || depth > MAX_DEPTH) { errors.push("Recipe assembly is too large or too deep."); return null; }
+    if ("recipe" in p) {
+      const recipe = list.find((r) => r.id === p.recipe);
+      if (!recipe) { errors.push(`Unknown recipe "${p.recipe}".`); return null; }
+      const made = instantiate(recipe, ctx);
+      if ("error" in made) { errors.push(made.error); return null; }
+      for (const [key, value] of Object.entries(made.values)) {
+        if (values[key] !== undefined && JSON.stringify(values[key]) !== JSON.stringify(value)) errors.push(`Conflicting defaults for "${key}".`);
+        else values[key] = value;
+      }
+      return { ...made.tree, ...(p.advanced ? { advanced: true } : {}) };
+    }
+    if (p.children.length > MAX_RECIPE_PARTS) { errors.push("Recipe assembly has too many children."); return null; }
+    return { atom: p.atom, ...(p.props ? { props: p.props } : {}), ...(p.advanced ? { advanced: true } : {}),
+      children: p.children.map((child) => walk(child, depth + 1)).filter((child): child is Node => child !== null) };
+  };
+  const raw = walk(part, 0);
+  if (errors.length) return { error: errors.slice(0, 3).join(" ") };
+  const checked = checkTree(raw, ctx);
+  if (!checked.tree || checked.errors.length) return { error: checked.errors.join(" ") };
+  return { ...meta, tree: checked.tree, values, origin: "composed", uses: 0, fp: fingerprint(checked.tree) };
 }
 
 const words = (s: string) => s.toLowerCase().split(/[^a-z0-9&]+/).filter((w) => w.length > 1);

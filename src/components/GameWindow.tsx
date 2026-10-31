@@ -137,7 +137,7 @@ export function GameWindow({ sessionId, phone }: { sessionId: string; phone: boo
     <div className={`pdf-window game-window has-rail ${phone ? "is-phone" : "is-desk"}${phone && full ? " is-full" : ""}`}>
       <div className="pdf-bar">
         <span className="pdf-bar-ico" aria-hidden="true"><IconGame size={14} /></span>
-        <span className="pdf-bar-app">Autora Games</span>
+        <span className="pdf-bar-app">Games</span>
         <span className="pdf-bar-name">{game.name ?? "Your game"}{scenes ? ` · ${scenes === 1 ? "1 scene" : `${scenes} scenes`}` : ""}</span>
         <span className="pdf-bar-note">{up ? "Saved as you go" : "Starting the engine…"}</span>
         <div className="spacer" />
@@ -163,7 +163,7 @@ export function GameWindow({ sessionId, phone }: { sessionId: string; phone: boo
         ref={frame}
         className="pdf-frame"
         src={src}
-        title="Autora Games"
+        title="Panacea · Games"
         /* No sandbox attribute: this is Autora's own build of GDevelop's editor, served from this origin under its own policy
            (server/gamedesk.ts serveGame: scripts from itself only, connections to this origin only, framed by this app only),
            and a sandbox that keeps the origin is no sandbox. It needs its origin for its engine's storage and for saving the

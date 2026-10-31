@@ -84,7 +84,7 @@ async function main() {
 
     await test("what the agent makes opens beside the chat, with the picture in PhotoCraft's editor", async () => {
       await page.waitForSelector(".app-pane[data-pane=photo] iframe", { timeout: 20_000 });
-      assert.equal(await page.locator("iframe[title='Autora Photo']").count(), 1);
+      assert.equal(await page.locator("iframe[title='Panacea · Images']").count(), 1);
       const box = (await pane.boundingBox())!;
       await waitFor("the white canvas to be drawn", async () => (await whitePixels(page, { x: box.x, y: box.y, width: box.width, height: box.height })) > 20_000, 90_000);
     });
@@ -174,14 +174,14 @@ async function main() {
       const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
       const phone = await ctx.newPage();
       await phone.goto(`${app.base}/?session=${s}`);
-      await phone.waitForSelector(".stage .pdf-window", { timeout: 20_000 });
+      await phone.waitForSelector('.pw-engine[data-engine="photo"] .pdf-window', { timeout: 20_000 });
       assert.equal(await phone.locator(".pdf-bar .pdf-pill").count(), 0, "round buttons, not text pills");
       await phone.locator('.pdf-bar button[aria-label="Full screen"]').click();
       await phone.waitForSelector(".pdf-window.is-full");
-      assert.match(await phone.locator("iframe[title='Autora Photo']").getAttribute("src") ?? "", /phone=1/);
+      assert.match(await phone.locator("iframe[title='Panacea · Images']").getAttribute("src") ?? "", /phone=1/);
       /* The desktop's chrome is away: the strip above the bar, where Photoshop's toolbox and options would be, is the picture's
          own black, with no menu bar's grey. Then the bar's Layers opens a sheet there. */
-      const box = (await phone.locator("iframe[title='Autora Photo']").boundingBox())!;
+      const box = (await phone.locator("iframe[title='Panacea · Images']").boundingBox())!;
       const lit = async (y0: number, y1: number) => {
         const png = (await phone.screenshot({ clip: { x: 8, y: box.y + y0, width: 374, height: y1 - y0 } })).toString("base64");
         return phone.evaluate(async (data) => {

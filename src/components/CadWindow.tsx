@@ -3,6 +3,7 @@ import { useFullscreen } from "../lib/fullscreen";
 import { SaveButton, keptAs, settle } from "./SaveButton";
 import { LoadButton } from "./LoadButton";
 import { cadStateNow, onCadHand, onCadState, useCadState } from "../lib/caddesk";
+import { isWorkVisible } from "../lib/frameCoordinates";
 import { useAgentCursor } from "../lib/agentCursor";
 import { useCursorWho, whoColors, getCursorWho } from "../lib/cursorWho";
 import { IconCube, IconMaximize, IconMinimize } from "./Icons";
@@ -142,6 +143,7 @@ export function CadWindow({ sessionId, phone }: { sessionId: string; phone: bool
   /* With Visible work on, the agent's call is done in the modeller by its hand (autora-3d/src/agentHand.ts). The first window
      to claim it does it; one whose modeller is still starting waits for it, so the work is done in front of the person. */
   useEffect(() => onCadHand((hand) => {
+    if (!frame.current || !isWorkVisible(frame.current)) return;
     void (async () => {
       const q = `/api/cad/${encodeURIComponent(sessionId)}/hand`;
       const claim = await fetch(`${q}/claim?id=${encodeURIComponent(hand.id)}`, { method: "POST" })
@@ -187,7 +189,7 @@ export function CadWindow({ sessionId, phone }: { sessionId: string; phone: bool
       {/* The same bar as every window (Autora 3D, what is in it, saved as you go), on a desktop too. */}
       <div className="pdf-bar">
         <span className="pdf-bar-ico" aria-hidden="true"><IconCube size={14} /></span>
-        <span className="pdf-bar-app">Autora 3D</span>
+        <span className="pdf-bar-app">3D</span>
         <span className="pdf-bar-name">{shapes === 1 ? "1 shape" : `${shapes} shapes`}</span>
         <span className="pdf-bar-note">Saved as you go</span>
         <div className="spacer" />
@@ -210,7 +212,7 @@ export function CadWindow({ sessionId, phone }: { sessionId: string; phone: bool
         ref={frame}
         className="pdf-frame"
         src={`/autora-3d/index.html?embed=autora&session=${encodeURIComponent(sessionId)}${phone ? "&phone=1" : ""}`}
-        title="Autora 3D"
+        title="Panacea · 3D"
         /* No sandbox attribute: this is Autora's own page, served from this origin under its own policy (server/caddesk.ts
            serveCad: scripts from itself only, framed by this app only), and a sandbox that keeps the origin is no sandbox. It
            needs its origin for its saved library, its downloads (STL, GLB) and its dialogs. Nothing the agent wrote runs in it:

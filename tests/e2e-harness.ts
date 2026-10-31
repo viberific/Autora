@@ -93,7 +93,10 @@ function killAtExit() {
   for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) process.on(sig, () => { all(); process.exit(1); });
 }
 
-export async function startApp(opts: { env?: Record<string, string> } = {}): Promise<App> {
+export async function startApp(opts: { env?: Record<string, string>; port?: number } = {}): Promise<App> {
+  if (opts.port !== undefined && (!Number.isInteger(opts.port) || opts.port < 1 || opts.port > 65535)) {
+    throw new Error("The test server port must be an integer between 1 and 65535.");
+  }
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "autora-e2e-"));
   const seen: Seen[] = [];
   const app: App = {
@@ -153,10 +156,10 @@ export async function startApp(opts: { env?: Record<string, string> } = {}): Pro
   app.modelUrl = `http://127.0.0.1:${llmPort}/v1`;
 
   // ---- the app
-  const port = await free();
+  const port = opts.port ?? await free();
   let output = "";
   const boot = (): ChildProcess => {
-    const c = spawn(path.resolve("node_modules/.bin/tsx"), ["server.ts"], {
+    const c = spawn(process.execPath, ["--import", "tsx", path.resolve("server.ts")], {
       env: {
         ...process.env,
         AUTORA_HOME: home, AUTORA_PORT: String(port), AUTORA_HOST: "127.0.0.1", AUTORA_TLS: "0",
@@ -169,7 +172,7 @@ export async function startApp(opts: { env?: Record<string, string> } = {}): Pro
         // finds the system's own. Naming a path that does not exist left the
         // server with no browser at all, so widgets went unchecked on CI.
         ...(fs.existsSync(LOCAL_CHROME) && !process.env.AUTORA_BROWSER_PATH ? { AUTORA_BROWSER_PATH: LOCAL_CHROME } : {}),
-        NODE_ENV: "development", ...opts.env,
+        NODE_ENV: "production", ...opts.env,
       },
       stdio: ["ignore", "pipe", "pipe"],
       // Its own process group: tsx starts the server as a grandchild, and a test that is stopped (a timeout, Ctrl-C)

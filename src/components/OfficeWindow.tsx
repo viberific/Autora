@@ -6,6 +6,7 @@ import { useCollab } from "../lib/collab";
 import { TakeControl } from "./TakeControl";
 import { onOfficeHand, onOfficePush, useOfficeWindow, type OfficeHand, type OfficeKind } from "../lib/officedesk";
 import { clearCursor, reportCursor } from "../lib/cursorPos";
+import { framePoint, isWorkVisible } from "../lib/frameCoordinates";
 import { getCursorWho, whoColors } from "../lib/cursorWho";
 import { OfficePages } from "./OfficePages";
 import { useFrameTheme } from "../lib/frameTheme";
@@ -151,8 +152,9 @@ export function OfficeWindow({ sessionId, kind, phone }: { sessionId: string; ki
             }
             case "hand-cursor": {
               // Where the hand's cursor is, for the few words beside it (AgentThought).
-              const r = frame.current?.getBoundingClientRect();
-              if (r && Number.isFinite(payload.x) && Number.isFinite(payload.y)) reportCursor(r.left + Number(payload.x), r.top + Number(payload.y));
+              const point = frame.current && Number.isFinite(payload.x) && Number.isFinite(payload.y)
+                ? framePoint(frame.current, { x: Number(payload.x), y: Number(payload.y) }) : null;
+              if (point) reportCursor(point.x, point.y);
               reply(true, {});
               break;
             }
@@ -212,6 +214,7 @@ export function OfficeWindow({ sessionId, kind, phone }: { sessionId: string; ki
      chat to claim it hands it to its editor -- once the editor has the document open, which it waits for -- and tells
      the server what was done. Nothing is played over a document the server changed: that would be a recording. */
   const byHand = useCallback(async (hand: OfficeHand) => {
+    if (!frame.current || !isWorkVisible(frame.current)) return;
     const at = (p: string) => `/api/officedesk/${encodeURIComponent(sessionId)}/hand/${p}?id=${encodeURIComponent(hand.id)}`;
     const claim = await fetch(at("claim"), { method: "POST" })
       .then((r) => (r.ok ? (r.json() as Promise<{ won?: boolean }>) : { won: false }))
@@ -263,7 +266,8 @@ export function OfficeWindow({ sessionId, kind, phone }: { sessionId: string; ki
   useEffect(() => {
     const el = pane.current;
     if (!el) return;
-    const look = () => setRoom(el.clientWidth > 40 && el.clientHeight > 40);
+    // Once started, the engine must survive a hidden workspace mode with its unsaved document intact.
+    const look = () => { if (el.clientWidth > 40 && el.clientHeight > 40) setRoom(true); };
     look();
     const watch = new ResizeObserver(look);
     watch.observe(el);

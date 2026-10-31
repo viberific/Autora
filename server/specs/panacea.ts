@@ -28,7 +28,7 @@ export const panaceaSPECS: ToolSpec[] = [
     name: "panacea_open",
     group: "files",
     description:
-      "Open Panacea (the canvas window) beside the chat: a blank dotted canvas where the controls for the work appear when they are needed and go when they " +
+      "Open Panacea (the shared workspace) beside the chat: a blank dotted canvas where the controls for the work appear when they are needed and go when they " +
       "are not. Returns the canvas and the library's index. Pass `new` (a name) to start a fresh canvas; if the canvas has work on it, that needs `replace: true` " +
       "-- only when the person asked to start over. The other panacea tools open the window themselves.",
     parameters: {
@@ -72,15 +72,25 @@ export const panaceaSPECS: ToolSpec[] = [
       "those. `file` also takes a Markdown or text file as a document, and `document` makes one from text (Markdown: # headings, - bullets, 1. numbers, > quotes; \"\" for " +
       "a blank one). A document is the person's to write unless it is productivity work or they asked you to write it: pass `mode` \"agent\" only then, else leave it " +
       "\"guide\" and format and structure it. `board` (its title) adds a board: cards anywhere, links between them, your questions as cards; the place for a " +
-      "brainstorm, a map of ideas, a story's who / what / where / when, a plan laid out. A board's words are the person's in the same way (`mode`). `remove` (a surface id) takes a surface off with its panels. Other kinds of work (PDFs, video, 3D, games, music) are " +
-      "done in their own windows.",
+      "brainstorm, a map of ideas, a story's who / what / where / when, a plan laid out. `flowchart` (a title), or `board` with `diagram:\"flowchart\"`, makes a real native editable flowchart: process, decision, start/end nodes and directed, optionally labelled connectors. It does not auto-layout or implement swimlanes. A board's words are the person's in the same way (`mode`): for a requested productivity process diagram use agent; for creative ideas guide and let the person write. `remove` (a surface id) takes a surface off with its panels. Other kinds of work (PDFs, video, 3D, games, music) are " +
+      "routed to Panacea's integrated engines when supported: DOCX/PPTX, PDF, HTML converted to DOCX, video/audio media, layered photos " +
+      "(PSD/PCraft/TIFF/BMP), saved songs (.song.json), saved 3D models (.model.json), and GDevelop projects as JSON. XLSX opens in the full " +
+      "spreadsheet engine by default to preserve formulas and file fidelity; pass native:true only when a flat native data view is wanted. " +
+      "The native option and an engine override are mutually exclusive. Saved projects that replace open work require replace:true, " +
+      "only when the person asked to replace it. A .panacea.json canvas always requires replace:true. Native canvas " +
+      "surfaces do not replace those engines' file fidelity or controls. Unsupported or ambiguous formats are refused explicitly.",
     parameters: {
       type: "object",
       properties: {
         file: { type: "string", description: "An artifact id or a path: the photo or table to add." },
+        engine: { type: "string", enum: ["pages", "sheets", "slides", "pdf", "video", "photo", "studio", "cad", "game"], description: "Optional supported engine override; must match the file format and cannot be combined with native." },
+        native: { type: "boolean", description: "Explicitly request a native canvas surface rather than an engine. For XLSX this is a flat data view, not a full editable workbook; formulas are not evaluated here. Cannot be combined with engine." },
+        replace: { type: "boolean", description: "Allow a saved project to replace open work, or load a saved Panacea canvas. Only when the person asked to replace it; keep/export current work first." },
         csv: { type: "string", description: "A table as CSV or TSV text, header row first." },
         document: { type: "string", description: "A document from text or Markdown (\"\" for a blank one)." },
         board: { type: "string", description: "A new board, by its title." },
+        flowchart: { type: "string", description: "A new native editable flowchart, by its title. Alternative to board, not combined with it." },
+        diagram: { type: "string", enum: ["mindmap", "flowchart"], description: "Diagram mode for a new board; omitted means legacy undirected cards. flowchart defaults to process nodes and forward connectors." },
         mode: { type: "string", enum: ["guide", "agent"], description: "Who writes a new document or board: guide (the person; the default) or agent (you, for productivity work or when they asked)." },
         title: { type: "string", description: "What to call it on the canvas." },
         remove: { type: "string", description: "A surface id to take off the canvas." },
@@ -93,7 +103,11 @@ export const panaceaSPECS: ToolSpec[] = [
     risky: true,
     description:
       "Put a panel on the canvas, beside what it works on and on the side the person puts panels. Either `recipe` (a library id: the library has about twenty " +
-      "ready-made panels for each kind of work, and what the person has used) or `tree` (a panel you compose from atoms, with a `title`). Prefer a recipe; " +
+      "ready-made panels for each kind of work, and what the person has used), `tree` (a panel you compose from atoms, with a `title`), or `parts` " +
+      "(nested reusable building blocks from the library). Choose exactly one. A parts root is either {recipe:\"photo.light\",advanced:true} or " +
+      "{atom:\"stack\"|\"row\"|\"group\",props:{label:\"Essentials\",gap:8},children:[parts...]}; layouts can contain other layouts and recipe references. " +
+      "There are at most 32 parts and 5 nesting levels, with the same expanded atom/control limits as a tree. It compiles into an ordinary panel, " +
+      "with the same controls, binds, ownership, learning and undo, not a separate embedded program. Prefer a recipe; " +
       "compose when none fits, and keep it small: two to six controls, the rest advanced. `why` is required: one sentence to the person, shown under the panel's " +
       "ⓘ, so they can say \"not this\". `ghost: true` offers it instead (dashed, with the why; the person takes it with a click or it drifts away): use that for " +
       "anything they did not ask for. `values` sets what it opens with. Creative work stays the person's: on their story, melody or design, place controls and " +
@@ -104,7 +118,8 @@ export const panaceaSPECS: ToolSpec[] = [
       properties: {
         recipe: { type: "string", description: "A library recipe id, e.g. photo.light, data.bar, general.budget." },
         tree: { type: "object", description: "A panel composed of atoms (see the description)." },
-        title: { type: "string", description: "Its title (required with `tree`)." },
+        parts: { type: "object", description: "One nested building-block root: {recipe:\"data.bar\",advanced?:true}, or {atom:\"stack\"|\"row\"|\"group\",props?:{label?:string,gap?:number},children:[parts...],advanced?:true}. References come from the built-in/learned library; max 32 parts and depth 5. Exclusive with recipe/tree." },
+        title: { type: "string", description: "Its title (required with `tree` or `parts`)." },
         why: { type: "string", description: "Why it is here, one sentence to the person." },
         near: { type: "string", description: "A surface or panel id to put it beside (default: what the person is working on)." },
         ghost: { type: "boolean", description: "Offer it as a suggestion rather than place it." },
@@ -218,12 +233,37 @@ export const panaceaSPECS: ToolSpec[] = [
       "away. Writing is not, while the board is the person's (mode guide, the default): {op:\"add\", text, near or x, y, tone}, {op:\"edit\", id, text}, " +
       "{op:\"remove\", id} on their cards, and a link's `label`. Those work only in mode agent: productivity work (a plan from a meeting, a sorted list) or what " +
       "they asked you to write; {op:\"mode\", mode:\"agent\"|\"guide\"} switches it, and you say so. On a brainstorm, a story or anything creative, ask, " +
-      "group, link and suggest; the ideas are theirs. Every change is a step they can undo. Returns the cards as they are now.",
+      "group, link and suggest; the ideas are theirs. Native flowcharts also allow {op:\"shape\", id, shape:\"process\"|\"decision\"|\"start\"|\"end\"|\"card\"}, " +
+      "{op:\"direction\", link:<link id>, direction:\"none\"|\"forward\"|\"backward\"|\"both\"}, and {op:\"diagram\", diagram:\"mindmap\"|\"flowchart\"}; these change structure, never words. " +
+      "`add` accepts shape; `link` accepts direction (flowchart default forward, mindmap none). `forward` points from to to; backward reverses it. " +
+      "{op:\"label\", link:<link id>, label:<text, or empty to clear>} changes words and requires agent mode, including clearing an existing label. " +
+      "Self-links, dangling ids, unknown shapes/directions and duplicate connections in the same direction are refused; opposite directed connections and cycles are supported. " +
+      "Coordinates are finite board-local units. Every change is a step they can undo. Returns the cards as they are now.",
     parameters: {
       type: "object",
       properties: {
         surface: { type: "string", description: "The board surface id (default: the one in focus, or the only one)." },
-        ops: { type: "array", items: { type: "object" }, description: "The changes, in order (at most 40)." },
+        ops: {
+          type: "array", maxItems: 40,
+          items: {
+            type: "object",
+            properties: {
+              op: { type: "string", enum: ["move", "tone", "shape", "link", "direction", "label", "unlink", "tidy", "ask", "add", "edit", "remove", "diagram", "mode"] },
+              id: { type: "string", description: "Card/node id for move, tone, shape, edit, remove." },
+              link: { type: "string", description: "Connector id for direction, label, unlink." },
+              from: { type: "string" }, to: { type: "string" }, near: { type: "string" },
+              text: { type: "string" }, label: { type: "string", maxLength: 40 },
+              x: { type: "number" }, y: { type: "number" },
+              tone: { type: "string", enum: ["yellow", "green", "blue", "pink", "violet", "plain"] },
+              shape: { type: "string", enum: ["card", "process", "decision", "start", "end"] },
+              direction: { type: "string", enum: ["none", "forward", "backward", "both"] },
+              diagram: { type: "string", enum: ["mindmap", "flowchart"] },
+              mode: { type: "string", enum: ["agent", "guide"] },
+            },
+            required: ["op"], additionalProperties: false,
+          },
+          description: "The changes, in order, all or none (at most 40). No implicit layout.",
+        },
       },
       required: ["ops"],
     },
@@ -233,13 +273,14 @@ export const panaceaSPECS: ToolSpec[] = [
     group: "files",
     description:
       "Save from the canvas into the project's folder in Artifacts: `surface` (an image: the picture with every adjustment, PNG or `format` jpeg; a table: the rows " +
-      "as filtered, CSV; a document or a board: Markdown) or `panel` (a chart, as SVG). Only when the person wants a file.",
+      "as filtered, CSV; a document: Markdown; a board: Markdown, or format svg; a flowchart defaults to standalone SVG, format markdown gives its nodes/connectors in text). " +
+      "The SVG has native shapes, arrows and escaped labels, without scripts or external resources; the graph stays editable in the canvas. Save keeps .panacea.json for editable round trips. Or `panel` (a chart, as SVG). Only when the person wants a file.",
     parameters: {
       type: "object",
       properties: {
         surface: { type: "string" },
         panel: { type: "string" },
-        format: { type: "string", enum: ["png", "jpeg"] },
+        format: { type: "string", enum: ["png", "jpeg", "svg", "markdown"] },
         name: { type: "string" },
       },
     },

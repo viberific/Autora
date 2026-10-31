@@ -5,6 +5,7 @@ import {
 } from "../../lib/studio/model";
 import type { Editor } from "./useSong";
 import { IconCopy, IconMoreH, IconTrash } from "../Icons";
+import { elementScale } from "../../lib/frameCoordinates";
 
 /** Width of the track-name column, in px (narrower on a phone). */
 export const headWidth = (phone: boolean) => (phone ? 132 : 176);
@@ -75,8 +76,9 @@ export function Arrangement({
   };
 
   const beatAt = (e: { clientX: number }, trackId: string) => {
-    const r = lanes.current.get(trackId)?.getBoundingClientRect();
-    return r ? (e.clientX - r.left) / bw : 0;
+    const lane = lanes.current.get(trackId);
+    const r = lane?.getBoundingClientRect();
+    return r && lane ? (e.clientX - r.left) / (bw * elementScale(lane)) : 0;
   };
 
   const startClip = (e: ReactPointerEvent, track: Track, clip: Clip, kind: "move" | "size") => {
@@ -91,7 +93,8 @@ export function Arrangement({
   const moveClip = (e: ReactPointerEvent) => {
     const d = drag.current;
     if (!d) return;
-    const delta = (e.clientX - d.x0) / bw;
+    const lane = lanes.current.get(d.trackId);
+    const delta = (e.clientX - d.x0) / (bw * (lane ? elementScale(lane) : 1));
     if (d.kind === "move") {
       const over = laneAt(e.clientY);
       const from = project.tracks.find((t) => t.id === d.trackId)!;
@@ -201,7 +204,7 @@ export function Arrangement({
         <div className="st-arr-inner" style={{ width: HEAD + total * bw }}>
           <div className="st-rowhead st-ruler-row">
             <div className="st-corner" style={{ width: HEAD }} />
-            <div className="st-ruler" style={{ width: total * bw }} onPointerDown={(e) => onSeek(Math.max(0, (e.clientX - e.currentTarget.getBoundingClientRect().left) / bw))}>
+            <div className="st-ruler" style={{ width: total * bw }} onPointerDown={(e) => onSeek(Math.max(0, (e.clientX - e.currentTarget.getBoundingClientRect().left) / (bw * elementScale(e.currentTarget))))}>
               {ticks.map((b, i) => (
                 <span key={b} className="st-tick" style={{ left: b * bw }}>{i % labelEvery === 0 ? i + 1 : ""}</span>
               ))}

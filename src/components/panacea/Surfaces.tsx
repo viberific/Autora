@@ -31,23 +31,31 @@ function ImageView({ surface, onSize }: { surface: Surface; onSize: (px: { w: nu
 
   // The picture.
   useEffect(() => {
+    let active = true;
+    setLoaded(null);
+    setProblem(null);
+    pictures.delete(surface.id);
     if (!surface.artifact) { setProblem("This picture's file is not here."); return; }
     const img = new Image();
     img.decoding = "async";
     img.onload = () => {
-      pictures.set(surface.id, img);
-      try {
+      void (async () => { try {
+        await img.decode();
+        if (!active) return;
+        if (!img.naturalWidth || !img.naturalHeight) throw new Error("The picture decoded without usable dimensions.");
         engine.current ??= new ImageEngine(canvas.current!);
         engine.current.setImage(img);
+        pictures.set(surface.id, img);
         setLoaded({ w: img.naturalWidth, h: img.naturalHeight });
         setImageStats(surface.id, { palette: paletteOf(img) });
         sized.current({ w: img.naturalWidth, h: img.naturalHeight });
       } catch (err) {
-        setProblem(err instanceof Error ? err.message : String(err));
-      }
+        if (active) setProblem(`The picture could not be decoded: ${err instanceof Error ? err.message : String(err)}`);
+      } })();
     };
-    img.onerror = () => setProblem("The picture could not be loaded.");
+    img.onerror = () => { if (active) setProblem("The picture could not be loaded or decoded."); };
     img.src = `/api/artifacts/${encodeURIComponent(surface.artifact)}`;
+    return () => { active = false; img.onload = null; img.onerror = null; pictures.delete(surface.id); };
   }, [surface.artifact, surface.id]);
 
   // The room the card gives it.
@@ -107,7 +115,7 @@ function ImageView({ surface, onSize }: { surface: Surface; onSize: (px: { w: nu
   return (
     <div className="pa-image" ref={box}>
       <div className="pa-image-frame">
-        <canvas ref={canvas} aria-label={`${surface.title}, as edited`} role="img" />
+        <canvas ref={canvas} aria-label={`${surface.title}, as edited`} role="img" aria-hidden={!loaded || !!problem} style={{ visibility: loaded && !problem ? "visible" : "hidden" }} />
         {compare && loaded && (
           <>
             <div className="pa-split" style={{ left: `${split * 100}%` }} onPointerDown={drag} role="slider" aria-label="Before and after" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(split * 100)}><i /></div>

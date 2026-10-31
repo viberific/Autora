@@ -40,7 +40,7 @@ export const LOOP_DEFAULTS: LoopWatchConfig = {
 };
 
 /** Rounds in a row of nothing but looking things up before the agent is asked whether it already has its answer. */
-export const LOOKUP_ROUNDS = 3;
+const LOOKUP_ROUNDS = 3;
 
 /** Bookkeeping rides along with any round and says nothing about whether it was a search. */
 const NEUTRAL = new Set(["todo", "requirements", "ledger", "set_mode", "memory_write", "memory_search"]);

@@ -18,7 +18,8 @@ export const terminalSPECS: ToolSpec[] = [
       "`&&` and environment variables all work. This is a real shell on a real " +
       "host: it is not a sandbox and it is not a simulation. Output is streamed " +
       "into the conversation as it arrives, so the person watching sees the " +
-      "command and its output as it runs. Not a terminal emulator -- there is no " +
+      "command and its output in a collapsible chat entry as it runs. There is " +
+      "no separate terminal window. Not a terminal emulator -- there is no " +
       "TTY, so interactive programs (vim, `top`, a password prompt, anything " +
       "paging) will hang rather than work. Use non-interactive flags, and prefer " +
       "`sudo -n` so a password prompt fails fast instead of waiting. " +

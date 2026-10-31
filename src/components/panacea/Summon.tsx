@@ -4,6 +4,7 @@ import type { Node } from "../../lib/panacea/recipe";
 
 /** The picker's way to a board: not a panel but a surface, which the window adds where the person double-clicked. */
 export const BOARD_PIECE = "blank.board";
+export const FLOWCHART_PIECE = "blank.flowchart";
 
 /** Pieces with nothing in them yet: a single control on a value of its own, for when the person just wants one; and a board. */
 function blankPieces(name: string): Recipe[] {
@@ -17,6 +18,7 @@ function blankPieces(name: string): Recipe[] {
     piece("checklist", "Checklist", "a list to tick", { atom: "list", bind: name, props: { label: "List" } }, 288),
     piece("colour", "Colour", "a colour", { atom: "color", bind: name, props: { label: "Colour" } }),
     { ...piece("board", "Board", "cards and links to think with: a brainstorm, a map of ideas", { atom: "note", props: { text: "A board" } }), id: BOARD_PIECE, tags: ["board", "brainstorm", "map", "cards", "ideas", "mind"] },
+    { ...piece("flowchart", "Flowchart", "processes, decisions and directed paths", { atom: "note", props: { text: "A flowchart" } }), id: FLOWCHART_PIECE, tags: ["flowchart", "process", "decision", "diagram"] },
   ];
 }
 

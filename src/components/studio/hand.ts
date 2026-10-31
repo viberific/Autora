@@ -13,6 +13,7 @@ import { instrumentOf, pitchName, DRUMS, type Project } from "../../lib/studio/m
 import type { StudioStep } from "../../lib/studio/handsteps";
 import { centreOf, pointerGo, pointerPlace, pointerRest, pointerTyping } from "../../lib/pointer";
 import { typingDelays, type Point } from "../../lib/humanPath";
+import { elementScale } from "../../lib/frameCoordinates";
 
 type HandEnv = {
   root: HTMLElement;
@@ -221,7 +222,7 @@ export async function runStudioHand(steps: StudioStep[], env: HandEnv): Promise<
   const laneGeom = (tid: string) => {
     const lane = row(tid)?.querySelector<HTMLElement>(".st-lane");
     if (!lane) throw new Skip("the track is not on screen");
-    const bw = parseFloat(lane.style.getPropertyValue("--beat")) || 24;
+    const bw = (parseFloat(lane.style.getPropertyValue("--beat")) || 24) * elementScale(lane);
     return { lane, bw };
   };
   /** The arrangement scrolled so beats `a`..`b` of a lane are in view. */
@@ -234,7 +235,7 @@ export async function runStudioHand(steps: StudioStep[], env: HandEnv): Promise<
     const x1 = r.left + b * bw;
     const head = r.left - (sc.getBoundingClientRect().left - sc.scrollLeft) - sc.scrollLeft;
     if (x0 < view.left + Math.max(0, head) + 8 || x1 > view.right - 8) {
-      sc.scrollTo({ left: Math.max(0, sc.scrollLeft + x0 - (view.left + Math.max(0, head)) - 40), behavior: "smooth" });
+      sc.scrollTo({ left: Math.max(0, sc.scrollLeft + (x0 - (view.left + Math.max(0, head)) - 40) / elementScale(sc)), behavior: "smooth" });
       await sleep(400);
     }
     row(lane.closest<HTMLElement>(".st-row")?.dataset.track ?? "")?.scrollIntoView({ block: "nearest", behavior: "smooth" });

@@ -28,29 +28,29 @@ async function main() {
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   const bodyText = () => page.evaluate(() => document.body.innerText);
   const say = async (text: string) => {
-    await page.fill('textarea[aria-label="Task"]', text);
+    await page.fill('textarea[aria-label="Ask Autora"]', text);
     await page.tap('button[aria-label="Send"], button[aria-label="Interrupt & send"], button[aria-label="Add to what it is doing"]');
   };
   try {
     const s = await app.newSession("Flows");
     await page.goto(`${app.base}/?session=${s}`);
-    await page.waitForSelector('textarea[aria-label="Task"]');
+    await page.waitForSelector('textarea[aria-label="Ask Autora"]');
 
     console.log("sending");
     await test("an image pasted into the box is attached, and pasted text still goes into it", async () => {
-      await page.focus('textarea[aria-label="Task"]');
+      await page.focus('textarea[aria-label="Ask Autora"]');
       await page.evaluate(() => {
         const png = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="), (c) => c.charCodeAt(0));
         const data = new DataTransfer();
         data.items.add(new File([png], "image.png", { type: "image/png" }));
-        document.querySelector('textarea[aria-label="Task"]')!.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+        document.querySelector('textarea[aria-label="Ask Autora"]')!.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
       });
       await page.waitForSelector(".attach-chip.is-pic, .attach-chip.is-file", { timeout: 10_000 });
-      assert.equal(await page.inputValue('textarea[aria-label="Task"]'), "");
+      assert.equal(await page.inputValue('textarea[aria-label="Ask Autora"]'), "");
       await page.evaluate(() => {
         const data = new DataTransfer();
         data.setData("text/plain", "pasted words");
-        document.querySelector('textarea[aria-label="Task"]')!.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+        document.querySelector('textarea[aria-label="Ask Autora"]')!.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
       });
       // Text is the browser's own job; the handler must not swallow it.
       assert.equal(await page.evaluate(() => document.querySelectorAll(".attach-chip").length), 1);
@@ -63,23 +63,23 @@ async function main() {
       await page.waitForFunction(() => document.body.innerText.includes("The reply is here, and it is complete."), null, { timeout: 15_000 });
       const text = await bodyText();
       assert.match(text, /hello there/);
-      assert.equal(await page.inputValue('textarea[aria-label="Task"]'), "");
+      assert.equal(await page.inputValue('textarea[aria-label="Ask Autora"]'), "");
     });
     await test("Enter writes a line rather than sending, and Ctrl+Enter sends the whole thing", async () => {
       app.decide = () => ({ text: "Second reply." });
-      await page.fill('textarea[aria-label="Task"]', "line one");
-      await page.press('textarea[aria-label="Task"]', "Shift+Enter");
-      await page.type('textarea[aria-label="Task"]', "line two");
-      assert.equal(await page.inputValue('textarea[aria-label="Task"]'), "line one\nline two");
+      await page.fill('textarea[aria-label="Ask Autora"]', "line one");
+      await page.press('textarea[aria-label="Ask Autora"]', "Shift+Enter");
+      await page.type('textarea[aria-label="Ask Autora"]', "line two");
+      assert.equal(await page.inputValue('textarea[aria-label="Ask Autora"]'), "line one\nline two");
       /* Enter writes a line; it never sends. Nothing was sent, so the box still
          holds what was typed -- a send would have cleared it. */
-      await page.press('textarea[aria-label="Task"]', "Enter");
-      await page.type('textarea[aria-label="Task"]', "line three");
-      assert.equal(await page.inputValue('textarea[aria-label="Task"]'), "line one\nline two\nline three");
+      await page.press('textarea[aria-label="Ask Autora"]', "Enter");
+      await page.type('textarea[aria-label="Ask Autora"]', "line three");
+      assert.equal(await page.inputValue('textarea[aria-label="Ask Autora"]'), "line one\nline two\nline three");
       /* Enter writes a line in the composer; Ctrl+Enter is what sends. */
-      await page.press('textarea[aria-label="Task"]', "Control+Enter");
+      await page.press('textarea[aria-label="Ask Autora"]', "Control+Enter");
       await page.waitForFunction(() => document.body.innerText.includes("Second reply."), null, { timeout: 15_000 });
-      assert.equal(await page.inputValue('textarea[aria-label="Task"]'), "");
+      assert.equal(await page.inputValue('textarea[aria-label="Ask Autora"]'), "");
       assert.match(await bodyText(), /line one\s+line two\s+line three/);
     });
     await test("a reply that is still streaming can be stopped from the page", async () => {
@@ -101,19 +101,19 @@ async function main() {
 
     console.log("the slash menu");
     await test("typing / offers the commands, and Escape closes it without sending anything", async () => {
-      await page.fill('textarea[aria-label="Task"]', "/");
+      await page.fill('textarea[aria-label="Ask Autora"]', "/");
       await page.waitForSelector(".slash-menu, [role=listbox]", { timeout: 5000 });
-      await page.press('textarea[aria-label="Task"]', "Escape");
+      await page.press('textarea[aria-label="Ask Autora"]', "Escape");
       await page.waitForFunction(() => !document.querySelector(".slash-menu"), null, { timeout: 5000 });
-      assert.equal(await page.inputValue('textarea[aria-label="Task"]'), "/");
-      await page.fill('textarea[aria-label="Task"]', "");
+      assert.equal(await page.inputValue('textarea[aria-label="Ask Autora"]'), "/");
+      await page.fill('textarea[aria-label="Ask Autora"]', "");
     });
 
     console.log("the @ menu");
     await test("typing @ offers the agents, Enter picks one into the text, and Escape closes it without sending", async () => {
       const made = await app.api("POST", "/api/agents", { name: "Bookkeeper", role: "Accountant", when: "tax and ledgers" });
       assert.equal(made.status, 200, JSON.stringify(made.body));
-      const box = 'textarea[aria-label="Task"]';
+      const box = 'textarea[aria-label="Ask Autora"]';
       await page.fill(box, "please ask @Boo");
       await page.waitForSelector('.slash-menu[aria-label="Agents"]', { timeout: 5000 });
       assert.match(await page.innerText('.slash-menu[aria-label="Agents"]'), /@Bookkeeper\s+Accountant/);
@@ -191,7 +191,7 @@ async function main() {
           inside: lr.right <= innerWidth + 1,
         };
       });
-      const want = { oneLine: true, last: "Tools", beforeSend: true, inside: true };
+      const want = { oneLine: true, last: "Panacea capabilities", beforeSend: true, inside: true };
       const shape = async (p: any, where: string) => {
         const got: any = await stripAt(p);
         assert.ok(got.buttons >= 7, `${where}: the wrench is not alone on the row`);

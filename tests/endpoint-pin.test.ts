@@ -39,7 +39,9 @@ async function test(name: string, fn: () => Promise<void> | void) {
    was asked. Nothing else about the reply matters here: the request is the
    subject, so a one-word answer is enough to finish the call. */
 const bodies: any[] = [];
+const headers: http.IncomingHttpHeaders[] = [];
 const vendor = http.createServer((req, res) => {
+  headers.push(req.headers);
   let raw = "";
   req.on("data", (chunk) => { raw += chunk; });
   req.on("end", () => {
@@ -60,6 +62,7 @@ const MODEL = "z-ai/glm-5.3-flash";
 /** Ask once, and hand back the body the vendor was sent. */
 async function ask(provider: string, endpoint: string | undefined, model = MODEL) {
   bodies.length = 0;
+  headers.length = 0;
   await streamChat({
     provider, model, key: "k", baseUrl: base,
     system: "", messages: [{ role: "user", text: "hi" }], endpoint,
@@ -69,6 +72,15 @@ async function ask(provider: string, endpoint: string | undefined, model = MODEL
 }
 
 console.log("endpoint pin");
+
+await test("OpenRouter attributes Autora to its current public repository", async () => {
+  await ask("openrouter", undefined);
+  assert.equal(headers[0]["http-referer"], "https://github.com/viberific/Autora");
+  assert.equal(headers[0]["x-title"], "Autora");
+  await ask("openai", undefined);
+  assert.equal(headers[0]["http-referer"], undefined);
+  assert.equal(headers[0]["x-title"], undefined);
+});
 
 await test("a pinned turn names that endpoint and refuses the others", async () => {
   const body = await ask("openrouter", "deepinfra");

@@ -33,6 +33,51 @@ export interface Node {
   children?: Node[];
 }
 
+/** A hierarchy of reusable panels. Expansion produces only the existing native Node tree. */
+export type RecipePart =
+  | { recipe: string; advanced?: boolean }
+  | { atom: "stack" | "row" | "group"; props?: Record<string, unknown>; advanced?: boolean; children: RecipePart[] };
+export const MAX_RECIPE_PARTS = 32;
+
+/** Read the composition wire format before expansion. Refuses cycles and unknown fields; never executes a prop. */
+export function readRecipePart(raw: unknown): { part: RecipePart } | { error: string } {
+  let count = 0;
+  const ancestors = new Set<object>();
+  let error = "";
+  const fail = (text: string): null => { error ||= text; return null; };
+  const walk = (value: unknown, depth: number, path: string): RecipePart | null => {
+    if (++count > MAX_RECIPE_PARTS) return fail(`At most ${MAX_RECIPE_PARTS} recipe parts; split the panel.`);
+    if (depth > MAX_DEPTH) return fail(`Recipe parts nested deeper than ${MAX_DEPTH}; flatten them.`);
+    if (!value || typeof value !== "object" || Array.isArray(value)) return fail(`${path}: a part is a recipe reference or a layout object.`);
+    if (ancestors.has(value)) return fail(`${path}: cyclic recipe parts are not allowed.`);
+    const r = value as Record<string, unknown>;
+    const ref = Object.hasOwn(r, "recipe");
+    const allowed = ref ? ["recipe", "advanced"] : ["atom", "props", "advanced", "children"];
+    const extra = Object.keys(r).find((key) => !allowed.includes(key));
+    if (extra) return fail(`${path}: unknown field "${extra}" in ${ref ? "a recipe reference" : "a layout part"}.`);
+    if (r.advanced !== undefined && typeof r.advanced !== "boolean") return fail(`${path}: advanced must be a boolean.`);
+    if (ref) {
+      if (typeof r.recipe !== "string" || !r.recipe.trim() || r.recipe.length > 80) return fail(`${path}: recipe must be a library id.`);
+      return { recipe: r.recipe.trim(), ...(r.advanced === true ? { advanced: true } : {}) };
+    }
+    if (r.atom !== "stack" && r.atom !== "row" && r.atom !== "group") return fail(`${path}: a layout part uses stack, row or group.`);
+    if (r.props !== undefined && (!r.props || typeof r.props !== "object" || Array.isArray(r.props))) return fail(`${path}: props must be an object.`);
+    if (!Array.isArray(r.children) || !r.children.length) return fail(`${path}: a layout part needs children.`);
+    if (r.children.length > MAX_RECIPE_PARTS) return fail(`${path}: at most ${MAX_RECIPE_PARTS} children.`);
+    ancestors.add(value);
+    const children: RecipePart[] = [];
+    for (let i = 0; i < r.children.length; i++) {
+      const child = walk(r.children[i], depth + 1, `${path}.children.${i + 1}`);
+      if (!child) { ancestors.delete(value); return null; }
+      children.push(child);
+    }
+    ancestors.delete(value);
+    return { atom: r.atom, ...(r.props ? { props: r.props as Record<string, unknown> } : {}), ...(r.advanced === true ? { advanced: true } : {}), children };
+  };
+  const part = walk(raw, 0, "parts");
+  return part ? { part } : { error: error || "Invalid recipe parts." };
+}
+
 /** What a tree is checked against: the surfaces on the canvas, and which one "@image" and "@data" mean here. */
 export interface CheckContext {
   surfaces: Array<{ id: string; kind: SurfaceKind; table?: Table | null }>;

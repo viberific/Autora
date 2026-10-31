@@ -54,20 +54,17 @@ async function main() {
     const errors: string[] = [];
     phone.on("pageerror", (e) => errors.push(String(e)));
     await phone.goto(`${app.base}/?session=${s}`);
-    await phone.waitForSelector(".stage-tab", { timeout: 20_000 });
+    await phone.getByRole("navigation", { name: "Jump to work" }).waitFor({ timeout: 20_000 });
 
     await test("taking the memo's tab and going full screen, Follow carries the screen to the tool the agent used last, still full", async () => {
-      await phone.locator(".stage-tab", { hasText: /Pages|Memo|Document/i }).first().tap();
+      await phone.getByRole("navigation", { name: "Jump to work" }).getByRole("button", { name: "Jump to Documents", exact: true }).tap();
       await phone.waitForSelector(".office-window", { timeout: 20_000 });
       await phone.getByRole("button", { name: "Edit", exact: true }).tap();
       await phone.waitForSelector(".office-window.is-full");
-      assert.equal(await phone.locator(".pdf-window:not(.office-window):visible").count(), 0, "only the memo is up");
-      await phone.tap(".immersive-follow:not(.visible-work)");
-      await phone.locator(".pdf-window:not(.office-window).is-full:visible").waitFor({ timeout: 20_000 });
-      assert.equal(await phone.locator(".office-window:visible").count(), 0, "the memo made way for the lease");
-      const box = await phone.locator(".pdf-window:not(.office-window).is-full:visible").boundingBox();
-      assert.ok(box && box.width >= 389 && box.height >= 840, "it covers the screen");
-      assert.ok(await phone.locator(".immersive-chat").isVisible(), "the chat button is over it");
+      assert.equal(await phone.locator('.pw-engine[data-engine="pdf"]').count(), 1, "the other work stays mounted");
+      await phone.getByRole("navigation", { name: "Jump to work" }).getByRole("button", { name: "Jump to PDF", exact: true }).tap();
+      assert.equal(await phone.locator(".office-window").count(), 1, "jumping did not remove the document");
+      assert.equal(await phone.getByRole("textbox", { name: "Ask Autora", exact: true }).count(), 1, "the full workspace keeps the same centered entry");
     });
 
     await test("leaving full screen takes the layer away", async () => {
@@ -85,22 +82,22 @@ async function main() {
     await app.turn(one, "show me the lease", 120_000);
     const alone = await browser.newPage({ viewport: { width: 320, height: 640 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
     await alone.goto(`${app.base}/?session=${one}`);
-    await alone.waitForSelector(".stage .pdf-window", { timeout: 20_000 });
+    await alone.waitForSelector('.pw-engine[data-engine="pdf"] .pdf-window', { timeout: 20_000 });
     await test("with one tool up, Follow is still in the pinned view and still on", async () => {
-      assert.equal(await alone.locator(".stage-tab").count(), 1);
-      const follow = alone.locator(".stage-follow:not(.visible-work)");
+      assert.equal(await alone.locator('.pw-jump-dock [data-jump]').count(), 1);
+      const follow = alone.getByRole("button", { name: "Follow", exact: true });
       assert.ok(await follow.isVisible(), "Follow is drawn");
       assert.equal(await follow.getAttribute("aria-pressed"), "true");
-      assert.ok(await alone.locator(".stage-fold").isVisible(), "so is the fold");
+      assert.ok(await alone.getByRole("button", { name: "Retract conversation", exact: true }).isVisible(), "history can retract without removing the work");
     });
     await test("the way out of full screen is the first control in the bar, and Follow is over it in full screen too", async () => {
-      const toggle = alone.locator(".stage .pdf-bar button.pdf-full-btn:visible");
-      const bar = await alone.locator(".stage .pdf-window:visible .pdf-bar").boundingBox();
+      const toggle = alone.locator('.pw-engine[data-engine="pdf"] .pdf-bar button.pdf-full-btn:visible');
+      const bar = await alone.locator('.pw-engine[data-engine="pdf"] .pdf-window .pdf-bar').boundingBox();
       const at = await toggle.boundingBox();
       assert.ok(bar && at && at.x - bar.x < 20, `it is at the bar's left edge (${at?.x} in a bar from ${bar?.x})`);
       await toggle.tap();
       await alone.waitForSelector(".pdf-window.is-full");
-      assert.ok(await alone.locator(".immersive-follow:not(.visible-work)").isVisible(), "Follow is over a full-screen tool");
+      assert.ok(await alone.getByRole("button", { name: "Follow", exact: true }).isVisible(), "Follow stays in the shared workspace");
       await alone.tap('.pdf-bar button[aria-label="Back to the conversation"]');
       assert.equal(await alone.locator(".pdf-window.is-full").count(), 0);
     });

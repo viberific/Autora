@@ -57,7 +57,11 @@ function fingerprint() {
 }
 
 function run(cmd, args, cwd) {
-  const r = spawnSync(cmd, args, { cwd, stdio: "inherit", env: process.env });
+  const npm = cmd === "npm" ? process.env.npm_execpath : undefined;
+  const r = spawnSync(npm ? process.execPath : cmd, npm ? [npm, ...args] : args, {
+    cwd, stdio: "inherit", env: process.env, shell: !npm && cmd === "npm" && process.platform === "win32",
+  });
+  if (r.error) throw new Error(`${cmd} ${args.join(" ")} could not start: ${r.error.message}`);
   if (r.status !== 0) throw new Error(`${cmd} ${args.join(" ")} failed (${r.status ?? r.signal})`);
 }
 
@@ -76,7 +80,13 @@ async function download(url, to) {
 }
 
 const want = fingerprint();
-if (fs.existsSync(stamp) && fs.readFileSync(stamp, "utf8").trim() === want && fs.existsSync(path.join(app, "public/libGD.wasm"))) {
+const preparedFiles = [
+  path.join(app, "public", "libGD.wasm"),
+  path.join(app, "public", "libGD.js"),
+  path.join(app, "resources", "GDJS", "Runtime", "runtimegame.js"),
+  path.join(editor, "node_modules", "GDJS-for-web-app-only", "Runtime", "Extensions", "AdMob", "JsExtension.js"),
+];
+if (fs.existsSync(stamp) && fs.readFileSync(stamp, "utf8").trim() === want && preparedFiles.every((file) => fs.existsSync(file))) {
   process.exit(0);
 }
 
@@ -97,7 +107,7 @@ for (const dir of ["newIDE/app", "newIDE/electron-app/app", "GDJS", "Extensions"
   fs.cpSync(path.join(src, dir), path.join(work, dir), { recursive: true });
 }
 // The dependencies live beside the scripts, once; GDevelop's scripts look for them in newIDE/app/node_modules.
-fs.symlinkSync(path.join(editor, "node_modules"), path.join(app, "node_modules"), "dir");
+fs.symlinkSync(path.join(editor, "node_modules"), path.join(app, "node_modules"), process.platform === "win32" ? "junction" : "dir");
 
 fs.cpSync(overlay, work, { recursive: true });
 
@@ -116,7 +126,7 @@ run("node", ["build-theme-resources.js"], path.join(app, "scripts"));
 
 for (const patch of PATCHES) {
   const file = path.join(work, patch.file);
-  const before = fs.readFileSync(file, "utf8");
+  const before = fs.readFileSync(file, "utf8").replace(/\r\n/g, "\n");
   const parts = before.split(patch.find);
   if (parts.length < 2) throw new Error(`patch for ${patch.file}: not found: ${patch.find.slice(0, 80)}`);
   if (parts.length > 2 && !patch.all) throw new Error(`patch for ${patch.file}: found ${parts.length - 1} times, expected once: ${patch.find.slice(0, 80)}`);
@@ -139,5 +149,8 @@ for (const file of ["libGD.js", "libGD.wasm"]) {
   fs.copyFileSync(cached, path.join(app, "public", file));
 }
 
+for (const file of preparedFiles) {
+  if (!fs.existsSync(file)) throw new Error(`GDevelop preparation did not produce ${file}`);
+}
 fs.writeFileSync(stamp, `${want}\n`);
 log(`editor prepared from ${pin.sha.slice(0, 12)}`);

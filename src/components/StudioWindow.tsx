@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useFullscreen } from "../lib/fullscreen";
 import { onStudioCommand } from "../lib/studio";
+import { isWorkVisible } from "../lib/frameCoordinates";
 import { bounce, Transport } from "../lib/studio/engine";
 import {
   addNotes, bassNotes, chordNotes, clamp, contentEnd, copyClip, drumNotes, fitBars, findClip, instrumentOf, isDrumTrack, MAX_BARS,
@@ -133,6 +134,7 @@ export function StudioWindow({ sessionId, phone }: { sessionId: string; phone: b
   // What the agent asks of this window: the things only a browser can do.
   useEffect(() => {
     const off = onStudioCommand((cmd) => {
+      if (cmd.name === "hand" && (!root.current || !isWorkVisible(root.current))) return;
       void (async () => {
         const claim = (await fetch(`${base}/claim?id=${encodeURIComponent(cmd.id)}`, { method: "POST" }).then((r) => r.json()).catch(() => null)) as { won?: boolean } | null;
         if (!claim?.won) return;
@@ -235,9 +237,10 @@ export function StudioWindow({ sessionId, phone }: { sessionId: string; phone: b
 
   const onKey = (e: ReactKeyboardEvent) => {
     const target = e.target as HTMLElement;
+    if (target.closest(".scrim")) return;
     const mod = e.metaKey || e.ctrlKey;
     // Ctrl+S saves wherever the focus is, the song's name field included, as it does everywhere else.
-    if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); saveRef.current?.querySelector("button")?.click(); return; }
+    if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); saveRef.current?.querySelector<HTMLButtonElement>(".win-save:not(.win-load)")?.click(); return; }
     const typing = target.closest("input, textarea, select") !== null && !(target instanceof HTMLInputElement && target.type === "range");
     if (typing) return;
     if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); if (e.shiftKey) song.redo(); else song.undo(); }
@@ -333,11 +336,11 @@ export function StudioWindow({ sessionId, phone }: { sessionId: string; phone: b
       className={`pdf-window st-window has-rail ${phone ? "is-phone" : "is-desk"}${phone && full ? " is-full" : ""}`}
       tabIndex={0}
       onKeyDown={onKey}
-      aria-label="Autora Music"
+      aria-label="Panacea · Music"
     >
       <div className="pdf-bar">
         <span className="pdf-bar-ico" aria-hidden="true"><IconMusic size={14} /></span>
-        <span className="pdf-bar-app">Autora Music</span>
+        <span className="pdf-bar-app">Music</span>
         <input
           className="st-song-name"
           value={project.name}

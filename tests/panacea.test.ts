@@ -11,6 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import type { Surface } from "../src/lib/panacea/canvas";
 import type { Node } from "../src/lib/panacea/recipe";
+import { pngFixture } from "./png-fixture";
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "autora-panacea-"));
 process.env.AUTORA_STATE_DIR = dir;
@@ -124,8 +125,8 @@ await test("a panel's shape is its fingerprint: other words and values, same sha
 
 // ------------------------------------------------------------- the library --
 
-await test("the library has twenty pieces for each kind of work, every one passes the rulebook on a canvas", () => {
-  for (const d of DOMAINS) assert.equal(BUILTINS.filter((r) => r.domain === d).length, 20, d);
+await test("the library has twenty pieces per domain plus native Flowchart; every recipe passes the rulebook", () => {
+  for (const d of DOMAINS) assert.equal(BUILTINS.filter((r) => r.domain === d).length, d === "general" ? 21 : 20, d);
   assert.equal(new Set(BUILTINS.map((r) => r.id)).size, BUILTINS.length, "ids are unique");
   const c = withSurfaces();
   for (const r of BUILTINS) {
@@ -376,6 +377,71 @@ await test("panacea_set checks each value; panacea_arrange moves, puts away (not
   assert.equal(unknown.ok, false);
 });
 
+await test("panacea_place assembles nested library parts through the real placement, learning and authority path", async () => {
+  const before = (await call("GET", `/api/panacea/${S}/doc`)).body.doc;
+  const placed = await run("panacea_place", {
+    title: "Reusable inspector", why: "The pieces you chose, together.",
+    parts: { atom: "group", props: { label: "My controls" }, children: [
+      { recipe: "general.budget" },
+      { atom: "row", children: [{ recipe: "general.budget" }, { recipe: "general.notes", advanced: true }] },
+    ] },
+    values: { notes: "The agent must not write this." },
+  });
+  assert.ok(placed.ok, placed.summary);
+  assert.match(placed.summary, /Values not set: notes: the words .*person's to write/);
+  const after = (await call("GET", `/api/panacea/${S}/doc`)).body.doc;
+  const panel = after.panels.find((p: { title: string }) => p.title === "Reusable inspector");
+  assert.ok(panel && panel.recipe, "the assembly is learned by the existing composed-recipe path");
+  assert.equal(panel.tree.atom, "group");
+  assert.equal(panel.tree.children[1].atom, "row");
+  assert.equal(panel.tree.children[1].children[1].advanced, true);
+  assert.equal(panel.tree.children[0].children[0].bind, panel.tree.children[1].children[0].children[0].bind, "repeated references reuse the same bind");
+  assert.equal(panel.writes, undefined);
+  assert.notEqual(after.values.notes, "The agent must not write this.");
+  for (const old of before.panels) {
+    const current = after.panels.find((p: { id: string }) => p.id === old.id);
+    assert.deepEqual([current.x, current.y, current.pinned, current.touched], [old.x, old.y, old.pinned, old.touched]);
+  }
+  assert.equal((await run("panacea_set", { values: { notes: "Still forbidden." } })).ok, false);
+  assert.ok((await run("panacea_arrange", { writes: { [panel.id]: "agent" } })).ok);
+  assert.ok((await run("panacea_set", { values: { notes: "Explicitly allowed." } })).ok);
+  assert.ok((await run("panacea_arrange", { writes: { [panel.id]: "person" } })).ok);
+  const learnedRef = await run("panacea_place", { title: "Learned pieces", why: "Reuse my own library entry.", parts: { recipe: panel.recipe } });
+  assert.ok(learnedRef.ok, learnedRef.summary);
+  const data = after.surfaces.find((s: { kind: string }) => s.kind === "data");
+  const native = await run("panacea_place", {
+    title: "Native rows", near: data.id, why: "A reusable filter and its rows.",
+    parts: { atom: "row", children: [{ recipe: "data.filter-category" }, { recipe: "data.table" }] },
+  });
+  assert.ok(native.ok, native.summary);
+  assert.match(native.summary, new RegExp(`=@${data.id}\\.filter\\.Region`), "recipe placeholders resolve beside the requested native surface");
+
+  const snapshot = (await call("GET", `/api/panacea/${S}/doc`)).body.doc;
+  const cycle: { atom: string; children: unknown[] } = { atom: "stack", children: [] };
+  cycle.children.push(cycle);
+  const shared = { recipe: "general.notes" };
+  const reused = await run("panacea_place", { title: "Reused reference", why: "Shared pieces are not cycles.", parts: { atom: "row", children: [shared, shared] } });
+  assert.ok(reused.ok, reused.summary);
+  for (const [parts, pattern] of [
+    [{ recipe: "missing.recipe" }, /Unknown recipe/],
+    [cycle, /cyclic recipe parts/],
+    [{ atom: "stack", children: Array.from({ length: 33 }, () => ({ recipe: "general.notes" })) }, /at most 32 children/],
+    [{ atom: "stack", children: [{ recipe: "general.budget" }, { recipe: "general.budget" }, { recipe: "general.budget" }] }, /at most 8/],
+    [{ atom: "group", props: { onclick: "not executable" }, children: [{ recipe: "general.notes" }] }, /no prop "onclick"/],
+    [{ recipe: "general.notes", children: [{ recipe: "general.budget" }] }, /unknown field "children"/],
+  ] as Array<[unknown, RegExp]>) {
+    const refused = await run("panacea_place", { title: "Refused", why: "Invalid composition.", parts });
+    assert.equal(refused.ok, false);
+    assert.match(refused.summary, pattern);
+  }
+  const mixed = await run("panacea_place", { title: "Mixed", why: "Invalid sources.", recipe: "general.notes", parts: { recipe: "general.notes" } });
+  assert.equal(mixed.ok, false);
+  assert.match(mixed.summary, /exactly one/);
+  const back = (await call("GET", `/api/panacea/${S}/doc`)).body.doc;
+  assert.equal(back.panels.length, snapshot.panels.length + 1, "only the valid repeated-reference panel changed the canvas");
+  assert.ok(!back.panels.some((p: { title: string }) => p.title === "Refused" || p.title === "Mixed"));
+});
+
 await test("a panel's words are the person's: set and place refuse them until it says Autora writes, and the person can take it back", async () => {
   const map = { atom: "row", children: ["who", "what", "where", "when"].map((k) => ({ atom: "list", bind: `map.${k}`, props: { label: k } })) };
   const placed = await run("panacea_place", { title: "Story map", why: "To gather who, what, where and when.", tree: map, values: { "map.who": ["Mara"] } });
@@ -464,10 +530,14 @@ await test("export: a table's filtered rows as CSV in the project; a dropped fil
   assert.ok(out.ok, out.summary);
   assert.match(out.summary, /\(2 rows, as filtered\)/);
   const imp = await call("POST", `/api/panacea/${S}/import?name=more.csv`, undefined, Buffer.from(CSV), "text/csv");
+  assert.equal(imp.status, 200, JSON.stringify(imp.body));
   assert.equal(imp.body.kind, "data");
   assert.equal(imp.body.table.rows.length, 5);
-  const pic = Buffer.from("89504e470d0a1a0a0000000d4948445200000280000001e00806000000", "hex");
-  const img = await call("POST", `/api/panacea/${S}/import?name=p.png`, undefined, Buffer.concat([pic, Buffer.alloc(20)]), "image/png");
+  const img = await call("POST", `/api/panacea/${S}/import?name=p.png`, undefined, pngFixture(640, 480), "image/png");
+  assert.equal(img.status, 200, JSON.stringify(img.body));
+  assert.equal(img.body.kind, "image");
+  assert.ok(img.body.artifact);
+  assert.equal(img.body.name, "p.png");
   assert.deepEqual(img.body.px, { w: 640, h: 480 });
   assert.equal((await call("POST", `/api/panacea/${S}/import?name=x.exe`, undefined, Buffer.from("MZ"), "application/octet-stream")).status, 415);
   const csv = await call("POST", `/api/panacea/${S}/deliver?name=rows`, undefined, Buffer.from("a,b\n1,2\n"), "text/csv");

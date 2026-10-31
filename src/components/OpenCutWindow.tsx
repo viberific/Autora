@@ -8,6 +8,7 @@ import { LoadButton } from "./LoadButton";
 import { useFullscreen } from "../lib/fullscreen";
 import { along, humanRoute, restMs, routeMs, typingDelays, type Point } from "../lib/humanPath";
 import { clearCursor, reportCursor } from "../lib/cursorPos";
+import { framePoint, isWorkVisible } from "../lib/frameCoordinates";
 import { onVideoCommand, useVideoState, type VideoCommand } from "../lib/opencut";
 import { IconMaximize, IconMinimize, IconVideo } from "./Icons";
 import { CursorTag } from "./CursorTag";
@@ -654,6 +655,7 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
   const play = useCallback(async (cmd: VideoCommand): Promise<unknown> => {
     let args = cmd.args;
     const name = cmd.name;
+    const onScreen = !!frame.current && isWorkVisible(frame.current);
     // A file to import comes through the app's own route, by a link the agent's tool made.
     if (name === "import_media" && typeof args.sourceToken === "string") {
       const res = await fetch(`/api/opencut/source/${encodeURIComponent(args.sourceToken)}?${query}`);
@@ -663,7 +665,7 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
       await toFrame("panel", { tab: "media" }).catch(() => undefined);
     }
     // Visible work: the edits a person makes with the timeline and the tool bar are made that way, live.
-    if (cursorOnRef.current && HAND.has(name)) {
+    if (cursorOnRef.current && onScreen && HAND.has(name)) {
       const done = await byHand(name, args).catch((err: unknown) => { console.debug(`[video hand] ${name}: ${String((err as Error)?.message ?? err)}`); return undefined; });
       if (done !== undefined) {
         await sleep(400);
@@ -671,7 +673,7 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
         return done;
       }
     }
-    const where = cursorOnRef.current ? whereFor({ ...cmd, args }) : null;
+    const where = cursorOnRef.current && onScreen ? whereFor({ ...cmd, args }) : null;
     let spot: Located | null = null;
     if (where) {
       spot = await locate(where);
@@ -754,7 +756,8 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
   // Where the cursor is on screen, for the line the agent says beside it.
   useEffect(() => {
     const r = layer.current?.getBoundingClientRect();
-    if (cursor && r) reportCursor(r.left + cursor.x, r.top + cursor.y);
+    const point = cursor && r && frame.current ? framePoint(frame.current, cursor) : null;
+    if (point) reportCursor(point.x, point.y);
   }, [cursor]);
   useEffect(() => clearCursor, []);
 
@@ -769,7 +772,7 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
     <div className={`pdf-window${phone ? " is-phone" : ""}${phone && full ? " is-full" : ""}`}>
       <div className="pdf-bar">
         <span className="pdf-bar-ico" aria-hidden="true"><IconVideo size={14} /></span>
-        <span className="pdf-bar-app">Autora Video</span>
+        <span className="pdf-bar-app">Video</span>
         <span className="pdf-bar-name" title={desk.name ?? undefined}>{desk.name ?? "Video"}</span>
         <span className="pdf-bar-note">Saved as you go</span>
         <div className="spacer" />
@@ -795,7 +798,7 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
           key={generation}
           className="pdf-frame"
           src={`/opencut-editor/index.html?session=${encodeURIComponent(sessionId)}${opening ? `&project=${encodeURIComponent(opening)}` : ""}${phone ? "&phone=1" : ""}`}
-          title={`${desk.name ?? "Video"}, in Autora Video`}
+          title={`${desk.name ?? "Video"}, in Panacea · Video`}
           sandbox="allow-scripts allow-downloads allow-modals allow-popups"
           allow="autoplay; fullscreen"
         />

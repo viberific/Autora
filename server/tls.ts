@@ -6,7 +6,7 @@
  * proxy with a real certificate in front of the plain port -- see the README
  * -- but where there is none, `AUTORA_TLS=1` puts an https copy of the app on
  * the next port up (8818 in the Umbrel app), and the page offers a link
- * across. Everything else about the app is unchanged.
+ * across. Both listeners enforce AUTORA_TRUSTED_PEERS when configured.
  *
  * The certificate is Autora's own. A small authority (ca.crt / ca.key) is made
  * once and kept beside the settings, so it survives an update, and it is

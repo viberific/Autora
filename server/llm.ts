@@ -357,7 +357,7 @@ function openAiHeaders(call: ChatCall): Record<string, string> {
   if (call.provider === "openrouter") {
     // OpenRouter attributes traffic by these and shows the name on its own
     // activity page, which is where people go to check a bill against ours.
-    headers["HTTP-Referer"] = "https://github.com/blofstedt/autora";
+    headers["HTTP-Referer"] = "https://github.com/viberific/Autora";
     headers["X-Title"] = "Autora";
   }
   return headers;

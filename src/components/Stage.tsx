@@ -7,10 +7,10 @@
  * the stage away costs nothing to bring back.
  */
 import type { ReactNode } from "react";
-import { APP_NAME } from "../lib/officedesk";
-import { VisibleWork } from "./VisibleWork";
+import { PanaceaWorkspace } from "./PanaceaWorkspace";
+import { workspaceMode, workspaceSurface, type WorkspaceMode } from "../lib/workspace";
 import type { Surface, SurfaceKind } from "../lib/stage";
-import { IconChevron, IconCube, IconGame, IconImage, IconMaximize, IconMinimize, IconTerminal, IconFile, IconGlobe, IconList, IconMark, IconMonitor, IconMusic, IconVideo } from "./Icons";
+import { IconCube, IconGame, IconImage, IconFile, IconGlobe, IconList, IconMark, IconMonitor, IconMusic, IconSparkle, IconVideo } from "./Icons";
 
 const ICON: Record<SurfaceKind, ReactNode> = {
   app: <IconMonitor size={14} />,
@@ -19,7 +19,7 @@ const ICON: Record<SurfaceKind, ReactNode> = {
   cad: <IconCube size={14} />,
   game: <IconGame size={14} />,
   photo: <IconImage size={14} />,
-  term: <IconTerminal size={14} />,
+  panacea: <IconSparkle size={14} />,
   studio: <IconMusic size={14} />,
   docx: <IconFile size={14} />,
   pptx: <IconFile size={14} />,
@@ -31,18 +31,13 @@ const ICON: Record<SurfaceKind, ReactNode> = {
 
 /** A tab is its name and nothing else: what is in it is what is below. The dot
     says the agent is at work in it. */
-export const NAME: Record<SurfaceKind, string> = { app: "Creator", pdf: "PDF", video: "Video", cad: "3D", game: "Game", photo: "Photo", term: "Terminal", studio: "Music", docx: APP_NAME.docx, pptx: APP_NAME.pptx, xlsx: APP_NAME.xlsx, browser: "Browser", plan: "To do", widget: "Widget" };
-
-const working = (surface: Surface): boolean => {
-  const { cell } = surface;
-  if (cell.kind === "screen") return cell.live;
-  if (cell.kind === "todo") return cell.items.some((t) => t.status === "in-progress");
-  return false;
-};
+export const NAME: Record<SurfaceKind, string> = { app: "Apps & code", pdf: "PDF", video: "Video", cad: "3D", game: "Games", photo: "Images", panacea: "Canvas", studio: "Music", docx: "Documents", pptx: "Presentations", xlsx: "Spreadsheets", browser: "Web", plan: "To do", widget: "Explainers" };
 
 export function Stage({
-  surfaces, active, collapsed, expanded, following, onPick, onFollow, onToggle, onExpand, render,
+  sessionId, onAsk, surfaces, active, collapsed, expanded, following, onPick, onFollow, onToggle, onExpand, render,
 }: {
+  sessionId: string;
+  onAsk?: (text: string) => void;
   surfaces: readonly Surface[];
   active: SurfaceKind;
   collapsed: boolean;
@@ -56,80 +51,27 @@ export function Stage({
   onExpand: () => void;
   render: (surface: Surface) => ReactNode;
 }) {
-  const nameOf = (kind: SurfaceKind) => NAME[kind];
+  const modes = surfaces.flatMap((s) => { const mode = workspaceMode(s.kind); return mode ? [mode] : []; });
+  const picked = (mode: WorkspaceMode) => onPick(workspaceSurface(mode) as SurfaceKind);
   return (
     <section
       className={`stage${collapsed ? " is-collapsed" : ""}${expanded && !collapsed ? " is-expanded" : ""}${surfaces.length > 2 ? " is-tight" : ""}`}
-      aria-label="Pinned view"
+      aria-label="Pinned Panacea workspace"
     >
-      <div className="stage-bar">
-        <div className="stage-tabs" role="tablist">
-        {surfaces.map((surface) => {
-          const on = surface.kind === active;
-          return (
-            <button
-              key={surface.kind}
-              type="button"
-              role="tab"
-              aria-selected={on}
-              className={`stage-tab${on ? " is-on" : ""}`}
-              onClick={() => onPick(surface.kind)}
-            >
-              {ICON[surface.kind]}
-              <span className="stage-tab-name">{nameOf(surface.kind)}</span>
-              {working(surface) && <span className="stage-live" aria-hidden="true" />}
-            </button>
-          );
-        })}
-        </div>
-        {/* Out of the tabs' scroller, so a row of tabs never pushes Follow or the fold off the edge. Follow is always
-            here, even with one tool up: it is a standing order for the next one too. */}
-        <VisibleWork className="stage-follow" compact />
-        <button
-          type="button"
-          className={`stage-follow${following ? " is-on" : ""}`}
-          onClick={onFollow}
-          aria-pressed={following}
-          title={following ? "Following the agent — tap to stop" : "Switch to whatever the agent is working on"}
-        >
-          <span className="watch-dot" aria-hidden="true" />
-          Follow
-        </button>
-        {!collapsed && (
-          <button
-            type="button"
-            className="stage-expand"
-            onClick={onExpand}
-            aria-pressed={expanded}
-            aria-label={expanded ? "Shrink the tools area" : "Expand the tools area"}
-            title={expanded ? "Shrink the tools area" : "Expand the tools area"}
-          >
-            {expanded ? <IconMinimize size={14} /> : <IconMaximize size={14} />}
-          </button>
-        )}
-        <button
-          type="button"
-          className="stage-fold"
-          onClick={onToggle}
-          aria-expanded={!collapsed}
-          aria-label={collapsed ? "Show the pinned view" : "Fold the pinned view away"}
-        >
-          <IconChevron size={14} />
-        </button>
-      </div>
-      <div className="stage-body" hidden={collapsed} data-active={active}>
+      <PanaceaWorkspace sessionId={sessionId} modes={modes} active={workspaceMode(active) ?? "panacea"} phone
+        following={following} onPick={picked} onFollow={onFollow} onAsk={onAsk}
+        collapsed={collapsed} expanded={expanded} onToggle={onToggle} onExpand={onExpand}>
         {surfaces.map((surface) => (
           <div
             key={surface.key}
             className="stage-pane"
-            data-kind={surface.kind}
-            role="tabpanel"
-            hidden={surface.kind !== active}
+            data-pane={workspaceMode(surface.kind) ?? ""}
+            aria-label={`${NAME[surface.kind]} surface`}
           >
             {render(surface)}
           </div>
         ))}
-      </div>
+      </PanaceaWorkspace>
     </section>
   );
 }

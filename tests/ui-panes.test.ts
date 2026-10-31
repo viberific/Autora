@@ -74,49 +74,42 @@ async function main() {
       assert.notEqual(await page.locator(".rail-slot").evaluate((el) => getComputedStyle(el).display), "none");
     });
 
-    await test("with a document open beside the conversation, the seam between them drags too, and the window keeps room", async () => {
+    await test("the workspace fills the area, ignores old chat widths, and receives room from the navigation rail", async () => {
       const d = await app.newSession("Panes with a document", "build");
       let n = 0;
       app.decide = (req) => {
         if (/You check one action/.test(req.system)) return { text: '{"destructive": false, "requested": true}' };
         if (req.tools.length === 0) return { text: "SKIP" };
         n += 1;
-        return n === 1 ? { tools: [{ name: "office_create", args: { type: "docx", name: "memo", markdown: "# Memo\n\nHello.\n" } }] } : { text: "Made." };
+        return n === 1 ? { tools: [{ name: "panacea_surface", args: { document: "# Memo\n\nHello.\n", title: "Memo" } }] } : { text: "Made." };
       };
       await app.turn(d, "make a memo", 120_000);
       const p2 = await browser.newPage({ viewport: { width: 1500, height: 900 } });
       await p2.goto(`${app.base}/?session=${d}`);
-      await p2.waitForSelector(".pane-handle.is-chat", { state: "visible", timeout: 30_000 });
+      await p2.waitForSelector(".pa-surface.is-doc .ProseMirror", { timeout: 30_000 });
+      assert.match(await p2.locator(".pa-surface.is-doc .ProseMirror").innerText(), /Memo[\s\S]*Hello/, "a real editable document is present");
       const w = (sel: string) => p2.locator(sel).first().evaluate((el) => Math.round(el.getBoundingClientRect().width));
       /* This window has never been sized, so its menu opens as the strip of
          icons (RAIL.fallback). The whole menu is asked for first, because what
          follows is about folding it away and giving its room to the window. */
       const whole = p2.getByRole("button", { name: "Show the whole menu" });
       if (await whole.count()) { await whole.click(); await sleep(300); }
-      const before = await w(".chat-view.has-app > .page");
-      const h = (await p2.locator(".pane-handle.is-chat").boundingBox())!;
-      await p2.mouse.move(h.x + h.width / 2, h.y + 300);
-      await p2.mouse.down();
-      await p2.mouse.move(h.x + h.width / 2 + 100, h.y + 300, { steps: 6 });
-      await p2.mouse.up();
-      const after = await w(".chat-view.has-app > .page");
-      assert.ok(after >= before + 90 && after <= before + 110, `${before} -> ${after}`);
-      // Dragged as far as it goes, the window beside it still has room.
-      const h2 = (await p2.locator(".pane-handle.is-chat").boundingBox())!;
-      await p2.mouse.move(h2.x + 3, h2.y + 300);
-      await p2.mouse.down();
-      await p2.mouse.move(h2.x + 1200, h2.y + 300, { steps: 6 });
-      await p2.mouse.up();
-      assert.ok((await w(".app-pane:not([hidden])")) >= 300, `the window has ${await w(".app-pane:not([hidden])")}px`);
-      await p2.locator(".pane-handle.is-chat").dblclick();
-      assert.ok((await w(".chat-view.has-app > .page")) <= 540);
-      // A smaller menu gives its room to the window, never to the conversation.
-      const chatWas = await w(".chat-view.has-app > .page");
-      const windowWas = await w(".app-pane:not([hidden])");
+      assert.equal(await p2.getByRole("separator", { name: "Resize the conversation" }).count(), 0);
+      const sceneBefore = await w(".panacea-workspace");
+      const entryBefore = await w(".conversation-flow__entry");
+      await p2.evaluate(() => localStorage.setItem("autora.panes", JSON.stringify({ ...JSON.parse(localStorage.getItem("autora.panes") ?? "{}"), chat: 900 })));
+      await p2.reload();
+      await p2.waitForSelector(".conversation-flow__entry");
+      assert.equal(await w(".panacea-workspace"), sceneBefore, "obsolete chat allocation cannot reduce workspace room");
+      assert.equal(await w(".conversation-flow__entry"), entryBefore, "the centered entry keeps its usable width");
       await p2.getByRole("button", { name: "Fold the menu to icons" }).click();
       await sleep(400);
-      assert.equal(await w(".chat-view.has-app > .page"), chatWas, "the conversation keeps its width");
-      assert.ok((await w(".app-pane:not([hidden])")) > windowWas + 100, "the window is wider");
+      assert.equal(await w(".conversation-flow__entry"), entryBefore, "rail folding cannot resize the main entry");
+      assert.ok((await w(".panacea-workspace")) > sceneBefore + 80, "rail room goes to the scene, not a chat column");
+      assert.match(await p2.locator(".pa-surface.is-doc .ProseMirror").innerText(), /Memo[\s\S]*Hello/, "the rail resize preserves the document");
+      const scene = (await p2.locator(".panacea-workspace").boundingBox())!;
+      const entry = (await p2.locator(".conversation-flow__entry").boundingBox())!;
+      assert.ok(Math.abs(entry.x + entry.width / 2 - (scene.x + scene.width / 2)) < 2, "entry stays centered over the work");
       await p2.getByRole("button", { name: "Show the whole menu" }).click();
     });
 
@@ -134,7 +127,7 @@ async function main() {
       const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
       const p3 = await ctx.newPage();
       await p3.goto(`${app.base}/?session=${t}`);
-      await p3.waitForSelector(".chat-view.has-app > .side-stack", { timeout: 30_000 });
+      await p3.waitForSelector(".pw-full-workspace > .pw-scene-stack", { timeout: 30_000 });
       for (const sel of [".top .session-btn", ".top .badge.mode-pill"]) {
         const reached = await p3.locator(sel).first().evaluate((el) => {
           const r = el.getBoundingClientRect();

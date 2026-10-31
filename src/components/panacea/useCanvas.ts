@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { newCanvas, normalizeCanvas, type Canvas } from "../../lib/panacea/canvas";
 import { onPanaceaState, panaceaStateNow } from "../../lib/panacea";
+import { readCanvasResponse } from "../../lib/panacea/canvasResponse";
 
 type SaveState = "saved" | "saving" | "error";
 
@@ -27,7 +28,7 @@ const HISTORY = 120;
  *   - the history is one track of every step, the person's and the agent's: `scrub` moves along it;
  *   - while something is being dragged (`hold`), an agent's change waits for the pointer to come up.
  */
-export function useCanvas(sessionId: string) {
+export function useCanvas(sessionId: string, enabled = true) {
   const [canvas, setCanvas] = useState<Canvas>(() => newCanvas());
   const [ready, setReady] = useState(false);
   const [save, setSave] = useState<SaveState>("saved");
@@ -45,6 +46,7 @@ export function useCanvas(sessionId: string) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saving = useRef(false);
   const dirty = useRef(false);
+  const localRevision = useRef(0);
   const freshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** The first load is where the canvas starts, not a step. */
   const ready_ = useRef(false);
@@ -114,14 +116,15 @@ export function useCanvas(sessionId: string) {
   }, [flush]);
 
   /** The canvas as the server has it, taken in. `mark` says the agent made the change: a step, and what it touched lit. */
-  const load = useCallback(async (mark: boolean) => {
+  const load = useCallback(async (mark: boolean, strict = false) => {
+    const beganAt = localRevision.current;
     try {
       const res = await fetch(`${base}/doc`);
-      const body = (await res.json().catch(() => null)) as { doc?: unknown; rev?: number; error?: string } | null;
-      const doc = normalizeCanvas(body?.doc);
-      if (!res.ok || !doc) throw new Error(body?.error ?? `Autora answered ${res.status}`);
+      const { doc, rev } = await readCanvasResponse(res);
+      // An older startup/refresh reply cannot replace work made while it was in flight.
+      if (localRevision.current !== beganAt) return;
       const before = live.current;
-      known.current = Number(body?.rev ?? 0);
+      known.current = rev;
       if (JSON.stringify(before) !== JSON.stringify(doc) && ready_.current) {
         remember({ canvas: before, label: agentLabel(before, doc), by: "agent", at: Date.now() });
         future.current = [];
@@ -139,18 +142,21 @@ export function useCanvas(sessionId: string) {
       put(doc);
       ready_.current = true;
       setReady(true);
+      setNotice((previous) => previous?.startsWith("The canvas could not be loaded:") ? null : previous);
     } catch (err) {
       setNotice(`The canvas could not be loaded: ${err instanceof Error ? err.message : String(err)}`);
+      if (strict) throw err;
     }
   }, [base, put]);
 
   useEffect(() => {
-    void load(false);
-  }, [load]);
+    if (enabled) void load(false);
+  }, [load, enabled]);
 
   useEffect(
     () =>
       onPanaceaState(() => {
+        if (!enabled) return;
         const now = panaceaStateNow();
         if (!now.open || now.rev === undefined) return;
         if (now.by === "agent" && now.rev > known.current) {
@@ -158,7 +164,7 @@ export function useCanvas(sessionId: string) {
           else void load(now.quiet !== now.rev);
         } else known.current = Math.max(known.current, now.rev);
       }),
-    [load],
+    [load, enabled],
   );
 
   useEffect(() => () => {
@@ -171,6 +177,7 @@ export function useCanvas(sessionId: string) {
     const next = structuredClone(live.current);
     fn(next);
     if (JSON.stringify(next) === JSON.stringify(live.current)) return;
+    localRevision.current += 1;
     const now = Date.now();
     const joined = key && lastKey.current?.key === key && now - lastKey.current.at < 900;
     lastKey.current = key ? { key, at: now } : null;
@@ -185,6 +192,7 @@ export function useCanvas(sessionId: string) {
   const quietly = useCallback((fn: Edit) => {
     const next = structuredClone(live.current);
     fn(next);
+    localRevision.current += 1;
     put(next);
     schedule();
   }, [put, schedule]);
@@ -247,10 +255,11 @@ export function useCanvas(sessionId: string) {
     for (let waited = 0; saving.current && waited < 30_000; waited += 100) await new Promise((r) => setTimeout(r, 100));
     if (dirty.current) await flush();
   }, [flush]);
+  const refresh = useCallback(() => load(false, true), [load]);
 
   return useMemo(
-    () => ({ canvas, live, ready, save, notice, fresh, track, edit, quietly, undo, redo, scrub, hold, dismiss, saveNow, canUndo: track.past.length > 0, canRedo: track.future.length > 0 }),
-    [canvas, ready, save, notice, fresh, track, edit, quietly, undo, redo, scrub, hold, dismiss, saveNow],
+    () => ({ canvas, live, ready, save, notice, fresh, track, edit, quietly, undo, redo, scrub, hold, dismiss, saveNow, refresh, canUndo: track.past.length > 0, canRedo: track.future.length > 0 }),
+    [canvas, ready, save, notice, fresh, track, edit, quietly, undo, redo, scrub, hold, dismiss, saveNow, refresh],
   );
 }
 

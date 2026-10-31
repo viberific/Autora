@@ -14,6 +14,7 @@ import type { Value } from "../../lib/panacea/atoms";
 import type { HandStep } from "../../lib/panacea/handsteps";
 import { centreOf, pointerGo, pointerPlace, pointerRest, pointerTyping } from "../../lib/pointer";
 import { typingDelays, type Point } from "../../lib/humanPath";
+import { isWorkVisible } from "../../lib/frameCoordinates";
 import type { BoardHandle } from "./Board";
 
 type HandEnv = {
@@ -45,6 +46,7 @@ const mouse = (type: string, p: Point, detail = 1) =>
   new MouseEvent(type, { bubbles: true, cancelable: true, composed: true, clientX: p.x, clientY: p.y, button: 0, buttons: type === "mouseup" || type === "click" || type === "dblclick" ? 0 : 1, detail });
 
 async function into(el: Element): Promise<Point> {
+  if (el.closest(".pa-board") && !isWorkVisible(el)) throw new Skip("the control is outside the workspace view");
   let p = centreOf(el);
   const r = el.getBoundingClientRect();
   if (!p || r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) {
@@ -72,6 +74,7 @@ async function click(el: Element | null): Promise<void> {
 
 /** Press on `el` at `from`, move to `to` a frame at a time, let go. */
 async function drag(el: Element, from: Point, to: Point): Promise<void> {
+  if (!isWorkVisible(el)) throw new Skip("the control is outside the workspace view");
   await pointerGo(from, false);
   await sleep(rand(80, 150));
   el.dispatchEvent(ptr("pointerdown", from));

@@ -40,6 +40,12 @@ export function LibraryPicker({
   const [picked, setPicked] = useState<string[]>([]);
   const [newTitle, setNewTitle] = useState("");
   const search = useRef<HTMLInputElement>(null);
+  const modal = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    modal.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    return () => { if (previous?.isConnected) previous.focus({ preventScroll: true }); };
+  }, []);
   const wantBooks = tabs.includes("notebooks");
   const wantFiles = tabs.includes("files") || tabs.includes("folders");
 
@@ -51,6 +57,13 @@ export function LibraryPicker({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Tab") {
+        const fields = [...(modal.current?.querySelectorAll<HTMLElement>("button:not([disabled]),input:not([disabled]),select:not([disabled]),a[href]") ?? [])];
+        const next = e.shiftKey && document.activeElement === fields[0] ? fields.at(-1)
+          : !e.shiftKey && document.activeElement === fields.at(-1) ? fields[0] : null;
+        if (next) { e.preventDefault(); next.focus(); }
+        return;
+      }
       if (e.key !== "Escape") return;
       e.stopPropagation();
       onClose();
@@ -145,6 +158,7 @@ export function LibraryPicker({
   return createPortal(
     <div className="scrim" onClick={onClose} role="presentation">
       <div
+        ref={modal}
         className="modal lib-modal"
         role="dialog"
         aria-modal="true"

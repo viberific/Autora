@@ -1,12 +1,56 @@
 # Panacea
 
-A blank dotted canvas where the controls come to the work. The person says what they want to do (in the chat, or the box
-along the bottom of the canvas), or drops a photo or a table on it, and the controls for that work appear around it, built
+**Panacea is the single workspace for all creative and productivity work.** Documents, spreadsheets, presentations,
+PDFs, images, video, music, 3D, games, apps, browsing and interactive explainers are integrated capabilities inside it,
+not standalone applications. The existing engines remain: removing their separate application chrome must not remove
+their editing, import, export, agent or live-hand abilities.
+
+The **Capabilities** chooser starts a blank file/project. **All work lives in one spatial scene**: native images, data,
+documents and boards, plus every retained engine's real work card, inside the same Board and camera. There are no
+Panacea/Music tabs, no work-mode combobox and no nested canvas application. The **fixed right-side icon dock** jumps the
+camera to actual existing work; **Zoom out** reduces magnification; **Show all work [ ]** fits every native and hosted
+surface without hiding any of them. Hosted card headers can be dragged and pinned. **Follow** may move the camera to
+the agent's work, but never while the person is typing, dragging, pinned or holding a manual camera position.
+Every opened engine stays mounted when the camera changes, so a jump is not a reload and cannot discard unsaved
+editor state. Web remains a real work surface; Activity is not a separate card. The Tools page
+presents Panacea with capability configuration, not separate applications.
+
+The workspace fills the available area; there is **no left chat column**. The original composer is the single
+**centered Ask Autora entry**, retaining work mode, speech, attachments, notebooks, artifacts, capabilities and
+Send/Stop. The **TODO list is attached above the entry**. Messages float as individual bubbles above it, without a
+history panel or scrim, and older bubbles fade at the top edge. **Retract conversation** preserves the mounted
+complete history and leaves the TODO/entry visible; **Show conversation** brings it back. Questions and permissions
+remain immediately actionable. All tool/output/file activity is in the bubbles, **contracted by default** until
+expanded, including live and failed console work. Activity is not a second world surface.
+
+Canvas fitting waits until the surface is actually visible (hidden engines have no usable viewport), observes phone /
+desktop resizing, and calculates reveals from model coordinates rather than animated rectangles. **Show all work**
+frames every native surface, its controls and hosted engine cards without relocating any of them. Empty chats offer **Open Panacea**, and the composer's wrench opens its
+capability chooser without spending an agent turn. Automatic pan and control revelation pause while
+the person is typing or dragging; pinned panels are not auto-revealed or shifted to make room for suggestions.
+
+There is no terminal window or interactive shared shell. Commands run non-interactively and stay in the conversation
+as per-call collapsible cards, with streaming output, failure status, duration and copy. Short and empty runs collapse
+too; long output can separately fold its earlier lines. **Shell commands** is still a configurable ability.
+
+The native canvas is a blank dotted canvas where the controls come to the work. The person says what they want to do
+in the centered main entry, or drops a photo or a table on the scene, and the controls for that work appear around it, built
 from a library of small, calm pieces. They are there while the work needs them and go when it moves on. The agent and the
 person use the same controls, at the same time.
 
 This page is the design and the plan. The code's map is in `docs/MODULES.md` (Panacea) and `docs/MAP.md`; the agent's
-manual for the window is `PANACEA` in `server/handbook.ts`.
+manual for the workspace is `PANACEA` in `server/handbook.ts`. The workspace shell is
+`src/components/PanaceaWorkspace.tsx`, with capability metadata in `src/lib/workspace.ts`. `workspaceScene.ts` preserves
+engine identities; `workspace-camera.ts` supplies the checked fit/jump/anchored-zoom math. The Board renders both native
+surfaces and engine cards under one world transform. Engine hand/cursor reports map local coordinates through that
+transform (`frameCoordinates.ts`); off-camera hand consumers leave calls to their existing safe fallback.
+
+**Implemented versus planned:** the unified scene, retained engine surfaces, capability chooser, centered composer,
+floating/retractable conversation, attached TODO, contracted activity, right icon dock, one shared camera,
+show-all fitting and follow/manual camera protection are implemented. Canvas adaptation continues to use its existing
+rules, selection-driven panels and learned profile. This does **not** imply a common operation log across engines,
+native replacements for every editor, or new adaptive controls for every engine selection. Each integrated engine
+still supplies its own live controls, model, save/export and history. See `docs/PANACEA-ENGINE.md` for that future work.
 
 ## What it is made of
 
@@ -31,7 +75,7 @@ manual for the window is `PANACEA` in `server/handbook.ts`.
   default, advanced) and `actions`. A control binds to a parameter by name; nothing else is reachable. Version 1 has an
   **image** (exposure, contrast, highlights, shadows, whites, blacks, temperature, tint, vibrance, saturation, clarity, fade,
   vignette, grain, a tone curve, looks with a strength, aspect, straighten, a quarter turn, flips, zoom, before/after; reset,
-  auto, export: all live on the GPU, `src/components/panacea/imagegl.ts`) and **data** (a table from CSV, TSV, XLSX or a paste:
+  auto, export: all live on the GPU, `src/components/panacea/imagegl.ts`) and   **data** (a table from CSV, TSV, a paste, or an explicitly requested flat XLSX copy:
   a filter per column, sort, search; charts and tables of the rows as filtered; clear, export CSV).
 - **Shared values**: a bind without `@` is a value of the canvas. Every control bound to the same name shows and sets the
   same value, so panels link by sharing a name (a Region chip filters the chart and the table at once, on the person's machine,
@@ -55,7 +99,9 @@ manual for the window is `PANACEA` in `server/handbook.ts`.
 - **Adapting** (`src/lib/panacea/profile.ts`, one profile per install): controls used three times come out from behind
   More; panels go on the side the person puts them; waved-away recipes go quiet; someone at home in the advanced settings
   gets denser panels (`data-density`). The turn note tells the agent what has been learned.
-- **One history**: every step, the person's and the agent's, on one track along the bottom right: Undo, Redo, and a scrubber.
+- **Native history**: steps on native surfaces share the track along the bottom right: Undo, Redo and a scrubber.
+  Hosted engines retain their own operation/undo logs, save/export and file-fidelity paths. A shared spatial camera is
+  **not** a common cross-engine operation log.
 - **Visible work**: with it on, `panacea_place`, `panacea_set` and `panacea_arrange` are done in the window by the agent's
   hand (`src/lib/panacea/handsteps.ts` plans, `src/components/panacea/hand.ts` does): a library panel summoned with the grid
   double-clicked, its name typed in the picker and the result clicked; values set by dragging that slider, knob or range,
@@ -70,9 +116,9 @@ manual for the window is `PANACEA` in `server/handbook.ts`.
 - **The home for the unplanned.** Work no other window was made for (a brainstorm, a map of ideas, a planner) comes here: the
   words that bring the Panacea tools in (`server/toolload.ts`) include brainstorms, mind maps, boards of ideas and organising
   thoughts, and the tool index and the prompt's line both say so.
-- **No tool rail.** Panacea is the one window without the floating tool bar of `docs/TOOL-RAIL.md`, on purpose: there is no
-  fixed set of tools to put on it. Its only chrome is the top bar (name, Load, Save), the ask box, the history and the put
-  away chip.
+- **Native canvas controls.** The Canvas mode has no floating tool bar, on purpose: there is no fixed set of tools to put
+  on it. Its chrome is the name, Load, Save, ask box, history and put-away chip. Other integrated modes retain their engine's
+  floating tool bars and All tools grids (`docs/TOOL-RAIL.md`) within Panacea's shared workspace chrome.
 
 ## Documents
 
@@ -97,6 +143,11 @@ agent's edits are steps on one track. Known cost: each step holds the whole docu
 heavy (a document over ~1.5 MB as JSON is refused); steps of changes (ProseMirror's own) are the planned answer.
 
 ## Boards
+
+**Flowcharts are explicit native work**, started from Capabilities → Flowchart or the native picker, not just a renamed
+mind map. The board's diagram mode supplies process, decision and start/end shapes, directed connectors and editable
+connector labels, with selection controls and SVG export. Existing idea boards remain compatible and word ownership
+still applies. A person can start an empty diagram in guide mode without a model turn; agent mode is explicit productivity work.
 
 A fourth kind of surface (`src/lib/panacea/board.ts`, drawn by `src/components/panacea/BoardView.tsx`) for thinking in space:
 **cards** anywhere on it (a few words each, a colour), **links** between them, and Autora's **questions** as dashed cards for the

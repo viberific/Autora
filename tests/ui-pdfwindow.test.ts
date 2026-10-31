@@ -102,7 +102,8 @@ async function main() {
 
     await test("what the agent signs opens beside the chat, drawn by the engine", async () => {
       await page.waitForSelector(".app-pane .pdf-window", { timeout: 20_000 });
-      assert.equal(await page.locator(".pdf-bar-app").innerText(), "Autora PDF");
+      assert.equal(await page.getByRole("region", { name: "Panacea workspace", exact: true }).count(), 1);
+      assert.equal(await page.locator('[data-engine="pdf"] .pw-engine-head > b').innerText(), "PDF", "the engine identifies its work without a standalone app header");
       editor = await editorIn(page);
       if (!(await waitDrawn(editor))) {
         /* Why it did not draw: what the frame has, and what the server said
@@ -252,7 +253,7 @@ async function main() {
     });
 
     await test("put away, it stays away until the agent works on a PDF again", async () => {
-      await page.click('.pane-pick-x[aria-label="Close PDF"]');
+      await page.click('.pw-engine-head button[aria-label="Close PDF work"]');
       await page.waitForSelector(".pdf-window", { state: "detached", timeout: 5_000 });
       assert.equal((await app.api("GET", `/api/pdfdesk/${s}`)).body.open, false);
     });
@@ -271,11 +272,16 @@ async function main() {
       await app.turn(s, "show me the lease");
       const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
       await phone.goto(`${app.base}/?session=${s}`);
-      await phone.waitForSelector(".stage .pdf-window", { timeout: 20_000 });
-      assert.match(await phone.locator(".stage-tab.is-on").innerText(), /PDF/);
+      await phone.waitForSelector('.pw-engine[data-engine="pdf"] .pdf-window', { timeout: 20_000 });
+      await phone.getByRole("navigation", { name: "Jump to work" }).getByRole("button", { name: "Jump to PDF", exact: true }).click();
       await phone.tap('.pdf-bar button[aria-label="Full screen"]');
       const full = await phone.locator(".pdf-window.is-full").boundingBox();
-      assert.ok(full && full.width >= 389 && full.height >= 840, "it covers the screen");
+      const workspace = (await phone.getByRole("region", { name: "Panacea workspace", exact: true }).boundingBox())!;
+      const header = (await phone.locator(".top").boundingBox())!;
+      assert.ok(workspace.width >= 389 && workspace.height >= 844 - header.height - 2, "the workspace keeps the full available phone area");
+      assert.ok(full && full.width > 100 && full.height > 100 && full.x >= workspace.x - 1 && full.y >= workspace.y - 1 &&
+        full.x + full.width <= workspace.x + workspace.width + 1 && full.y + full.height <= workspace.y + workspace.height + 1,
+      "the real editor is usable inside the workspace rather than a separate full-screen application");
       await phone.tap('.pdf-bar button[aria-label="Back to the conversation"]');
       assert.equal(await phone.locator(".pdf-window.is-full").count(), 0);
       await phone.close();
@@ -284,7 +290,7 @@ async function main() {
     await test("on a phone the editor is the paired-down one: a bar of coloured tools that fits without scrolling, the desktop chrome put away", async () => {
       const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
       await phone.goto(`${app.base}/?session=${s}`);
-      await phone.waitForSelector(".stage .pdf-window", { timeout: 20_000 });
+      await phone.waitForSelector('.pw-engine[data-engine="pdf"] .pdf-window', { timeout: 20_000 });
       await phone.tap('.pdf-bar button[aria-label="Full screen"]');
       // The window's own bar: the name and round buttons, not a row of text pills.
       assert.equal(await phone.locator(".pdf-bar .pdf-pill").count(), 0);

@@ -8,7 +8,7 @@
  * a network or a running MCP server.
  */
 
-export interface SearchToolRef {
+interface SearchToolRef {
   /** The name the agent sees, e.g. mcp__4get__search. */
   name: string;
   /** The server it belongs to, e.g. 4get. */
@@ -17,7 +17,7 @@ export interface SearchToolRef {
   remote: string;
 }
 
-export interface SearchDeps {
+interface SearchDeps {
   /** The MCP tools connected right now. */
   tools: () => SearchToolRef[];
   /** Run one MCP tool. */
@@ -45,7 +45,7 @@ export function resultsUnusable(text: string): boolean {
   return t.length < 1200 && BLOCKED.test(t);
 }
 
-export interface SearchOutcome {
+interface SearchOutcome {
   ok: boolean;
   /** The tier that answered: 4get, webclaw, or built-in. */
   tier: string;

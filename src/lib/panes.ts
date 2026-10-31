@@ -17,7 +17,7 @@ export const RAIL = {
   /** What "show the whole menu" widens to. */
   whole: 164,
 };
-export const CHAT = { min: 300, max: 900 };
+const CHAT = { min: 300, max: 900 };
 
 /* The menu is never folded away on a desktop any more: whole, or a strip of icons. An old `collapsed` in storage is ignored. */
 type Panes = { rail: number | null; chat: number | null; /** Folded to a strip of icons. */ mini: boolean };
@@ -43,11 +43,9 @@ function set(next: Partial<Panes>) {
 }
 
 export const setRailWidth = (px: number | null) => set({ rail: px === null ? null : Math.min(RAIL.max, Math.max(RAIL.min, Math.round(px))) });
-export const setChatWidth = (px: number | null) => set({ chat: px === null ? null : Math.min(CHAT.max, Math.max(CHAT.min, Math.round(px))) });
 export const setRailMini = (mini: boolean) => set({ mini });
 
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
 export function usePanes(): Panes {
   return useSyncExternalStore(subscribe, () => panes, () => panes);
 }
-

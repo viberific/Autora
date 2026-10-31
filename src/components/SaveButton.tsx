@@ -10,12 +10,13 @@ import { IconCheck, IconSave } from "./Icons";
  * `onSave` does the window's own part and says what was kept ("Kept as
  * Novel.png"); a throw is shown as the reason it was not.
  */
-export function SaveButton({ onSave, disabled, phone, label = "Save" }: {
+export function SaveButton({ onSave, disabled, phone, label = "Save", tooltip = "Save now, with a copy in Artifacts" }: {
   onSave: () => Promise<string>;
   disabled?: boolean;
   /** A phone's bar is round buttons only: Save is one, its state in its icon and colour. */
   phone?: boolean;
   label?: string;
+  tooltip?: string;
 }) {
   const [state, setState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
   const [said, setSaid] = useState("");
@@ -43,7 +44,7 @@ export function SaveButton({ onSave, disabled, phone, label = "Save" }: {
         className={`${phone ? "btn icon ghost" : "pdf-pill"} win-save is-${state}`}
         onClick={() => void press()}
         disabled={disabled || state === "saving"}
-        title={state === "idle" ? "Save now, with a copy in Artifacts" : said || undefined}
+        title={state === "idle" ? tooltip : said || undefined}
         aria-label={state === "saved" ? `Saved. ${said}` : label}
       >
         {phone ? (state === "saved" ? <IconCheck size={15} /> : <IconSave size={15} />) : (

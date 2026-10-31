@@ -11,7 +11,7 @@ import type { Cell } from "./derive";
     reached for. Everything else -- a page, a diff, a question, an answer --
     stays where it happened, so the shape of the turn still reads: you can
     see it was asked, worked, and answered, in that order. */
-export const STEP_KINDS = new Set(["terminal", "tool"]);
+export const STEP_KINDS = new Set(["terminal", "tool", "screen", "file", "files", "images", "widget", "app", "memory", "learned", "chime"]);
 
 /** A card is known by its kind and where it sits in the stream -- the same
     thing Thread.tsx calls a cell's key. */
@@ -42,10 +42,16 @@ export function turnItems(cells: Cell[]): TurnItem[] {
     items.push({ kind: "steps", key: `${run[0].seq}-steps`, cells: run });
     run = [];
   };
-  for (const cell of cells) {
+  const visit = (cell: Cell) => {
+    if (cell.kind === "screen" && cell.log.length) {
+      visit({ ...cell, log: [] });
+      for (const entry of cell.log) visit(entry);
+      return;
+    }
     if (STEP_KINDS.has(cell.kind)) run.push(cell);
     else { flush(); items.push({ kind: "cell", key: itemKey(cell), cell }); }
-  }
+  };
+  for (const cell of cells) visit(cell);
   flush();
   return items;
 }

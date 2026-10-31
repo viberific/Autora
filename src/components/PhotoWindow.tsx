@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useFullscreen } from "../lib/fullscreen";
 import { onPhotoHand, onPhotoState, photoStateNow, usePhotoState, type PhotoHand } from "../lib/photodesk";
 import { clearCursor, reportCursor } from "../lib/cursorPos";
+import { framePoint, isWorkVisible } from "../lib/frameCoordinates";
 import { getCursorWho, whoColors } from "../lib/cursorWho";
 import { IconImage, IconMaximize, IconMinimize } from "./Icons";
 import { SaveButton, keptAs, settle } from "./SaveButton";
@@ -99,6 +100,7 @@ export function PhotoWindow({ sessionId, phone }: { sessionId: string; phone: bo
 
   /** One edit, done in the editor by the agent's hand, and its answer sent to the server. */
   const byHand = useCallback(async (hand: PhotoHand) => {
+    if (!frame.current || !isWorkVisible(frame.current)) return;
     const q = `/api/photo/${encodeURIComponent(sessionId)}/hand`;
     const claim = await fetch(`${q}/claim?id=${encodeURIComponent(hand.id)}`, { method: "POST" })
       .then((r) => (r.ok ? (r.json() as Promise<{ won?: boolean }>) : { won: false }))
@@ -167,8 +169,8 @@ export function PhotoWindow({ sessionId, phone }: { sessionId: string; phone: bo
         handing.current.get(id)?.(msg.json, msg.bytes instanceof ArrayBuffer ? msg.bytes : null);
       } else if (msg.autoraPhoto === "cursor" && typeof msg.x === "number" && typeof msg.y === "number") {
         // The agent's cursor in the editor, for the few words beside it (AgentThought).
-        const r = frame.current.getBoundingClientRect();
-        reportCursor(r.left + msg.x, r.top + msg.y);
+        const point = framePoint(frame.current, { x: msg.x, y: msg.y });
+        if (point) reportCursor(point.x, point.y);
       }
     };
     window.addEventListener("message", onMessage);
@@ -201,7 +203,7 @@ export function PhotoWindow({ sessionId, phone }: { sessionId: string; phone: bo
     <div className={`pdf-window${phone ? " is-phone" : ""}${phone && full ? " is-full" : ""}`}>
       <div className="pdf-bar">
         <span className="pdf-bar-ico" aria-hidden="true"><IconImage size={14} /></span>
-        <span className="pdf-bar-app">Autora Photo</span>
+        <span className="pdf-bar-app">Images</span>
         <span className="pdf-bar-name">{size ? `${size.w} × ${size.h}, ${layers === 1 ? "1 layer" : `${layers} layers`}` : "No picture yet"}</span>
         <span className="pdf-bar-note">Saved as you go</span>
         <div className="spacer" />
@@ -222,7 +224,7 @@ export function PhotoWindow({ sessionId, phone }: { sessionId: string; phone: bo
         ref={frame}
         className="pdf-frame"
         src={`/autora-photo/index.html?embed=autora&session=${encodeURIComponent(sessionId)}${phone ? "&phone=1" : ""}`}
-        title="Autora Photo"
+        title="Panacea · Images"
         /* No sandbox attribute: this is PhotoCraft's page with Autora's overlay, served from this origin under its own
            policy (server/photodesk.ts servePhoto: scripts and WebAssembly from itself only, framed by this app only), and
            a sandbox that keeps the origin is no sandbox. It needs its origin for its saved preferences and its WebGL. Nothing

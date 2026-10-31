@@ -58,11 +58,6 @@ if (files.length === 0) {
   process.exit(1);
 }
 
-/* The project's own tsx, so a test run does not fetch one from the network --
-   which is what `npx tsx` does on a machine that has not got it. */
-const tsx = path.join(here, "..", "node_modules", ".bin", "tsx");
-const runner = fs.existsSync(tsx) ? tsx : "npx";
-
 type Result = { file: string; ok: boolean; ms: number; code: number | null };
 
 function run(file: string): Promise<Result> {
@@ -71,8 +66,8 @@ function run(file: string): Promise<Result> {
   if (serial) console.log(`\n== ${file} ==`);
   return new Promise((resolve) => {
     const child = spawn(
-      runner,
-      runner === tsx ? [path.join(here, file)] : ["tsx", path.join(here, file)],
+      process.execPath,
+      ["--import", "tsx", path.join(here, file)],
       // Serial runs print as they go; parallel ones keep each file's output
       // together and print it when the file ends.
       { stdio: serial ? "inherit" : ["ignore", "pipe", "pipe"], env: { ...process.env, NODE_ENV: "development" } },
