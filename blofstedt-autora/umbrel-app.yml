@@ -204,28 +204,9 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Panacea brings native surfaces and the existing editing engines into one
-  spatial workspace, with no work tabs or separate chat column. One centered
-  Ask Autora entry retains voice, attachments and work modes. Tasks sit above
-  it; floating conversation bubbles retract without losing history, and
-  activity stays collapsed until expanded. Screen-edge controls jump to work,
-  zoom out and show everything without closing other work.
-  Native documents, tables, images, boards and flowcharts support contextual
-  controls and bounded nested layouts. Flowcharts include process, decision,
-  start and end shapes, directed labelled connections and SVG export.
-  Loading uses shared format checks: workbooks open in full Sheets by default,
-  with an explicit native table option. Existing engines retain their own
-  controls, undo and file saving; this does not replace their native capabilities
-  with a unified history.
-  Shell commands now stay in collapsible chat runs; the standalone interactive
-  terminal and its direct shell socket have been removed.
-  HTTP and HTTPS now enforce the same trusted-proxy restriction, including
-  websocket connections. Unresolved proxy names fail closed instead of allowing
-  unknown clients. Existing ports are unchanged for authenticated tunnel setups;
-  connectors must be loopback or explicitly trusted. Cloudflare Access remains
-  responsible for authentication when it fronts the app.
-  Autora's project links, developer metadata and provider attribution now use viberific.
-  Personal project cross-links have been removed from the public documentation and source metadata.
-  The community store contains only Autora: unrelated Bambu Studio and Flix entries and
-  their store checks have been removed. Existing Umbrel store and app IDs are unchanged,
-  so Autora installations keep their update identity, proxy hostnames and data paths.
+  Autora loads again through its Cloudflare Tunnel hostname,
+  autora.049993.xyz. The Cloudflare Tunnel app's connector is now a trusted
+  peer and the hostname is allowed, so a tunnel routed to
+  http://blofstedt-autora_app_1:8817 reaches the app instead of being dropped.
+  Keep a Cloudflare Access policy on that hostname, since the tunnel does not
+  pass through Umbrel's login.
