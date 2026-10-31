@@ -13,7 +13,7 @@ import { filteredRows, splitDelimited, tableCsv, tableFrom } from "../lib/panace
 import { onPanaceaCommand } from "../lib/panacea";
 import type { HandStep } from "../lib/panacea/handsteps";
 import { Board, type BoardHandle } from "./panacea/Board";
-import { BOARD_PIECE } from "./panacea/Summon";
+import { BOARD_PIECE, FLOWCHART_PIECE } from "./panacea/Summon";
 import { standaloneSvg } from "./panacea/Chart";
 import { PanaceaCtx, type PanaceaApi } from "./panacea/context";
 import { History } from "./panacea/History";
@@ -25,6 +25,11 @@ import { useCanvas } from "./panacea/useCanvas";
 import { SaveButton, keptAs } from "./SaveButton";
 import { LoadButton } from "./LoadButton";
 import { IconSparkle, IconX } from "./Icons";
+import { usePhone } from "../lib/stage";
+import type { HostedWork } from "../lib/workspaceScene";
+import { workspaceMode, type NativeWorkspaceActions, type WorkspaceMode } from "../lib/workspace";
+import { sure } from "../lib/sure";
+import type { MutableRefObject } from "react";
 
 /** A ghost nobody took drifts off after this long. */
 const GHOST_MS = 45_000;
@@ -45,16 +50,28 @@ const show = (v: Value | undefined) => {
  * widen, pin and group; they fade when the work moves on and come back with a click; suggestions arrive as ghosts to
  * take or wave away. The canvas lives on the server (server/panacea.ts), where the agent's panacea_* tools work on it.
  */
-export function PanaceaWindow({ sessionId }: { sessionId: string }) {
-  const doc = useCanvas(sessionId);
-  const { canvas, edit, quietly, live, saveNow } = doc;
+export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene, followTarget, onJump, onCloseWork, navigationHost, nativeActions }: {
+  sessionId: string;
+  hosted?: readonly HostedWork[];
+  nativeOpen?: boolean;
+  scene?: MutableRefObject<BoardHandle | null>;
+  followTarget?: WorkspaceMode | null;
+  onJump?: (mode: WorkspaceMode) => void;
+  onCloseWork?: (mode: WorkspaceMode) => void;
+  navigationHost?: HTMLElement | null;
+  nativeActions?: MutableRefObject<NativeWorkspaceActions | null>;
+}) {
+  const phone = usePhone();
+  const doc = useCanvas(sessionId, nativeOpen);
+  const { canvas, edit, quietly, live, saveNow, refresh } = doc;
   const base = `/api/panacea/${encodeURIComponent(sessionId)}`;
   const [recipes, setRecipes] = useState<Recipe[]>(BUILTINS);
   const [profile, setProfile] = useState<Profile>(() => newProfile());
+  const [displayProfile, setDisplayProfile] = useState<Profile>(() => newProfile());
+  const [pointerBusy, setPointerBusy] = useState(false);
+  const [fieldBusy, setFieldBusy] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [goneOpen, setGoneOpen] = useState(false);
-  const [prompt, setPrompt] = useState("");
-  const [sent, setSent] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const root = useRef<HTMLDivElement>(null);
@@ -65,6 +82,25 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
   const activityTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   /** Recipes waved away lately, and when: not offered again for a while, whatever the profile says. */
   const waved = useRef(new Map<string, number>());
+  const focusedKind = canvas.surfaces.find((surface) => surface.id === canvas.focus)?.kind;
+
+  // Learning may reveal controls or change density, but never midway through typing or dragging.
+  useEffect(() => {
+    if (!pointerBusy && !fieldBusy) setDisplayProfile(profile);
+  }, [profile, pointerBusy, fieldBusy]);
+  useEffect(() => {
+    const release = () => setPointerBusy(false);
+    window.addEventListener("pointerup", release);
+    window.addEventListener("pointercancel", release);
+    return () => {
+      window.removeEventListener("pointerup", release);
+      window.removeEventListener("pointercancel", release);
+    };
+  }, []);
+  useEffect(() => {
+    const timers = activityTimers.current;
+    return () => { for (const timer of timers.values()) clearTimeout(timer); timers.clear(); };
+  }, []);
 
   const loadLibrary = useCallback(async () => {
     const got = (await fetch("/api/panacea/library").then((r) => r.json()).catch(() => null)) as { recipes?: Recipe[] } | null;
@@ -87,23 +123,24 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
 
   /** What the person did, told to the server: the next turn, the companion, the suggester and the profile hear it. */
   const tell = useCallback(async (text: string, extra: Record<string, unknown> = {}) => {
+    if (extra.kind === "focus" || extra.kind === "selection") await saveNow();
     const res = await fetch(`${base}/activity`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, ...extra }) }).catch(() => null);
     const body = (await res?.json().catch(() => null)) as { offer?: { recipe: string; why: string; near: string } } | null;
     const offer = body?.offer;
     if (!offer) return;
+    if ((extra.kind === "focus" || extra.kind === "selection") && typeof extra.surface === "string" && live.current.focus !== extra.surface) return;
     const r = find(offer.recipe);
     if (!r || live.current.panels.some((p) => p.state === "ghost" || (p.recipe === r.id && p.context === offer.near))) return;
     // An offer about a value that has moved on since, or one the person waved away a moment ago, is not made.
     if (typeof extra.bind === "string" && JSON.stringify(valueAt(live.current, extra.bind)) !== JSON.stringify(extra.value)) return;
     if (Date.now() - (waved.current.get(r.id) ?? 0) < WAVED_MS) return;
     quietly((d) => { placeRecipe(d, r, { near: offer.near, state: "ghost", why: offer.why, by: "rule", side: preferredSide(profile), view: board.current?.viewRect() }); });
-  }, [base, find, live, quietly, profile]);
+  }, [base, find, live, quietly, profile, saveNow]);
 
   const sendPrompt = useCallback((text: string) => {
-    setSent(text);
     void fetch(`/api/sessions/${encodeURIComponent(sessionId)}/message`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) })
-      .then((r) => { if (!r.ok) setSent(null); }).catch(() => setSent(null));
-    setTimeout(() => setSent(null), 3500);
+      .then((r) => { if (!r.ok) setProblem(`The message was not sent (${r.status}). Try again from the conversation.`); })
+      .catch(() => setProblem("Could not send the message. Check the connection and try again."));
   }, [sessionId]);
 
   // ----------------------------------------------------------- the api --
@@ -118,7 +155,9 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
       const p = d.panels.find((x) => x.id === panel.id);
       if (p) p.touched = Date.now();
     }, label, key);
-    setProfile((p) => { const next = { ...p, uses: { ...p.uses } }; noteUse(next, usageKey(key)); return next; });
+    const boundSurface = parseBind(key).surface;
+    const usageKind = live.current.surfaces.find((surface) => surface.id === (boundSurface ?? panel.context ?? live.current.focus))?.kind;
+    setProfile((p) => { const next = structuredClone(p); noteUse(next, usageKey(key), 1, usageKind); return next; });
     // The first use of a panel: a composed one joins the library; its recipe id is written on it.
     if (first) {
       void fetch(`${base}/use`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ panel }) })
@@ -207,7 +246,18 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
       KINDS[t.kind].settle?.(t);
     };
     const title = live.current.surfaces.find((x) => x.id === id)?.title ?? "the document";
-    if (!content) { quietly(apply); return; }
+    if (!content) {
+      quietly(apply);
+      const timers = activityTimers.current;
+      const key = `selection:${id}`;
+      const prior = timers.get(key);
+      if (prior) clearTimeout(prior);
+      timers.set(key, setTimeout(() => {
+        timers.delete(key);
+        if (live.current.focus === id) void tell("", { kind: "selection", surface: id });
+      }, 400));
+      return;
+    }
     edit(apply, `Edited ${title}`, `doc:${id}`);
     const timers = activityTimers.current;
     const t = timers.get(`doc:${id}`);
@@ -236,7 +286,18 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
       t.board = next;
       KINDS[t.kind].settle?.(t);
     };
-    if (!label) { quietly(apply); return; }
+    if (!label) {
+      quietly(apply);
+      const timers = activityTimers.current;
+      const key = `selection:${id}`;
+      const prior = timers.get(key);
+      if (prior) clearTimeout(prior);
+      timers.set(key, setTimeout(() => {
+        timers.delete(key);
+        if (live.current.focus === id) void tell("", { kind: "selection", surface: id });
+      }, 400));
+      return;
+    }
     const title = live.current.surfaces.find((x) => x.id === id)?.title ?? "the board";
     edit(apply, `${label} on ${title}`);
     const timers = activityTimers.current;
@@ -247,9 +308,9 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
 
   const hold = doc.hold;
   const api: PanaceaApi = useMemo(() => ({
-    canvas, profile, sessionId, set, act, ask, hold, expand, writeDoc, writeBoard, setMode,
+    canvas, profile: displayProfile, sessionId, set, act, ask, hold, expand, writeDoc, writeBoard, setMode,
     value: (key: string) => valueAt(canvas, key),
-  }), [canvas, profile, sessionId, set, act, ask, hold, expand, writeDoc, writeBoard, setMode]);
+  }), [canvas, displayProfile, sessionId, set, act, ask, hold, expand, writeDoc, writeBoard, setMode]);
 
   // ------------------------------------------------------- panel actions --
 
@@ -301,16 +362,17 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
 
   // ------------------------------------------------------------- board --
 
-  const onPick = useCallback((r: Recipe, at: { x: number; y: number }) => {
+  const pickRecipe = useCallback((r: Recipe, at: { x: number; y: number }) => {
     const forced = pending.current;
     // Not a panel: a board, a surface of its own, where it was asked for.
-    if (r.id === BOARD_PIECE && !forced) {
+    if ((r.id === BOARD_PIECE || r.id === FLOWCHART_PIECE) && !forced) {
       let err: string | null = null;
       edit((d) => {
         // Where it can be seen whole, as an agent's surface is: a board is too big to hang off the point they double-clicked.
-        const made = addSurfaceTo(d, { kind: "board", name: "Board", board: createBoard() }, find, { side: preferredSide(profile), quiet: (id) => quieted(profile, id), view: board.current?.viewRect() });
+        const flow = r.id === FLOWCHART_PIECE;
+        const made = addSurfaceTo(d, { kind: "board", name: flow ? "Flowchart" : "Board", board: flow ? createBoard("guide", "flowchart") : createBoard() }, find, { side: preferredSide(profile), quiet: (id) => quieted(profile, id), view: board.current?.viewRect() });
         if ("error" in made) err = made.error;
-      }, "Added a board");
+      }, r.id === FLOWCHART_PIECE ? "Added a flowchart" : "Added a board");
       if (err) setProblem(err);
       else void tell("added a board to think on");
       return;
@@ -333,11 +395,42 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
     }, `Summoned ${r.name}`);
     if (placed && !forced) void tell(`summoned "${r.name}"`, { kind: "use", recipe: r.id });
   }, [edit, find, live, profile, tell]);
+  const onPick = useCallback((recipe: Recipe, at: { x: number; y: number }) => {
+    if (nativeOpen && doc.ready) { pickRecipe(recipe, at); return; }
+    void (async () => {
+      const opened = await fetch(`${base}/open`, { method: "POST" });
+      if (!opened.ok) throw new Error("The native workspace is switched off or could not be opened.");
+      await refresh();
+      pickRecipe(recipe, at);
+    })().catch((error: unknown) => setProblem(error instanceof Error ? error.message : String(error)));
+  }, [nativeOpen, doc.ready, pickRecipe, base, refresh]);
+  const createFlowchart = useCallback(async () => {
+    if (!sessionId) throw new Error("Open a workspace chat first.");
+    const opened = await fetch(`${base}/open`, { method: "POST" });
+    if (!opened.ok) throw new Error("The native workspace is switched off or could not be opened.");
+    await saveNow();
+    await refresh();
+    let id = "";
+    edit((draft) => {
+      const made = addSurfaceTo(draft, { kind: "board", name: "Flowchart", board: createBoard("guide", "flowchart") }, find, {
+        side: preferredSide(profile), quiet: (recipe) => quieted(profile, recipe), view: board.current?.viewRect(),
+      });
+      if ("error" in made) throw new Error(made.error);
+      id = draft.surfaces.at(-1)?.id ?? "";
+    }, "Added a flowchart");
+    await saveNow();
+    onJump?.("panacea");
+    requestAnimationFrame(() => board.current?.jump(id));
+  }, [sessionId, base, refresh, edit, find, profile, saveNow, onJump]);
+  useEffect(() => {
+    if (nativeActions) nativeActions.current = { createFlowchart };
+    return () => { if (nativeActions) nativeActions.current = null; };
+  }, [nativeActions, createFlowchart]);
 
   const onFocus = useCallback((id: string) => {
     const s = live.current.surfaces.find((x) => x.id === id);
     edit((d) => { refocus(d, id); }, `Worked on ${s?.title ?? "a surface"}`);
-    void tell(`moved to working on ${s?.title ?? id}`);
+    void tell(`moved to working on ${s?.title ?? id}`, { kind: "focus", surface: id });
   }, [edit, live, tell]);
 
   const addSurface = useCallback((input: SurfaceInput) => {
@@ -354,16 +447,56 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
     void (async () => {
       for (const [i, f] of files.slice(0, 4).entries()) {
         try {
-          const res = await fetch(`${base}/import?name=${encodeURIComponent(f.name)}`, { method: "POST", headers: { "Content-Type": f.type || "application/octet-stream" }, body: f });
-          const body = (await res.json().catch(() => null)) as { kind?: SurfaceKind; artifact?: string; name?: string; px?: { w: number; h: number } | null; table?: SurfaceInput["table"]; doc?: SurfaceInput["doc"]; error?: string } | null;
+          const request = (replace = false) => fetch(`${base}/import?name=${encodeURIComponent(f.name)}${replace ? "&replace=true" : ""}`, { method: "POST", headers: { "Content-Type": f.type || "application/octet-stream" }, body: f });
+          type Imported = { kind?: SurfaceKind | "engine" | "canvas"; engine?: string; artifact?: string; name?: string; px?: { w: number; h: number } | null; table?: SurfaceInput["table"]; doc?: SurfaceInput["doc"]; error?: string; replaceRequired?: boolean };
+          let res = await request();
+          let body = await res.json().catch(() => null) as Imported | null;
+          if (res.status === 409 && body?.replaceRequired) {
+            if (!(await sure(`${body.error ?? "This replaces open work."} Save a copy first if you want to keep it.`, "Replace work"))) continue;
+            res = body.artifact
+              ? await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/load`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ app: "panacea", artifact: body.artifact, replace: true, ...(body.engine ? { engine: body.engine } : {}) }),
+              })
+              : await request(true);
+            body = await res.json().catch(() => null) as Imported | null;
+          }
           if (!res.ok || !body?.kind) throw new Error(body?.error ?? `Autora answered ${res.status}`);
+          if (body.kind === "engine") {
+            const mode = workspaceMode(body.engine ?? "");
+            if (!mode || mode === "panacea") throw new Error("The imported file did not identify a supported work surface.");
+            board.current?.jump(`engine:${mode}`);
+            onJump?.(mode);
+            continue;
+          }
+          if (body.kind === "canvas") {
+            await refresh();
+            requestAnimationFrame(() => board.current?.fit());
+            continue;
+          }
+          if (!nativeOpen) {
+            const open = await fetch(`${base}/open`, { method: "POST" });
+            if (!open.ok) throw new Error("The native surface could not be opened.");
+            await refresh();
+          }
           addSurface({ kind: body.kind, name: body.name ?? f.name, artifact: body.artifact, px: body.px, table: body.table, doc: body.doc, at: { x: at.x + i * 48, y: at.y + i * 48 } });
         } catch (err) {
           setProblem(`${f.name}: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
     })();
-  }, [base, addSurface]);
+  }, [base, addSurface, refresh, nativeOpen, onJump, sessionId]);
+  const loaded = useCallback(async (result: { kind?: string; engine?: string }) => {
+    if (result.kind === "engine") {
+      const mode = workspaceMode(result.engine ?? "");
+      if (!mode || mode === "panacea") throw new Error("The loaded file did not identify a supported work surface.");
+      board.current?.jump(`engine:${mode}`);
+      onJump?.(mode);
+    } else {
+      await refresh();
+      requestAnimationFrame(() => board.current?.fit());
+    }
+  }, [refresh, onJump]);
 
   const onPaste = useCallback((text: string, at: { x: number; y: number }) => {
     const table = tableFrom(splitDelimited(text));
@@ -401,6 +534,7 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
   // ---------------------------------------------------------- commands --
 
   useEffect(() => {
+    if (!sessionId || !nativeOpen) return;
     const off = onPanaceaCommand((cmd) => {
       void (async () => {
         const claim = (await fetch(`${base}/claim?id=${encodeURIComponent(cmd.id)}`, { method: "POST" }).then((r) => r.json()).catch(() => null)) as { won?: boolean } | null;
@@ -443,7 +577,7 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
       off();
       void fetch(`${base}/ready`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ready: false }), keepalive: true }).catch(() => undefined);
     };
-  }, [base, live, saveNow]);
+  }, [base, live, saveNow, sessionId, nativeOpen]);
 
   // -------------------------------------------------------------- keys --
 
@@ -464,8 +598,9 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
 
   const onKey = (e: ReactKeyboardEvent) => {
     const target = e.target as HTMLElement;
+    if (target.closest(".pw-engine,.scrim")) return;
     const mod = e.metaKey || e.ctrlKey;
-    if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); saveRef.current?.querySelector("button")?.click(); return; }
+    if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); saveRef.current?.querySelector(".win-save:not(.win-load)")?.dispatchEvent(new MouseEvent("click", { bubbles: true })); return; }
     if (target.closest("input, textarea, select, iframe")) return;
     if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); if (e.shiftKey) doc.redo(); else doc.undo(); }
     else if (mod && e.key.toLowerCase() === "y") { e.preventDefault(); doc.redo(); }
@@ -486,15 +621,21 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
 
   return (
     <PanaceaCtx.Provider value={api}>
-      <div ref={root} className="pa-window" data-density={densityOf(profile)} tabIndex={0} onKeyDown={onKey} aria-label="Panacea">
+      <div ref={root} className="pa-window" data-density={densityOf(displayProfile, focusedKind)} data-surface-kind={focusedKind ?? "none"}
+        tabIndex={0} onKeyDown={onKey} aria-label="Panacea"
+        onPointerDownCapture={() => setPointerBusy(true)}
+        onFocusCapture={(e) => { if ((e.target as HTMLElement).closest("input,textarea,[contenteditable='true']")) setFieldBusy(true); }}
+        onBlurCapture={(e) => { if (!(e.relatedTarget as HTMLElement | null)?.closest?.("input,textarea,[contenteditable='true']")) setFieldBusy(false); }}>
         <div className="pdf-bar">
           <span className="pdf-bar-ico" aria-hidden="true"><IconSparkle size={14} /></span>
           <span className="pdf-bar-app">Panacea</span>
-          <input className="st-song-name" value={canvas.name} size={Math.max(4, canvas.name.length + 1)} maxLength={80} aria-label="Canvas name"
-            onChange={(e) => { const name = e.target.value; edit((d) => { d.name = name; }, "Renamed the canvas", "name"); }} />
-          <span className={`pdf-bar-note st-save is-${doc.save}`}>{doc.save === "saving" ? "Saving…" : doc.save === "error" ? "Not saved" : "Saved as you go"}</span>
+          {nativeOpen && <input className="st-song-name" value={canvas.name} size={Math.max(4, canvas.name.length + 1)} maxLength={80} aria-label="Canvas name"
+            disabled={!doc.ready}
+            onChange={(e) => { const name = e.target.value; edit((d) => { d.name = name; }, "Renamed the canvas", "name"); }} />}
+          {nativeOpen && <span className={`pdf-bar-note st-save is-${doc.save}`}>{!doc.ready ? doc.notice ? "Not loaded" : "Loading native work…" : doc.save === "saving" ? "Saving…" : doc.save === "error" ? "Not saved" : "Saved as you go"}</span>}
           <div className="spacer" />
-          <span ref={saveRef} className="st-save-btn"><LoadButton app="panacea" session={sessionId} phone={false} /><SaveButton onSave={keep} /></span>
+          <span ref={saveRef} className="st-save-btn"><LoadButton app="panacea" session={sessionId} phone={phone} onLoaded={loaded} disabled={!sessionId} />{nativeOpen &&
+            <SaveButton onSave={keep} phone={phone} disabled={!doc.ready} label="Save native work" tooltip="Keep native panels and surfaces as .panacea.json. Engine files save on their own work cards." />}</span>
         </div>
         {note && (
           <div className="pdf-problem" role="status">
@@ -519,11 +660,18 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
           onSurfaceSize={onSurfaceSize}
           onMoved={onMoved}
           handle={board}
+          scene={scene}
+          hosted={hosted}
+          ready={hosted.length > 0 || !nativeOpen || doc.ready}
+          followTarget={followTarget}
+          onJumpWork={onJump}
+          onCloseWork={onCloseWork}
+          navigationHost={navigationHost}
         >
           {empty && doc.ready && (
             <div className="pa-empty pa-chrome">
               <h3>What do you want to do?</h3>
-              <p>Tell Autora below, or drop a photo or a table here. Double-click anywhere for a piece of your own.</p>
+              <p>Use the centered Ask Autora bar, or drop a file here. Double-click anywhere for a piece of your own.</p>
             </div>
           )}
           {selected.size > 1 && (
@@ -548,10 +696,6 @@ export function PanaceaWindow({ sessionId }: { sessionId: string }) {
                 )}
               </div>
             )}
-            <form className="pa-ask" onSubmit={(e) => { e.preventDefault(); const t = prompt.trim(); if (!t) return; sendPrompt(t); setPrompt(""); }}>
-              <input value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={sent ? "Sent to Autora. Watch the canvas." : empty ? "What do you want to do?" : "Ask Autora…"} aria-label="Ask Autora" />
-              <button type="submit" disabled={!prompt.trim()} aria-label="Send">↑</button>
-            </form>
             <History past={doc.track.past} future={doc.track.future} onScrub={doc.scrub} onUndo={doc.undo} onRedo={doc.redo} />
           </div>
           {toast && <div className="pa-toast pa-chrome" role="status">{toast}</div>}

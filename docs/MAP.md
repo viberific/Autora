@@ -125,6 +125,7 @@ task is about the PDF editor's shim or overlay.
 | Event log -> UI | `lib/stream.ts`, `lib/derive.ts`, `lib/share.ts`, `lib/steps.ts`, `lib/types.ts` |
 | Thread | `components/Thread.tsx` (`TurnBucket`, `CellView`, `Reply`), cells: `ToolCell`, `TerminalCell`, `FileCell`, `ImageCell`, `AskCell`, `PermissionCell`, `TodoCell`, `MemoryCell`, `LearnedCell`, `RemarkCell`, `WidgetCell`, `ScreencastCell`, `Markdown` |
 | Phone stage | `lib/stage.ts`, `components/Stage.tsx`, `ImmersiveChat.tsx`, `lib/fullscreen.ts`, `lib/cursorPos.ts` |
+| Unified workspace | `components/PanaceaWorkspace.tsx`, `lib/workspace.ts` (modes and contextual guidance), `components/ToolsSheet.tsx` (capability chooser); shared by desktop and phone Stage. Engine components below are integrated surfaces, not standalone applications. `lib/workspaceThread.ts` keeps collapsible command cards in chat rather than the Activity surface. |
 | Windows | Video: `OpenCutWindow`, `lib/opencut.ts`. Games: `GameWindow`, `lib/gamedesk.ts`. 3D: `CadWindow`, `lib/caddesk.ts`. Photo: `PhotoWindow`, `lib/photodesk.ts`. Music: `StudioWindow` + `studio/{Arrangement,PianoRoll,Mixer,useSong,hand}`, `lib/studio.ts`, `lib/studio/{model,engine,handsteps}.ts` (the agent's hand: `handsteps` plans, `hand` does). Panacea: `PanaceaWindow` + `panacea/{Board,PanelCard,Atoms,Surfaces,Chart,Summon,History,Bespoke,useCanvas,hand,imagegl}`, `lib/panacea.ts`. Browser: `ScreencastCell`, `lib/liveFrame.ts`, `lib/pageInput.ts`. App: `AppPreview`, `AppInspector`, `AppReview`, `AppVersions`, `DevtoolsPanel`, `lib/preview.ts`, `lib/appApi.ts`. PDF: `SpectraWindow`, `lib/spectra.ts`, `lib/pdfdesk.ts`. Office: `OfficeWindow`, `OfficePages`, `lib/officedesk.ts`, `lib/officeSelection.ts`; the agent's hand in the editors: `office/shim/hand.js`, `server/officehand.ts` |
 | Pages (menu) | `components/Rail.tsx`; lazy: `components/pages/*` (Organization and Threads: `OrganizationPage`, `ThreadsPage`, `lib/organization.ts`) ; eager: `Settings.tsx`, `Sessions.tsx`, `Schedule.tsx`, `Triggers.tsx` |
 | Settings cards | `Settings.tsx` (1.5k), `SecretStore`, `Credentials`, `VoiceCard`, `NotifyCard`, `QuietCard`, `CaptchaCard`, `AutomationCard`, `CollabSettings`, `TimeZoneCard`, `ModelPicker`, `SetupCard` |
@@ -148,7 +149,7 @@ class (`.pdf-window`, `.app-window`, `.composer`, `.rail`, `.turn`, `.cell`...).
 | `scripts/` | `build-office.mjs`, `build-spectra.mjs`, `replay.ts`, `spectra-look.ts` |
 | `tests/` | one `*.test.ts` per area; `npm test -- <name>` filters, `-- -j 4` runs four at once (`tests/run.ts`); `ui-*` and `e2e-*` drive Chromium |
 | `.github/` | `workflows/check.yml` (lint/build/test), image + release workflows, `scripts/check_release.py`, `scripts/offer_release.py` |
-| `blofstedt-autora/` | Umbrel app manifest, compose file, store icon |
+| `blofstedt-autora/` | Autora's only Umbrel store entry: manifest, compose file, icon; legacy folder and install IDs kept for compatibility (README's Umbrel section) |
 | `docs/` | `ARCHITECTURE.md` (why), `HARNESS_AUDIT.md`, `BACKLOG.md`, `GEMINI.md`, `REVIEW.md` (the October 2026 review), this file |
 
 ## Recipes

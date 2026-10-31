@@ -7,6 +7,7 @@ import { TakeControl } from "./TakeControl";
 import { onDeskHand, useDeskState, type DeskHand } from "../lib/pdfdesk";
 import { useBootWatch } from "../lib/bootWatch";
 import { clearCursor, reportCursor } from "../lib/cursorPos";
+import { framePoint, isWorkVisible } from "../lib/frameCoordinates";
 import { getCursorWho, whoColors } from "../lib/cursorWho";
 import { onSpectraEvent } from "../lib/spectra";
 import { useFrameTheme } from "../lib/frameTheme";
@@ -70,6 +71,7 @@ export function SpectraWindow({ sessionId, phone }: { sessionId: string; phone: 
      Nothing is played over a file the server changed: that would be a recording of work already done. */
   const handing = useRef(new Map<string, (answer: { results?: unknown; saved?: unknown; error?: unknown }) => void>());
   const byHand = useCallback(async (hand: DeskHand) => {
+    if (!frame.current || !isWorkVisible(frame.current)) return;
     const q = `/api/pdfdesk/${encodeURIComponent(sessionId)}/hand`;
     const claim = await fetch(`${q}/claim?id=${encodeURIComponent(hand.id)}`, { method: "POST" })
       .then((r) => (r.ok ? (r.json() as Promise<{ won?: boolean }>) : { won: false }))
@@ -156,8 +158,8 @@ export function SpectraWindow({ sessionId, phone }: { sessionId: string; phone: 
         handing.current.get(msg.id)?.(msg);
       } else if (msg.type === "autora:spectra:cursor" && typeof msg.x === "number" && typeof msg.y === "number") {
         // The agent's cursor in the editor, for the few words beside it (AgentThought).
-        const r = frame.current.getBoundingClientRect();
-        reportCursor(r.left + msg.x, r.top + msg.y);
+        const point = framePoint(frame.current, { x: msg.x, y: msg.y });
+        if (point) reportCursor(point.x, point.y);
       } else if (msg.type === "autora:spectra:listen" && typeof msg.event === "string") {
         wanted.current.add(msg.event);
       } else if (msg.type === "autora:spectra:error" && typeof msg.message === "string") {
@@ -197,7 +199,7 @@ export function SpectraWindow({ sessionId, phone }: { sessionId: string; phone: 
     <div className={`pdf-window${phone ? " is-phone" : ""}${phone && full ? " is-full" : ""}`}>
       <div className="pdf-bar">
         <span className="pdf-bar-ico" aria-hidden="true"><IconFile size={14} /></span>
-        <span className="pdf-bar-app">Autora PDF</span>
+        <span className="pdf-bar-app">PDF</span>
         <span className="pdf-bar-name" title={desk.name ?? undefined}>{desk.name ?? "PDF"}</span>
         <span className="pdf-bar-note">Saved as you go</span>
         <div className="spacer" />
@@ -232,7 +234,7 @@ export function SpectraWindow({ sessionId, phone }: { sessionId: string; phone: 
         key={generation}
         className="pdf-frame"
         src={`/spectra-editor/index.html?session=${encodeURIComponent(sessionId)}${phone ? "&phone=1" : ""}`}
-        title={`${desk.name ?? "PDF"}, in Autora PDF`}
+        title={`${desk.name ?? "PDF"}, in Panacea · PDF`}
         sandbox="allow-scripts allow-downloads allow-modals allow-popups"
       />
     </div>

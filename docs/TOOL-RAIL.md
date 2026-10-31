@@ -72,7 +72,7 @@ host-side `src/components/game/GameRail.tsx` driving the editor through
 window, the Rules sheet sits under Advanced). Autora Games is the last app. Autora 3D (done, 0.9.199) wears the rail
 in its own build (`autora-3d/src/components/Rail.tsx`, Tailwind, same colours and
 rules): its bottom bar of text pills and the menus of its top bar are gone, the top bar is undo, redo and what is selected, and
-every tool is on the bar or in All tools. It is a copy of blofstedt/3D-Modeling, and the change was made in the copy
+every tool is on the bar or in All tools. It is a copy of the standalone 3D-Modeling app, and the change was made in the copy
 (`docs/autora-3d-tool-rail.patch` is the same change; apply it upstream with `git apply -p2` before the next
 `scripts/sync-autora-3d.mjs`, which would otherwise undo it). Browser is a navigation bar, not a palette. Panacea has no rail by design: its controls are the panels the work
 brings (`docs/PANACEA.md`).

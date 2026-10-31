@@ -1,22 +1,26 @@
 # Panacea's engine: the plan
 
-`docs/PANACEA.md` is what Panacea is today (a canvas of controls around an image or a table). This page is where it goes:
-**one engine that morphs to whatever is being made, and in time replaces the separate tools.** Decisions below were made
+`docs/PANACEA.md` describes Panacea today: one workspace integrating all existing engines alongside its native adaptive
+canvas. The separate application UI is consolidated; its capabilities are not discarded. This page describes the
+longer-term native engine and adaptation work, **not functionality completed merely by integrating those engines**. Earlier decisions were made
 with the person who asked for it (2026-10-29); where they said "use your judgement", the reasoning is written down here
 so it can be argued with.
 
 ## Decisions
 
-- **Native, not wrapped.** Panacea grows its own engines. It does not embed OpenCut, GenOffice, Spectra or GDevelop. It
-  reuses well-kept libraries for the hard, solved parts (text editing, code editing) and owns the model above them.
+- **Integrate first; native where it earns parity.** The current direction supersedes the earlier "Native, not wrapped"
+  decision: Panacea retains OpenCut, GenOffice, Spectra, GDevelop, PhotoCraft, the music and 3D engines as integrated
+  work surfaces. Their models, controls, API paths, sandboxing and live visible-work handlers remain. Native canvas
+  engines can grow alongside them; no capability is retired simply because it has a unified shell.
 - **Order:** documents and code first, then images (what exists, grown into layers), data (exists), video later.
 - **Who decides what** (the core principle in `CLAUDE.md`): productivity and proactivity are Autora's; creativity is the
   person's. The engine carries this in its schema (below), not in a prompt rule.
 - **The layout may shift.** Floating cards stay; docked regions (side inspector, outline, bottom dock, focus mode) join.
   One absolute rule: **nothing the person is touching or has pinned ever moves.**
 - **Per person**, not shared: the learned library and profile. Sharing (the Store) is revisited later.
-- **Parity, then retire.** Each existing tool gets a checklist of what people actually do in it. When Panacea's surface
-  covers the list, that tool's window is removed. Not before.
+- **Capability parity, then engine retirement.** The separate application chrome is removed now, while its engine and
+  abilities remain accessible within Panacea. Retiring an underlying engine later requires verified import/edit/export,
+  live-control and agent parity, not a renamed tab or a new wrapper.
 
 ## What is wrong with the shape today
 

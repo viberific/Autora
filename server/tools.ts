@@ -48,8 +48,6 @@ import os from "node:os";
 import path from "node:path";
 import { GoogleGenAI } from "@google/genai";
 import { MANUAL_IDS, manualText, windowsOverview, type ManualId } from "./handbook";
-import { lookColors, readLook } from "../src/lib/agentlook";
-import { termAgentBegin, termAgentChunk, termAgentEnd, termAgentRun, termCwd, termNews, type ShellRun } from "./termdesk";
 import { mergeTools, save, state, allSecrets, keyFor, secretFor, stateDir, redactSecrets as redactStored } from "./state";
 import {
   STATUSES, checkoutFolder, findCheckout, listEntries, moveInto, recordFinding, setStatus, type Status,
@@ -77,8 +75,10 @@ import { officeHooks } from "./officedesk";
 import { handToWindow as officeHandToWindow } from "./officehand";
 import { runPdfTool } from "./pdf";
 import { runVideoTool } from "./opencut";
-import { runStudioTool, studioBriefing } from "./studio";
-import { panaceaBriefing, runPanaceaTool } from "./panacea";
+import { loadSong, runStudioTool, studioBriefing, studioState } from "./studio";
+import { loadIntoPanacea, panaceaBriefing, runPanaceaTool } from "./panacea";
+import { PANACEA_ENGINE_FORMATS, panaceaFileRoute, type PanaceaFileRoute } from "./panacea-formats";
+import { readFileRef } from "./fileref";
 import {
   addEntries, createNotebook, describeNotebook, findNotebook, listNotebooks, moveEntry,
   notebookLine, notebookMarkdown, removeEntry, updateEntry, updateNotebook, type Notebook,
@@ -104,7 +104,7 @@ const MAX_SPOKEN_CHARS = 2_000;
 
 /** Blank out stored secrets and the person's saved credentials. The one
     redactor lives in credentials.ts; this is the local name for it. */
-export function redactForModel(text: string): string {
+function redactForModel(text: string): string {
   return redactCredentials(redactStored(text));
 }
 
@@ -190,8 +190,8 @@ import { studioSPECS } from "./specs/studio";
 import { panaceaSPECS } from "./specs/panacea";
 import { cadSPECS } from "./specs/cad";
 import { gameSPECS } from "./specs/game";
-import { gameAvailable, gameBriefing, runGameTool } from "./gamedesk";
-import { cadAvailable, cadBriefing, runCadTool } from "./caddesk";
+import { gameAvailable, gameBriefing, gameState, loadGame, runGameTool } from "./gamedesk";
+import { cadAvailable, cadBriefing, cadState, loadModel, runCadTool } from "./caddesk";
 import { photoSPECS } from "./specs/photo";
 import { photoAvailable, photoBriefing, runPhotoTool } from "./photodesk";
 import { killTree, processPressure } from "./processes";
@@ -902,6 +902,7 @@ function runCommand(
             ...secrets,
             ...identityEnv(),
             ...extraEnv,
+            ...(process.platform === "win32" ? { CHERE_INVOKING: "1" } : {}),
             PATH: process.env.PATH || "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
             ...(color
               ? { TERM: "xterm-256color", FORCE_COLOR: "1", CLICOLOR_FORCE: "1", COLORTERM: "truecolor" }
@@ -1002,25 +1003,6 @@ function runCommand(
   };
 
   return tryShell(0);
-}
-
-/** What a command typed into the window's shell did, said the way runCommand says it: its start and end if it is long. */
-function shellOutcome(ran: ShellRun, timeoutSeconds: number): ToolOutcome {
-  const HEAD = 8_000;
-  const TAIL = 16_000;
-  const all = redactForModel(ran.output).replace(/^\n+/, "");
-  const body = (all.length > HEAD + TAIL
-    ? `${all.slice(0, HEAD)}\n\n[... ${(all.length - HEAD - TAIL).toLocaleString("en-US")} characters of output omitted here ...]\n\n${all.slice(-TAIL)}`
-    : all).trim();
-  const note = ran.timedOut
-    ? `\n\n[stopped with Ctrl+C after ${timeoutSeconds}s -- it had not finished]`
-    : ran.stopped ? "\n\n[stopped by the person watching]" : "";
-  return {
-    ok: !ran.timedOut && !ran.stopped && ran.exit === 0,
-    exitCode: ran.exit,
-    summary: `Exit code ${ran.exit}${ran.timedOut ? " (timed out)" : ""}\n\n${body || "(no output)"}${note}`,
-    preview: body.split("\n").slice(-1)[0]?.slice(0, 120) || `exit ${ran.exit}`,
-  };
 }
 
 /**
@@ -2267,6 +2249,95 @@ export async function afterGivingUp(
   };
 }
 
+async function openPanaceaFile(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolOutcome | null> {
+  const file = typeof args.file === "string" ? args.file.trim() : "";
+  if (!file) return null;
+  const source = readFileRef(file, terminalDir(), "file", "Panacea");
+  const selected = PANACEA_ENGINE_FORMATS.find((format) => format.engine === args.engine)?.engine;
+  if (args.engine !== undefined && !selected) {
+    return { ok: false, summary: "Panacea needs a supported engine name; choose one listed in panacea_surface." };
+  }
+  if (args.native !== undefined && typeof args.native !== "boolean") {
+    return { ok: false, summary: "Panacea's native option must be true or false." };
+  }
+  if (args.native !== undefined && selected) {
+    return { ok: false, summary: "Choose a native surface or an engine override, not both." };
+  }
+  let json: unknown;
+  if (/\.json$/i.test(source.name) && !/\.(?:panacea|song|model)\.json$/i.test(source.name)) {
+    try {
+      json = JSON.parse(source.data.toString("utf8"));
+    } catch (err) {
+      if (!(err instanceof SyntaxError)) throw err;
+      return { ok: false, summary: `${source.name} is not valid JSON: ${err.message}` };
+    }
+  }
+  const route: PanaceaFileRoute = panaceaFileRoute({
+    file: source.artifact?.id ?? file, name: source.name, json,
+    ...(selected ? { engine: selected } : {}),
+    ...(typeof args.native === "boolean" ? { native: args.native } : {}),
+  });
+  if (route.status === "unsupported") {
+    return {
+      ok: false,
+      summary: `Panacea cannot open ${source.name} as an editing surface (${route.reason}). ` +
+        "Use a supported file format or the underlying file tools; no file was replaced.",
+    };
+  }
+  if (route.status === "native") {
+    if (route.kind !== "canvas") return null;
+    if (args.replace !== true) {
+      return { ok: false, summary: "A saved Panacea canvas replaces the current canvas. Pass replace:true only when the person asked to load that canvas instead of the current work." };
+    }
+    const loaded = loadIntoPanacea(ctx.session, { id: source.artifact?.id ?? file, name: source.name }, source.data);
+    return loaded.ok
+      ? { ok: true, summary: loaded.said ?? `Loaded ${source.name} in Panacea.` }
+      : { ok: false, summary: loaded.error ?? "The saved Panacea canvas could not be loaded." };
+  }
+  if (route.status === "loader") {
+    const target = route.engine === "studio" ? "studio_open" : route.engine === "cad" ? "cad_scene_get" : "game_open";
+    if (windowOff(target)) {
+      return { ok: false, summary: `Panacea's ${route.engine} engine is disabled or unavailable on this installation.` };
+    }
+    const open = route.engine === "studio" ? studioState(ctx.session).open
+      : route.engine === "cad" ? cadState(ctx.session).open : gameState(ctx.session).open;
+    if (open && args.replace !== true) {
+      return { ok: false, summary: `Panacea's ${route.engine} engine already has work open. Save it first, or pass replace:true only when the person asked to replace it.` };
+    }
+    const loaded = route.loader === "loadSong" ? loadSong(ctx.session, source.data)
+      : route.loader === "loadModel" ? await loadModel(ctx.session, source.data) : loadGame(ctx.session, source.data);
+    return loaded.ok
+      ? { ok: true, summary: `Loaded ${source.name} in Panacea's ${route.engine} engine.` }
+      : { ok: false, summary: loaded.error ?? `Panacea's ${route.engine} engine could not load ${source.name}.` };
+  }
+  const target = findTool(route.tool);
+  if (!target || windowOff(target.name)) {
+    return { ok: false, summary: `Panacea's ${route.engine} engine is disabled or unavailable on this installation.` };
+  }
+  if (route.engine === "video") {
+    const open = findTool("video_open");
+    if (!open) return { ok: false, summary: "Panacea's video engine is not installed." };
+    const opened = await runTool(open, {}, ctx);
+    if (!opened.ok) return opened;
+  }
+  if (route.tool === "office_convert") {
+    const files: Parameters<NonNullable<ToolContext["showFile"]>>[0][] = [];
+    const converted = await runTool(target, route.args, {
+      ...ctx,
+      showFile: (saved) => { files.push(saved); ctx.showFile?.(saved); },
+    });
+    if (!converted.ok) return converted;
+    const document = files.find((saved) => saved.name.toLowerCase().endsWith(`.${route.args.to}`));
+    const open = findTool("office_open");
+    if (!document || !open) {
+      return { ok: false, summary: "The HTML conversion finished, but no converted document was available to open in Panacea." };
+    }
+    return await runTool(open, { file: document.id }, ctx);
+  }
+  const outcome = await runTool(target, route.args, ctx);
+  return { ...outcome, summary: `${outcome.ok ? `Opened ${source.name} in Panacea's ${route.engine} engine.\n\n` : ""}${outcome.summary}` };
+}
+
 async function runToolUnredacted(
   spec: ToolSpec,
   args: Record<string, any>,
@@ -2284,37 +2355,9 @@ async function runToolUnredacted(
         const waited = waitsInside(command);
         if (waited) return { ok: false, summary: WAIT_REFUSAL(waited) };
         const asked = String(args.cwd ?? "").trim();
-        // A relative directory is taken from the terminal's own, like `cd`; once the Terminal window is open, its own.
-        const base = termCwd(ctx.session) ?? terminalDir();
+        const base = terminalDir();
         const cwd = asked ? path.resolve(base, asked) : base;
-        // The same command appears in the Terminal window, marked as the agent's, and the person's own are told back.
-        const self = ctx.agents ? findAgent(ctx.agents.self.id) : null;
-        const look = readLook(self?.look);
-        const rgb = look ? (lookColors(look).css["--accent-rgb"].split(",").map((n) => Number(n)) as [number, number, number]) : undefined;
-        const who = self && !self.builtin ? { name: self.name, rgb } : undefined;
-        // Visible work, someone watching: typed into the shell in the window and run there, as a person would.
-        if (state.agentCursor) {
-          const ran = await termAgentRun(ctx.session, command, {
-            cwd: asked ? cwd : undefined,
-            timeoutMs: settings.timeout * 1000,
-            who,
-            onOutput: (text) => ctx.onOutput(redactForModel(text)),
-            onCancel: (fn) => ctx.onCancel(fn),
-          });
-          if (ran) {
-            const outcome = shellOutcome(ran, settings.timeout);
-            const news = termNews(ctx.session);
-            return { ...outcome, summary: `${outcome.summary}\n\n(Typed into the shell in the Terminal window, where the person watched it run.)${news ? `\n\n${news}` : ""}` };
-          }
-        }
-        const shown = termAgentBegin(ctx.session, command, cwd, who);
-        const outcome = await runCommand(command, cwd, settings.timeout, {
-          ...ctx,
-          onOutput: (chunk: string) => { ctx.onOutput(chunk); termAgentChunk(ctx.session, shown, chunk); },
-        } as ToolContext);
-        termAgentEnd(ctx.session, shown, outcome.exitCode);
-        const news = termNews(ctx.session);
-        return news ? { ...outcome, summary: `${outcome.summary}\n\n${news}` } : outcome;
+        return await runCommand(command, cwd, settings.timeout, ctx);
       }
 
       case "research": {
@@ -3630,6 +3673,10 @@ async function runToolUnredacted(
       case "panacea_export":
         if (ctx.memory.incognito) {
           return { ok: false, summary: "Not available in an incognito chat: the canvas is kept on disk." };
+        }
+        if (spec.name === "panacea_surface") {
+          const opened = await openPanaceaFile(args, ctx);
+          if (opened) return opened;
         }
         return await runPanaceaTool(ctx.session, spec.name, args, { cwd: terminalDir(), showFile: ctx.showFile });
 

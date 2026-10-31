@@ -6,8 +6,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/blofstedt/Autora/actions/workflows/check.yml"><img src="https://github.com/blofstedt/Autora/actions/workflows/check.yml/badge.svg" alt="Check"></a>
-  <a href="https://github.com/blofstedt/Autora/actions/workflows/docker.yml"><img src="https://github.com/blofstedt/Autora/actions/workflows/docker.yml/badge.svg" alt="Build and publish container image"></a>
+  <a href="https://github.com/viberific/Autora/actions/workflows/check.yml"><img src="https://github.com/viberific/Autora/actions/workflows/check.yml/badge.svg" alt="Check"></a>
+  <a href="https://github.com/viberific/Autora/actions/workflows/docker.yml"><img src="https://github.com/viberific/Autora/actions/workflows/docker.yml/badge.svg" alt="Build and publish container image"></a>
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT">
   <img src="https://img.shields.io/badge/umbrel-community%20store-5a5a5a.svg" alt="Umbrel community store">
 </p>
@@ -116,10 +116,16 @@ open it and wait for *Engine running*, then use the command from the
 ### Umbrel
 
 In umbrelOS open **App Store**, use the **⋯** menu at the top right, choose
-**Community App Stores**, add `https://github.com/blofstedt/Autora`, then open
+**Community App Stores**, add `https://github.com/viberific/Autora`, then open
 the store, pick **Autora** and press **Install**. Note that the Umbrel version
 can reach the whole machine, not one folder — see
 [Before you run it](#before-you-run-it).
+
+This repository's community store contains only Autora. Its store ID
+(`blofstedt`) and app ID (`blofstedt-autora`), including the packaging folder,
+proxy hostnames and data paths, retain their original spelling for existing
+installations. They are compatibility identifiers, not the project's current
+branding; changing them would require an explicit installation migration.
 
 ### First run: connect a model
 
@@ -178,7 +184,7 @@ Run these in the same terminal or PowerShell:
 ### Run it from source (for developers)
 
 ```bash
-git clone https://github.com/blofstedt/Autora && cd Autora
+git clone https://github.com/viberific/Autora && cd Autora
 npm install
 
 export GEMINI_API_KEY=...        # optional -- keys can also be added in Settings
@@ -488,8 +494,8 @@ settings changes that.
 
 **On a tailnet, this is one command and it is the best answer there is.**
 Tailscale issues a real certificate, so there is no warning to click through,
-and whatever was guarding the plain port — Umbrel's login, say — still guards
-it. On the machine running Autora:
+and the tailnet controls who can reach it. This standalone example forwards
+to Autora directly; it does not add Umbrel's login. On the machine running Autora:
 
 ```bash
 tailscale serve --bg --https=8443 8817   # https://<machine>.<tailnet>.ts.net:8443 -> :8817
@@ -513,6 +519,22 @@ nothing has to listen on the tailnet interface at all.
 
 Anything else that terminates TLS works the same way: Caddy or nginx with a
 certificate from `tailscale cert`, or whatever reverse proxy you already run.
+
+**On Umbrel, preserve authentication.** Put HTTPS in front of Umbrel's
+authenticated app proxy, not the raw Autora backend. Forwarding to port 8817
+or 8818 alone does not add the dashboard's login.
+
+**Cloudflare Access:** keep an Access policy on the public hostname and route
+through the authenticated app proxy, or trust the `cloudflared` connector if it
+connects directly to Autora. A loopback connector remains allowed. A connector
+on Docker's network must be listed in `AUTORA_TRUSTED_PEERS` by hostname or
+address alongside any existing trusted proxy; set `AUTORA_ALLOWED_HOSTS` to
+the public hostname if the tunnel preserves it. Both origin ports and
+WebSockets enforce the same peer restriction. The app does not change Access
+cookies or headers, and peer identity comes from the socket, not
+`CF-Connecting-IP` or `X-Forwarded-For`. Keep the origin inaccessible to clients
+that could bypass Access. A tunnel that previously used the unrestricted HTTPS
+origin must explicitly trust its connector before updating.
 
 **With nothing in front of it**, `AUTORA_TLS=1` is the fallback. Autora puts an
 https listener on the next port up with a certificate it generates and keeps:
@@ -538,10 +560,12 @@ site to that device, and this one is worth exactly what the server holding its
 key is. Skipping it costs nothing but the warning — clicking through still
 opens the microphone, it just will not install to a home screen.
 
-The listener itself has whatever authentication Autora has, which is none. That
-is fine on a network you control and a poor thing to expose anywhere else,
-which is why it is off by default in the Umbrel app (`AUTORA_TLS=1` to turn it
-on) and why a real certificate in front is better still.
+Autora has no authentication of its own. Both listeners enforce
+`AUTORA_TRUSTED_PEERS` when configured, with loopback always allowed; failed DNS
+lookups do not open either port to unknown clients. Without that configuration,
+standalone TLS remains available, but must be restricted to trusted clients.
+TLS provides encryption, not login. On Umbrel TLS remains off by default, and
+enabling it does not provide a direct browser route around the trusted proxy.
 
 Until then the microphone and `Live` are still in the composer, greyed, and
 tapping either says what is in the way and offers the secure page if one is
@@ -818,8 +842,8 @@ planning: looking changes nothing.
 ### PDFs
 
 Attach a PDF (or name one on the server) and ask for what you want done to it.
-Seven tools, always on, do what [SecurePDF](https://github.com/blofstedt/SecurePDF)
-does in its editor, asked for in words instead:
+Seven tools, always on, handle PDF reading, editing and redaction, asked for
+in words:
 
 | Tool | What it does |
 | --- | --- |
@@ -1296,7 +1320,7 @@ guard's standing agreements and the irrecoverable tier ask whatever they say.
 | `AUTORA_STATE_DIR` | Where settings, keys and the spend ledger are written (default: `$AUTORA_HOME/settings`, else `.autora/` beside the app) |
 | `AUTORA_PORT` / `AUTORA_HOST` | Where to listen (default `3000` on `127.0.0.1`, this machine only; set `AUTORA_HOST=0.0.0.0` to reach it from other devices. The container uses `8817` on `0.0.0.0`) |
 | `AUTORA_ALLOWED_HOSTS` | Names Autora may be addressed by beyond addresses, `localhost`, single-label names, `.local`/`.lan`/`.internal`/`.home.arpa` and Tailscale's `.ts.net`, comma separated (`.example.com` allows a domain and everything under it; `*` turns the check off). A request under any other name is refused, which stops a DNS-rebinding page from talking to Autora. Set it when Autora is behind your own domain |
-| `AUTORA_TRUSTED_PEERS` | Hostnames or addresses, comma separated, that alone may connect to the plain port (loopback always may). The Umbrel app sets its own proxy, so another app on Docker's shared network cannot reach Autora past the login. A name that never resolves leaves the port open and says so in the log |
+| `AUTORA_TRUSTED_PEERS` | Hostnames or addresses, comma separated, that alone may connect to HTTP and HTTPS, including WebSockets (loopback always may). The Umbrel app sets its own proxy; a direct authenticated tunnel also needs its connector listed. Unresolved names fail closed, are logged and retried |
 | `AUTORA_WORKDIR` | Where the agent's commands run when Settings names no directory (the Umbrel app sets `/host`, the host's filesystem) |
 | `AUTORA_TLS` | `1` also serves https on the next port up, with a certificate Autora issues from its own authority (download it at `/autora-ca.crt`) |
 | `AUTORA_TLS_PORT` | Where the https listener goes (default: `AUTORA_PORT` + 1) |

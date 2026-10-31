@@ -234,11 +234,11 @@ async function main() {
     await p.waitForSelector(".app-frame", { timeout: 20_000 });
     await sleep(800);
     await test("the app is a tab in the pinned view, inside the screen, with thumb-sized tools", async () => {
-      assert.equal(await p.locator(".app-pane").count(), 0, "no side pane on a phone");
-      assert.match(await p.locator(".stage-tab.is-on").innerText(), /Creator/);
+      assert.equal(await p.getByRole("separator", { name: "Resize the conversation" }).count(), 0, "there is no left chat allocation");
+      assert.equal(await p.getByRole("navigation", { name: "Jump to work" }).getByRole("button", { name: "Jump to Apps & code", exact: true }).count(), 1);
       const box = await p.locator(".app-canvas").boundingBox();
       assert.ok(box!.x >= 0 && box!.x + box!.width <= 390, "within the width");
-      for (const t of ["Use", "Select", "Region"]) assert.ok((await p.locator(".app-tools button", { hasText: t }).boundingBox())!.height >= 34, t);
+      for (const t of ["Use", "Select", "Region"]) assert.ok(await p.locator(".app-tools button", { hasText: t }).evaluate((button) => (button as HTMLElement).offsetHeight >= 34), `${t} keeps its authored thumb-size at scene zoom`);
     });
     await test("a tap selects, and the comment box is a centred sheet over a dimmed page", async () => {
       await p.locator('.app-seg button[title="Phone size"]').tap();

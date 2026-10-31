@@ -79,13 +79,13 @@ try {
   const page = await browser.newPage({ viewport: { width: 1500, height: 900 } });
   await page.goto(`${app.base}/?session=${s}`);
 
-  await test("both windows are open at once, each with a tab named for its app", async () => {
+  await test("both Office engines are mounted as work cards in one scene", async () => {
     try {
-      await until("the tabs", async () => (await page.locator(".pane-pick-tab").count()) >= 2, 120_000);
+      await until("the work cards", async () => (await page.locator('.pw-engine[data-engine="pages"],.pw-engine[data-engine="sheets"]').count()) === 2, 120_000);
     } catch (err) {
       const state = JSON.stringify((await app.api("GET", `/api/officedesk/${s}`)).body).slice(0, 300);
       const seen = await page.evaluate(() => ({
-        stack: document.querySelectorAll(".side-stack").length,
+        stack: document.querySelectorAll(".pw-scene-stack").length,
         panes: document.querySelectorAll(".app-pane").length,
         tabs: document.querySelectorAll(".pane-pick-tab").length,
         rail: document.querySelectorAll(".rail-slot").length,
@@ -95,30 +95,25 @@ try {
       console.log("DIAG page=" + JSON.stringify(seen));
       throw err;
     }
-    const tabs = await page.locator(".pane-pick-tab").allInnerTexts();
-    // Activity is where the agent's tool calls are shown; the rest say which app each window is, not the file in it.
-    assert.deepEqual(tabs.filter((t) => t !== "Activity"), ["Pages", "Sheets"], "the tabs say which app each window is, not the file in it");
+    assert.equal(await page.locator(".pane-pick-tab").count(), 0, "there are no workspace tabs");
     const state = (await app.api("GET", `/api/officedesk/${s}`)).body as { windows: { kind: string; name: string }[] };
     assert.deepEqual(state.windows.map((w) => w.kind).sort(), ["docx", "xlsx"], "two documents are open, one per app");
   });
 
-  await test("switching tabs shows a window and puts nothing away", async () => {
-    assert.equal(await page.locator('.side-stack .app-pane:not([data-pane="work"])').count(), 2, "both windows stay mounted");
-    assert.equal(await page.locator('.side-stack .app-pane:not([data-pane="work"]):not([hidden])').count(), 1, "one window is shown");
-    await page.locator('.pane-pick-tab[data-pane="pages"]').click();
+  await test("jumping to work moves the camera without hiding another editor", async () => {
+    assert.equal(await page.locator('.pw-engine[data-engine="pages"],.pw-engine[data-engine="sheets"]').count(), 2);
+    await page.getByRole("navigation", { name: "Jump to work" }).getByRole("button", { name: "Jump to Documents", exact: true }).click();
     await sleep(400);
-    assert.equal(await page.locator('.side-stack .app-pane:not([data-pane="work"])').count(), 2, "picking a tab closes nothing");
+    assert.equal(await page.locator('.pw-engine[data-engine="pages"],.pw-engine[data-engine="sheets"]').count(), 2, "jumping closes nothing");
     assert.equal(await page.locator('.app-pane[data-pane="pages"]:not([hidden])').count(), 1, "the Pages window is the one shown");
-    assert.equal(await page.locator('.pane-pick-tab:not([data-pane="work"])').count(), 2, "both tabs are still there");
+    assert.equal(await page.locator('.app-pane[data-pane="sheets"]:not([hidden])').count(), 1, "the other work is not hidden");
   });
 
-  await test("the tab strip runs to the very top of the screen", async () => {
-    const strip = await page.locator(".pane-pick").boundingBox();
-    const pane = await page.locator('.app-pane:not([hidden]):not([data-pane="work"])').boundingBox();
-    assert.ok(strip && pane, "the strip and a window are on screen");
-    assert.equal(Math.round(strip!.y), 0, "the tabs are the top of the window");
-    assert.ok(strip!.height < 40, "and the strip is a strip (it covers about two thirds of the header behind it)");
-    assert.ok(pane!.y >= strip!.height, "the window starts below the tabs");
+  await test("one unscaled right dock navigates the shared scene", async () => {
+    const dock = page.getByRole("navigation", { name: "Jump to work" });
+    assert.equal(await dock.count(), 1);
+    assert.ok(await dock.evaluate((node) => !node.closest(".pa-world")));
+    assert.equal(await page.getByRole("separator", { name: "Resize the conversation" }).count(), 0);
   });
 
   /** What the agent was told by its last tool call. */
@@ -132,7 +127,7 @@ try {
   });
 
   await test("each window's change is typed in that window: the cell goes to the Sheets window, not the Pages one", async () => {
-    await page.locator('.pane-pick-tab[data-pane="sheets"]').click();
+    await page.getByRole("navigation", { name: "Jump to work" }).getByRole("button", { name: "Jump to Spreadsheets", exact: true }).click();
     await sleep(400);
     const shots = process.env.OFFICE_SHOT;
     const shooting = (async () => { for (let i = 0; i < 8 && shots; i++) { await sleep(1500); await page.screenshot({ path: `${shots}-win-${i}.png` }); } })();

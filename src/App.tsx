@@ -10,16 +10,18 @@ import { setLiveFields, setLiveFrame, setLivePaneOwns, setLiveTabs } from "./lib
 import { resetPreview, setPreviewFrame, setPreviewState, usePreviewState, type PreviewState } from "./lib/preview";
 import { ScreencastCell } from "./components/ScreencastCell";
 import { WidgetCell } from "./components/WidgetCell";
-import { AppPreview, CadWindow, GameWindow, OfficeWindow, OpenCutWindow, PanaceaWindow, PhotoWindow, SpectraWindow, StudioWindow, TerminalWindow } from "./components/lazyWindows";
+import { AppPreview, CadWindow, GameWindow, OfficeWindow, OpenCutWindow, PhotoWindow, SpectraWindow, StudioWindow } from "./components/lazyWindows";
+import { PanaceaWorkspace } from "./components/PanaceaWorkspace";
+import type { NativeWorkspaceActions, WorkspaceMode } from "./lib/workspace";
+import { useWorkspaceFocus, workspaceToolKey } from "./lib/workspaceFocus";
 import { emitCadHand, resetCad, setCadState, useCadState } from "./lib/caddesk";
 import { resetGame, setGameState, useGameState } from "./lib/gamedesk";
 import { emitPhotoHand, resetPhoto, setPhotoState, usePhotoState } from "./lib/photodesk";
-import { resetTerm, setTermState, useTermState } from "./lib/termdesk";
 import { emitStudioCommand, resetStudio, setStudioState, useStudioState } from "./lib/studio";
 import { emitPanaceaCommand, resetPanacea, setPanaceaState, usePanaceaState } from "./lib/panacea";
 import { emitSpectraEvent } from "./lib/spectra";
 import { ResizeHandle } from "./components/ResizeHandle";
-import { CHAT, RAIL, setChatWidth, setRailMini, setRailWidth, usePanes } from "./lib/panes";
+import { RAIL, setRailMini, setRailWidth, usePanes } from "./lib/panes";
 import { RAIL_SLACK, useGivesWay, useRailIcons, useRowSpare, useWidthOf } from "./lib/railfit";
 import { clearOfficePick, getOfficePick, pickLabel, pickSentence, useOfficePick } from "./lib/officeSelection";
 import { emitOfficeHand, emitOfficePush, resetOffice, setOfficeState, useOfficeState, type OfficeKind } from "./lib/officedesk";
@@ -29,8 +31,9 @@ import { resetCollab, setCollabState } from "./lib/collab";
 import { cellKey, dockedPlan, pickSurfaces, usePhone } from "./lib/stage";
 import { lastWorkedPane } from "./lib/followPane";
 import { setFollowing, useFollowing } from "./lib/follow";
-import { Thread, WorkFeed, hasWork, type Outgoing } from "./components/Thread";
-import { VisibleWork } from "./components/VisibleWork";
+import { setFullscreen } from "./lib/fullscreen";
+import { Thread, type Outgoing } from "./components/Thread";
+import { ConversationFlow } from "./components/panacea/ConversationFlow";
 import { Dock } from "./components/Dock";
 import { Rail, pageLabel, PAGES, type PageId } from "./components/Rail";
 import { isSystemTab, type SystemTab } from "./lib/systemTabs";
@@ -140,7 +143,7 @@ const LIBRARY_TABS: LibraryTab[] = ["notebooks", "files"];
 const ARTIFACT_TABS: LibraryTab[] = ["files", "folders"];
 
 /** The windows that can sit beside the chat on a wide screen, one at a time. */
-type SideWindow = "app" | "pdf" | "video" | "cad" | "game" | "photo" | "term" | "studio" | "panacea" | "pages" | "sheets" | "slides" | "browser" | "widget" | "work";
+type SideWindow = WorkspaceMode;
 
 /**
  * The Office windows that can be open beside the chat, one per app, in the order their tabs sit in. Each has its
@@ -170,7 +173,6 @@ function closeUrlFor(pane: SideWindow, session: string): string | null {
     case "cad": return `/api/cad/${id}/close`;
     case "game": return `/api/game/${id}/close`;
     case "photo": return `/api/photo/${id}/close`;
-    case "term": return `/api/term/${id}/close`;
     case "studio": return `/api/studio/${id}/close`;
     case "panacea": return `/api/panacea/${id}/close`;
     case "pages": return `/api/officedesk/${id}/close?kind=docx`;
@@ -225,6 +227,12 @@ export function App() {
   const [artifactsOpen, setArtifactsOpen] = useState(false);
   /** The toolbox: the apps the person opens themselves, with a new blank file. */
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [workspaceOpening, setWorkspaceOpening] = useState(false);
+  const [sessionsLoaded, setSessionsLoaded] = useState(false);
+  const creatingSession = useRef<Promise<string> | null>(null);
+  const [workNavigationHost, setWorkNavigationHost] = useState<HTMLDivElement | null>(null);
+  const [chatCollapsed, setChatCollapsed] = useState(false);
+  const nativeWorkspaceActions = useRef<NativeWorkspaceActions | null>(null);
   /** The notebook open on the Notebooks page. */
   const [notebookOpen, setNotebookOpen] = useState<string | null>(
     () => new URLSearchParams(location.search).get("notebook"),
@@ -340,6 +348,7 @@ export function App() {
           // React re-throws during render.
           if (!alive || !Array.isArray(rows)) return;
           setSessions(rows);
+          setSessionsLoaded(true);
           // Functional update so polling never needs `sessionId` as a dep --
           // otherwise every session switch restarts the poll. A session that
           // has been deleted gives way to the newest one.
@@ -469,7 +478,6 @@ export function App() {
     resetCad();
     resetGame();
     resetPhoto();
-    resetTerm();
     resetStudio();
     resetPanacea();
     resetOffice();
@@ -507,7 +515,6 @@ export function App() {
       onGameDesk: setGameState,
       onPhotoDesk: setPhotoState,
       onPhotoHand: emitPhotoHand,
-      onTermDesk: setTermState,
       onStudioDesk: setStudioState,
       onStudioCommand: emitStudioCommand,
       onPanaceaDesk: setPanaceaState,
@@ -916,6 +923,8 @@ export function App() {
   }, [incognitoId, endIncognito]);
 
   const newSession = useCallback(async () => {
+    if (creatingSession.current) return creatingSession.current;
+    const create = async () => {
     // Opening another chat closes an incognito one: two at once is not a thing.
     endIncognito();
     const res = await fetch("/api/sessions", {
@@ -923,7 +932,9 @@ export function App() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
     });
+    if (!res.ok) throw new Error("Could not create the chat.");
     const { id } = await res.json();
+    if (typeof id !== "string" || !id) throw new Error("The chat did not get an id.");
     history.replaceState(null, "", `?session=${id}`);
     setSessionId(id);
     setSessionsOpen(false);
@@ -936,7 +947,16 @@ export function App() {
       .then(setSessions)
       .catch(() => undefined);
     return id as string;
+    };
+    const pending = create();
+    creatingSession.current = pending;
+    try { return await pending; } finally { creatingSession.current = null; }
   }, [endIncognito]);
+  useEffect(() => {
+    if (page === "chat" && sessionsLoaded && sessions.length === 0 && !sessionId) {
+      void newSession().catch(() => setNotice("Could not create the workspace chat. Check the connection and try again."));
+    }
+  }, [page, sessionsLoaded, sessions.length, sessionId, newSession]);
 
   const pickSession = useCallback((id: string) => {
     // Going to another chat ends an incognito one rather than leaving it open
@@ -1547,7 +1567,6 @@ export function App() {
   const cad = useCadState();
   const game = useGameState();
   const photo = usePhotoState();
-  const term = useTermState();
   const studio = useStudioState();
   const panacea = usePanaceaState();
   const off = useOfficeState();
@@ -1613,15 +1632,14 @@ export function App() {
   const openWidgetWindow = useCallback(() => pickWindow("widget"), [pickWindow]);
   /* On a desktop what the agent looks at and does is shown in the work area, not in the conversation (a phone has one
      column and keeps it all in the thread): the Activity tab is there as soon as there is anything to show. */
-  const workOn = useMemo(() => !phoneLayout && hasWork(view.buckets), [phoneLayout, view.buckets]);
   /* The newest explainer the agent drew. On a desktop it is a window of its own beside the chat, so a widget is
      never left behind in a thread that has moved on since; a phone has one column and keeps it in the pinned view
      (lib/stage.ts). A recorded session is read, not watched, so its widgets stay in the thread. */
   const widgetCell = useMemo(() => {
-    if (phoneLayout || !live) return null;
+    if (!live) return null;
     const found = pickSurfaces(view.buckets, null, false).find((s) => s.kind === "widget");
     return found && found.cell.kind === "widget" ? found.cell : null;
-  }, [phoneLayout, live, view.buckets]);
+  }, [live, view.buckets]);
   /* When it arrived, for the tab order (a widget that lands while another window is open takes the pane, the way
      a page the agent opens does). Closing the tab dismisses this one; the next widget opens a new one. */
   const [widgetAt, setWidgetAt] = useState(0);
@@ -1632,7 +1650,6 @@ export function App() {
   }, [widgetSeq]);
   const widget = widgetCell && widgetCell.widget.seq !== widgetClosed ? widgetCell : null;
   const openWindows: Array<{ pane: SideWindow; since: number }> = [
-    ...(workOn ? [{ pane: "work" as const, since: 0 }] : []),
     ...(widget ? [{ pane: "widget" as const, since: widgetAt }] : []),
     ...(preview.open ? [{ pane: "app" as const, since: preview.since ?? 0 }] : []),
     ...(desk.open ? [{ pane: "pdf" as const, since: desk.since ?? 0 }] : []),
@@ -1640,7 +1657,6 @@ export function App() {
     ...(cad.open ? [{ pane: "cad" as const, since: cad.since ?? 0 }] : []),
     ...(game.open ? [{ pane: "game" as const, since: game.since ?? 0 }] : []),
     ...(photo.open ? [{ pane: "photo" as const, since: photo.since ?? 0 }] : []),
-    ...(term.open ? [{ pane: "term" as const, since: term.since ?? 0 }] : []),
     ...(studio.open ? [{ pane: "studio" as const, since: studio.since ?? 0 }] : []),
     ...(panacea.open ? [{ pane: "panacea" as const, since: panacea.since ?? 0 }] : []),
     ...OFFICE_PANES.flatMap((o) => {
@@ -1653,8 +1669,19 @@ export function App() {
     const win = windowAt(o.kind);
     return win ? [{ pane: o.pane as "pages" | "sheets" | "slides", working: win.working, name: win.name }] : [];
   });
-  const workedPane = followAgent && !phoneLayout ? lastWorkedPane(view.buckets, officeLooks) : null;
-  const sidePane: SideWindow | null = phoneLayout ? null : (() => {
+  const workedPane = followAgent ? lastWorkedPane(view.buckets, officeLooks) : null;
+  const changedMode = useWorkspaceFocus([
+    { mode: "panacea", open: panacea.open, since: panacea.since, revision: panacea.by === "agent" ? panacea.rev : undefined },
+    { mode: "pdf", open: desk.open, since: desk.since, revision: desk.rev },
+    { mode: "video", open: video.open, since: video.since, revision: `${video.projectId ?? ""}:${video.name ?? ""}` },
+    { mode: "cad", open: cad.open, since: cad.since, revision: cad.by === "agent" ? cad.rev : undefined },
+    { mode: "game", open: game.open, since: game.since, revision: game.by === "agent" ? game.rev : undefined },
+    { mode: "photo", open: photo.open, since: photo.since, revision: photo.by === "agent" ? photo.rev : undefined },
+    { mode: "studio", open: studio.open, since: studio.since, revision: studio.by === "agent" ? studio.rev : undefined },
+    ...OFFICE_PANES.map((o) => { const win = windowAt(o.kind); return { mode: o.pane, open: !!win, since: win?.since, revision: win?.loadRev }; }),
+  ], workspaceToolKey(view.buckets));
+  const sidePane: SideWindow | null = (() => {
+    if (followAgent && changedMode && openWindows.some((w) => w.pane === changedMode)) return changedMode;
     if (workedPane && openWindows.some((w) => w.pane === workedPane)) return workedPane;
     if (!followAgent && pickedWindow && openWindows.some((w) => w.pane === pickedWindow)) return pickedWindow;
     // Ties go to the later kind in this list: the more specific window.
@@ -1664,14 +1691,12 @@ export function App() {
      they do not move about, and shown even when there is only one -- a window never disappears from under the
      person. Every window that is open stays mounted (see below), so a tab is never a reload. */
   const sideWindows: Array<{ pane: SideWindow; label: string }> = [
-    ...(workOn ? [{ pane: "work" as const, label: "Activity" }] : []),
     ...(widget ? [{ pane: "widget" as const, label: "Widget" }] : []),
     ...(desk.open ? [{ pane: "pdf" as const, label: "PDF" }] : []),
     ...(video.open ? [{ pane: "video" as const, label: "Video" }] : []),
     ...(cad.open ? [{ pane: "cad" as const, label: "3D" }] : []),
     ...(game.open ? [{ pane: "game" as const, label: "Game" }] : []),
     ...(photo.open ? [{ pane: "photo" as const, label: "Photo" }] : []),
-    ...(term.open ? [{ pane: "term" as const, label: "Terminal" }] : []),
     ...(studio.open ? [{ pane: "studio" as const, label: "Music" }] : []),
     ...(panacea.open ? [{ pane: "panacea" as const, label: "Panacea" }] : []),
     ...OFFICE_PANES.filter((o) => openWindows.some((w) => w.pane === o.pane)).map((o) => ({ pane: o.pane, label: o.label })),
@@ -1690,10 +1715,39 @@ export function App() {
     }
     return best;
   }, [view.buckets]);
-  const appPane = sidePane !== null;
+  const workspaceAsk = useCallback((text: string) => {
+    setFullscreen(false);
+    setDraft(text);
+    window.setTimeout(() => composerRef.current?.focus(), 0);
+  }, []);
+  const requiresInput = !!view.asking || view.approvals.some((approval) => !approval.settled);
+  const retractChat = useCallback(() => {
+    if (requiresInput) { setNotice("A question or permission needs your answer before work can continue."); return; }
+    setChatCollapsed((collapsed) => !collapsed);
+  }, [requiresInput]);
+  const openPanaceaChooser = useCallback(async () => {
+    if (workspaceOpening) return;
+    if (toolsOpen) { setToolsOpen(false); return; }
+    setWorkspaceOpening(true);
+    try {
+      const id = sessionId ?? await newSession();
+      if (!id) throw new Error("No chat was created.");
+      setToolsOpen(true);
+    } catch {
+      setNotice("Could not open Panacea. Check the connection and try again.");
+    } finally {
+      setWorkspaceOpening(false);
+    }
+  }, [workspaceOpening, toolsOpen, sessionId, newSession]);
+  const closeWorkspaceMode = useCallback((mode: WorkspaceMode) => {
+    if (!sessionId) return;
+    const url = closeUrlFor(mode, sessionId);
+    if (url) void fetch(url, { method: "POST" }).catch(() => setNotice("That surface could not be closed."));
+    else if (mode === "widget") setWidgetClosed(widgetSeq);
+  }, [sessionId, widgetSeq]);
   /* The browser window is the live view while it is open, so the thread's card
      stops following the feed: one live page, not the same one in two places. */
-  useEffect(() => setLivePaneOwns(sidePane === "browser"), [sidePane]);
+  useEffect(() => setLivePaneOwns(browser?.open === true), [browser?.open]);
 
   const sessionCost = sessions.find((s) => s.id === sessionId)?.cost ?? 0;
 
@@ -1905,7 +1959,6 @@ export function App() {
       className={`app${panes.mini ? " rail-mini" : ""}${railIcons ? " rail-icons" : ""}`}
       style={{
         ...(panes.rail ? { "--rail-w": `${panes.rail}px` } : {}),
-        ...(panes.chat ? { "--chat-w": `${panes.chat}px` } : {}),
       } as React.CSSProperties}
     >
       {/* Wide screens get the session list in the margin instead of behind a
@@ -2138,14 +2191,22 @@ export function App() {
 
         {/* The conversation stays mounted under the other pages, so leaving
             it and coming back keeps your place in the thread. */}
-        <div className={`chat-view${appPane ? " has-app" : ""}`} hidden={page !== "chat"}>
+        <div className="chat-view pw-full-workspace" role="main" hidden={page !== "chat"}>
 
-        <main className="page">
-          {/* The room's light: cool at rest, warmer while it works, amber
-              while it waits on you. Barely there, and still when away. */}
-          <div className={`mood-light is-${mood}`} aria-hidden="true" />
+        <ConversationFlow collapsed={chatCollapsed && !requiresInput} onToggle={retractChat} conversation={<>
+          {openWindows.length === 0 && !view.buckets.some((bucket) => bucket.prompt || bucket.attachments.length > 0) && (
+            <div className="pw-launch">
+              <button type="button" className="btn ghost" onClick={() => void openPanaceaChooser()}
+                disabled={workspaceOpening} aria-expanded={toolsOpen}>
+                <IconWrench size={16} /> {workspaceOpening ? "Opening…" : "Open Panacea"}
+              </button>
+              <span>Start directly with a canvas, file or project — no message needed.</span>
+            </div>
+          )}
           <Thread
-            chatOnly={!phoneLayout}
+            workspaceHosted
+            onWorkspaceAsk={workspaceAsk}
+            chatOnly={false}
             buckets={view.buckets}
             // Stopped on a question is not working; the card says what it is.
             busy={view.busy && !view.asking}
@@ -2178,7 +2239,7 @@ export function App() {
             loading={status.state === "connecting"}
             // The thread stays mounted under the other pages: told which of them is
             // on screen, so a row that was answered elsewhere catches up.
-            showing={page === "chat"}
+            showing={page === "chat" && (!chatCollapsed || requiresInput)}
             // Anything pinned to the corners of the conversation. Empty
             // unless it is asked for in Settings -> Appearance.
             dock={dockEl}
@@ -2189,6 +2250,10 @@ export function App() {
             readOnly={!live}
             onDecide={(id, approved, remember) => streamRef.current?.approve(id, approved, remember)}
           />
+          </>}
+          todos={dockPlan ? <TodoDock key={cellKey(dockPlan)} items={dockPlan.items} /> : undefined}
+          workNavigation={<div ref={setWorkNavigationHost} className="pw-navigation-host" />}
+          entry={<>
 
           {/* The screen above stays exactly as it was; only this strip changes,
               because the point of talking to it is to keep watching it work. */}
@@ -2289,7 +2354,6 @@ export function App() {
               <>
                 {/* The agent's to-do list, attached to the top of the box:
                     one line, the task it is on, tap for all of them. */}
-                {dockPlan && <TodoDock key={cellKey(dockPlan)} items={dockPlan.items} />}
                 <div className={`composer-box ${draft.trim() || attached.length > 0 || attachedBooks.length > 0 || attachedFolders.length > 0 ? "has-text" : ""}`}>
                   {/* What the month has cost against the ceiling set in
                       Settings, with this session's share at the right-hand
@@ -2326,7 +2390,7 @@ export function App() {
                     ref={composerRef}
                     value={draft}
                     rows={1}
-                    aria-label="Task"
+                    aria-label="Ask Autora"
                     placeholder={modelReady === false
                       ? "Connect a model to start…"
                       : "What should I do?"}
@@ -2506,7 +2570,7 @@ export function App() {
                       <div className="composer-strip">
                       {/* How the agent goes about the work, on the row above
                           Send: it applies to the words in the box. */}
-                      <ModeSelect mode={sessionMode} onChange={setSessionMode} busy={modeSaving} compact={appPane || tightStrip} />
+                      <ModeSelect mode={sessionMode} onChange={setSessionMode} busy={modeSaving} compact={tightStrip} />
                       {/* Leftmost in the row, and the only one of the two that
                           carries a conversation: Talk sits where the hand
                           goes first. It used to float over the thread above
@@ -2583,9 +2647,10 @@ export function App() {
                       <button
                         type="button"
                         className={`btn ghost icon attach-btn${toolsOpen ? " is-on" : ""}`}
-                        onClick={() => setToolsOpen((v) => !v)}
-                        title="Tools: open an app with a new blank file"
-                        aria-label="Tools"
+                        onClick={() => void openPanaceaChooser()}
+                        disabled={workspaceOpening}
+                        title="Open Panacea capabilities without starting an agent turn"
+                        aria-label="Panacea capabilities"
                         aria-expanded={toolsOpen}
                       >
                         <IconWrench size={18} />
@@ -2596,7 +2661,16 @@ export function App() {
                           session={sessionId}
                           onClose={() => setToolsOpen(false)}
                           onTrouble={setNotice}
-                          onOpened={(name, app) => setNotice(`${name} is open in ${app}`)}
+                          openModes={sideWindows.map((w) => w.pane)}
+                          onSelect={pickWindow}
+                          onFlowchart={async () => {
+                            if (!nativeWorkspaceActions.current) throw new Error("The workspace is still opening. Try again in a moment.");
+                            await nativeWorkspaceActions.current.createFlowchart();
+                          }}
+                          onOpened={(name, app, mode) => {
+                            setNotice(`${name} is open in Panacea · ${app}`);
+                            if (mode) pickWindow(mode);
+                          }}
                           onAsk={(text) => { setDraft(text); window.setTimeout(() => composerRef.current?.focus(), 0); }}
                         />
                       )}
@@ -2661,112 +2735,25 @@ export function App() {
               </>
             )}
           </div>
-        </main>
-        {/* The seam between the conversation and whatever window is beside it. */}
-        {sidePane !== null && (
-          <ResizeHandle
-            className="is-chat"
-            label="Resize the conversation"
-            value={panes.chat ?? 480}
-            min={CHAT.min}
-            max={CHAT.max}
-            onChange={setChatWidth}
-            onReset={() => setChatWidth(null)}
-          />
-        )}
-        {sidePane !== null && (
-          <div className="side-stack">
-            {/* One tab per window open beside the chat, named for the app it is (PDF, Pages, Sheets, Slides) rather
-                than the file in it. The strip is there whenever a window is open, and picking a tab shows that
-                window and puts nothing away. */}
-            {sideWindows.length > 0 && (
-              <div className="pane-pick" role="tablist" aria-label="Windows open beside the chat">
-                {sideWindows.map((w) => {
-                  const closeUrl = sessionId ? closeUrlFor(w.pane, sessionId) : null;
-                  /* A widget has no server-side window to close: its tab is dismissed here, and the thread keeps
-                     the card inline again. */
-                  const closable = closeUrl !== null || w.pane === "widget";
-                  return (
-                    <div key={w.pane} className={`pane-pick-item${sidePane === w.pane ? " is-on" : ""}`}>
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={sidePane === w.pane}
-                        className={`pane-pick-tab${sidePane === w.pane ? " is-on" : ""}${closable ? " has-close" : ""}`}
-                        title={w.label}
-                        data-pane={w.pane}
-                        onClick={() => pickWindow(w.pane)}
-                      >
-                        {w.label}
-                      </button>
-                      {closable && (
-                        <button
-                          type="button"
-                          className="pane-pick-x"
-                          onClick={() => {
-                            if (closeUrl) void fetch(closeUrl, { method: "POST" }).catch(() => undefined);
-                            else setWidgetClosed(widgetSeq);
-                          }}
-                          title={`Close ${w.label}`}
-                          aria-label={`Close ${w.label}`}
-                        >
-                          <IconX size={11} />
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-                <div className="pane-acts">
-                  <VisibleWork className="pane-follow" />
-                  {/* Always here, even with one tab: it is a standing order for the next tool too. */}
-                  <button
-                    type="button"
-                    className={`pane-follow${followAgent ? " is-on" : ""}`}
-                    onClick={() => setFollow(!followAgent)}
-                    aria-pressed={followAgent}
-                    title={followAgent ? "Following the agent between tools: click to stop" : "Switch to whatever the agent is working on"}
-                  >
-                    <span className="watch-dot" aria-hidden="true" />
-                    Follow
-                  </button>
-                </div>
-              </div>
-            )}
-            {/* Every window that is open stays mounted, and only the chosen one is shown: switching tabs neither
-                reloads the page in one window nor restarts another's editor, and nothing is put away. */}
-            {workOn && sessionId && (
-              <aside className="app-pane" data-pane="work" hidden={sidePane !== "work"} aria-label="What the agent is looking at and doing">
-                <WorkFeed
-                  buckets={view.buckets}
-                  busy={view.busy && !view.asking}
-                  doing={doing}
-                  sessionId={sessionId}
-                  liveBrowserSeq={view.liveBrowserSeq}
-                  browserOpen={browser?.open === true}
-                  live={live}
-                  widgetHeld={widget ? cellKey(widget) : ""}
-                  onOpenWidget={openWidgetWindow}
-                  // The feed is a window of its own: it follows the page it belongs to.
-                  showing={workOn && sidePane === "work"}
-                  phase={reading.phase}
-                  onPermissionDecide={handlePermissionDecide}
-                  driving={driving}
-                  browserHandedOver={browserHandedOver}
-                  onStop={stopFromThread}
-                  onOpenMind={openKnowledge}
-                  onOpenSettings={openModelSettings}
-                />
-              </aside>
-            )}
+          </>} />
+          <div className="pw-scene-stack">
+            <PanaceaWorkspace sessionId={sessionId ?? ""} modes={sideWindows.map((w) => w.pane)} active={sidePane ?? "panacea"}
+              following={followAgent} onPick={pickWindow} onFollow={() => setFollow(!followAgent)}
+              onAsk={workspaceAsk}
+              phone={phoneLayout}
+              navigationHost={workNavigationHost}
+              nativeActionsRef={nativeWorkspaceActions}
+              onCloseMode={closeWorkspaceMode}>
+            {/* All engine contents stay mounted in one spatial scene. Camera jumps never hide or reload work. */}
             {/* The newest explainer the agent drew, at the size it was drawn for. A phone has one column and holds it
                 in the pinned view instead (see Stage). */}
             {widget && sessionId && (
-              <aside className="app-pane" data-pane="widget" hidden={sidePane !== "widget"} aria-label="The explainer the agent drew">
+              <aside className="app-pane" data-pane="widget" aria-label="The explainer the agent drew">
                 <WidgetCell widget={widget.widget} sessionId={sessionId} canFix={live && !view.busy} fill />
               </aside>
             )}
             {browser?.open && sessionId && (
-              <aside className="app-pane" data-pane="browser" hidden={sidePane !== "browser"} aria-label="The browser the agent is driving">
+              <aside className="app-pane" data-pane="browser" aria-label="The browser the agent is driving">
                 <ScreencastCell
                   sessionId={sessionId}
                   source="browser"
@@ -2786,56 +2773,44 @@ export function App() {
             {/* The app being built, beside the conversation on a wide screen. On a
                 phone it is a tab in the pinned view instead (see Stage). */}
             {preview.open && sessionId && (
-              <aside className="app-pane" data-pane="app" hidden={sidePane !== "app"} aria-label="The app being built">
-                <Suspense fallback={null}><AppPreview sessionId={sessionId} phone={false} /></Suspense>
+              <aside className="app-pane" data-pane="app" aria-label="The app being built">
+                <Suspense fallback={null}><AppPreview sessionId={sessionId} phone={phoneLayout} /></Suspense>
               </aside>
             )}
             {/* The PDF the agent is working on, open for the person to work on too. */}
             {desk.open && sessionId && (
-              <aside className="app-pane" data-pane="pdf" hidden={sidePane !== "pdf"} aria-label="The PDF being worked on">
-                <Suspense fallback={null}><SpectraWindow sessionId={sessionId} phone={false} /></Suspense>
+              <aside className="app-pane" data-pane="pdf" aria-label="The PDF being worked on">
+                <Suspense fallback={null}><SpectraWindow sessionId={sessionId} phone={phoneLayout} /></Suspense>
               </aside>
             )}
             {/* The video being cut, in OpenCut's editor, for the person to work on too. */}
             {video.open && sessionId && (
-              <aside className="app-pane" data-pane="video" hidden={sidePane !== "video"} aria-label="The video being edited">
-                <Suspense fallback={null}><OpenCutWindow sessionId={sessionId} phone={false} /></Suspense>
+              <aside className="app-pane" data-pane="video" aria-label="The video being edited">
+                <Suspense fallback={null}><OpenCutWindow sessionId={sessionId} phone={phoneLayout} /></Suspense>
               </aside>
             )}
             {/* Autora 3D: the model the agent and the person are both working on. */}
             {cad.open && sessionId && (
-              <aside className="app-pane" data-pane="cad" hidden={sidePane !== "cad"} aria-label="Autora 3D, the model being worked on">
-                <Suspense fallback={null}><CadWindow sessionId={sessionId} phone={false} /></Suspense>
+              <aside className="app-pane" data-pane="cad" aria-label="Panacea 3D, the model being worked on">
+                <Suspense fallback={null}><CadWindow sessionId={sessionId} phone={phoneLayout} /></Suspense>
               </aside>
             )}
             {/* Autora Games: the game the agent and the person are both making, in GDevelop's editor. */}
             {game.open && sessionId && (
-              <aside className="app-pane" data-pane="game" hidden={sidePane !== "game"} aria-label="Autora Games, the game being made">
-                <Suspense fallback={null}><GameWindow sessionId={sessionId} phone={false} /></Suspense>
+              <aside className="app-pane" data-pane="game" aria-label="Panacea Games, the game being made">
+                <Suspense fallback={null}><GameWindow sessionId={sessionId} phone={phoneLayout} /></Suspense>
               </aside>
             )}
             {/* Autora Photo: the picture the agent and the person are both working on, in PhotoCraft's editor. */}
             {photo.open && sessionId && (
-              <aside className="app-pane" data-pane="photo" hidden={sidePane !== "photo"} aria-label="Autora Photo, the picture being worked on">
-                <Suspense fallback={null}><PhotoWindow sessionId={sessionId} phone={false} /></Suspense>
-              </aside>
-            )}
-            {/* The Terminal: a shell the agent and the person share. */}
-            {term.open && sessionId && (
-              <aside className="app-pane" data-pane="term" hidden={sidePane !== "term"} aria-label="The terminal, shared with the agent">
-                <Suspense fallback={null}><TerminalWindow sessionId={sessionId} phone={false} /></Suspense>
+              <aside className="app-pane" data-pane="photo" aria-label="Panacea Images, the picture being worked on">
+                <Suspense fallback={null}><PhotoWindow sessionId={sessionId} phone={phoneLayout} /></Suspense>
               </aside>
             )}
             {/* Autora Music: the song the agent and the person are both making. */}
             {studio.open && sessionId && (
-              <aside className="app-pane" data-pane="studio" hidden={sidePane !== "studio"} aria-label="Autora Music, the song being made">
-                <Suspense fallback={null}><StudioWindow sessionId={sessionId} phone={false} /></Suspense>
-              </aside>
-            )}
-            {/* Panacea: the canvas where the controls come to the work. */}
-            {panacea.open && sessionId && (
-              <aside className="app-pane" data-pane="panacea" hidden={sidePane !== "panacea"} aria-label="Panacea, the canvas">
-                <Suspense fallback={null}><PanaceaWindow sessionId={sessionId} /></Suspense>
+              <aside className="app-pane" data-pane="studio" aria-label="Panacea Music, the song being made">
+                <Suspense fallback={null}><StudioWindow sessionId={sessionId} phone={phoneLayout} /></Suspense>
               </aside>
             )}
             {/* And one window for each Office app with a document open in it: Autora Pages, Autora Sheets and
@@ -2845,14 +2820,13 @@ export function App() {
                 key={o.pane}
                 className="app-pane"
                 data-pane={o.pane}
-                hidden={sidePane !== o.pane}
                 aria-label={`The ${o.label} window, open beside the chat`}
               >
-                <Suspense fallback={null}><OfficeWindow sessionId={sessionId} kind={o.kind} phone={false} /></Suspense>
+                <Suspense fallback={null}><OfficeWindow sessionId={sessionId} kind={o.kind} phone={phoneLayout} /></Suspense>
               </aside>
             ) : null))}
+            </PanaceaWorkspace>
           </div>
-        )}
         </div>
 
       </div>

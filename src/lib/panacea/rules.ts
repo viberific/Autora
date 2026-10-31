@@ -13,7 +13,9 @@
  */
 import type { Value } from "./atoms";
 import { contextOf, estimateHeight, MAX_SURFACES, nearestFree, placeFor, refocus, seedValues, snap, surfaceParams, uid, type Canvas, type Panel, type PanelState, type Side, type Surface, type Who } from "./canvas";
-import { instantiate, type Recipe } from "./library";
+import { BUILTINS, instantiate, type Recipe } from "./library";
+import { rankRecipes } from "./adaptive";
+import type { Profile } from "./profile";
 import { checkTree, parseBind, type CheckContext, type Node } from "./recipe";
 import { KINDS, KIND_NAMES, type Offer, type Starters, type SurfaceKind } from "./kinds";
 import type { BoardState } from "./board";
@@ -48,6 +50,11 @@ function surfaceNear(canvas: Canvas, near: string | null | undefined, kind: Surf
 /** For each kind, the surface of it a placeholder bind near `near` means. */
 const nearTo = (canvas: Canvas, near: string | null | undefined): NonNullable<CheckContext["near"]> =>
   Object.fromEntries(KIND_NAMES.map((k) => [k, surfaceNear(canvas, near, k)]));
+
+/** The same placeholder-resolution context for assembling and placing a panel near a surface or another panel. */
+export function recipeContext(canvas: Canvas, near?: string | null): CheckContext {
+  return contextOf(canvas, nearTo(canvas, near));
+}
 
 /** The context a tree belongs to: the one surface it works on, or "general". */
 function contextFor(tree: Node, canvas: Canvas): string {
@@ -89,7 +96,7 @@ function placeTree(canvas: Canvas, tree: Node, title: string, w: number, opts: P
 
 /** Put a library recipe on the canvas, made ready for it. Says why not when it does not fit. */
 export function placeRecipe(canvas: Canvas, recipe: Recipe, opts: PlaceOptions): Panel | { error: string } {
-  const ctx = contextOf(canvas, nearTo(canvas, opts.near));
+  const ctx = recipeContext(canvas, opts.near);
   const made = instantiate(recipe, ctx);
   if ("error" in made) return made;
   return placeTree(canvas, made.tree, recipe.name, opts.w ?? recipe.w, { ...opts, values: { ...made.values, ...(opts.values ?? {}) } }, recipe.id);
@@ -97,7 +104,7 @@ export function placeRecipe(canvas: Canvas, recipe: Recipe, opts: PlaceOptions):
 
 /** Put an agent's own tree on the canvas, after the rulebook. */
 export function placeComposed(canvas: Canvas, raw: unknown, title: string, w: number, opts: PlaceOptions): Panel | { error: string } {
-  const ctx = contextOf(canvas, nearTo(canvas, opts.near));
+  const ctx = recipeContext(canvas, opts.near);
   const checked = checkTree(raw, ctx);
   if (!checked.tree || checked.errors.length) return { error: checked.errors.join(" ") || "That is not a panel." };
   return placeTree(canvas, checked.tree, title, w, opts);
@@ -130,15 +137,13 @@ function placeStarters(canvas: Canvas, surface: Surface, find: (id: string) => R
  * The person (or the agent) set a value: is there a panel worth offering for what they are doing now? One suggestion at
  * most, never one already on the canvas or waved away twice.
  */
-export function suggestFor(canvas: Canvas, key: string, value: Value, quiet: (id: string) => boolean): (Offer & { near: string }) | null {
+export function suggestFor(canvas: Canvas, key: string, value: Value, quiet: (id: string) => boolean, profile?: Profile, list: Recipe[] = BUILTINS): (Offer & { near: string }) | null {
   const { surface, param } = parseBind(key);
   if (!surface) return null;
   const s = canvas.surfaces.find((x) => x.id === surface);
   if (!s) return null;
-  const has = (recipe: string) => canvas.panels.some((p) => p.recipe === recipe && p.context === s.id);
-  const offer = (recipe: string, why: string) => (has(recipe) || quiet(recipe) ? null : { recipe, why });
-  const found = KINDS[s.kind].suggest(s, param, value, { has, offer });
-  return found ? { ...found, near: s.id } : null;
+  const found = rankRecipes(canvas, list, { surface: s.id, change: { param, value }, quiet, profile, limit: 1 })[0];
+  return found ? { recipe: found.recipe.id, why: found.why, near: s.id } : null;
 }
 
 export interface SurfaceInput {

@@ -115,7 +115,7 @@ async function main() {
     });
 
     await test("it is beside the chat, named for the app, and the cursor played", async () => {
-      assert.equal(await page.locator(".app-pane[data-pane=video] .pdf-bar-app").innerText(), "Autora Video");
+      assert.equal(await page.locator('[data-engine="video"] .pw-engine-head > b').innerText(), "Video");
       assert.equal(await page.locator(".app-pane[data-pane=video] .pdf-bar-name").innerText(), "Test cut");
       assert.ok(sawCursor.length > 0, "the agent's cursor was shown");
     });
@@ -158,7 +158,7 @@ async function main() {
     await test("on a phone the editor is the paired-down one: the picture, the timeline, the tool bar along the bottom, and Media and Edit as sheets", async () => {
       const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
       await phone.goto(`${app.base}/?session=${s}`);
-      await phone.waitForSelector(".stage .pdf-window", { timeout: 20_000 });
+      await phone.waitForSelector('.pw-engine[data-engine="video"] .pdf-window', { timeout: 20_000 });
       assert.equal(await phone.locator(".pdf-bar .pdf-pill").count(), 0, "round buttons, not text pills");
       await phone.tap('.pdf-bar button[aria-label="Full screen"]');
       const frame = await editorIn(phone);
@@ -228,7 +228,7 @@ async function main() {
       await app.turn(s, "look at the timeline again", 90_000);
       assert.match(said(), /image "violet.png"/, "the picture is still on the timeline");
 
-      await again.click('.pane-pick-x[aria-label="Close Video"]');
+      await again.click('.pw-engine-head button[aria-label="Close Video work"]');
       await again.waitForSelector(".app-pane[data-pane=video]", { state: "detached", timeout: 5_000 });
       await again.close();
     });

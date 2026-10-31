@@ -6481,6 +6481,78 @@ button.dock-card:hover { border-color: var(--border-strong); }
   flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;
   position: relative; z-index: var(--z-side); margin-top: calc(-1 * var(--top-h, 58px));
 }
+.panacea-workspace { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--bg); }
+.pw-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; flex: 0 0 auto; border-bottom: 1px solid var(--border); background: var(--s1); }
+.pw-bar > svg { color: var(--accent-light); flex-shrink: 0; }
+.pw-bar > b { font-size: var(--fs-base); }
+.pw-bar .pane-follow, .pw-bar .stage-follow, .pw-bar .stage-expand, .pw-bar .stage-fold { margin: 0; position: static; }
+.pw-context { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--s1); }
+.pw-context[hidden], .pw-surfaces[hidden] { display: none; }
+.pw-mode { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; font-size: var(--fs-xs); color: var(--text-3); }
+.pw-mode select { max-width: 200px; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--s2); color: var(--text); font: inherit; font-size: var(--fs-sm); }
+.pw-context p { flex: 1; min-width: 0; margin: 0; color: var(--text-3); font-size: var(--fs-xs); line-height: 1.4; }
+.pw-surfaces { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.pw-engine {
+  position: absolute; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden;
+  border: 1px solid var(--border-strong); border-radius: var(--r-lg); background: var(--bg); box-shadow: var(--shadow-lg);
+}
+.pw-engine-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--s1); border-bottom: 1px solid var(--border); cursor: grab; }
+.pw-engine-head > span:first-child { display: flex; color: var(--accent-light); }
+.pw-engine-head > b { flex-shrink: 0; font-size: var(--fs-base); }
+.pw-engine-context { flex: 1; min-width: 0; color: var(--text-3); font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pw-engine-head button { border: 0; background: transparent; color: var(--text-2); border-radius: var(--r-sm); padding: 4px; font: inherit; font-size: var(--fs-xs); cursor: pointer; }
+.pw-engine.is-pinned .pw-engine-head { cursor: default; }
+.pw-engine-body, .pw-engine-body > .app-pane, .pw-engine-body > .stage-pane { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.pw-engine-body > .app-pane { border: 0; }
+.pw-engine .pdf-window.is-full, .pw-engine .app-window.is-full, .pw-engine .cell.widget.is-expanded, .pw-engine .cell.shot.is-max { position: relative; inset: auto; z-index: auto; height: auto; padding: 0; }
+.pw-jump-dock { position: absolute; left: 12px; bottom: 72px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; max-width: calc(100% - 24px); padding: 6px; background: var(--s1); border: 1px solid var(--border-strong); border-radius: var(--r-lg); box-shadow: var(--shadow-lg); }
+.pw-jump-dock button { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: var(--r-md); background: var(--s2); color: var(--text); font: inherit; cursor: pointer; }
+.pw-jump-dock button:hover { background: var(--accent-soft); color: var(--accent-light); }
+.pw-surfaces > .app-pane:not([hidden]) { flex: 1; min-height: 0; }
+.pw-capability { padding: 12px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--s1); }
+.pw-capability.on { border-color: var(--border-strong); }
+.pw-launch { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; padding: 12px; }
+.pw-launch > span { color: var(--text-3); font-size: var(--fs-xs); }
+.pw-launch button { pointer-events: auto; }
+.pw-full-workspace { position: relative; isolation: isolate; min-width: 0; overflow: hidden; }
+.pw-scene-stack { position: absolute; inset: 0; min-width: 0; min-height: 0; display: flex; z-index: 0; }
+.pw-scene-stack > .panacea-workspace { width: 100%; height: 100%; }
+.pw-scene-stack .pa-window { height: auto; min-height: 0; }
+.pw-navigation-host { max-height: 100%; overflow-y: auto; overflow-x: hidden; }
+.pw-navigation-host .pw-jump-dock { position: static; max-width: none; width: fit-content; max-height: none; margin: 0; overflow-x: hidden; flex-wrap: nowrap; flex-direction: column; }
+.pw-navigation-host .pw-jump-dock button { flex-shrink: 0; }
+.pw-full-workspace .conversation-flow__entry .composer { width: 100%; max-width: none; margin: 0; }
+.conversation-flow .cell-note { width: fit-content; max-width: 100%; pointer-events: none; }
+.tool-choice { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.tool-choice > .tool-tile { flex: 1; }
+.tool-new { align-self: flex-end; color: var(--text-3); }
+.stage.is-expanded .panacea-workspace, .stage.is-expanded .pw-surfaces { flex: 1; min-height: 0; }
+.panacea-workspace.is-phone .pw-bar { gap: 6px; padding: 6px 8px; flex-wrap: wrap; }
+.panacea-workspace.is-phone .pw-context { padding: 6px 8px; }
+.panacea-workspace.is-phone .pw-context p, .panacea-workspace.is-phone .pw-mode > span { display: none; }
+.panacea-workspace.is-phone .pw-mode { flex: 1; }
+.panacea-workspace.is-phone .pw-mode select { width: 100%; max-width: none; }
+.panacea-workspace.is-phone .pa-window { height: 65dvh; min-height: 280px; }
+.panacea-workspace.is-phone .pa-window > .pdf-bar { flex-wrap: wrap; gap: 6px; }
+.panacea-workspace.is-phone .pa-window > .pdf-bar .pdf-bar-note { display: none; }
+.panacea-workspace.is-phone .pa-window > .pdf-bar .st-song-name { flex: 1; min-width: 80px; max-width: 180px; }
+.stage.is-expanded .pa-window { flex: 1; height: auto; min-height: 0; }
+.panacea-workspace .pdf-bar-app { display: none; }
+.thread-wrap.is-immersive > .stage {
+  position: fixed; inset: 0; z-index: var(--z-cover); display: flex; flex-direction: column;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+.thread-wrap.is-immersive .panacea-workspace, .thread-wrap.is-immersive .stage-body { flex: 1; min-height: 0; max-height: none; display: flex; flex-direction: column; }
+.thread-wrap.is-immersive .stage-pane:not([hidden]) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.thread-wrap.is-immersive .stage-pane > * { flex: 1; min-height: 0; }
+.thread-wrap.is-immersive .pw-bar { padding-right: 56px; }
+.thread-wrap.is-immersive:has(.immersive-follow) .pw-bar { padding-right: 172px; }
+.thread-wrap.is-immersive .pw-bar .stage-follow { display: none; }
+.panacea-workspace.is-phone .pdf-window.is-full, .panacea-workspace.is-phone .app-window.is-full,
+.panacea-workspace.is-phone .cell.widget.is-expanded, .panacea-workspace.is-phone .cell.shot.is-max {
+  position: relative; inset: auto; z-index: auto; padding: 0; height: auto;
+}
+.thread-wrap.is-immersive .pa-window { height: auto; min-height: 0; }
 .pane-pick {
   display: flex; align-items: flex-end; gap: 3px; height: 38px; padding: 0 10px; overflow-x: auto; scrollbar-width: none;
   border-left: 1px solid var(--border-strong); border-bottom: 1px solid var(--border-strong); background: var(--s1);
@@ -7724,7 +7796,7 @@ body.is-resizing iframe { pointer-events: none; }
 }
 .pa-window[data-density="dense"] { --pa-pad: 10px; --pa-gap: 8px; --pa-track: 3px; }
 .pa-board {
-  position: relative; flex: 1; min-height: 0; overflow: hidden; outline: none; cursor: default; touch-action: none;
+  position: relative; flex: 1; min-height: 0; overflow: clip; outline: none; cursor: default; touch-action: none;
   background-color: var(--bg);
   background-image: radial-gradient(circle, var(--border-strong) 1px, transparent 1.4px);
 }
@@ -8156,29 +8228,10 @@ body.is-resizing iframe { pointer-events: none; }
   .tw-card { animation: none !important; }
 }
 
-/* ============================================================================
-   The Terminal window (components/TerminalWindow.tsx): xterm.js in a .pdf-window's frame, with a row of the keys
-   a phone does not have under it.
-   ========================================================================== */
-.tm-window { position: relative; background: var(--bg); }
-.tm-window.is-phone { height: min(62dvh, 560px); }
-.tm-window.is-phone.is-full { height: auto; }
-.tm-screen { flex: 1; min-height: 0; padding: 6px 8px 4px 10px; background: var(--bg); overflow: hidden; }
-.tm-screen .xterm { height: 100%; }
-.tm-screen .xterm-viewport { background: transparent !important; }
-.tm-keys { display: flex; gap: 6px; padding: 7px 8px calc(7px + env(safe-area-inset-bottom, 0px)); overflow-x: auto; scrollbar-width: none; border-top: 1px solid var(--border); background: var(--s1); }
-.tm-keys::-webkit-scrollbar { display: none; }
-.tm-key {
-  flex: 0 0 auto; min-width: 40px; height: 34px; padding: 0 11px; border-radius: var(--r-sm);
-  border: 1px solid var(--border); background: var(--s2); color: var(--text); font: inherit;
-  font-size: var(--fs-sm); cursor: pointer;
-}
-.tm-key:active { background: var(--accent-soft); }
-
 /* ==========================================================================
    Tool windows on a phone: one set of measurements.
 
-   Every window (PDF, Video, Pages/Sheets/Slides, 3D, Music, Terminal, the app
+   Every surface (PDF, Video, Pages/Sheets/Slides, 3D, Music, the app
    window, the browser) is built by a different component, and each grew its
    own sizes: round buttons beside square ones, 28px beside 36px beside 44px,
    pills beside text. On a phone they now share three numbers and one shape:
@@ -8237,8 +8290,7 @@ body.is-resizing iframe { pointer-events: none; }
   .st-window.is-phone .st-play { width: 48px; height: 48px; border-radius: var(--r-lg); }
   .st-window.is-phone .st-stepper button { width: 34px; min-height: 34px; }
 
-  /* Terminal's keys, and the Office page view's bar. */
-  .tm-window.is-phone .tm-key { min-height: var(--pt-hit); border-radius: var(--pt-r); }
+  /* The Office page view's bar. */
   .office-pages-bar { min-height: 52px; padding: 6px 10px; }
   .office-pages-bar .pdf-pill, .office-pages-clear { min-height: var(--pt-hit); padding: 0 14px; border-radius: var(--pt-r); font-size: var(--fs-base); }
 }

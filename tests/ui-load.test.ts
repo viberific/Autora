@@ -102,7 +102,7 @@ async function main() {
       await dialog.getByRole("button", { name: "Add" }).click();
       await p2.locator(".attach-chip.is-folder", { hasText: "House move" }).waitFor();
       app.script.push({ text: "Got the folder." });
-      await p2.locator('textarea[aria-label="Task"]').fill("what is in my move folder?");
+      await p2.locator('textarea[aria-label="Ask Autora"]').fill("what is in my move folder?");
       await p2.getByRole("button", { name: "Send" }).click();
       for (let i = 0; i < 100 && app.seen.length === 0; i++) await sleep(100);
       const seen = JSON.stringify(app.seen[0]?.messages ?? []);

@@ -1,0 +1,23 @@
+.pa-brd-wrap .pa-brd-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 6px 12px; color: var(--text-2); font-size: var(--fs-xs); }
+.pa-brd-wrap .pa-brd-controls:empty { display: none; }
+.pa-brd-wrap .pa-brd-controls label { display: flex; align-items: center; gap: 6px; }
+.pa-brd-wrap .pa-brd-controls .jf-field { min-width: 0; max-width: 180px; padding: 4px 6px; background: var(--s2); border: 1px solid var(--border-strong); border-radius: var(--r-sm); color: var(--text); font: inherit; }
+.pa-brd-wrap .pa-brd-controls button, .pa-flowchart .pa-doc-bar > button:not(.pa-doc-mode) { padding: 4px 8px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: var(--s2); color: var(--text-2); font-size: var(--fs-xs); cursor: pointer; }
+.pa-flowchart .pa-flow-node { display: flex; justify-content: center; align-items: center; box-sizing: border-box; background: transparent; border: 0; box-shadow: none; padding: 16px 20px; text-align: center; }
+.pa-flowchart .pa-flow-node.shape-decision { padding: 0; }
+.pa-flowchart .pa-flow-node.shape-decision > p, .pa-flowchart .pa-flow-node.shape-decision > textarea { width: 50%; }
+.pa-flowchart .pa-flow-node.is-ask { flex-direction: column; }
+.pa-flowchart .pa-flow-node > p, .pa-flowchart .pa-flow-node > textarea, .pa-flowchart .pa-flow-node > .pa-brd-tag, .pa-flowchart .pa-flow-node > .pa-brd-acts { position: relative; z-index: 1; }
+.pa-flowchart .pa-flow-shape { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.pa-flowchart .pa-flow-shape path { fill: var(--s2); stroke: var(--border-strong); stroke-width: 2; }
+.pa-flowchart .is-yellow .pa-flow-shape path { fill: color-mix(in srgb, var(--warn) 18%, var(--s2)); }
+.pa-flowchart .is-green .pa-flow-shape path { fill: color-mix(in srgb, var(--live) 18%, var(--s2)); }
+.pa-flowchart .is-blue .pa-flow-shape path { fill: color-mix(in srgb, var(--accent-2) 20%, var(--s2)); }
+.pa-flowchart .is-pink .pa-flow-shape path { fill: color-mix(in srgb, var(--danger) 16%, var(--s2)); }
+.pa-flowchart .is-violet .pa-flow-shape path { fill: color-mix(in srgb, var(--accent) 20%, var(--s2)); }
+.pa-flowchart .shape-end .pa-flow-shape path { stroke-width: 3; }
+.pa-flowchart .is-selected .pa-flow-shape path { stroke: var(--accent); }
+.pa-flowchart .pa-flow-node:focus-visible { outline: 1px solid var(--accent-line); outline-offset: 4px; }
+.pa-brd-wrap .pa-brd-hit:focus-visible { stroke: var(--accent-line); stroke-opacity: .4; }
+.pa-brd-wrap .pa-brd-label { pointer-events: auto; cursor: pointer; }
+.pa-brd-wrap .pa-brd-error { padding: 6px 12px; color: var(--danger); font-size: var(--fs-xs); }

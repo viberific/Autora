@@ -2,7 +2,6 @@ import fs from "node:fs";
 import http from "node:http";
 import https from "node:https";
 import crypto from "node:crypto";
-import net from "node:net";
 import path from "node:path";
 import type { Duplex } from "node:stream";
 import express, { type Request, type Response } from "express";
@@ -43,7 +42,7 @@ import {
 import { replyStyle, standingBlock, standingReminder } from "./server/prompt";
 import { WebPush } from "./server/webpush";
 import { allowSocket, refuseHost, refuseRequest } from "./server/crosssite";
-import { peerGate } from "./server/peers";
+import { gateConnections, peerGate } from "./server/peers";
 import { certificateSource, tlsSettings } from "./server/tls";
 import {
   connect as connectMcp, disconnect as disconnectMcp, mcpToolsGeneration, mcpTools,
@@ -166,11 +165,10 @@ import { keyRoutes } from "./server/routes/keys";
 import { dropOpencut, onOpencutChange, opencutRoutes, opencutState, serveOpencut, videoBriefing } from "./server/opencut";
 import { dropSpectra, serveSpectra, spectraDocumentChanged, spectraRoutes, spectraUpgrade } from "./server/spectra";
 import { newFileRoutes } from "./server/newfile";
-import { loadFileRoutes } from "./server/loadfile";
+import { loadFileRoutes, loadPanaceaFile, type FileLoadGuards } from "./server/loadfile";
 import { cadRoutes, cadState, dropCad, onCadChange, serveCad } from "./server/caddesk";
 import { dropGame, gameRoutes, gameState, onGameChange, serveGame } from "./server/gamedesk";
 import { dropPhoto, onPhotoChange, photoRoutes, photoState, servePhoto } from "./server/photodesk";
-import { dropTerm, onTermChange, termRoutes, termState, termUpgrade } from "./server/termdesk";
 import { dropStudio, onStudioChange, studioRoutes, studioState, studioTurnNote, studioVisible } from "./server/studio";
 import { dropPanacea, onPanaceaChange, onPanaceaTouch, panaceaRoutes, panaceaState, panaceaSuggester, panaceaTurnNote, panaceaVisible } from "./server/panacea";
 import { joinProjects, windowOff } from "./server/tools";
@@ -485,11 +483,10 @@ function forgetSession(id: string) {
   dropCad(id);
   dropGame(id);
   dropPhoto(id);
-  dropTerm(id);
   dropStudio(id);
   dropPanacea(id);
   presenceSent.delete(id);
-  for (const timers of [presenceTimers, termTimers]) {
+  for (const timers of [presenceTimers]) {
     const timer = timers.get(id);
     if (timer) clearTimeout(timer);
     timers.delete(id);
@@ -1291,17 +1288,6 @@ onDeskChange((sessionId) => {
 /* The video window (server/opencut.ts): open or closed, and which project is in it, to the chat's tabs. */
 onOpencutChange((sessionId) => {
   sendEphemeral(sessionId, { type: "opencutdesk", session: sessionId, state: opencutState(sessionId) });
-});
-
-/* The Terminal window, the same way: opening, and anything moving in it (the page then asks for what it has not seen).
-   Held to a few a second, so a command that prints a great deal does not flood the socket. */
-const termTimers = new Map<string, ReturnType<typeof setTimeout>>();
-onTermChange((sessionId) => {
-  if (termTimers.has(sessionId)) return;
-  termTimers.set(sessionId, setTimeout(() => {
-    termTimers.delete(sessionId);
-    sendEphemeral(sessionId, { type: "termdesk", session: sessionId, state: termState(sessionId) });
-  }, 120));
 });
 
 /* Autora Games, the same way: the window opens, and the game changes (by the agent's tools or the person's hands). */
@@ -6326,7 +6312,6 @@ async function startServer() {
   opencutRoutes(app, { exists: (id: string) => sessions.has(id), push: (id: string, message: Record<string, unknown>) => sendEphemeral(id, message) });
   officeRoutes(app, { exists: (id: string) => sessions.has(id) });
   // The Terminal window: a shell the person and the agent share.
-  termRoutes(app, { exists: (id: string) => sessions.has(id) });
   // Autora 3D: the 3D window's model, and opening and putting it away.
   cadRoutes(app, {
     exists: (id: string) => sessions.has(id),
@@ -6358,12 +6343,23 @@ async function startServer() {
     push: (id: string, message: Record<string, unknown>) => sendEphemeral(id, message),
   });
   studioVisible(() => state.agentCursor);
+  const fileLoadGuards: FileLoadGuards = {
+    exists: (id) => sessions.has(id),
+    incognito: (id) => Boolean(sessions.get(id)?.incognito),
+    off: (which) => {
+      const s = toolSettings();
+      if (which === "pdf") return windowOff("pdf_open", s);
+      if (which === "pages" || which === "sheets" || which === "slides") return windowOff("office_open", s) || !s[which].enabled;
+      return windowOff(`${which}_open`, s);
+    },
+  };
   // Panacea: the canvas, its library and profile, the commands to it, and opening and putting it away.
   panaceaRoutes(app, {
     exists: (id: string) => sessions.has(id),
     incognito: (id: string) => Boolean(sessions.get(id)?.incognito),
     off: () => windowOff("panacea_look"),
     push: (id: string, message: Record<string, unknown>) => sendEphemeral(id, message),
+    loadFile: (id, artifact, options) => loadPanaceaFile(id, artifact, options, fileLoadGuards),
   });
   panaceaVisible(() => state.agentCursor);
 
@@ -6396,16 +6392,7 @@ async function startServer() {
   /* The toolbox beside the message box: a tool the person taps there makes a
      blank file and opens its window, without spending a turn. */
   /* ...and its other half: a saved file picked from Artifacts, loaded into an app's window. */
-  loadFileRoutes(app, {
-    exists: (id) => sessions.has(id),
-    incognito: (id) => Boolean(sessions.get(id)?.incognito),
-    off: (which) => {
-      const s = toolSettings();
-      if (which === "pdf") return windowOff("pdf_open", s);
-      if (which === "pages" || which === "sheets" || which === "slides") return windowOff("office_open", s) || !s[which].enabled;
-      return windowOff(`${which}_open`, s);
-    },
-  });
+  loadFileRoutes(app, fileLoadGuards);
   newFileRoutes(app, {
     exists: (id) => sessions.has(id),
     incognito: (id) => Boolean(sessions.get(id)?.incognito),
@@ -7014,7 +7001,7 @@ async function startServer() {
   const upgrade = (req: http.IncomingMessage, socket: Duplex, head: Buffer) => {
     /* Every socket, the editors' and the terminal's included: one opened from
        another site, or under a name a rebinding page could have used, reads
-       whole threads and documents, and the terminal's is a shell. */
+       whole threads and documents. */
     if (refuseHost(req.headers.host) || !allowSocket(req.headers)) {
       log("warn", "http", `websocket ${req.url ?? ""} refused: opened from another site or addressed to ${req.headers.host ?? "no host"}`);
       socket.destroy();
@@ -7023,8 +7010,6 @@ async function startServer() {
     // Spectra's editor has a socket of its own for a page opened on its own;
     // it takes the connection here or leaves it to the app's own sockets.
     if (spectraUpgrade(req, socket, head)) return;
-    // The terminal's own socket: a shell for whoever opens it, so the same cross-site check as every socket.
-    if (termUpgrade(req, socket, head, allowSocket)) return;
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
   };
   server.on("upgrade", upgrade);
@@ -7162,7 +7147,6 @@ async function startServer() {
       ws.send(JSON.stringify({ type: "photodesk", session: sessionId, state: photoState(sessionId) }));
       ws.send(JSON.stringify({ type: "studiodesk", session: sessionId, state: studioState(sessionId) }));
       ws.send(JSON.stringify({ type: "panaceadesk", session: sessionId, state: panaceaState(sessionId) }));
-      ws.send(JSON.stringify({ type: "termdesk", session: sessionId, state: termState(sessionId) }));
       ws.send(JSON.stringify({ type: "presence", session: sessionId, state: presenceFor(sessionId).view() }));
       if (openPreview?.opened) void openPreview.live.nudge();
 
@@ -7402,19 +7386,9 @@ async function startServer() {
      app's own proxy, so another app on Docker's shared network cannot reach
      this port past the login. A peer is checked before the server reads a
      byte from it; the socket waits, paused, while a name is looked up. */
-  const gate = peerGate(process.env.AUTORA_TRUSTED_PEERS, (line) => log("warn", "http", line));
-  if (gate) {
-    const gated = net.createServer({ pauseOnConnect: true }, (socket) => {
-      gate.allows(socket.remoteAddress).then((ok) => {
-        if (!ok || socket.destroyed) return void socket.destroy();
-        server.emit("connection", socket);
-        socket.resume();
-      }, () => socket.destroy());
-    });
-    gated.listen(PORT, HOST, listening);
-  } else {
-    server.listen(PORT, HOST, listening);
-  }
+  const peerLog = (line: string) => log("warn", "http", line);
+  const gate = peerGate(process.env.AUTORA_TRUSTED_PEERS, peerLog);
+  gateConnections(server, gate, peerLog).listen(PORT, HOST, listening);
 
   /* The https copy, beside the plain port rather than instead of it. A
      failure here is said in the log and on the Voice check, and never takes
@@ -7428,7 +7402,7 @@ async function startServer() {
         secureListening = false;
         console.warn(`[tls] https on port ${secure.port} failed: ${err.message}`);
       });
-      secureServer.listen(secure.port, HOST, () => {
+      gateConnections(secureServer, gate, peerLog).listen(secure.port, HOST, () => {
         secureListening = true;
         caPem = source.caPem;
         console.log(

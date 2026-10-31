@@ -9,9 +9,6 @@ type WordVersion = { n: number; label: string; at: number; by: "agent" | "person
 
 export type OfficeKind = "docx" | "pptx" | "xlsx";
 
-/** What each app is called, on its tab and in the editor: a window says which app it is, never the file's name. */
-export const APP_NAME: Record<OfficeKind, string> = { docx: "Pages", pptx: "Slides", xlsx: "Sheets" };
-
 /** One thing the agent did in the document, played as a cursor that goes there and types it (server/officedesk.ts). */
 type OfficeCue = {
   act: "type" | "point"; text: string; cell?: string; sheet?: string; box?: [number, number, number, number];

@@ -15,6 +15,7 @@ import type { Surface } from "./canvas";
 import { BOARD_PARAMS, applyBoardParam, boardParams, readBoardState, type BoardState } from "./board";
 import { DOC_PARAMS, applyParam, blocksOf, docStateOf, paramsFromState, readDocState, stateOf, type DocState } from "./document";
 import type { Domain } from "./library";
+import { intentOffer, type SelectionSignal } from "./intent";
 import {
   DATA_ACTIONS, IMAGE_ACTIONS, IMAGE_PARAMS, dataParams, distinct, normalizeTable,
   type ActionSpec, type ParamSpec, type Table,
@@ -56,6 +57,10 @@ interface SurfaceKindDef {
   starters: (surface: Surface) => Starters;
   /** One panel worth offering now that `param` has gone to `value`, or null. */
   suggest: (surface: Surface, param: string, value: Value, tools: OfferTools) => Offer | null;
+  /** Context exposed to recipe intent without teaching the scorer about a particular engine. */
+  selection: (surface: Surface) => SelectionSignal;
+  /** Dynamic parameter families (such as column filters) which count toward familiarity with this engine. */
+  skillFamilies?: string[];
   /** The surface in a line of words for the agent. */
   describe: (surface: Surface) => string;
   /** The small print in its title bar. */
@@ -80,15 +85,8 @@ const IMAGE: SurfaceKindDef = {
     return { w, h: px && px.w > 0 ? Math.min(720, Math.max(192, (w * px.h) / px.w)) : 384 };
   },
   starters: () => ({ live: ["photo.light", "photo.colour"], ghost: "photo.looks", why: "A photo arrived: light and colour are where most edits start." }),
-  suggest: (_s, param, value, { has, offer }) => {
-    if (param === "exposure" && typeof value === "number" && Math.abs(value) >= 1.2 && !has("photo.curve")) {
-      return offer("photo.histogram", "Exposure is pushed a long way: the histogram shows what is clipping.");
-    }
-    if (param === "saturation" && typeof value === "number" && value <= -90) return offer("photo.mono", "It is black and white now: contrast and grain carry it from here.");
-    if (param === "aspect" && value !== "original" && value !== "free") return offer("photo.straighten", "Cropped: a level horizon matters more in a tight frame.");
-    if (param === "look" && value !== "none") return offer("photo.compare", "A look is on: compare it with the original.");
-    return null;
-  },
+  suggest: (_s, param, value, tools) => intentOffer("image", param, value, tools),
+  selection: () => "none",
   describe: (s) => `image "${s.title}"${s.px ? ` ${s.px.w}x${s.px.h}` : ""}${s.artifact ? ` (artifact ${s.artifact})` : ""}`,
   meta: (s) => (s.px ? `${s.px.w} × ${s.px.h}` : "Photo"),
   read: () => ({}),
@@ -114,12 +112,10 @@ const DATA: SurfaceKindDef = {
     if (cats.length) live.push("data.filter-category");
     return { live, ghost: nums.length ? "data.explore" : null, why: "A table arrived: a chart of it, and a filter for its categories." };
   },
-  suggest: (_s, param, value, { offer }) => {
-    if (param.startsWith("filter.") && Array.isArray(value) && value.length === 1) return offer("data.top", `Filtered to ${String(value[0])}: its top rows.`);
-    if (param === "search" && typeof value === "string" && value.trim()) return offer("data.table", "Searching: the matching rows.");
-    return null;
-  },
+  suggest: (_s, param, value, tools) => intentOffer("data", param, value, tools),
+  selection: () => "none",
   describe: (s) => `data "${s.title}", ${s.table?.rows.length ?? 0} rows; columns ${s.table?.columns.map((c) => `${c.name} (${c.type})`).join(", ")}`,
+  skillFamilies: ["filter."],
   meta: (s) => `${s.table?.rows.length.toLocaleString() ?? 0} rows`,
   read: (raw) => {
     const table = normalizeTable(raw.table);
@@ -140,10 +136,8 @@ const DOC: SurfaceKindDef = {
   actions: DOC_ACTIONS,
   size: () => ({ w: 640, h: 592 }),
   starters: () => ({ live: ["document.styles", "document.type"], ghost: "document.paragraph", why: "A document arrived: text style and typography are where formatting starts." }),
-  suggest: (_s, param, value, { offer }) => {
-    if (param === "align" && value !== "left") return offer("document.paragraph", "Aligned: line height goes with it.");
-    return null;
-  },
+  suggest: (_s, param, value, tools) => intentOffer("doc", param, value, tools),
+  selection: (s) => s.doc?.sel && s.doc.sel.anchor !== s.doc.sel.head ? "range" : s.doc ? "caret" : "none",
   describe: (s) => {
     const blocks = s.doc ? blocksOf(stateOf(s.doc).doc).length : 0;
     const who = s.doc?.mode === "agent" ? "Autora may write in it" : "the person writes it: format and structure it, never write its words";
@@ -177,13 +171,14 @@ const BOARD: SurfaceKindDef = {
   params: () => BOARD_PARAMS,
   actions: BOARD_ACTIONS,
   size: () => ({ w: 832, h: 560 }),
-  starters: () => ({ live: ["general.board"], ghost: null, why: "A board arrived: card colours and what is on it." }),
-  suggest: () => null,
+  starters: (s) => ({ live: [s.board?.diagram === "flowchart" ? "general.flowchart" : "general.board"], ghost: null, why: s.board?.diagram === "flowchart" ? "A flowchart arrived: editable nodes and directed connectors." : "A board arrived: card colours and what is on it." }),
+  suggest: (_s, param, value, tools) => intentOffer("board", param, value, tools),
+  selection: (s) => s.board?.cards.some((c) => c.id === s.board?.sel) || s.board?.links.some((l) => l.id === s.board?.selLink) ? "card" : "none",
   describe: (s) => {
     const who = s.board?.mode === "agent" ? "Autora may write cards on it" : "its words are the person's: arrange, link, colour and ask questions, never write or remove their cards";
-    return `board "${s.title}", ${s.params.cards ?? 0} cards, ${s.params.links ?? 0} links, ${s.params.questions ?? 0} questions; ${who}`;
+    return `${s.board?.diagram === "flowchart" ? "flowchart (process, decision, start/end nodes; directed connectors)" : "board"} "${s.title}", ${s.params.cards ?? 0} cards, ${s.params.links ?? 0} links, ${s.params.questions ?? 0} questions; ${who}`;
   },
-  meta: (s) => `${Number(s.params.cards ?? 0)} cards`,
+  meta: (s) => `${Number(s.params.cards ?? 0)} ${s.board?.diagram === "flowchart" ? "nodes · flowchart" : "cards"}`,
   read: (raw) => {
     const board = readBoardState(raw.board);
     return board ? { board } : null;
@@ -192,7 +187,13 @@ const BOARD: SurfaceKindDef = {
     if (s.board) s.params = boardParams(s.board, s.params);
   },
   apply: (s, param, value) => {
-    if (s.board) s.board = applyBoardParam(s.board, param, value);
+    if (s.board) {
+      if (param === "diagram" && (value === "mindmap" || value === "flowchart") && value !== (s.board.diagram ?? "mindmap")) {
+        s.params.shape = value === "flowchart" ? "process" : "card";
+        s.params.direction = value === "flowchart" ? "forward" : "none";
+      }
+      s.board = applyBoardParam(s.board, param, value);
+    }
   },
 };
 

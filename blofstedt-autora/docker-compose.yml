@@ -41,9 +41,9 @@ services:
     # docker-compose.umbreld.yml.
     mem_limit: 3g
     memswap_limit: 3g
-    # The https listener, published directly rather than through app_proxy,
-    # because the proxy speaks http to the backend and the browser needs the
-    # certificate to be the one it is talking to.
+    # Optional HTTPS origin for an authenticated proxy or tunnel. It enforces
+    # the same trusted-peer restriction as HTTP, not a direct browser login.
+    # Keep the port stable for existing tunnel configurations.
     ports:
       - "8818:8818"
     volumes:
@@ -62,26 +62,18 @@ services:
       # box shares Docker's network with this one, so without this any of
       # them could reach the port directly, past the login, and run commands
       # with the host's filesystem mounted. See server/peers.ts. Loopback
-      # (the agent opening its own app) is always let in; the https port 8818
-      # is not gated.
+      # (the agent opening its own app) is always let in. The same restriction
+      # protects HTTPS on 8818, including websocket connections.
       AUTORA_TRUSTED_PEERS: "blofstedt-autora_app_proxy_1"
       # Off, and staying off, because the better answer costs one command.
       #
       # Dictation and live voice chat need a secure page -- browsers will not
       # open a microphone for http://<host>, whatever the site settings say.
-      # Setting this to 1 gets you one: Autora serves https on 8818 with a
-      # certificate it generates, and you click through a warning once per
-      # device. It works, and it is the only option on a network with nothing
-      # in front of it.
-      #
-      # But 8818 is published straight to the network, so unlike 8817 it does
-      # not go through Umbrel's login -- and this app auto-approves everything
-      # with the whole filesystem mounted. That is not a default to hand
-      # somebody. A proxy with a real certificate is better on every count: no
-      # warning at all, no second port, and the login still in front. On a
-      # tailnet that is `tailscale serve --bg --https=8443 8817`, one line,
-      # once -- not plain `tailscale serve`, whose port 443 is the one umbrelOS
-      # needs for its own dashboard. See the README.
+      # Prefer HTTPS in front of an authenticated frontend: Umbrel's app proxy
+      # or a Cloudflare Access-protected tunnel. Direct forwarding to Autora
+      # does not add Umbrel login. If a tunnel connects directly, name its
+      # connector in AUTORA_TRUSTED_PEERS and allow its public hostname with
+      # AUTORA_ALLOWED_HOSTS. Enabling TLS does not bypass the peer gate.
       AUTORA_TLS: "0"
       # Where the agent's commands start: the host's filesystem, mounted above.
       AUTORA_WORKDIR: "/host"

@@ -68,6 +68,6 @@ exception: they delete at once and offer Undo.
 
 Frames that cannot read this page's custom properties are sent them: `src/lib/frameTheme.ts` posts
 `--autora-*` tokens to the PDF and Office frames (`useFrameTheme`), which read them with Autora Violet as the
-fallback. The video editor has its own, older channel (`autora:opencut:theme`), and GDevelop, the 3D window
-and the terminal observe the page's `data-theme`. A new frame needs one of these: do not write a palette into
+fallback. The video editor has its own, older channel (`autora:opencut:theme`), and GDevelop and the 3D surface
+observe the page's `data-theme`. A new frame needs one of these: do not write a palette into
 it.

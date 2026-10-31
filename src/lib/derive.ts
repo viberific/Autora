@@ -305,8 +305,8 @@ export type Cell =
   | { kind: "game"; seq: number }
   /** And Autora Photo's window (lib/photodesk.ts), likewise. */
   | { kind: "photo"; seq: number }
-  /** The Terminal window (lib/termdesk.ts), likewise. */
-  | { kind: "term"; seq: number }
+  /** Panacea's native canvas, held in the same workspace on a phone. */
+  | { kind: "panacea"; seq: number }
   /** And Autora Music's (lib/studio.ts). */
   | { kind: "studio"; seq: number }
   /** And the Word window (lib/officedesk.ts), likewise. */
@@ -758,6 +758,7 @@ export function derive(events: AutoraEvent[]): Derived {
             shell.status = span.status;
             shell.durationMs = span.durationMs;
             if (span.exitCode !== null) shell.exitCode = span.exitCode;
+            if (span.status === "error" && !shell.output.trim()) shell.output = span.output || span.preview || "The command failed.";
           }
         }
         break;
@@ -769,7 +770,10 @@ export function derive(events: AutoraEvent[]): Derived {
           span.preview = e.payload.error ?? e.payload.reason ?? "failed";
           span.durationMs = e.payload.duration_ms ?? span.durationMs;
           const shell = shells.get(span.id);
-          if (shell) shell.status = span.status;
+          if (shell) {
+            shell.status = span.status;
+            if (!shell.output.trim()) shell.output = String(span.preview).replace(COLOUR, "");
+          }
         }
         // A staged tool carries no cell of its own until it produces a frame
         // or a diff, so a browser call that failed outright would otherwise

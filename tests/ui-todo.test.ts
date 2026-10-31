@@ -24,7 +24,7 @@ async function main() {
   try {
     const s = await app.newSession("Todo");
     await page.goto(`${app.base}/?session=${s}`);
-    await page.waitForSelector('textarea[aria-label="Task"]');
+    await page.waitForSelector('textarea[aria-label="Ask Autora"]');
     const L = (a: string, b: string, c: string) => ({ todos: [{ title: "Read it", status: a }, { title: "Write it", status: b }, { title: "Check it", status: c }] });
     app.script.push(
       { tools: [{ name: "todo", args: L("in-progress", "not-started", "not-started") }] },
@@ -33,7 +33,7 @@ async function main() {
       { tools: [{ name: "bash", args: { command: "sleep 6" } }] },
       { text: "All done." },
     );
-    await page.fill('textarea[aria-label="Task"]', "do three things");
+    await page.fill('textarea[aria-label="Ask Autora"]', "do three things");
     /* Enter writes a line in the composer; Ctrl+Enter is what sends. */
     await page.keyboard.press("Control+Enter");
 

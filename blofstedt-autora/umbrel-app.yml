@@ -34,7 +34,14 @@ description: >-
   and each password only on its own site.
 
 
-  • App window — when Autora builds a website or an app you watch it take shape
+  • Panacea workspace — native documents, tables, images, boards and flowcharts
+  share a spatial canvas with the existing editing engines. Ask Autora from one
+  centered entry, keep tasks above it, and expand the floating conversation
+  when you need the details. Jump to work, zoom out or show everything from
+  the screen-edge controls; each engine keeps its own saving and undo.
+
+
+  • Panacea code and design — when Autora builds a website or an app you watch it take shape
   beside the conversation, then select elements or drag a region, say what to
   change (or try it on the page), and send the comments as one review.
 
@@ -48,16 +55,16 @@ description: >-
   result is a new file in the chat; yours is never overwritten.
 
 
-  • Autora Pages, Sheets and Slides — attach a document (.docx), spreadsheet (.xlsx)
+  • Panacea documents, spreadsheets and presentations — attach a document (.docx), spreadsheet (.xlsx)
   or presentation (.pptx), or ask for a new one: Autora reads it, edits it in place
   (document changes can be tracked changes), makes new files from your description,
-  converts between Markdown, HTML and CSV, and checks its own work. Each app has its
-  own window and its own switch on the Tools page. Formulas really calculate,
+  converts between Markdown, HTML and CSV, and checks its own work. The engines
+  work inside Panacea and can be configured as its capabilities. Formulas really calculate,
   and your file is never overwritten. Built on the open-source GenOffice
   engines.
 
 
-  • Autora Video — OpenCut's open-source editor in a window beside the chat. Ask for
+  • Panacea video — OpenCut's open-source engine inside the shared workspace. Ask for
   a video and Autora imports your footage, pictures and music and builds the cut on
   the timeline (clips, trims, splits, titles, subtitles) while you watch it happen;
   take control and edit it yourself, then export an mp4 or webm. Autora can use
@@ -65,29 +72,30 @@ description: >-
   subtitles, scenes, settings, any control on its screen) and look at a frame to check
   its work. The story, the pacing and the look stay yours: Autora does the technical
   work and asks about the rest. Your projects stay on your server.
-  • Autora Music — a music window for making songs, easy enough to start in one
+  • Panacea music — an integrated song engine, easy enough to start in one
   click. Tracks of keys, synth, bass, pluck, pad, lead and drums; a piano roll and
   a drum grid you draw on; a mixer; a click track; export to WAV. Autora works in
   the same song: ask for chords in a key, a bass line that follows them or a drum
   beat and the clips appear (lit up for a moment) for you to play and change; it
   tidies timing, balances the mix and checks for mistakes. The tune, the mood and
   the taste stay yours: Autora suggests and asks, and writes a melody only if you
-  ask it to. One Ctrl+Z takes back anything it did. Has its own switch on the
-  Tools page.
+  ask it to. One Ctrl+Z takes back anything it did. Configure its capability on
+  the Tools page.
 
-  • Panacea — a blank canvas where the controls for the work appear when they are
+  • Panacea — one workspace with a canvas where the controls for the work appear when they are
   needed and go when they are not. Drop a photo, a table or a document, or say what
   you want to do, and you and Autora work the same sliders, switches and charts, or
-  the same page of text. It learns what you use. Has its own switch on the Tools page.
+  the same page of text. It learns what you use. Specialist engine surfaces retain
+  their editing controls and file formats rather than throwing away their abilities.
 
-  • Autora 3D — a 3D modelling window for things to design or print. The agent
+  • Panacea 3D — an integrated modelling engine for things to design or print. The agent
   builds shapes by sketching an outline and pulling it up (and cutting, bevelling,
   repeating and measuring them) and you work on the same model beside the chat:
   push and pull faces, move, resize and bevel by finger or mouse. Exports STL for
-  printing and GLB for games. Has its own switch on the Tools page.
+  printing and GLB for games. Configure its capability on the Tools page.
 
 
-  • Autora Games — GDevelop's open-source game editor in a window beside the chat,
+  • Panacea games — GDevelop's open-source game engine inside the shared workspace,
   with GDevelop's own AI, account, shop and cloud taken out: Autora is what helps.
   Ask for a game and Autora builds it in the project file GDevelop itself saves —
   scenes, objects, behaviors (platformer, physics, pathfinding), events, pictures
@@ -95,18 +103,18 @@ description: >-
   watch it appear and change anything by hand; your edits are saved as you go. Play
   it from the Preview button (it runs in a box of its own) or export it as a web
   game. The idea, the story, the look and the feel stay yours: Autora does the
-  wiring and asks about the rest. Your games stay on your server. Has its own
-  switch on the Tools page.
+  wiring and asks about the rest. Your games stay on your server. Configure its
+  capability on the Tools page.
 
 
-  • Autora Photo — PhotoCraft's open-source photo editor (Rust, running in the
-  browser) in a window beside the chat: layers, masks, adjustment layers, filters,
+  • Panacea layered photos — PhotoCraft's open-source photo engine (Rust, running in the
+  browser) inside the shared workspace: layers, masks, adjustment layers, filters,
   type, brushes and real PSD files. Ask for a retouch, a cut-out, a resize or a
   colour grade and Autora does it with the editor's own commands (the same ones in
   its menus) while you watch, and checks the result by looking at it; paint and edit
   by hand at the same time, undo anything it did, and export PNG, JPEG, WebP, TIFF
-  or PSD. The look, the mood and what the picture is of stay yours. Has its own
-  switch on the Tools page.
+  or PSD. The look, the mood and what the picture is of stay yours. Configure its
+  capability on the Tools page.
 
 
   • Notebooks — group files by purpose with notes between them. Autora can
@@ -120,7 +128,8 @@ description: >-
   the work.
 
 
-  • Live terminal with colour output, progress bars, and scrollback.
+  • Shell runs in collapsible chat entries, with live output, progress and exit status.
+  There is no separate interactive terminal window.
 
 
   • File diff viewer showing every edit the agent makes.
@@ -128,8 +137,8 @@ description: >-
 
   • Real tools, listed in Settings — a shell on this machine, the browser it
   drives, control of another computer over a small relay, and a memory that
-  outlives the session. Each can be switched off, as can the built-in windows
-  on the Tools page. Nothing waits for approval:
+  outlives the session. Capabilities can be switched off on the Tools page.
+  Nothing waits for approval:
   every command runs straight away and is shown in the thread as it runs.
 
 
@@ -180,23 +189,43 @@ description: >-
 
 
   Voice from a phone: browsers only open a microphone on a secure page, and an
-  http address on your home network is not one. Set AUTORA_TLS=1 in the same
-  file and Autora also serves https on port 8818 — open that, click through the
-  certificate warning once, and dictation and live chat appear. Note that 8818
-  is published directly, so it does not go through Umbrel's login.
+  http address on your home network is not one. Use HTTPS through Umbrel's
+  authenticated app proxy or a Cloudflare Access-protected tunnel. Optional
+  HTTPS on port 8818 enforces the same trusted-peer restriction as HTTP; it
+  is not an unauthenticated browser entry point. A tunnel connecting directly
+  must have its connector named in AUTORA_TRUSTED_PEERS and its public domain
+  in AUTORA_ALLOWED_HOSTS.
 
-developer: blofstedt
-website: https://github.com/blofstedt/Autora
-submitter: blofstedt
-submission: https://github.com/blofstedt/Autora
-repo: https://github.com/blofstedt/Autora
-support: https://github.com/blofstedt/Autora/issues
+developer: viberific
+website: https://github.com/viberific/Autora
+submitter: viberific
+submission: https://github.com/viberific/Autora
+repo: https://github.com/viberific/Autora
+support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  On a desktop, the card where Autora asks you a question or offers choices is compact again: it fits the chat
-  column, with its options in one readable list instead of a cramped grid, and buttons sized for a mouse. Text
-  across the chat and the work area now follows one scale: every sentence in the chat (messages, notes, the
-  question a card asks), the chat's name at the top and the Activity tab are the same size as the menu beside
-  them, details are one step smaller, and the work area's lines no longer drop below that. The chat's name now
-  fills the room the header has instead of being cut to a few letters. A question card right after your message
-  has the same space above it as a reply does. Phones keep their larger touch sizes.
+  Panacea brings native surfaces and the existing editing engines into one
+  spatial workspace, with no work tabs or separate chat column. One centered
+  Ask Autora entry retains voice, attachments and work modes. Tasks sit above
+  it; floating conversation bubbles retract without losing history, and
+  activity stays collapsed until expanded. Screen-edge controls jump to work,
+  zoom out and show everything without closing other work.
+  Native documents, tables, images, boards and flowcharts support contextual
+  controls and bounded nested layouts. Flowcharts include process, decision,
+  start and end shapes, directed labelled connections and SVG export.
+  Loading uses shared format checks: workbooks open in full Sheets by default,
+  with an explicit native table option. Existing engines retain their own
+  controls, undo and file saving; this does not replace their native capabilities
+  with a unified history.
+  Shell commands now stay in collapsible chat runs; the standalone interactive
+  terminal and its direct shell socket have been removed.
+  HTTP and HTTPS now enforce the same trusted-proxy restriction, including
+  websocket connections. Unresolved proxy names fail closed instead of allowing
+  unknown clients. Existing ports are unchanged for authenticated tunnel setups;
+  connectors must be loopback or explicitly trusted. Cloudflare Access remains
+  responsible for authentication when it fronts the app.
+  Autora's project links, developer metadata and provider attribution now use viberific.
+  Personal project cross-links have been removed from the public documentation and source metadata.
+  The community store contains only Autora: unrelated Bambu Studio and Flix entries and
+  their store checks have been removed. Existing Umbrel store and app IDs are unchanged,
+  so Autora installations keep their update identity, proxy hostnames and data paths.

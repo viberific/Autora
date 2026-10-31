@@ -190,7 +190,7 @@ async function main() {
       const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 1 });
       const phone = await ctx.newPage();
       await phone.goto(`${app.base}/?session=${s}`);
-      await phone.waitForSelector(".stage .pdf-window", { timeout: 20_000 });
+      await phone.waitForSelector('.pw-engine[data-engine="game"] .pdf-window', { timeout: 20_000 });
       await phone.locator('.pdf-bar button[aria-label="Full screen"]').click();
       let frame: Frame | undefined;
       await waitFor("the editor frame", async () => { frame = phone.frames().find((f) => f.url().includes("/gdevelop-editor/")); return !!frame; }, 20_000);

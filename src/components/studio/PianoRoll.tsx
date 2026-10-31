@@ -5,6 +5,7 @@ import {
 } from "../../lib/studio/model";
 import type { Editor } from "./useSong";
 import { IconCopy, IconTrash } from "../Icons";
+import { elementScale } from "../../lib/frameCoordinates";
 
 const ROW = 16;
 const DRUM_ROW = 28;
@@ -45,8 +46,12 @@ function Toolbar({ children }: { children: ReactNode }) {
 function Roll({ project, track, clip, bw, edit, hold, preview }: Props) {
   const [snap, setSnap] = useState(0.25);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
-  const [ghost, setGhost] = useState<Map<string, Partial<Note>> | null>(null);
-  const [drawn, setDrawn] = useState<Note | null>(null);
+  const [ghost, setGhostState] = useState<Map<string, Partial<Note>> | null>(null);
+  const [drawn, setDrawnState] = useState<Note | null>(null);
+  const ghostLive = useRef<Map<string, Partial<Note>> | null>(null);
+  const drawnLive = useRef<Note | null>(null);
+  const setGhost = (next: Map<string, Partial<Note>> | null) => { ghostLive.current = next; setGhostState(next); };
+  const setDrawn = (next: Note | null) => { drawnLive.current = next; setDrawnState(next); };
   const drag = useRef<Drag | null>(null);
   const lastLength = useRef(1);
   const grid = useRef<HTMLDivElement>(null);
@@ -80,12 +85,15 @@ function Roll({ project, track, clip, bw, edit, hold, preview }: Props) {
 
   const at = (e: { clientX: number; clientY: number }) => {
     const r = grid.current!.getBoundingClientRect();
-    return { beat: (e.clientX - r.left) / bw, pitch: hi - Math.floor((e.clientY - r.top) / ROW) };
+    const scale = elementScale(grid.current!);
+    return { beat: (e.clientX - r.left) / (bw * scale), pitch: hi - Math.floor((e.clientY - r.top) / (ROW * scale)) };
   };
   const snapped = (beat: number) => tidy(Math.floor(beat / snap + 1e-6) * snap);
 
   const down = (e: ReactPointerEvent) => {
     if (e.button === 2) return;
+    e.preventDefault();
+    e.stopPropagation();
     const el = (e.target as HTMLElement).closest<HTMLElement>("[data-note]");
     const { beat, pitch } = at(e);
     grid.current!.setPointerCapture(e.pointerId);
@@ -122,8 +130,9 @@ function Roll({ project, track, clip, bw, edit, hold, preview }: Props) {
       const end = Math.max(d.start + snap, Math.ceil(beat / snap - 1e-6) * snap);
       setDrawn({ id: d.id, pitch: d.pitch, start: d.start, length: tidy(Math.min(end, clip.length) - d.start), vel: 0.8 });
     } else if (d.kind === "move") {
-      const dx = Math.round((e.clientX - d.x0) / bw / snap) * snap;
-      const dy = Math.round(-(e.clientY - d.y0) / ROW);
+      const scale = elementScale(grid.current!);
+      const dx = Math.round((e.clientX - d.x0) / (bw * scale) / snap) * snap;
+      const dy = Math.round(-(e.clientY - d.y0) / (ROW * scale));
       if (!d.moved && dx === 0 && dy === 0) return;
       const next = new Map<string, Partial<Note>>();
       for (const [id, o] of d.from) {
@@ -136,7 +145,7 @@ function Roll({ project, track, clip, bw, edit, hold, preview }: Props) {
       d.moved = true;
       setGhost(next);
     } else {
-      const dx = (e.clientX - d.x0) / bw;
+      const dx = (e.clientX - d.x0) / (bw * elementScale(grid.current!));
       const next = new Map<string, Partial<Note>>();
       for (const [id, len] of d.from) {
         const n = clip.notes.find((x) => x.id === id)!;
@@ -147,11 +156,13 @@ function Roll({ project, track, clip, bw, edit, hold, preview }: Props) {
   };
 
   const up = (e: ReactPointerEvent) => {
+    if (drag.current?.kind === "move" || drag.current?.kind === "size") move(e);
     const d = drag.current;
     drag.current = null;
     try { grid.current?.releasePointerCapture(e.pointerId); } catch { /* already released */ }
-    const g = ghost;
-    const made = drawn;
+    // Pointerup may arrive before React paints the last continuous move.
+    const g = ghostLive.current;
+    const made = drawnLive.current;
     setGhost(null);
     setDrawn(null);
     hold(false);
@@ -169,6 +180,13 @@ function Roll({ project, track, clip, bw, edit, hold, preview }: Props) {
         for (const n of c.notes) { const o = g.get(n.id); if (o) Object.assign(n, o); }
       });
     }
+  };
+  const cancel = (e: ReactPointerEvent) => {
+    drag.current = null;
+    setGhost(null);
+    setDrawn(null);
+    hold(false);
+    try { grid.current?.releasePointerCapture(e.pointerId); } catch { /* Already released. */ }
   };
 
   const remove = (ids: Iterable<string>) => {
@@ -259,7 +277,7 @@ function Roll({ project, track, clip, bw, edit, hold, preview }: Props) {
             onPointerDown={down}
             onPointerMove={move}
             onPointerUp={up}
-            onPointerCancel={up}
+            onPointerCancel={cancel}
             onContextMenu={(e) => {
               e.preventDefault();
               const el = (e.target as HTMLElement).closest<HTMLElement>("[data-note]");

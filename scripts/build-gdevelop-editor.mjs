@@ -45,6 +45,6 @@ const licences = ["LICENSE.md", "newIDE/LICENSE.md", "GDJS/LICENSE.md", "Extensi
   .map((file) => `## ${file}\n\n${fs.readFileSync(path.join(src, file), "utf8").trim()}\n`);
 fs.writeFileSync(
   path.join(out, "LICENSES-GDevelop.md"),
-  `# GDevelop\n\nThis editor is built from GDevelop (${pin.repo}, commit ${pin.sha}) with Autora's changes: its AI, account, shop and cloud are removed, and it saves to Autora (https://github.com/blofstedt/Autora, gdevelop-editor/). GDevelop's name and logo are the property of Florian Rival.\n\n${licences.join("\n")}`,
+  `# GDevelop\n\nThis editor is built from GDevelop (${pin.repo}, commit ${pin.sha}) with Autora's changes: its AI, account, shop and cloud are removed, and it saves to Autora (https://github.com/viberific/Autora, gdevelop-editor/). GDevelop's name and logo are the property of Florian Rival.\n\n${licences.join("\n")}`,
 );
 console.log(`[gdevelop-editor] built into ${path.relative(root, out)}`);

@@ -1,9 +1,10 @@
 /**
  * Which saved files each app can load (the Load button in its bar; server/loadfile.ts does the loading).
  *
- * Plain functions with no imports, because the page's picker and the server's route must agree on this: what the picker
+ * Browser-safe functions, because the page's picker and the server's route must agree on this: what the picker
  * offers is what the route accepts.
  */
+import { panaceaFileRoute } from "./panacea/file-formats";
 
 export type LoadApp = "pdf" | "pages" | "sheets" | "slides" | "photo" | "video" | "studio" | "cad" | "game" | "panacea";
 export const LOAD_APPS: LoadApp[] = ["pdf", "pages", "sheets", "slides", "photo", "video", "studio", "cad", "game", "panacea"];
@@ -21,7 +22,7 @@ export const LOAD_WHAT: Record<LoadApp, string> = {
   studio: "a song you saved",
   cad: "a model you saved",
   game: "a game you saved, or a picture, sound or font for it",
-  panacea: "a canvas you saved, or a photo or a table to put on it",
+  panacea: "a canvas, document, workbook (full Sheets), table, photo, PDF, media or saved song, model or game",
 };
 
 /** Whether this app can use this file, by what it is. */
@@ -36,6 +37,10 @@ export function loadable(app: LoadApp, file: { name: string; mime: string }): bo
     case "studio": return name.endsWith(".song.json");
     case "cad": return name.endsWith(".json");
     case "game": return name.endsWith(".json") || /^(image|audio|font)\//.test(mime) || /\.(png|jpe?g|gif|webp|svg|mp3|wav|ogg|ttf|otf|woff2?|glb|gltf)$/.test(name);
-    case "panacea": return name.endsWith(".panacea.json") || /\.(png|jpe?g|gif|webp|csv|tsv|xlsx)$/.test(name);
+    case "panacea": {
+      const route = panaceaFileRoute({ file: name, name });
+      // The server reads generic JSON and checks that it is a GDevelop project.
+      return route.status !== "unsupported" || route.reason === "ambiguous-json";
+    }
   }
 }

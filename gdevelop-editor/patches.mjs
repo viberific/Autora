@@ -7,6 +7,26 @@
 const SRC = "newIDE/app/src/";
 
 export const PATCHES = [
+  {
+    file: "newIDE/app/scripts/import-GDJS-Runtime.js",
+    find: `const fs = require('fs');`,
+    replace: `const fs = require('fs');
+const { spawnSync } = require('node:child_process');`,
+  },
+  {
+    file: "newIDE/app/scripts/import-GDJS-Runtime.js",
+    find: `  const output = shell.exec(\`node scripts/build.js --out \${outPath}\`, {
+    cwd: path.join(gdevelopRootPath, 'GDJS'),
+  });
+  if (output.code !== 0) {
+    shell.exit(0);
+  }`,
+    replace: `  const output = spawnSync(process.execPath, [
+    path.join(gdevelopRootPath, 'GDJS', 'scripts', 'build.js'), '--out', outPath,
+  ], { cwd: path.join(gdevelopRootPath, 'GDJS'), stdio: 'inherit' });
+  if (output.error) throw output.error;
+  if (output.status !== 0) throw new Error('GDJS runtime build failed: ' + output.status);`,
+  },
   // ---- One theme: Autora's (UI/Theme/DeepBlueTheme/index.js), under GDevelop's default name so nothing has to be told. ----
   {
     file: SRC + "UI/Theme/ThemeRegistry.js",

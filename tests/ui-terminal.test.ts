@@ -1,83 +1,87 @@
-/**
- * The Terminal window with the agent at work, in a real browser. With Visible work on, the agent's command is typed at
- * the window's own prompt, a key at a time, and runs in that shell (its output and exit code read back from it); with
- * it off, it runs on its own at speed.
- *
- *   npx tsx tests/ui-terminal.test.ts
- */
+/** Per-command collapsible chat output, on desktop and phone. Requires the built app and Chromium. */
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import path from "node:path";
 import { chromium } from "playwright-core";
-import { sleep, startApp } from "./e2e-harness";
-
-let passed = 0;
-async function test(name: string, fn: () => Promise<void>) {
-  try { await fn(); passed += 1; console.log(`  ok  ${name}`); } catch (err) { console.error(`  FAIL ${name}`); throw err; }
-}
+import { startApp } from "./e2e-harness";
 
 async function main() {
   const exe = process.env.AUTORA_BROWSER_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
-  if (!fs.existsSync(exe)) { console.log("  skip  no browser here"); return; }
-  const shots = process.env.TERM_SHOTS || "";
+  if (!exe || !fs.existsSync(exe)) { console.log("  skip  no configured browser here"); return; }
+  if (!fs.existsSync(path.join("dist", "index.html"))) { console.log("  skip  no app build here"); return; }
   const app = await startApp();
   const browser = await chromium.launch({ executablePath: exe });
   const page = await browser.newPage({ viewport: { width: 1360, height: 820 } });
+  let passed = 0;
   try {
-    const s = await app.newSession("Shell", "build");
-    await page.goto(`${app.base}/?session=${s}`);
-    assert.equal((await app.api("POST", `/api/term/${s}/open`)).status, 200);
-    await page.waitForSelector(".tm-window .xterm-rows");
-    const screen = () => page.locator(".tm-window .xterm-rows").innerText();
-    const until = async (what: string, ok: () => Promise<boolean>, ms = 15_000) => {
-      const end = Date.now() + ms;
-      while (Date.now() < end) { if (await ok()) return; await sleep(150); }
-      throw new Error(`timed out: ${what}: ${JSON.stringify((await screen()).slice(-400))}`);
+    const session = await app.newSession("Commands", "build");
+    await page.goto(`${app.base}/?session=${session}`);
+    app.script.push({ tools: [{ name: "panacea_surface", args: { document: "# Work area", title: "Work area" } }] });
+    app.script.push({ text: "Ready." });
+    await app.turn(session, "open my work");
+    const run = async (command: string) => {
+      const before = await page.locator(".thread .steps").count();
+      app.script.push({ tools: [{ name: "terminal", args: { command } }] });
+      app.script.push({ text: "Done." });
+      await app.turn(session, "run the command");
+      await page.waitForFunction((count) => document.querySelectorAll(".thread .steps").length > count, before);
+      const group = page.locator(".thread .steps").last();
+      assert.equal(await group.locator(".steps-top").getAttribute("aria-expanded"), "false", "completed/error work is contracted by default");
+      await group.locator(".steps-top").click();
+      const card = group.locator(".cell.term").last();
+      await card.waitFor();
+      return card;
     };
-    await until("the prompt", async () => /[#$]\s*$/m.test(await screen()));
-    const told = () => JSON.stringify(app.seen.flatMap((r) => r.messages).filter((m: { role: string }) => m.role === "tool").slice(-1));
 
-    await test("with Visible work on, the command is typed at the window's own prompt and runs in that shell", async () => {
-      app.script.push({ tools: [{ name: "terminal", args: { command: "export SEEN=by-hand; echo made-$((6*7))" } }] });
-      app.script.push({ text: "Done." });
-      let midway = false;
-      let on = true;
-      void (async () => {
-        while (on) {
-          const t = await screen().catch(() => "");
-          if (/# export SEEN=by-h?a?n?$|# export SEE?N?$/m.test(t) || (/# export/.test(t) && !/made-42/.test(t))) midway = true;
-          await sleep(40);
-        }
-      })();
-      await app.turn(s, "run it", 60_000);
-      on = false;
-      assert.match(told(), /Typed into the shell in the Terminal window/, told());
-      assert.match(told(), /Exit code 0/);
-      assert.match(told(), /made-42/);
-      assert.ok(midway, "the command was on the screen part typed, before it ran");
-      const t = await screen();
-      assert.match(t, /[#$] export SEEN=by-hand; echo made-\$\(\(6\*7\)\)/, "typed at the prompt");
-      assert.doesNotMatch(t, /\[Autora\] \$/, "not printed beside the shell");
-      if (shots) await page.screenshot({ path: `${shots}/term-hand.png` });
-      // It ran in the person's shell: what it set is there for them.
-      await page.locator(".tm-screen").click();
-      await page.keyboard.type("echo $SEEN\n");
-      await until("the person sees what the agent set", async () => /^by-hand$/m.test(await screen()));
-    });
+    for (const viewport of [{ width: 1360, height: 820 }, { width: 390, height: 844 }]) {
+      await page.setViewportSize(viewport);
+      const card = await run('node -e "console.log(\'short-command-output\')"');
+      const toggle = card.getByRole("button", { name: /Show output|Hide output/ });
+      if (await toggle.getAttribute("aria-expanded") === "true") await toggle.click();
+      assert.equal(await toggle.getAttribute("aria-expanded"), "false");
+      assert.equal(await card.locator(".term-body").isVisible(), false);
+      await toggle.click();
+      try { await card.getByText("short-command-output", { exact: true }).waitFor({ timeout: 5000 }); }
+      catch { throw new Error(`The command card did not show its output: ${await card.innerText()}`); }
+      assert.equal(await toggle.getAttribute("aria-expanded"), "true");
+      assert.equal(await card.getByRole("button", { name: /copy/i }).count(), 1);
+      assert.equal(await page.locator(".tm-window").count(), 0);
+      assert.equal(await page.locator(".panacea-workspace .cell.term").count(), 0, "commands are not duplicated in Activity");
+      passed += 1;
+    }
 
-    await test("with Visible work off, it runs on its own at speed and is shown beside the shell", async () => {
-      await app.api("PATCH", "/api/agent-cursor", { on: false });
-      app.script.push({ tools: [{ name: "terminal", args: { command: "echo quick-run" } }] });
-      app.script.push({ text: "Done." });
-      await app.turn(s, "run it fast", 60_000);
-      assert.doesNotMatch(told(), /Typed into the shell/);
-      assert.match(told(), /quick-run/);
-      await app.api("PATCH", "/api/agent-cursor", { on: true });
-    });
+    const failure = await run('node -e "console.log(\'command-failed\'); process.exit(3)"');
+    await failure.getByText("exit 3").waitFor();
+    assert.equal(await failure.getByRole("button", { name: "Show output" }).getAttribute("aria-expanded"), "false");
+    assert.equal(await failure.locator(".term-body").isVisible(), false);
+    passed += 1;
+
+    const empty = await run('node -e ""');
+    const toggle = empty.getByRole("button", { name: /Show output|Hide output/ });
+    assert.equal(await toggle.count(), 1);
+    if (await toggle.getAttribute("aria-expanded") === "false") await toggle.click();
+    await empty.getByText("no output", { exact: true }).waitFor();
+    passed += 1;
+    const beforeLive = await page.locator(".thread .steps").count();
+    app.script.push({ tools: [{ name: "terminal", args: { command: 'node -e "let i=0;const t=setInterval(()=>{console.log(\'stream-\'+i);if(++i===10)clearInterval(t)},400)"' } }] });
+    app.script.push({ text: "Stream complete." });
+    const liveTurn = app.turn(session, "stream the output");
+    await page.waitForFunction((count) => document.querySelectorAll(".thread .steps").length > count, beforeLive);
+    const liveGroup = page.locator(".thread .steps").last();
+    assert.equal(await liveGroup.locator(".steps-top").getAttribute("aria-expanded"), "false", "live activity is contracted by default");
+    await liveGroup.locator(".steps-top").click();
+    const liveCard = liveGroup.locator(".cell.term");
+    await liveCard.getByRole("button", { name: "Show output", exact: true }).click();
+    await liveCard.getByText("stream-0", { exact: true }).waitFor();
+    await liveTurn;
+    await liveCard.getByText("stream-9", { exact: true }).waitFor();
+    assert.equal(await page.locator(".pw-scene-stack .cell.term").count(), 0, "streaming output is not duplicated on the board");
+    passed += 1;
+    console.log(`\n${passed} passed`);
   } finally {
     await browser.close();
     await app.stop();
   }
-  console.log(`\n${passed} passed`);
 }
 
 main().catch((err) => { console.error(err); process.exit(1); });

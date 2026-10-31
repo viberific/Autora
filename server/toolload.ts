@@ -29,50 +29,50 @@ interface Family {
 export const FAMILIES: Family[] = [
   {
     id: "pdf",
-    about: "read, look at, edit, redact, compose, reorder and compress PDFs",
+    about: "Panacea PDF engine: read, look at, edit, redact, compose, reorder and compress PDFs",
     match: (n) => n.startsWith("pdf_"),
     words: /\bpdfs?\b|\bautora pdf\b|\.pdf\b|\bacrobat\b|\bfill (?:in |out )?(?:the |this |a )?form\b|\bredact|\bsignature\b|\bstamp\b/i,
   },
   {
     id: "video",
-    about: "Autora Video: open a video project and import clips, cut, arrange, title and export them",
+    about: "Panacea video engine: open a video project and import clips, cut, arrange, title and export them",
     match: (n) => n.startsWith("video_"),
     words: /\bvideos?\b|\bautora video\b|\bopencut\b|\bfootage\b|\bclips?\b|\bvideo edit|\b(?:mp4|mov|webm)\b|\bsubtitles?\b|\bsplice\b|\btimeline\b/i,
   },
   {
     id: "studio",
-    about: "Autora Music: make music in the music window -- tracks, chords, bass, drums, notes, tempo, mixing and a WAV export",
+    about: "Panacea music engine: tracks, chords, bass, drums, notes, tempo, mixing and a WAV export",
     match: (n) => n.startsWith("studio_"),
     words: /\bautora studio\b|\bmusic\b|\bsongs?\b|\bbeats?\b|\bdaw\b|\bchord progression|\bchords?\b|\bmelod(?:y|ies)\b|\bbassline\b|\bbass line\b|\bdrum (?:loop|pattern|track|beat|kit)|\bsynth(?:esizer)?\b|\bpiano roll\b|\bbpm\b|\btempo\b|\bmix(?:ing)? (?:the |a |my )?(?:song|track|tracks)\b|\bjingle\b|\bsoundtrack\b|\bproduce (?:a |some )?(?:track|tune|song)/i,
   },
   {
     id: "panacea",
-    about: "Panacea: the canvas window, where controls for the work appear and go -- photos and tables as surfaces, panels from the library or composed from atoms, values set, bespoke pieces; the place for work no other window was made for (a brainstorm, a map of ideas, a planner, a tracker)",
+    about: "Panacea: the shared adaptive workspace, where controls for the work appear and go -- native photos, tables, documents and boards, panels from the library or composed from atoms, values set, bespoke pieces; integrated specialist engines preserve advanced file and editing abilities",
     match: (n) => n.startsWith("panacea_"),
     // Its own name and look, and the open-ended work it is the home for: brainstorms, maps and boards of ideas, organising thoughts.
     words: /\bpanacea\b|\bcanvas\b|\bgenerative ui\b|\b(?:sliders?|knobs?|toggles?|controls?) (?:for|to)\b|\b(?:control )?panels? for\b|\bdotted grid\b|\bmiro\b|\bfigma\b|\bbrainstorm|\bmind ?maps?\b|\bmood ?boards?\b|\bwhiteboard\b|\bsticky notes?\b|\b(?:idea|story|plot|writing|concept|planning|vision) (?:maps?|boards?)\b|\bwho,? what,? (?:where|when|why)\b|\b(?:organi[sz]e|map out|lay out|sort out|structure) (?:my |the |these |our |some )?(?:ideas|thoughts|notes)\b/i,
   },
   {
     id: "office",
-    about: "Autora Pages, Sheets and Slides: read, edit, check, make and convert documents (.docx), spreadsheets (.xlsx) and presentations (.pptx)",
+    about: "Panacea documents, spreadsheets and presentations engines: read, edit, check, make and convert .docx, .xlsx and .pptx",
     match: (n) => n.startsWith("office_"),
     words: /\bautora (?:pages|sheets|slides)\b|\.(?:docx|xlsx|pptx)\b|\bword (?:doc|document|file)\b|\bexcel\b|\bspreadsheet|\bworkbook\b|\bpowerpoint\b|\bslide ?deck\b|\bslides?\b|\bpresentation\b|\bpitch deck\b|\bgoogle (?:docs|sheets|slides)\b/i,
   },
   {
     id: "cad",
-    about: "Autora 3D: model, edit, measure and export 3D shapes (STL for printing, GLB for games) in the 3D window",
+    about: "Panacea 3D engine: model, edit, measure and export shapes (STL for printing, GLB for games)",
     match: (n) => n.startsWith("cad_"),
     words: /\bautora 3d\b|\b3d[- ]?(?:model|print|design|shape|object|part|scene)|\bcad\b|\.(?:stl|glb)\b|\bstl\b|\bextrud|\bbevel|\bprintable\b/i,
   },
   {
     id: "game",
-    about: "Autora Games: make a game in the game window (GDevelop's editor) -- scenes, objects, behaviors, events, pictures and sound",
+    about: "Panacea games engine (GDevelop): scenes, objects, behaviors, events, pictures and sound",
     match: (n) => n.startsWith("game_"),
     words: /\bautora games?\b|\bgdevelop\b|\b(?:make|build|create|design|prototype|code) (?:me )?(?:a |an |the |my )?(?:\w+ ){0,3}(?:game|platformer|shooter|puzzle game|rpg|arcade game)\b|\bvideo ?game\b|\bgame (?:jam|engine|design|scene|level|dev)\b|\bplatformer\b|\bsprite\b|\bgame objects?\b|\bpixel[- ]art game\b/i,
   },
   {
     id: "photo",
-    about: "Autora Photo: open, look at, edit and export photos and images (layers, masks, adjustments, filters, PSD) in the photo window",
+    about: "Panacea layered-photo engine: open, look at, edit and export images (layers, masks, adjustments, filters, PSD)",
     match: (n) => n.startsWith("photo_"),
     words: /\bautora photo\b|\bphotocraft\b|\bphotoshop\b|\.(?:psd|psb|pcraft)\b|\bphotos?\b|\bretouch|\bcolou?r[- ]grad|\bcrop (?:the |this |my )?(?:photo|image|picture)|\bremove (?:the )?background\b|\blayers?\b.*\b(?:image|photo|picture)|\b(?:edit|fix|touch up|enhance|sharpen|blur) (?:the |this |my |a )?(?:photo|image|picture)/i,
   },

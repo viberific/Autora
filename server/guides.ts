@@ -164,13 +164,15 @@ export const OFFICE_GUIDE = (pages: boolean, sheets: boolean, slides: boolean): 
   "the pages with office_look before you say it is done. Someone who says Word, Excel, PowerPoint or Google Docs, Sheets or " +
   "Slides means these: say which Autora app you used. Save a PDF of one with office_pdf.";
 
-/** Which window is for what: they are all open to you, and the right one is the one the work belongs in. */
+/** Choose the engine for the work inside Panacea, without substituting a weaker format. */
 export const WINDOWS_GUIDE =
-  "- Choosing a window: a website or app you are building belongs in the Creator window (app_preview); a document, " +
-  "spreadsheet or deck in Autora Pages, Sheets or Slides; a PDF in Autora PDF; a live site you must use or read in the " +
-  "browser window; a small interactive explanation in a widget. Do not build a report as a web page, a deck as HTML, or a " +
+  "- Panacea is the shared workspace: use its code/design engine (app_preview) for a website or app, its documents, " +
+  "spreadsheets or presentations engines (office_*) for those files, its PDF engine (pdf_*) for PDFs, and its browser " +
+  "engine for a live site you must use or read. Existing tool names are internal engine operations, not separate apps. " +
+  "Shell commands run in collapsible chat entries, never in a separate terminal window. " +
+  "Do not build a report as a web page, a deck as HTML, or a " +
   "table as a script's printed output when a document, deck or spreadsheet is wanted, and do not open a document in the " +
-  "browser. Open the right window as soon as there is something to show.";
+  "browser. Open the appropriate engine surface as soon as there is something to show.";
 
 
 /**

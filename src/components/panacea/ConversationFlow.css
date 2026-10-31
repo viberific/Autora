@@ -1,0 +1,266 @@
+.conversation-flow {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-pop);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 24px max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  pointer-events: none;
+  font-family: var(--sans);
+  color: var(--text);
+}
+
+.conversation-flow__column {
+  position: relative;
+  width: min(100%, 760px);
+  min-height: 0;
+  max-height: 100%;
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.conversation-flow__conversation {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  height: min(54dvh, 620px);
+  min-height: 0;
+  background: transparent;
+}
+
+/* Keep the mounted scroller's dimensions; hiding must not reset Thread's live edge. */
+.conversation-flow.is-collapsed .conversation-flow__conversation {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  height: var(--flow-history-height, min(54dvh, 620px));
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.conversation-flow .thread-wrap,
+.conversation-flow .thread,
+.conversation-flow .thread-content,
+.conversation-flow .turn,
+.conversation-flow .work,
+.conversation-flow__conversation > .empty {
+  background: transparent;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+.conversation-flow .thread-wrap {
+  width: 100%;
+  min-height: 0;
+  background: transparent;
+}
+
+.conversation-flow .thread {
+  min-height: 0;
+  width: 100%;
+  max-width: none;
+  padding: 36px 8px 8px;
+  background: transparent;
+  border: 0;
+}
+
+.conversation-flow .thread-content {
+  width: 100%;
+  max-width: none;
+  min-height: 100%;
+  justify-content: flex-end;
+  gap: 20px;
+}
+
+/* Keep the Thread's own scroll handlers, but let blank canvas space be panned. */
+.conversation-flow .thread-content > :not(.turn),
+.conversation-flow .msg,
+.conversation-flow .work > *,
+.conversation-flow .jump-pill.on,
+.conversation-flow .thread-dock,
+.conversation-flow__conversation > .empty > * {
+  pointer-events: auto;
+}
+
+/* The old virtual-height estimate belongs to the old column, not these bubbles. */
+.conversation-flow .turn {
+  content-visibility: visible;
+  contain-intrinsic-size: none;
+}
+
+.conversation-flow .msg {
+  width: fit-content;
+  max-width: 92%;
+  padding: 12px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  background: rgba(var(--s1-rgb), 0.94);
+  box-shadow: var(--shadow-sm);
+  align-self: flex-start;
+  min-width: 0;
+  -webkit-mask-image: var(--flow-edge-mask, none);
+  mask-image: var(--flow-edge-mask, none);
+}
+
+.conversation-flow .msg.user {
+  margin-left: auto;
+  align-self: flex-end;
+  background: color-mix(in srgb, var(--accent-soft) 55%, var(--s2));
+  border-color: var(--accent-line);
+  border-bottom-right-radius: var(--r-2xs);
+}
+
+.conversation-flow .msg.agent {
+  border-bottom-left-radius: var(--r-2xs);
+}
+
+.conversation-flow .msg-body {
+  flex: 1 1 auto;
+}
+
+.conversation-flow .work {
+  min-width: 0;
+}
+
+.conversation-flow__entry-area {
+  flex: 0 0 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.conversation-flow__entry,
+.conversation-flow__todos,
+.conversation-flow__work-navigation {
+  min-width: 0;
+  pointer-events: auto;
+}
+
+.conversation-flow__todos {
+  margin-inline: 8px;
+}
+
+.conversation-flow__todos .todo-dock {
+  width: 100%;
+  margin: 0;
+}
+
+.conversation-flow__entry .composer {
+  width: 100%;
+  max-width: none;
+  padding: 0;
+}
+
+.conversation-flow__entry .composer::before {
+  display: none;
+}
+
+.conversation-flow__entry .composer-box {
+  box-shadow: var(--shadow-lg);
+}
+
+.conversation-flow__entry .composer-box:focus-within {
+  box-shadow: 0 0 0 4px var(--accent-soft), var(--shadow-lg);
+}
+
+.conversation-flow__work-navigation {
+  position: absolute;
+  top: 96px;
+  bottom: max(200px, env(safe-area-inset-bottom));
+  right: max(16px, env(safe-area-inset-right));
+  max-width: min(160px, 24vw);
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.conversation-flow__work-navigation > * {
+  pointer-events: auto;
+  min-height: 0;
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.conversation-flow__toggle {
+  align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  margin: 0 8px 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  background: var(--s2);
+  color: var(--text-2);
+  font: var(--fs-xs) var(--sans);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+
+.conversation-flow__toggle:hover {
+  background: var(--s3);
+  color: var(--text);
+}
+
+@media (max-width: 680px) {
+  .conversation-flow {
+    padding: 12px max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+  }
+
+  .conversation-flow__column {
+    gap: 8px;
+  }
+
+  .conversation-flow__conversation {
+    height: 48dvh;
+  }
+
+  .conversation-flow .thread {
+    padding-inline: 2px;
+  }
+
+  .conversation-flow .msg {
+    max-width: 96%;
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .conversation-flow__todos {
+    margin-inline: 2px;
+  }
+
+  .conversation-flow__entry textarea {
+    max-height: min(24dvh, 240px);
+  }
+
+  .conversation-flow__work-navigation {
+    top: 64px;
+    right: max(8px, env(safe-area-inset-right));
+    bottom: max(180px, env(safe-area-inset-bottom));
+    max-width: 48px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .conversation-flow .msg {
+    animation: none;
+  }
+
+  .conversation-flow .thread-content {
+    transition: none;
+  }
+
+  .conversation-flow__toggle {
+    transition: none;
+  }
+}

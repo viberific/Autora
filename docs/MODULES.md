@@ -183,7 +183,10 @@ Spectra's fetched renderer is most of what is on disk.
   an agent twice in one chain (`agentRuns` is per chat, cleared in `forgetSession`). The
   `thread` tool posts as the agent whose chat it is (or `as` another). Both belong to the
   `organization` family in `toolload.ts`. `guard.ts` (what stops and asks before a risky call), `crosssite.ts` (refuses requests and websockets
-  started by other websites), `tls.ts` (the optional https listener and the
+  started by other websites), `peers.ts` (the same connection gate on HTTP and
+  HTTPS, including upgrades: configured names fail closed until resolved,
+  loopback remains allowed; direct authenticated tunnel connectors must be
+  explicitly trusted), `tls.ts` (the optional https listener and the
   certificates it issues), `logs.ts` (the Logs page's ring buffer).
 - How it learns and runs on its own:
   - `memory.ts`: the memory graph (ranked recall, merging near-copies,
@@ -201,6 +204,16 @@ Spectra's fetched renderer is most of what is on disk.
     window (PDF and Pages/Sheets/Slides through their desk hooks; Photo and Video through the agent's own tools; Music, 3D and
     Games through `loadSong`, `loadModel` and `loadGame`). What each app takes is `src/lib/loadable.ts`, shared with the picker
     (`LoadButton`, in every window's bar beside Save). 3D's Save now also keeps `<name>.model.json` for Load to take back.
+    Panacea's raw `/api/panacea/:session/import?name=...` and saved Load share `loadPanaceaFile` for engine/project routes;
+    `src/lib/panacea/file-formats.ts` is the browser-safe authority (the server module re-exports it). Native photo/table/text
+    uploads keep their surface replies; engine replies are `{kind:"engine", engine, artifact, name}` and create no native
+    surface. XLSX defaults to the full Sheets engine, preserving workbook structure and formulas; an unavailable/off engine
+    is an explicit refusal, never a flattened-table fallback. Raw query `native=true` or saved body `native:true` deliberately
+    opts into a flat native table. Do not combine `native` and `engine` options. CSV/TSV remain native by default.
+    Generic JSON must validate as a GDevelop project.
+    Replacing existing engine work or a saved canvas returns `409 replaceRequired`; only a confirmed retry with `replace:true`
+    (raw query `replace=true`) replaces it. Settled Office bytes and the displaced canvas are preserved in Artifacts.
+    Off/unavailable engines and incognito chats are refused; no person load calls a model. Test: `workspace-files.test.ts`.
     The composer's Artifacts button (beside the notebook) is the same picker (`LibraryPicker` with a Folders tab): a picked
     folder goes as `folders` in the message and `folderFiles` in `attach.ts` turns it into its files (20 at most, newest first).
   - `customtools.ts`: scripts the agent saved as its own tools.
@@ -477,27 +490,21 @@ Spectra's fetched renderer is most of what is on disk.
   only `windowsOverview()`; each window's manual is attached to the result of the first tool call into it in a chat
   (`manualId`, then a `tool.manual` event in the log so it is not repeated), and `tool_manual` reads one sooner. A
   new window or tool gets a manual here as well as its schema.
-- `server/termdesk.ts` + `src/components/TerminalWindow.tsx` (`lib/termdesk.ts`, `tests/termdesk.test.ts`): **Autora Terminal**, a real terminal on
-  the machine Autora runs on (one switch with the agent's `terminal` tool: `tools.terminal.enabled`). One shell per chat on a pseudo-terminal, made
-  by a small Python program (`PTY_HELPER`, run with the image's `python3`: a native module such as node-pty would be built for the builder's CPU,
-  not the image's, so there is none). The page draws it with xterm.js and talks to it over `/api/term/ws?session=` (`termUpgrade`, called from the
-  upgrade handler in `server.ts` with `allowSocket`, so the cross-site rule holds): JSON frames `{t:"in",d}`, `{t:"size",cols,rows}` up and
-  `{t:"out",d}` down, with the scrollback (400 kB, in memory, never on disk) replayed to a page that connects, so a reload gets the same shell. The
-  shell is ended when the window is put away (`/close`) and with the chat (`dropTerm`). The agent shares: the shell's folder (read from `/proc`,
-  `termCwd`, used by the `terminal` tool), its commands, and what the person ran. With Visible work on, a watcher connected, bash at its prompt
-  and the person not mid-line, the `terminal` tool types the command into this shell (`termAgentRun`: a key at a time, pasted with bracketed paste
-  when it has several lines, a tab or is long; a `cd` first for a `cwd` elsewhere) and reads what it printed and its exit code back between the
-  OSC 133 marks bash makes from `RC` (its startup file, written to `<state>/term/rc.bash`: the login files, then a mark in `PROMPT_COMMAND` with `$?`
-  and one in `PS0`; `set +H`); too long or Stop is Ctrl+C. The shell has the secrets, the identity env and `PAGER=cat` the tool's own processes
-  have. Otherwise the tool runs its own `bash -lc` at speed and its lines are printed in dim magenta
-  (`termAgentBegin/Chunk/End`). And what the person ran, told back once on its next terminal result (`termNews`,
-  from the lines sent with
-  Enter: best-effort). Completion, history, colours and full-screen programs are the shell's own. A touch screen gets a key row (Esc, Tab, Ctrl+C,
-  arrows, `| / ~`). The socket to the page carries only `{open, cwd, rev, running}` (`termdesk`). Class names are `tm-*` (`term-*` is the thread's cell).
+- **Shell commands**, not a standalone terminal. The `terminal` tool in `server/tools.ts` uses `runCommand` for a
+  non-interactive process at its configured folder or explicit `cwd`, with streamed output, timeout and cancellation.
+  There is no PTY window, terminal websocket, shared interactive shell or persisted `cd`/environment state between calls.
+  The independent `tools.terminal.enabled` switch is shown as Shell commands inside Panacea's capability configuration.
+  `src/components/TerminalCell.tsx` renders every command in the conversation on desktop and phone, even when a desktop
+  has Panacea open. The header retains command, status, exit code, duration and copy; Show output/Hide output collapses
+  any run, while earlier lines/Show last 24 lines independently folds a long output's history. Running/error runs start
+  expanded, successful completed runs start collapsed, and an arriving failure opens the output. ANSI spans, streaming
+  tail following and no-result status for interrupted calls remain. `src/lib/workspaceThread.ts` separates conversation
+  commands from Activity, including commands nested inside browser work. Tests: `tests/workspace.test.ts`,
+  `tests/ui-terminal.test.ts`.
 - `autora-3d/` and `server/caddesk.ts`: **Autora 3D**, the 3D modelling window (a desktop has a parts pane down the
   left, `components/LeftPane.tsx`: Shapes, Objects and Library as named thumbnails, Edit inside a group; a library
   copy is independent unless `linked:true`) (a sketch-and-extrude CAD modeller) and the agent's
-  `cad_*` tools. `autora-3d/` is a **copy** of github.com/blofstedt/3D-Modeling, which is also its own app: never
+  `cad_*` tools. `autora-3d/` is a **copy** of the standalone 3D-Modeling app: never
   edit it here (the tool rail and the agent's hand are the exceptions so far: `docs/autora-3d-tool-rail.patch`,
   `docs/autora-3d-hand.patch` and `docs/autora-3d-parts.patch`, in that order, are to be applied upstream), change
   it there and run `node scripts/sync-autora-3d.mjs [checkout]` (it also regenerates `server/specs/cad.ts`, one `cad_*` tool for
@@ -559,7 +566,19 @@ Spectra's fetched renderer is most of what is on disk.
   sound, an agent change lights up and undoes with Visible off, and with it on adds a track, draws a clip with notes, types a
   tempo and clicks drum hits by hand), `tests/studiohand.test.ts` (the steps).
 - `server/panacea.ts`, `server/specs/panacea.ts`, `src/lib/panacea/`, `src/components/PanaceaWindow.tsx` + `src/components/panacea/`,
-  `server/projectbook.ts`: **Panacea**, the canvas window (design and plan: `docs/PANACEA.md`). The model is pure and shared
+  `server/projectbook.ts`: **Panacea**, the single workspace (design and plan: `docs/PANACEA.md`).
+  `src/components/PanaceaWorkspace.tsx` supplies Capabilities and Follow on desktop and phone, both hosted by `App.tsx`.
+  There is no mode selector or exclusive pane: `panacea/Board.tsx` renders every native surface and hosted engine card under
+  one world transform. `workspaceScene.ts` gives hosted contents stable identities even when other work is inserted.
+  The viewport-level right icon dock jumps the camera, Zoom out is anchored, and Show all work fits native/engine bounds together.
+  All engine surfaces stay mounted and no jump hides one. `panacea/workspace-camera.ts` owns the checked camera math;
+  `frameCoordinates.ts` applies the camera scale to engine cursor reports and prevents off-camera hand consumers claiming work.
+  `src/lib/workspace.ts` maps capability ids to their context and phone file-kind aliases. Retained Office, PDF, video, music,
+  3D, game, photo, app and browser engines run inside that shell alongside the native Canvas; their models, APIs, hand-work
+  handlers and sandboxing are not replaced. `panacea/ConversationFlow.tsx` hosts the original Thread and centered composer as floating
+  bubbles/entry over the scene, keeps complete history mounted when retracted, and attaches TODO above the entry.
+  `src/lib/steps.ts` contracts all tool/output/file activity in chat and lifts nested browser questions/permissions out of folds;
+  there is no Activity work card or left chat column. The native canvas model is pure and shared
   (`src/lib/panacea/`: no DOM or Node types, imported by the server and the page): `atoms.ts` (the pieces), `recipe.ts` (the
   rulebook `checkTree`, `fingerprint`, `generalize`), `kinds.ts` (the registry of surface kinds: each kind's parameters,
   actions, starters, offers, size and words; **a new kind is a new entry there**, and `Record<SurfaceKind, ...>` in the window
@@ -582,7 +601,7 @@ Spectra's fetched renderer is most of what is on disk.
 - `spectra-editor/`: Spectra-PDF's renderer (github.com/jasonulbright/Spectra-PDF), the PDF window's
   editor, built by `spectra-editor/vite.config.ts` into `dist/spectra-editor/`. **Its source is not in
   this repository**: `scripts/prepare-spectra-editor.mjs` (run by `npm run build` and `npm run lint`)
-  copies `src/renderer` from the commit in `spectra/PIN.json` -- the same pin as the engine -- into
+  copies the upstream renderer sources from the commit in `spectra/PIN.json` -- the same pin as the engine -- into
   `spectra-editor/src/renderer/` (gitignored) and applies Autora's changes: `overlay/renderer.patch`
   (three of Spectra's files: `App.tsx` brings the opened document to the front, `i18n.ts` loads other
   languages on demand, `index.tsx` installs the shim and `autora.css`) and the files in
@@ -656,7 +675,8 @@ Spectra's fetched renderer is most of what is on disk.
   without the cursor. The editor's tools are brought in by the person's words (`toolload.ts`), the surface `video` can
   be taken (`presence.ts`), and Plan mode allows only looking (`video_look`, `video_catalog`, `video_frame`, `video_ui
   read`). Patches to OpenCut's own files, made as they are read (`markSources` in `vite.config.ts`, which fails the
-  build if a line has moved): `data-element-id` and `data-track-id` on the timeline so a clip can be found on screen,
+  build if a line has moved; targeted sources are normalized from CRLF to LF before matching the pinned snippets,
+  so Windows checkouts preserve the same exact patch contract): `data-element-id` and `data-track-id` on the timeline so a clip can be found on screen,
   and the wasm renderer's `effect_pass_groups` (an effect layer failed every frame without it). One whole-file overlay
   fixes a bug at the pin: stickers registered with the wrong call and every one failed (`overlay/web/stickers/`).
   `npm run typecheck` checks only Autora's files in it (`scripts/typecheck-opencut-editor.mjs`): at the pin a few
@@ -739,11 +759,11 @@ Spectra's fetched renderer is most of what is on disk.
   (5) a first `trunk build` of the editor is a long Rust build (~15 min cold; CI caches `target/`); (6) the CLI's `serve` would write
   anywhere in its roots, so the roots are the chat's folder and nothing else, and `HOME` is pointed there too. Search with
   `--glob '!.cache/**'`.
-- Follow (`lib/follow.ts`): one switch, on by default and kept per browser, for the pill beside the phone's tabs
-  (`Stage`) and the one at the top right of the desktop strip (`pane-follow` in `App.tsx`). On, the screen goes where the
-  agent works: the stage's `busiestSurface` on a phone, and on a desktop `lib/followPane.ts` (`lastWorkedPane`: the
-  window of the newest tool call, an Office one found by the file it names). Picking a tab turns it off; the pill
-  turns it back on. The desktop strip and the phone's stage tabs are folder tabs (CSS only, `.pane-pick-tab`, `.stage-tab`).
+- Follow (`lib/follow.ts`): one switch, on by default and kept per browser, in Panacea's shared workspace shell on desktop
+  and phone. On, `lib/followPane.ts` (`lastWorkedPane`: the engine of the newest tool call, an Office one found by its file)
+  identifies the work the camera may follow; the phone falls back to `busiestSurface` for a live page. A manual icon jump stops Follow and
+  holds the camera while other surfaces open. Jumping to work keeps every engine mounted in the same spatial scene;
+  it never changes exclusive visibility. Typing, dragging and pins block automatic camera movement.
 - The agent's pointer outside the Office windows: `lib/pointer.ts` (a layer on the body: arc, rest, press ring, typed
   words beside it; it goes only where a real element or a frame-confirmed point is). Music points at the clips that
   lit up (`StudioWindow`). The PDF window plays the server's cues (`cueForItem`, with the page's size so a place on a
@@ -1015,12 +1035,11 @@ page (`thoughtFromAction`) into "Clicking “Save”", under `MAX` characters, a
 since the windows play the work after it; the browser (and so Creator) draws its own inside the page (`__autoraThought` in
 `CURSOR_SCRIPT`, set from `LiveBrowser`'s `hooks.onAction`) and the 3D frame inside its own pointer. Photo draws its own,
 inside the editor (the hand, `hand_*` in `photo/overlay/autora.rs`), live while `photo_edit` is done there; nothing is
-played over a picture the server changed. Terminal: the agent's command is typed into the window key by key at a
-person's pace (`termAgentBegin`, server-side, so the output waits behind it and order holds), the page is told
-`{t:"agent", on}`, and the pointer follows the text cursor with its tag showing the caret.
+played over a picture the server changed. Shell commands have no terminal window or cursor replay: their streamed
+output is a collapsible card in the conversation, whether Visible work is on or off.
 **Whose cursor**: `lib/cursorWho.ts` reads the chat's `agent.started` line and lays `--agent-accent(-rgb)` on the
 page, which every cursor style reads; the tag carries the agent's name and the polygon of its mark (`CursorTag`,
 `pointer.ts`); the browser's page pointer is told by `LiveBrowser`'s `who` hook (`cursorWhoFor` in `server.ts`), the
-3D frame by `{autora3d:"who"}`, the terminal's own tag by its colour in `termAgentBegin`. All of it is off with the
+3D frame by `{autora3d:"who"}`. All of it is off with the
 agent-cursor switch. Tests: `thought.test.ts`,
 `browser-cursor.test.ts`.

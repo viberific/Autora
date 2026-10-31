@@ -19,7 +19,7 @@ async function main() {
   const app = await startApp();
   try {
     const counter = path.join(app.home, "runs.txt");
-    const command = `echo run >> ${counter}; echo "Error: the build is broken" >&2; exit 1`;
+    const command = 'echo run >> runs.txt; echo "Error: the build is broken" >&2; exit 1';
     const runs = () => (fs.existsSync(counter) ? fs.readFileSync(counter, "utf8").trim().split("\n").length : 0);
     const results = () => app.seen.flatMap((r) => r.messages.filter((m: any) => m.role === "tool").map((m: any) => String(m.content)));
 

@@ -9,6 +9,7 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import fs from "node:fs";
+import http from "node:http";
 import https from "node:https";
 import os from "node:os";
 import path from "node:path";
@@ -25,7 +26,7 @@ process.env.DEEPGRAM_API_KEY = "dg-secret-key-99887766";
 
 const stateMod = await import("../server/state");
 const { allowSocket, allowedHost, fromAnotherSite, refuseHost, refuseRequest } = await import("../server/crosssite");
-const { peerGate, plainAddress } = await import("../server/peers");
+const { gateConnections, peerGate, plainAddress } = await import("../server/peers");
 const { certificateSource, issueCertificate, pem, publicKeyId, tlsSettings } = await import("../server/tls");
 const { isGitHubApi } = await import("../server/tools");
 const { addressFor } = await import("../server/browser");
@@ -83,7 +84,7 @@ await test("a request under a name a rebinding page could use is refused", () =>
   assert.match(refuseHost("evil.example") ?? "", /AUTORA_ALLOWED_HOSTS/);
 });
 
-await test("only the named peers reach the plain port, loopback always", async () => {
+await test("only the named peers reach either port, loopback always", async () => {
   assert.equal(peerGate("", () => undefined), null, "nothing configured: no gate");
   assert.equal(plainAddress("::ffff:172.18.0.5"), "172.18.0.5");
   let proxy = ["172.18.0.5"];
@@ -99,11 +100,127 @@ await test("only the named peers reach the plain port, loopback always", async (
   clock += 10_000;
   assert.equal(await gate.allows("172.18.0.7"), true);
   assert.equal(await gate.allows("172.18.0.5"), false);
-  // A name that never resolves leaves the gate open, and says so once.
-  const open = peerGate("misspelt", (l) => said.push(l), async () => { throw new Error("ENOTFOUND"); }, () => 0)!;
-  assert.equal(await open.allows("10.0.0.1"), true);
-  assert.equal(await open.allows("10.0.0.2"), true);
-  assert.equal(said.filter((l) => l.includes("did not resolve")).length, 1);
+});
+
+await test("unresolved peers fail closed and recover without losing loopback or literal trust", async () => {
+  let clock = 0;
+  let found: string[] | null = null;
+  const said: string[] = [];
+  const gate = peerGate("cloudflared", (line) => said.push(line), async () => {
+    if (found === null) throw new Error("ENOTFOUND");
+    return found;
+  }, () => clock)!;
+  assert.equal(await gate.allows("10.0.0.1"), false);
+  assert.equal(await gate.allows("10.0.0.2"), false);
+  assert.equal(await gate.allows(undefined), false);
+  assert.equal(await gate.allows("127.0.0.1"), true);
+  assert.equal(await gate.allows("::ffff:127.0.0.1"), true);
+  assert.equal(await gate.allows("::1"), true);
+  clock += 10_000;
+  assert.equal(await gate.allows("10.0.0.1"), false, "a repeated failure stays closed");
+  found = [];
+  clock += 10_000;
+  assert.equal(await gate.allows("10.0.0.1"), false, "empty DNS results stay closed");
+  found = ["10.0.0.1"];
+  clock += 10_000;
+  assert.equal(await gate.allows("::ffff:10.0.0.1"), true, "the tunnel recovers once resolved");
+  found = null;
+  clock += 70_000;
+  assert.equal(await gate.allows("10.0.0.1"), true, "retain last-known-good trust during an outage");
+  assert.equal(await gate.allows("10.0.0.2"), false);
+  assert.ok(said.some((line) => line.includes("ENOTFOUND")));
+  assert.ok(said.some((line) => line.includes("no addresses")));
+  const literal = peerGate("10.0.0.3, unavailable", (line) => said.push(line),
+    async () => { throw new Error("ENOTFOUND"); })!;
+  assert.equal(await literal.allows("::ffff:10.0.0.3"), true);
+  assert.equal(await literal.allows("10.0.0.4"), false);
+});
+
+await test("HTTP and HTTPS gate requests and upgrades before any handler sees them", async () => {
+  const source = certificateSource(tlsSettings(3000, { AUTORA_TLS: "1" }), path.join(dir, "gate-tls"));
+  for (const encrypted of [false, true]) {
+    let allow = false;
+    let fail = false;
+    let handled = 0;
+    const said: string[] = [];
+    const handler = (_req: http.IncomingMessage, res: http.ServerResponse) => {
+      handled += 1;
+      res.end("allowed");
+    };
+    const server = encrypted ? https.createServer(source.options, handler) : http.createServer(handler);
+    server.on("upgrade", (_req, socket) => {
+      handled += 1;
+      socket.end("HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: test\r\n\r\n");
+    });
+    assert.equal(gateConnections(server, null, (line) => said.push(line)), server, "standalone listener is unchanged");
+    const listener = gateConnections(server, { allows: async (address) => {
+      assert.equal(plainAddress(address), "127.0.0.1", "check the socket peer, not forwarded client IP");
+      if (fail) throw new Error("lookup failed");
+      return allow;
+    } }, (line) => said.push(line));
+    await new Promise<void>((resolve) => listener.listen(0, "127.0.0.1", resolve));
+    const { port } = listener.address() as AddressInfo;
+    const request = (upgrade: boolean) => new Promise<number>((resolve, reject) => {
+      const req = (encrypted ? https : http).request({
+        host: "127.0.0.1", port, agent: false, ca: source.caPem!,
+        headers: { "CF-Connecting-IP": "203.0.113.1", "X-Forwarded-For": "203.0.113.1",
+          ...(upgrade ? { Connection: "Upgrade", Upgrade: "test" } : {}) },
+      }, (res) => {
+        res.resume();
+        res.on("end", () => resolve(res.statusCode!));
+      });
+      req.on("upgrade", (res, socket) => { socket.destroy(); resolve(res.statusCode!); });
+      req.on("error", reject);
+      req.setTimeout(2_000, () => req.destroy(new Error("request timed out")));
+      req.end();
+    });
+    try {
+      await assert.rejects(request(false), { code: "ECONNRESET" });
+      await assert.rejects(request(true), { code: "ECONNRESET" });
+      assert.equal(handled, 0);
+      allow = true;
+      assert.equal(await request(false), 200);
+      assert.equal(await request(true), 101);
+      assert.equal(handled, 2, "a trusted connector still reaches both request types");
+      fail = true;
+      await assert.rejects(request(false), { code: "ECONNRESET" });
+      assert.equal(handled, 2);
+      assert.ok(said.some((line) => line.includes("lookup failed")));
+    } finally {
+      await new Promise<void>((resolve, reject) => listener.close((err) => err ? reject(err) : resolve()));
+    }
+  }
+});
+
+await test("localhost HTTP and HTTPS still work with no gate or an unresolved configured proxy", async () => {
+  const source = certificateSource(tlsSettings(3000, { AUTORA_TLS: "1" }), path.join(dir, "localhost-tls"));
+  for (const encrypted of [false, true]) {
+    for (const configured of [false, true]) {
+      const handler = (_req: http.IncomingMessage, res: http.ServerResponse) => res.end("localhost");
+      const server = encrypted ? https.createServer(source.options, handler) : http.createServer(handler);
+      const gate = configured ? peerGate("unresolved", () => undefined,
+        async () => { throw new Error("ENOTFOUND"); }) : null;
+      const listener = gateConnections(server, gate, () => undefined);
+      await new Promise<void>((resolve) => listener.listen(0, "127.0.0.1", resolve));
+      const { port } = listener.address() as AddressInfo;
+      try {
+        const body = await new Promise<string>((resolve, reject) => {
+          const req = (encrypted ? https : http).get({
+            host: "127.0.0.1", port, ca: source.caPem!, agent: false,
+          }, (res) => {
+            let body = "";
+            res.on("data", (chunk) => { body += chunk; });
+            res.on("end", () => resolve(body));
+          });
+          req.on("error", reject);
+          req.setTimeout(2_000, () => req.destroy(new Error("request timed out")));
+        });
+        assert.equal(body, "localhost");
+      } finally {
+        await new Promise<void>((resolve, reject) => listener.close((err) => err ? reject(err) : resolve()));
+      }
+    }
+  }
 });
 
 await test("an unreadable settings file is kept aside, not overwritten", () => {

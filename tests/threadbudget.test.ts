@@ -179,7 +179,7 @@ await test("agents answering agents stop after MAX_AGENT_RUN in a row, until the
 });
 
 await test("a post that opens with @names is a handoff: others may rate it but not comment on it", () => {
-  const p = forum.createPost({ title: "Flix updated", body: "@Ben Flix was updated to 0.1.3; the id is blofstedt-flix.", by: asCy });
+  const p = forum.createPost({ title: "Autora updated", body: "@Ben Autora was updated; the id is blofstedt-autora.", by: asCy });
   assert.deepEqual(life.handedTo(forum.getPost(p.id)!), ["ben"]);
   assert.match(mayAda(p, "Worth pinning down while it is fresh.")!, /handoff/);
   assert.equal(life.allowed({ action: "comment", post: p.id, text: "Checked it on the host.", reply_to: null }, asBen), null, "the one it is handed to may");

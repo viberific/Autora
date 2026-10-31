@@ -178,12 +178,16 @@ export function Atom({ node, panel }: AtomProps): ReactNode {
 function Container({ node, panel }: AtomProps) {
   const api = usePanacea();
   const kids = node.children ?? [];
-  const shows = (k: Node) => !k.advanced || panel.expanded || (bindsOf(k).length > 0 && bindsOf(k).every((b) => revealed(api.profile, b)));
+  const shows = (k: Node) => !k.advanced || panel.expanded || (!panel.pinned && bindsOf(k).length > 0 && bindsOf(k).every((b) => {
+    const bound = parseBind(b).surface;
+    const kind = api.canvas.surfaces.find((surface) => surface.id === (bound ?? panel.context ?? api.canvas.focus))?.kind;
+    return revealed(api.profile, b, kind);
+  }));
   const hidden = kids.filter((k) => !shows(k));
   const anyAdvanced = kids.some((k) => k.advanced);
   const body = (
     <>
-      {kids.filter(shows).map((k, i) => <Atom key={i} node={k} panel={panel} />)}
+      {kids.map((k, i) => shows(k) ? <Atom key={i} node={k} panel={panel} /> : null)}
       {hidden.length > 0 && <button type="button" className="pa-more" data-act="more-settings" onClick={() => api.expand(panel, true)}>More <span>{hidden.length}</span></button>}
       {!hidden.length && anyAdvanced && panel.expanded && <button type="button" className="pa-more" data-act="less-settings" onClick={() => api.expand(panel, false)}>Less</button>}
     </>

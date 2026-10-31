@@ -1,7 +1,7 @@
 /**
  * Autora 3D: the 3D modelling window, and the agent's hands on the same model.
  *
- * Autora 3D (autora-3d/, a copy of github.com/blofstedt/3D-Modeling built by `npm run build`) is a sketch-and-extrude CAD
+ * Autora 3D (autora-3d/, a copy of the standalone 3D-Modeling app built by `npm run build`) is a sketch-and-extrude CAD
  * modeller. Here it is a window beside the conversation, and one model per chat that the agent and the person both work
  * on. The model lives on this server, in the same headless engine the app is built on (dist/autora-3d-engine/):
  *

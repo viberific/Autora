@@ -24,7 +24,12 @@ const walk = (dir, rel) => {
 };
 walk(path.join(editor, "overlay/web"), "");
 
-const run = spawnSync("npx", ["tsc", "--noEmit", "--pretty", "false"], { cwd: editor, encoding: "utf8" });
+const run = spawnSync(process.execPath, [path.join(editor, "node_modules/typescript/bin/tsc"), "--noEmit", "--pretty", "false"], { cwd: editor, encoding: "utf8" });
+if (run.error) throw run.error;
+if (run.status !== 0 && !/error TS\d+/.test(run.stdout + run.stderr)) {
+  console.error(run.stdout + run.stderr);
+  process.exit(run.status ?? 1);
+}
 const mine = (run.stdout + run.stderr)
   .split("\n")
   .filter((line) => /error TS\d+/.test(line))

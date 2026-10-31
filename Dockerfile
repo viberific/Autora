@@ -91,7 +91,7 @@ COPY gdevelop-editor/package.json gdevelop-editor/package-lock.json gdevelop-edi
 COPY gdevelop-editor/patches gdevelop-editor/patches
 RUN npm --prefix gdevelop-editor ci
 # Autora 3D (the 3D modelling window and the agent's cad_* tools) is a sub-project too: its source is a copy of
-# github.com/blofstedt/3D-Modeling (scripts/sync-autora-3d.mjs), built into dist/autora-3d (the page) and
+# the standalone 3D-Modeling repository (scripts/sync-autora-3d.mjs), built into dist/autora-3d (the page) and
 # dist/autora-3d-engine (the headless model the server runs the tools on).
 COPY autora-3d/package.json autora-3d/package-lock.json autora-3d/
 RUN npm --prefix autora-3d ci

@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { chromium, type Page } from "playwright-core";
 import { sleep, startApp } from "./e2e-harness";
+import { focusWork } from "./ui-workspace-ready";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -29,7 +30,7 @@ async function main() {
   try {
     const s = await app.newSession("Music", "build");
     await page.goto(`${app.base}/?session=${s}`);
-    await page.waitForSelector('textarea[aria-label="Task"]');
+    await page.waitForSelector('textarea[aria-label="Ask Autora"]');
     const doc = async () => (await app.api("GET", `/api/studio/${s}/doc`)).body.doc;
     const until = async (what: string, fn: () => Promise<boolean> | boolean, ms = 8000) => {
       const end = Date.now() + ms;
@@ -40,6 +41,7 @@ async function main() {
     await test("opening it from the server puts the window beside the chat, on an empty song with four ways to start", async () => {
       assert.equal((await app.api("POST", `/api/studio/${s}/open`)).status, 200);
       await page.waitForSelector('[data-pane="studio"] .st-window');
+      await focusWork(page, "Music");
       assert.equal(await page.locator(".st-start").count(), 4);
       await shot("1-empty");
     });
@@ -61,13 +63,14 @@ async function main() {
       // Make a clip on the new track by dragging across its lane.
       const lane = page.locator(".st-lane").nth(1);
       const box = (await lane.boundingBox())!;
-      await page.mouse.move(box.x + 8, box.y + box.height / 2);
+      const scale = await lane.evaluate((element) => element.getBoundingClientRect().width / (element as HTMLElement).offsetWidth);
+      await page.mouse.move(box.x + 8 * scale, box.y + box.height / 2);
       await page.mouse.down();
-      await page.mouse.move(box.x + 8 + 28 * 8, box.y + box.height / 2, { steps: 6 });
+      await page.mouse.move(box.x + (8 + 28 * 8) * scale, box.y + box.height / 2, { steps: 6 });
       await page.mouse.up();
       await page.waitForSelector(".st-roll .st-grid");
       const view = (await page.locator(".st-roll-scroll").boundingBox())!;
-      await page.mouse.click(view.x + 52 + 120, view.y + 80);
+      await page.mouse.click(view.x + (52 + 120) * scale, view.y + 80 * scale);
       await until("a note is saved", async () => (await doc()).tracks[1]?.clips[0]?.notes.length === 1);
       assert.ok(await page.locator(".st-note").count() >= 1);
       await shot("2-roll");
@@ -219,6 +222,7 @@ async function main() {
       p2.on("pageerror", (e) => errors.push(e.message));
       await p2.goto(`${app.base}/?session=${s}`);
       await p2.waitForSelector(".st-window", { timeout: 15_000 });
+      await focusWork(p2, "Music");
       const wide = await p2.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
       assert.equal(wide, false, "no sideways page scroll");
       if (shots) await p2.screenshot({ path: `${shots}/6-phone.png` });

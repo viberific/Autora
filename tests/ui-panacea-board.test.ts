@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { chromium, type Page } from "playwright-core";
 import { sleep, startApp } from "./e2e-harness";
+import { workspaceReady } from "./ui-workspace-ready";
 
 let passed = 0;
 let onFail: () => Promise<void> = async () => undefined;
@@ -36,7 +37,7 @@ async function main() {
     await app.api("PATCH", "/api/agent-cursor", { on: false });
     const s = await app.newSession("Board", "build");
     await page.goto(`${app.base}/?session=${s}`);
-    await page.waitForSelector('textarea[aria-label="Task"]');
+    await page.waitForSelector('textarea[aria-label="Ask Autora"]');
     const board = async () => (await app.api("GET", `/api/panacea/${s}/doc`)).body.doc.surfaces.find((x: { kind: string }) => x.kind === "board")?.board as { mode: string; cards: Card[]; links: Array<{ from: string; to: string }> } | undefined;
     const toolResults = () => app.seen.flatMap((req) => req.messages.filter((m) => m.role === "tool").map((m) => (typeof m.content === "string" ? m.content : JSON.stringify(m.content))));
     const until = async (what: string, fn: () => Promise<boolean> | boolean, ms = 8000) => {
@@ -49,6 +50,8 @@ async function main() {
     await test("the picker offers a board, and it lands with its panel, asking for a first card", async () => {
       assert.equal((await app.api("POST", `/api/panacea/${s}/open`)).status, 200);
       await page.waitForSelector(".pa-empty");
+      await workspaceReady(page);
+      await page.getByRole("button", { name: "Retract conversation", exact: true }).click();
       const box = (await page.locator(".pa-board").boundingBox())!;
       await page.mouse.dblclick(box.x + 80, box.y + 80);
       await page.fill(".pa-summon-q", "brainstorm");

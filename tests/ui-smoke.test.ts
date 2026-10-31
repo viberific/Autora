@@ -42,7 +42,7 @@ try {
         for (const el of Array.from(document.querySelectorAll("body *")).slice(0, 4000) as HTMLElement[]) {
           const r = el.getBoundingClientRect();
           if (r.width > 0 && r.right > w + 2 && getComputedStyle(el).position !== "fixed" && !el.closest("[style*='overflow']") ) {
-            const anc = el.closest(".thread, .shot-log, pre, .term-body, .diff-code, table, .stage-bar, .rail-scroll");
+            const anc = el.closest(".thread, .shot-log, pre, .term-body, .diff-code, table, .pw-jump-dock, .rail-scroll, .pw-engine");
             if (!anc) bad.push(`${el.tagName.toLowerCase()}.${String(el.className).slice(0, 30)} right=${Math.round(r.right)}`);
           }
         }

@@ -11,6 +11,7 @@ import fs from "node:fs";
 import zlib from "node:zlib";
 import { chromium, type Page } from "playwright-core";
 import { sleep, startApp } from "./e2e-harness";
+import { workspaceReady } from "./ui-workspace-ready";
 
 let passed = 0;
 let onFail: () => Promise<void> = async () => undefined;
@@ -58,7 +59,7 @@ async function main() {
     await app.api("PATCH", "/api/agent-cursor", { on: false });
     const s = await app.newSession("Canvas", "build");
     await page.goto(`${app.base}/?session=${s}`);
-    await page.waitForSelector('textarea[aria-label="Task"]');
+    await page.waitForSelector('textarea[aria-label="Ask Autora"]');
     const doc = async () => (await app.api("GET", `/api/panacea/${s}/doc`)).body.doc;
     /** What the tools answered the model, from what it was sent. */
     const toolResults = () => app.seen.flatMap((req) => req.messages.filter((m) => m.role === "tool").map((m) => (typeof m.content === "string" ? m.content : JSON.stringify(m.content))));
@@ -70,8 +71,10 @@ async function main() {
 
     await test("opening it puts a blank dotted canvas beside the chat that asks what you want to do", async () => {
       assert.equal((await app.api("POST", `/api/panacea/${s}/open`)).status, 200);
-      await page.waitForSelector('[data-pane="panacea"] .pa-window');
+      await page.waitForSelector('.panacea-workspace .pa-window');
       await page.waitForSelector(".pa-empty");
+      await workspaceReady(page);
+      await page.getByRole("button", { name: "Retract conversation", exact: true }).click();
       assert.match(await page.locator(".pa-empty h3").innerText(), /What do you want to do/);
       assert.equal(await page.locator(".pa-panel").count(), 0, "nothing on it until the work needs it");
       await shot("1-empty");

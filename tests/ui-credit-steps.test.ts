@@ -52,7 +52,7 @@ async function main() {
 
     const s = await app.newSession("Credit and steps");
     await page.goto(`${app.base}/?session=${s}`);
-    await page.waitForSelector('textarea[aria-label="Task"]');
+    await page.waitForSelector('textarea[aria-label="Ask Autora"]');
 
     await test("the bar says what is left of the top-up, and the fill is what is left", async () => {
       await page.waitForSelector(".spend", { timeout: 20_000 });
@@ -87,7 +87,7 @@ async function main() {
       ] } }] },
       { text: "On it." },
     );
-    await page.fill('textarea[aria-label="Task"]', "ship the feature");
+    await page.fill('textarea[aria-label="Ask Autora"]', "ship the feature");
     /* Enter writes a line in the composer; Ctrl+Enter is what sends. */
     await page.keyboard.press("Control+Enter");
 
@@ -145,7 +145,7 @@ async function main() {
       { tools: [{ name: "todo", args: { todos: ["A plain item, no steps"] } }] },
       { text: "Right." },
     );
-    await page.fill('textarea[aria-label="Task"]', "and now a plain one");
+    await page.fill('textarea[aria-label="Ask Autora"]', "and now a plain one");
     await page.keyboard.press("Control+Enter");
 
 

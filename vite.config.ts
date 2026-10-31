@@ -7,5 +7,13 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     port: 3000,
+    watch: {
+      ignored: [
+        "**/.cache/**",
+        "**/gdevelop-editor/work/**",
+        "**/spectra-editor/src/renderer/**",
+        "**/opencut-editor/src/web/**",
+      ],
+    },
   },
 });

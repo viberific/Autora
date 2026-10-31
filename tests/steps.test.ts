@@ -67,8 +67,19 @@ test("an empty turn folds to nothing", () => {
   assert.deepEqual(turnItems([]), []);
 });
 
-test("the kinds that fold are only commands and the small tools", () => {
-  assert.deepEqual([...STEP_KINDS].sort(), ["terminal", "tool"]);
+test("all work activity folds, but questions, permissions and conversation remain actionable", () => {
+  for (const kind of ["terminal", "tool", "screen", "file", "files", "images", "widget", "app", "memory", "learned", "chime"]) assert.ok(STEP_KINDS.has(kind));
+  for (const kind of ["ask", "permission", "reply", "said", "todo"]) assert.ok(!STEP_KINDS.has(kind));
+});
+
+test("questions and permissions nested in browser work cannot be hidden inside contracted activity", () => {
+  const question = cell("ask", 3);
+  const permission = cell("permission", 4);
+  const screen = { kind: "screen", seq: 1, source: "browser", log: [cell("tool", 2), question, permission, cell("terminal", 5)] } as Cell;
+  const items = turnItems([screen]);
+  assert.deepEqual(items.map((item) => item.kind === "cell" ? item.cell.kind : "activity"), ["activity", "ask", "permission", "activity"]);
+  const first = items[0];
+  assert.equal(first.kind === "steps" && first.cells[0].kind === "screen" && first.cells[0].log.length, 0, "browser logs are not duplicated");
 });
 
 console.log(`${passed} passed`);
