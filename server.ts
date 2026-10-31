@@ -7385,8 +7385,10 @@ async function startServer() {
   /* Only the peers the deployment names (server/peers.ts): on Umbrel, the
      app's own proxy, so another app on Docker's shared network cannot reach
      this port past the login. A peer is checked before the server reads a
-     byte from it; the socket waits, paused, while a name is looked up. */
-  const peerLog = (line: string) => log("warn", "http", line);
+     byte from it; the socket waits, paused, while a name is looked up.
+     Said on the console too (so in `docker logs`, and the app's log through
+     captureConsole): a refused tunnel cannot open the app to read why. */
+  const peerLog = (line: string) => console.warn(`[http] ${line}`);
   const gate = peerGate(process.env.AUTORA_TRUSTED_PEERS, peerLog);
   gateConnections(server, gate, peerLog).listen(PORT, HOST, listening);
 

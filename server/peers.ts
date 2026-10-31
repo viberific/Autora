@@ -15,6 +15,10 @@
  * and at once (at most every few seconds) when an unknown peer knocks, since
  * a recreated proxy comes back on a new address. Unresolved names never
  * admit unknown peers: a misspelt name fails closed and is logged.
+ *
+ * A refused peer is logged once a minute per address, with the container name
+ * Docker's DNS gives its address, so `docker logs` says exactly what to add
+ * when a tunnel or proxy is turned away (the app itself cannot be opened then).
  */
 import dns from "node:dns/promises";
 import net from "node:net";
@@ -43,12 +47,23 @@ type Lookup = (name: string) => Promise<string[]>;
 
 const lookupAll: Lookup = async (name) => (await dns.lookup(name, { all: true })).map((r) => r.address);
 
+/** Docker's DNS names a container's address `<container>.<network>`; a second at most. */
+const reverseAll: Lookup = (address) => {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<string[]>((resolve) => {
+    timer = setTimeout(() => resolve([]), 1000);
+    timer.unref();
+  });
+  return Promise.race([dns.reverse(address).catch(() => []), late]).finally(() => clearTimeout(timer));
+};
+
 /** A gate for the names in `spec`, or null when none are configured. */
 export function peerGate(
   spec: string | undefined,
   log: (line: string) => void = () => undefined,
   lookup: Lookup = lookupAll,
   now: () => number = Date.now,
+  reverse: Lookup = reverseAll,
 ): PeerGate | null {
   const names = String(spec ?? "").split(",").map((n) => n.trim()).filter(Boolean);
   if (names.length === 0) return null;
@@ -56,6 +71,19 @@ export function peerGate(
   let addresses = new Set<string>();
   let lastTry = 0;
   let running: Promise<void> | null = null;
+  const lastRefusal = new Map<string, number>();
+
+  const refused = (address: string) => {
+    const at = now();
+    if (at - (lastRefusal.get(address) ?? -Infinity) < REFRESH_MS) return;
+    lastRefusal.set(address, at);
+    if (lastRefusal.size > 256) lastRefusal.delete(lastRefusal.keys().next().value!);
+    void reverse(address).catch(() => []).then((found) => {
+      const name = found.map((n) => n.split(".")[0]).find(Boolean);
+      log(`connection from ${address}${name ? ` (${name})` : ""} refused: not one of AUTORA_TRUSTED_PEERS` +
+        ` (${names.join(", ")})${name ? `; add ${name} to it if that is your proxy or tunnel` : ""}`);
+    });
+  };
 
   const refresh = () => {
     running ??= (async () => {
@@ -99,7 +127,7 @@ export function peerGate(
         await refresh();
         if (addresses.has(address)) return true;
       }
-      log(`connection from ${address} refused: not one of AUTORA_TRUSTED_PEERS`);
+      refused(address);
       return false;
     },
   };
