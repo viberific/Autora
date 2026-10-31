@@ -90,16 +90,23 @@ await test("only the named peers reach either port, loopback always", async () =
   let proxy = ["172.18.0.5"];
   const said: string[] = [];
   let clock = 0;
-  const gate = peerGate("proxy", (l) => said.push(l), async () => proxy, () => clock)!;
+  const gate = peerGate("proxy", (l) => said.push(l), async () => proxy, () => clock,
+    async (address) => address === "172.18.0.9" ? ["cloudflared_connector_1.umbrel_main_network"] : [])!;
   assert.equal(await gate.allows("::ffff:172.18.0.5"), true);
   assert.equal(await gate.allows("127.0.0.1"), true);
   assert.equal(await gate.allows("::1"), true);
   assert.equal(await gate.allows("172.18.0.9"), false, "another app on the network");
+  assert.equal(await gate.allows("172.18.0.9"), false);
   // The proxy recreated on a new address: looked up again when it knocks.
   proxy = ["172.18.0.7"];
   clock += 10_000;
   assert.equal(await gate.allows("172.18.0.7"), true);
   assert.equal(await gate.allows("172.18.0.5"), false);
+  await new Promise((resolve) => setImmediate(resolve));
+  const refusals = said.filter((line) => line.includes("172.18.0.9"));
+  assert.equal(refusals.length, 1, "a refused peer is logged once a minute, not per connection");
+  assert.match(refusals[0], /\(cloudflared_connector_1\) refused: .*\(proxy\); add cloudflared_connector_1/,
+    "the log names the container to trust");
 });
 
 await test("unresolved peers fail closed and recover without losing loopback or literal trust", async () => {
