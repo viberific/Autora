@@ -64,7 +64,16 @@ services:
       # with the host's filesystem mounted. See server/peers.ts. Loopback
       # (the agent opening its own app) is always let in. The same restriction
       # protects HTTPS on 8818, including websocket connections.
-      AUTORA_TRUSTED_PEERS: "blofstedt-autora_app_proxy_1"
+      # The Cloudflare Tunnel app's connector (cloudflared_connector_1) is
+      # trusted too, so a public hostname routed straight to this container
+      # (http://blofstedt-autora_app_1:8817) loads. Keep a Cloudflare Access
+      # policy on that hostname: the tunnel skips Umbrel's login, and Access
+      # is then the only thing in front of a shell on this box. A name that
+      # does not resolve (the app not installed) is logged and skipped.
+      AUTORA_TRUSTED_PEERS: "blofstedt-autora_app_proxy_1,cloudflared_connector_1"
+      # Public names Autora answers to (server/crosssite.ts refuses any other,
+      # against DNS rebinding): the tunnel's hostname.
+      AUTORA_ALLOWED_HOSTS: "autora.049993.xyz"
       # Off, and staying off, because the better answer costs one command.
       #
       # Dictation and live voice chat need a secure page -- browsers will not

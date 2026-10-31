@@ -8,7 +8,7 @@ const apps = fs.readdirSync(root, { withFileTypes: true })
   .filter((entry) => entry.isDirectory() && fs.existsSync(path.join(root, entry.name, "umbrel-app.yml")))
   .map((entry) => entry.name).sort();
 
-assert.deepEqual(apps, ["blofstedt-autora"], "this repository packages only Autora");
+assert.deepEqual(apps, ["blofstedt-autora", "blofstedt-flix"], "the store packages Autora and Flix");
 assert.match(read("umbrel-app-store.yml"), /^id: "blofstedt"$/m, "keep the existing store identity");
 const manifest = read("blofstedt-autora", "umbrel-app.yml");
 assert.match(manifest, /^id: blofstedt-autora$/m, "keep the existing install identity");
@@ -20,7 +20,8 @@ for (const field of ["website", "submission", "repo", "support"]) {
 }
 const compose = read("blofstedt-autora", "docker-compose.yml");
 assert.match(compose, /^\s+APP_HOST: blofstedt-autora_app_1$/m);
-assert.match(compose, /^\s+AUTORA_TRUSTED_PEERS: "blofstedt-autora_app_proxy_1"$/m);
+assert.match(compose, /^\s+AUTORA_TRUSTED_PEERS: "blofstedt-autora_app_proxy_1,cloudflared_connector_1"$/m);
+assert.match(compose, /^\s+AUTORA_ALLOWED_HOSTS: "autora\.049993\.xyz"$/m, "the Cloudflare tunnel's public hostname");
 assert.match(compose, /^\s+image: ghcr\.io\/viberific\/autora:/m);
 assert.match(compose, /^\s+- "8818:8818"$/m, "keep the HTTPS origin port stable for configured tunnels");
 assert.match(compose, /^\s+AUTORA_TLS: "0"$/m);
