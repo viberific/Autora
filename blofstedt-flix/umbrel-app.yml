@@ -1,0 +1,64 @@
+manifestVersion: 1
+id: blofstedt-flix
+name: Flix
+tagline: Your own streaming service, sourced straight from BTN
+icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
+category: media
+version: "0.3.86"
+port: 8096
+# umbrelOS only hands a container the GPU when the manifest says so: with this
+# permission it adds /dev/dri plus the render/video groups those nodes belong
+# to. Without it, a hand-written `devices: /dev/dri` in docker-compose.yml is
+# deleted when umbrelOS patches that file at install time.
+permissions:
+  - GPU
+folderAccess:
+  - id: umbrel-downloads
+    name: Downloads
+    note: Torrents are saved in Umbrel's shared Downloads folder, so everything
+      Flix fetches shows up in the Files app. Available in Flix at /downloads.
+    mounts:
+      - service: app
+        targetPath: /downloads
+description: >-
+  Flix is a private, Jellyfin-style media server whose only source is
+  BroadcasTheNet. Search BTN's catalog, pick a show, press play — Flix starts a
+  sequential torrent download in the bundled qBittorrent and begins streaming
+  the file as its pieces arrive, remuxing or transcoding to HLS when the
+  browser can't play the original format. It is an installable PWA: add it to
+  your phone's home screen and it behaves like an app. Everyone in the family
+  has their own profile, watch history, My List and content-rating limits.
+
+
+  Everything runs in one container: the app, qBittorrent-nox (BTN only allows
+  whitelisted clients) and ffmpeg. Seeding follows BTN's rule — 130 hours or a
+  1:1 ratio — and is not configurable.
+
+
+  Setup: open Flix and create your admin account — the first account made
+  becomes the administrator. The admin's Settings page is where the BTN API
+  key goes in (with a Test connection button beside it), along with an
+  optional TMDB key for automatic content ratings. Nothing has to be edited on
+  disk and the app does not need restarting. The bundled qBittorrent is wired
+  up already: its Web UI is bound to localhost inside the container, is never
+  exposed, and needs no password.
+
+
+  If you prefer files, the same settings can be given as environment
+  variables in a .env in the app's data directory (BTN_API_KEY, TMDB_API_KEY,
+  QB_URL, QB_USER, QB_PASS); what is set in the app's Settings takes
+  precedence, and the app says which of the two each key came from.
+
+
+  Your library, users and downloads live in the app's data directory and
+  survive updates.
+developer: blofstedt
+website: https://github.com/viberific/Flix
+submitter: blofstedt
+submission: https://github.com/blofstedt/Autora
+repo: https://github.com/viberific/Flix
+support: https://github.com/viberific/Flix/issues
+gallery: []
+releaseNotes: >-
+  Hardware encoding is now a switch in Settings, and Quick Sync actually works:
+  the transcode hands the resize to the GPU instead of doing it on the CPU.
