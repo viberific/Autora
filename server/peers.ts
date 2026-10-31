@@ -57,6 +57,25 @@ const reverseAll: Lookup = (address) => {
   return Promise.race([dns.reverse(address).catch(() => []), late]).finally(() => clearTimeout(timer));
 };
 
+/**
+ * A container's name in both of Compose's spellings: `<project>_<service>_<n>`
+ * (Compose v1, and what Umbrel's manifests write) and `<project>-<service>-<n>`
+ * (Compose v2's default). Which one a box's containers carry depends on how
+ * they were created, so a trusted name is looked up both ways. Either is the
+ * same container; nothing else is admitted.
+ */
+export function spellings(name: string): string[] {
+  const n = /_(\d+)$/.exec(name)?.[1];
+  if (!n) return [name];
+  const out = new Set([name]);
+  // Which underscore ends the project is unknown (a service may be app_proxy), so each is tried.
+  const body = name.slice(0, -n.length - 1);
+  for (let i = body.indexOf("_"); i > 0; i = body.indexOf("_", i + 1)) {
+    out.add(`${body.slice(0, i)}-${body.slice(i + 1)}-${n}`);
+  }
+  return [...out];
+}
+
 /** A gate for the names in `spec`, or null when none are configured. */
 export function peerGate(
   spec: string | undefined,
@@ -94,13 +113,19 @@ export function peerGate(
           next.add(plainAddress(name));
           continue;
         }
-        try {
-          const found = await lookup(name);
-          if (found.length === 0) log(`AUTORA_TRUSTED_PEERS: ${name} resolved to no addresses`);
-          for (const a of found) next.add(plainAddress(a));
-        } catch (err) {
-          log(`AUTORA_TRUSTED_PEERS: could not resolve ${name}: ${err instanceof Error ? err.message : String(err)}`);
+        const said: string[] = [];
+        let found = 0;
+        for (const spelling of spellings(name)) {
+          try {
+            const got = await lookup(spelling);
+            if (got.length === 0) said.push(`${spelling} resolved to no addresses`);
+            for (const a of got) next.add(plainAddress(a));
+            found += got.length;
+          } catch (err) {
+            said.push(`could not resolve ${spelling}: ${err instanceof Error ? err.message : String(err)}`);
+          }
         }
+        if (found === 0) for (const line of said) log(`AUTORA_TRUSTED_PEERS: ${line}`);
       }
       if (next.size > 0) {
         addresses = next;

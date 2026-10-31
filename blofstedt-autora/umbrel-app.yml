@@ -204,10 +204,11 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  When Autora turns a connection away because it does not come from Umbrel's
-  proxy or a trusted tunnel connector (for example a Cloudflare Tunnel showing
-  "502 Bad gateway"), the reason is now written to the container log with the
-  refused container's name, once a minute per address. Before, it was only in
-  Autora's own log, which you cannot open while you are locked out. Run
-  `docker logs blofstedt-autora_app_1 2>&1 | grep TRUSTED_PEERS` to see what
-  to trust.
+  Fixes "502 Bad gateway" through a Cloudflare Tunnel (and Umbrel's own
+  proxy) since 0.9.307. Autora only accepts connections from the containers it
+  trusts, and it looked them up by one spelling of their names; Docker can give
+  a container the other (blofstedt-autora-app_proxy-1 rather than
+  blofstedt-autora_app_proxy_1), and then nothing was let in. Both spellings
+  are now accepted, and every other container is still refused. A refused
+  connection is now written to the container log with the refused container's
+  name: `docker logs blofstedt-autora_app_1 2>&1 | grep TRUSTED_PEERS`.

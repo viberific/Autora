@@ -26,7 +26,7 @@ process.env.DEEPGRAM_API_KEY = "dg-secret-key-99887766";
 
 const stateMod = await import("../server/state");
 const { allowSocket, allowedHost, fromAnotherSite, refuseHost, refuseRequest } = await import("../server/crosssite");
-const { gateConnections, peerGate, plainAddress } = await import("../server/peers");
+const { gateConnections, peerGate, plainAddress, spellings } = await import("../server/peers");
 const { certificateSource, issueCertificate, pem, publicKeyId, tlsSettings } = await import("../server/tls");
 const { isGitHubApi } = await import("../server/tools");
 const { addressFor } = await import("../server/browser");
@@ -107,6 +107,20 @@ await test("only the named peers reach either port, loopback always", async () =
   assert.equal(refusals.length, 1, "a refused peer is logged once a minute, not per connection");
   assert.match(refusals[0], /\(cloudflared_connector_1\) refused: .*\(proxy\); add cloudflared_connector_1/,
     "the log names the container to trust");
+});
+
+await test("a trusted container is found under either of Compose's spellings, and nothing else is", async () => {
+  assert.deepEqual(spellings("proxy"), ["proxy"]);
+  assert.deepEqual(spellings("cloudflared_connector_1"), ["cloudflared_connector_1", "cloudflared-connector-1"]);
+  assert.ok(spellings("blofstedt-autora_app_proxy_1").includes("blofstedt-autora-app_proxy-1"));
+  const said: string[] = [];
+  const gate = peerGate("blofstedt-autora_app_proxy_1", (l) => said.push(l), async (name) => {
+    if (name === "blofstedt-autora-app_proxy-1") return ["172.18.0.5"];
+    throw new Error("ENOTFOUND");
+  }, () => 0, async () => [])!;
+  assert.equal(await gate.allows("172.18.0.5"), true, "the proxy under Compose v2's name");
+  assert.equal(await gate.allows("172.18.0.6"), false, "still closed to every other container");
+  assert.ok(!said.some((l) => l.includes("ENOTFOUND")), "a name found one way is not reported as missing");
 });
 
 await test("unresolved peers fail closed and recover without losing loopback or literal trust", async () => {
