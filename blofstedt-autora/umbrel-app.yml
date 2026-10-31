@@ -209,6 +209,4 @@ releaseNotes: >-
   trusts, and it looked them up by one spelling of their names; Docker can give
   a container the other (blofstedt-autora-app_proxy-1 rather than
   blofstedt-autora_app_proxy_1), and then nothing was let in. Both spellings
-  are now accepted, and every other container is still refused. A refused
-  connection is now written to the container log with the refused container's
-  name: `docker logs blofstedt-autora_app_1 2>&1 | grep TRUSTED_PEERS`.
+  are now accepted, and every other container is still refused.
