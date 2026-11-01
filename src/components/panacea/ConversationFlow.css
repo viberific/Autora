@@ -456,12 +456,24 @@
     flex: 0 0 45%;
   }
 
+  /* No grip line: the whole sheet drags (see ConversationFlow.tsx). The handle stays as the keyboard and screen
+     reader control, and as a strip along the top edge that drags too. */
   .conversation-flow__handle {
     display: flex;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 20px;
+    z-index: 1;
+  }
+
+  .conversation-flow__handle > span {
+    display: none;
   }
 
   .conversation-flow__column {
-    padding: 0 8px 8px;
+    padding: 8px 8px 8px;
     gap: 8px;
   }
 

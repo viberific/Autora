@@ -204,8 +204,8 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  On a phone the conversation sheet now follows your finger: drag the handle and
-  the conversation grows or shrinks under it, then glides to canvas-only, half
-  or full when you let go (a quick flick carries it to the next height). Taps,
-  the arrow keys and the last-messages strip glide too instead of snapping, and
-  reduced motion is respected. The speech-bubble button stays gone.
+  On a phone the grip line at the top of the conversation is gone. Drag from
+  anywhere in the chat except the box you type in: the conversation follows your
+  finger, then glides to canvas-only, half or full when you let go. In the
+  message list a swipe still scrolls; it moves the sheet only when the list has
+  nothing left to scroll that way.

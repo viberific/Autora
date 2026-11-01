@@ -26,9 +26,11 @@ interface ConversationFlowProps {
 
 /** A finger must move this far before a press on the handle is a drag rather than a tap. */
 const SHEET_SLOP = 8;
+/** Where a touch never moves the sheet: the entry box, where you type. */
+const NO_SHEET_DRAG = "textarea, input, select, [contenteditable], .conversation-flow__entry";
 /** The handle row, and the column's padding and gap under the entry strip (ConversationFlow.css). */
-const HANDLE_H = 44;
-const SHEET_PAD = 9;
+const HANDLE_H = 0;
+const SHEET_PAD = 17;
 
 interface SheetDrag {
   y: number; lastY: number; lastT: number; speed: number; active: boolean;
@@ -183,7 +185,6 @@ export function ConversationFlow({
     onSheet?.(next === 2 ? "full" : "half");
   };
   const cycle = () => setLevel(level === 2 ? (locked ? 1 : 0) : level + 1);
-  const gesture = useRef<number | null>(null);
   /** The heights a finger can settle the sheet at: canvas only, half, full (the first is out of reach while locked). */
   const restHeights = (parentH: number) => {
     const half = Math.max(parentH * 0.55, Math.min(parentH, 320));
@@ -192,11 +193,21 @@ export function ConversationFlow({
     const retracted = restBox.current ?? (HANDLE_H + entry + SHEET_PAD);
     return [locked ? half : Math.min(retracted, half), half, parentH];
   };
-  const dragSheet = (event: PointerEvent<HTMLDivElement>) => {
+  const beginSheetDrag = (y: number) => {
+    const root = rootRef.current;
+    if (!root) return;
+    const box = root.getBoundingClientRect();
+    sheetDrag.current = {
+      y, lastY: y, lastT: performance.now(), speed: 0, active: false,
+      startH: box.height, h: box.height, wasFull: level === 2,
+      parentH: root.parentElement?.getBoundingClientRect().height ?? box.height,
+    };
+  };
+  const dragSheet = (y: number) => {
     const root = rootRef.current;
     const state = sheetDrag.current;
     if (!root || !state) return;
-    const moved = event.clientY - state.y;
+    const moved = y - state.y;
     if (!state.active) {
       if (Math.abs(moved) < SHEET_SLOP) return;
       state.active = true;
@@ -210,8 +221,8 @@ export function ConversationFlow({
     if (state.wasFull) root.style.top = `${state.parentH - h}px`;
     else root.style.flexBasis = `${h}px`;
     const now = performance.now();
-    state.speed = (event.clientY - state.lastY) / Math.max(1, now - state.lastT);
-    state.lastY = event.clientY;
+    state.speed = (y - state.lastY) / Math.max(1, now - state.lastT);
+    state.lastY = y;
     state.lastT = now;
     state.h = h;
   };
@@ -219,9 +230,8 @@ export function ConversationFlow({
     const root = rootRef.current;
     const state = sheetDrag.current;
     sheetDrag.current = null;
-    gesture.current = null;
     if (!root || !state) return;
-    if (!state.active) { cycle(); return; }
+    if (!state.active) return;
     // Let go: settle on the nearest height, carried a little further by a flick, gliding from where the finger left it.
     const box = root.getBoundingClientRect();
     root.style.removeProperty("flex-basis");
@@ -239,6 +249,60 @@ export function ConversationFlow({
       setLevel(target);
     }
   };
+  // A drag may start anywhere in the sheet but where you type. The message list still scrolls: a swipe on it moves the
+  // sheet only when it has nothing to scroll that way (up, until the sheet is full; down, once it is at its top).
+  // Touch events, not pointer events, because a pan the browser takes up is cancelled from under pointer events.
+  const touchRef = useRef({ begin: beginSheetDrag, drag: dragSheet, end: endSheetGesture, level });
+  touchRef.current = { begin: beginSheetDrag, drag: dragSheet, end: endSheetGesture, level };
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || !phone) return;
+    let from = 0;
+    let mode: "idle" | "pending" | "drag" | "scroll" = "idle";
+    let scroller: HTMLElement | null = null;
+    const scrollerOf = (start: HTMLElement) => {
+      for (let el: HTMLElement | null = start; el && el !== root; el = el.parentElement) {
+        const overflow = getComputedStyle(el).overflowY;
+        if ((overflow === "auto" || overflow === "scroll") && el.scrollHeight > el.clientHeight + 1) return el;
+      }
+      return null;
+    };
+    const onStart = (event: TouchEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (event.touches.length !== 1 || !target || target.closest(NO_SHEET_DRAG) || target.closest(".conversation-flow__handle")) { mode = "idle"; return; }
+      from = event.touches[0].clientY;
+      scroller = scrollerOf(target);
+      mode = "pending";
+    };
+    const onMove = (event: TouchEvent) => {
+      if (mode === "idle" || mode === "scroll") return;
+      const y = event.touches[0].clientY;
+      if (mode === "pending") {
+        const moved = y - from;
+        if (Math.abs(moved) < 3) return;
+        const takes = !scroller || (moved < 0 ? touchRef.current.level < 2 : scroller.scrollTop <= 1);
+        if (!takes) { mode = "scroll"; return; }
+        mode = "drag";
+        touchRef.current.begin(from);
+      }
+      if (event.cancelable) event.preventDefault();
+      touchRef.current.drag(y);
+    };
+    const onEnd = () => {
+      if (mode === "drag") touchRef.current.end();
+      mode = "idle";
+    };
+    root.addEventListener("touchstart", onStart, { passive: true });
+    root.addEventListener("touchmove", onMove, { passive: false });
+    root.addEventListener("touchend", onEnd);
+    root.addEventListener("touchcancel", onEnd);
+    return () => {
+      root.removeEventListener("touchstart", onStart);
+      root.removeEventListener("touchmove", onMove);
+      root.removeEventListener("touchend", onEnd);
+      root.removeEventListener("touchcancel", onEnd);
+    };
+  }, [phone]);
   const keySheet = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "ArrowUp") setLevel(level + 1);
     else if (event.key === "ArrowDown") setLevel(level - 1);
@@ -338,19 +402,8 @@ export function ConversationFlow({
           aria-valuenow={level}
           aria-valuetext={LEVELS[level]}
           onKeyDown={keySheet}
-          onPointerDown={(event) => {
-            const root = rootRef.current;
-            if (!root) return;
-            event.currentTarget.setPointerCapture(event.pointerId);
-            const box = root.getBoundingClientRect();
-            gesture.current = event.clientY;
-            sheetDrag.current = {
-              y: event.clientY, lastY: event.clientY, lastT: performance.now(), speed: 0, active: false,
-              startH: box.height, h: box.height, wasFull: level === 2,
-              parentH: root.parentElement?.getBoundingClientRect().height ?? box.height,
-            };
-          }}
-          onPointerMove={dragSheet}
+          onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); beginSheetDrag(event.clientY); }}
+          onPointerMove={(event) => dragSheet(event.clientY)}
           onPointerUp={endSheetGesture}
           onPointerCancel={endSheetGesture}
         >
