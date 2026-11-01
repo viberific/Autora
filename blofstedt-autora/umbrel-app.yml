@@ -204,7 +204,7 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  On a phone the speech-bubble button beside the message box is gone: it took a
-  whole row of the screen. The handle above the conversation sheet (tap or
-  drag) and the last-messages preview strip open and close it instead, and the
-  strip now spans the full width.
+  On a phone the conversation sheet now glides between canvas-only, half and
+  full instead of snapping, and eases to a stop. It still respects the reduced
+  motion setting. The speech-bubble button beside the message box stays gone;
+  the handle above the sheet and the last-messages strip open and close it.

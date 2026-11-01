@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { PANEL_DEFAULT, PANEL_MAX, PANEL_MIN, PANEL_STEP, clampPanelWidth, type PreviewLine, type Sheet } from "./chatLayout";
 import "./ConversationFlow.css";
 
@@ -110,6 +110,48 @@ export function ConversationFlow({
   // Phone sheet: Canvas only (the retracted conversation), half, full. A tap steps up and wraps to the canvas;
   // a drag or the arrow keys move one level. Lowering to the canvas goes through the same refusal as Retract.
   const level = collapsed ? 0 : sheet === "full" ? 2 : 1;
+  // The sheet glides between heights. The new level is laid out at once (the canvas resizes to it); the root's own
+  // height is then animated from where it was, so the conversation slides rather than snaps. Full lies over the canvas,
+  // so going to or from it moves the top edge instead.
+  const lastBox = useRef<DOMRect | null>(null);
+  const gliding = useRef(false);
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || !phone || typeof ResizeObserver === "undefined") return;
+    const watch = new ResizeObserver(() => { if (!gliding.current) lastBox.current = root.getBoundingClientRect(); });
+    watch.observe(root);
+    return () => watch.disconnect();
+  }, [phone]);
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root || !phone) { lastBox.current = null; return; }
+    const from = lastBox.current;
+    const to = root.getBoundingClientRect();
+    lastBox.current = to;
+    if (!from || Math.abs(from.height - to.height) < 2 || typeof root.animate !== "function") return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const style = getComputedStyle(root);
+    const duration = (parseFloat(style.getPropertyValue("--dur-3")) || 0.4) * 1000;
+    const easing = style.getPropertyValue("--ease").trim() || "ease";
+    const parentTop = root.parentElement?.getBoundingClientRect().top ?? 0;
+    const frames = level === 2
+      ? [{ top: `${from.top - parentTop}px` }, { top: "0px" }]
+      : [{ flexBasis: `${from.height}px` }, { flexBasis: `${to.height}px` }];
+    gliding.current = true;
+    root.dataset.gliding = "";
+    const run = root.animate(frames, { duration, easing });
+    const done = () => {
+      // A cancelled run reports late; by then a newer one may own the sheet.
+      if (root.getAnimations().some((a) => a !== run && a.playState === "running")) return;
+      gliding.current = false;
+      delete root.dataset.gliding;
+      lastBox.current = root.getBoundingClientRect();
+    };
+    run.onfinish = done;
+    run.oncancel = done;
+    return () => run.cancel();
+  }, [phone, level]);
+
   const setLevel = (target: number) => {
     const next = Math.max(0, Math.min(2, target));
     if (next === level) return;
