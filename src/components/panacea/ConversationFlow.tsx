@@ -24,6 +24,17 @@ interface ConversationFlowProps {
   preview?: readonly PreviewLine[];
 }
 
+/** A finger must move this far before a press on the handle is a drag rather than a tap. */
+const SHEET_SLOP = 8;
+/** The handle row, and the column's padding and gap under the entry strip (ConversationFlow.css). */
+const HANDLE_H = 44;
+const SHEET_PAD = 9;
+
+interface SheetDrag {
+  y: number; lastY: number; lastT: number; speed: number; active: boolean;
+  startH: number; h: number; wasFull: boolean; parentH: number;
+}
+
 const LEVELS = ["Canvas only", "Half", "Full"] as const;
 
 /** The one glyph for showing and retracting the conversation: a speech bubble, the same open or retracted. */
@@ -114,11 +125,43 @@ export function ConversationFlow({
   // height is then animated from where it was, so the conversation slides rather than snaps. Full lies over the canvas,
   // so going to or from it moves the top edge instead.
   const lastBox = useRef<DOMRect | null>(null);
+  const restBox = useRef<number | null>(null);
   const gliding = useRef(false);
+  const sheetDrag = useRef<SheetDrag | null>(null);
+  /** Animates the root from a box it was in to the one it is in now. Returns a way to stop it. */
+  const glide = (root: HTMLElement, from: { top: number; height: number }, to: { height: number }, toFull: boolean) => {
+    if (Math.abs(from.height - to.height) < 2 || typeof root.animate !== "function") return undefined;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
+    const style = getComputedStyle(root);
+    const duration = (parseFloat(style.getPropertyValue("--dur-3")) || 0.4) * 1000;
+    const easing = style.getPropertyValue("--ease").trim() || "ease";
+    const parentTop = root.parentElement?.getBoundingClientRect().top ?? 0;
+    const frames = toFull
+      ? [{ top: `${from.top - parentTop}px` }, { top: "0px" }]
+      : [{ flexBasis: `${from.height}px` }, { flexBasis: `${to.height}px` }];
+    gliding.current = true;
+    root.dataset.gliding = "";
+    const run = root.animate(frames, { duration, easing });
+    const done = () => {
+      // A cancelled run reports late; by then a newer one (or a finger) may own the sheet.
+      if (sheetDrag.current?.active) return;
+      if (root.getAnimations().some((a) => a !== run && a.playState === "running")) return;
+      gliding.current = false;
+      delete root.dataset.gliding;
+      lastBox.current = root.getBoundingClientRect();
+    };
+    run.onfinish = done;
+    run.oncancel = done;
+    return () => run.cancel();
+  };
   useEffect(() => {
     const root = rootRef.current;
     if (!root || !phone || typeof ResizeObserver === "undefined") return;
-    const watch = new ResizeObserver(() => { if (!gliding.current) lastBox.current = root.getBoundingClientRect(); });
+    const watch = new ResizeObserver(() => {
+      if (gliding.current) return;
+      lastBox.current = root.getBoundingClientRect();
+      if (root.classList.contains("is-collapsed")) restBox.current = lastBox.current.height;
+    });
     watch.observe(root);
     return () => watch.disconnect();
   }, [phone]);
@@ -128,28 +171,8 @@ export function ConversationFlow({
     const from = lastBox.current;
     const to = root.getBoundingClientRect();
     lastBox.current = to;
-    if (!from || Math.abs(from.height - to.height) < 2 || typeof root.animate !== "function") return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const style = getComputedStyle(root);
-    const duration = (parseFloat(style.getPropertyValue("--dur-3")) || 0.4) * 1000;
-    const easing = style.getPropertyValue("--ease").trim() || "ease";
-    const parentTop = root.parentElement?.getBoundingClientRect().top ?? 0;
-    const frames = level === 2
-      ? [{ top: `${from.top - parentTop}px` }, { top: "0px" }]
-      : [{ flexBasis: `${from.height}px` }, { flexBasis: `${to.height}px` }];
-    gliding.current = true;
-    root.dataset.gliding = "";
-    const run = root.animate(frames, { duration, easing });
-    const done = () => {
-      // A cancelled run reports late; by then a newer one may own the sheet.
-      if (root.getAnimations().some((a) => a !== run && a.playState === "running")) return;
-      gliding.current = false;
-      delete root.dataset.gliding;
-      lastBox.current = root.getBoundingClientRect();
-    };
-    run.onfinish = done;
-    run.oncancel = done;
-    return () => run.cancel();
+    if (!from) return;
+    return glide(root, from, to, level === 2);
   }, [phone, level]);
 
   const setLevel = (target: number) => {
@@ -161,6 +184,61 @@ export function ConversationFlow({
   };
   const cycle = () => setLevel(level === 2 ? (locked ? 1 : 0) : level + 1);
   const gesture = useRef<number | null>(null);
+  /** The heights a finger can settle the sheet at: canvas only, half, full (the first is out of reach while locked). */
+  const restHeights = (parentH: number) => {
+    const half = Math.max(parentH * 0.55, Math.min(parentH, 320));
+    // Retracted, the sheet is its handle and the entry strip. Before it has been seen retracted, that is measured.
+    const entry = rootRef.current?.querySelector<HTMLElement>(".conversation-flow__entry-area")?.offsetHeight ?? 90;
+    const retracted = restBox.current ?? (HANDLE_H + entry + SHEET_PAD);
+    return [locked ? half : Math.min(retracted, half), half, parentH];
+  };
+  const dragSheet = (event: PointerEvent<HTMLDivElement>) => {
+    const root = rootRef.current;
+    const state = sheetDrag.current;
+    if (!root || !state) return;
+    const moved = event.clientY - state.y;
+    if (!state.active) {
+      if (Math.abs(moved) < SHEET_SLOP) return;
+      state.active = true;
+      // The finger owns the height now: stop any glide and let the conversation draw while it is pulled open.
+      gliding.current = true;
+      root.dataset.gliding = "";
+      for (const run of root.getAnimations()) run.cancel();
+    }
+    const heights = restHeights(state.parentH);
+    const h = Math.max(heights[0], Math.min(state.parentH, state.startH - moved));
+    if (state.wasFull) root.style.top = `${state.parentH - h}px`;
+    else root.style.flexBasis = `${h}px`;
+    const now = performance.now();
+    state.speed = (event.clientY - state.lastY) / Math.max(1, now - state.lastT);
+    state.lastY = event.clientY;
+    state.lastT = now;
+    state.h = h;
+  };
+  const endSheetGesture = () => {
+    const root = rootRef.current;
+    const state = sheetDrag.current;
+    sheetDrag.current = null;
+    gesture.current = null;
+    if (!root || !state) return;
+    if (!state.active) { cycle(); return; }
+    // Let go: settle on the nearest height, carried a little further by a flick, gliding from where the finger left it.
+    const box = root.getBoundingClientRect();
+    root.style.removeProperty("flex-basis");
+    root.style.removeProperty("top");
+    gliding.current = false;
+    delete root.dataset.gliding;
+    const heights = restHeights(state.parentH);
+    const reach = state.h - state.speed * 180;
+    let target = 0;
+    heights.forEach((h, i) => { if (Math.abs(h - reach) < Math.abs(heights[target] - reach)) target = i; });
+    if (target === level) {
+      glide(root, box, root.getBoundingClientRect(), level === 2);
+    } else {
+      lastBox.current = box;
+      setLevel(target);
+    }
+  };
   const keySheet = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "ArrowUp") setLevel(level + 1);
     else if (event.key === "ArrowDown") setLevel(level - 1);
@@ -170,15 +248,6 @@ export function ConversationFlow({
     else return;
     event.preventDefault();
   };
-  const endSheetGesture = (event: PointerEvent<HTMLDivElement>) => {
-    const from = gesture.current;
-    gesture.current = null;
-    if (from == null) return;
-    const moved = event.clientY - from;
-    if (Math.abs(moved) < PANEL_STEP * 3) cycle();
-    else setLevel(level + (moved < 0 ? 1 : -1));
-  };
-
   useEffect(() => {
     const history = historyRef.current;
     if (!history) return;
@@ -269,9 +338,21 @@ export function ConversationFlow({
           aria-valuenow={level}
           aria-valuetext={LEVELS[level]}
           onKeyDown={keySheet}
-          onPointerDown={(event) => { gesture.current = event.clientY; event.currentTarget.setPointerCapture(event.pointerId); }}
+          onPointerDown={(event) => {
+            const root = rootRef.current;
+            if (!root) return;
+            event.currentTarget.setPointerCapture(event.pointerId);
+            const box = root.getBoundingClientRect();
+            gesture.current = event.clientY;
+            sheetDrag.current = {
+              y: event.clientY, lastY: event.clientY, lastT: performance.now(), speed: 0, active: false,
+              startH: box.height, h: box.height, wasFull: level === 2,
+              parentH: root.parentElement?.getBoundingClientRect().height ?? box.height,
+            };
+          }}
+          onPointerMove={dragSheet}
           onPointerUp={endSheetGesture}
-          onPointerCancel={() => { gesture.current = null; }}
+          onPointerCancel={endSheetGesture}
         >
           <span aria-hidden="true" />
         </div>

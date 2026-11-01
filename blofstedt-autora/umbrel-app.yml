@@ -204,7 +204,8 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  On a phone the conversation sheet now glides between canvas-only, half and
-  full instead of snapping, and eases to a stop. It still respects the reduced
-  motion setting. The speech-bubble button beside the message box stays gone;
-  the handle above the sheet and the last-messages strip open and close it.
+  On a phone the conversation sheet now follows your finger: drag the handle and
+  the conversation grows or shrinks under it, then glides to canvas-only, half
+  or full when you let go (a quick flick carries it to the next height). Taps,
+  the arrow keys and the last-messages strip glide too instead of snapping, and
+  reduced motion is respected. The speech-bubble button stays gone.
