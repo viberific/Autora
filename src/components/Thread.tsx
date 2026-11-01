@@ -597,12 +597,12 @@ type WorkState = {
   onOpenSettings?: () => void;
   /** Reads one reply out loud, in the voice the page already speaks with. */
   onSpeakReply?: (text: string) => void;
-  /** Puts the person's thumb on a turn (up, or null to take it back), with
-      the one line they typed when it was a thumb down. */
-  onRateReply?: (turn: number, up: boolean | null, reason?: string) => void;
-  /** What a turn is already rated, so a reload shows the thumb that is lit
-      rather than a fresh pair of grey ones. */
-  ratingOf?: (turn: number) => { up: boolean; reason?: string } | undefined;
+  /** Puts the person's thumb on one reply of a turn (up, or null to take it
+      back), with the one line they typed when it was a thumb down. */
+  onRateReply?: (turn: number, reply: number, up: boolean | null, reason?: string) => void;
+  /** What a reply (by its seq) is already rated, so a reload shows the thumb
+      that is lit rather than a fresh pair of grey ones. */
+  ratingOf?: (reply: number) => { up: boolean; reason?: string } | undefined;
   /** Which reply the voice is on, and whether it has been silenced -- so the
       speaker under it can be one button rather than a play button with a
       separate way to stop it. */
@@ -1097,7 +1097,8 @@ const CellView = memo(function CellView({
           onSpeak={onSpeakReply}
           speakingReply={speakingReply}
           turn={turnSeq}
-          rating={ratingOf?.(turnSeq)}
+          reply={cell.turn.seq}
+          rating={ratingOf?.(cell.turn.seq)}
           onRate={onRateReply}
         />
       );
@@ -1326,6 +1327,7 @@ const Reply = memo(function Reply({
   onSpeak,
   speakingReply,
   turn,
+  reply,
   rating,
   onRate,
 }: {
@@ -1343,10 +1345,12 @@ const Reply = memo(function Reply({
   /** The turn this reply answers, by the seq of its own prompt: what a thumb
       is filed under. */
   turn?: number;
-  /** The thumb already on this turn, if the person has given one. */
+  /** This reply's own seq: a thumb is on this reply, not on every reply of the turn. */
+  reply?: number;
+  /** The thumb already on this reply, if the person has given one. */
   rating?: { up: boolean; reason?: string };
   /** Give a thumb, replace the one there, or take it back with null. */
-  onRate?: (turn: number, up: boolean | null, reason?: string) => void;
+  onRate?: (turn: number, reply: number, up: boolean | null, reason?: string) => void;
   /** Still being written. The mark animates while this holds and plays its
       own ending when it drops, so the reply visibly lands rather than just
       stopping. */
@@ -1365,7 +1369,7 @@ const Reply = memo(function Reply({
   const [why, setWhy] = useState("");
   /** A thumb needs somewhere to land: a turn number, and a page that can
       record it. */
-  const rateable = Boolean(onRate) && typeof turn === "number" && turn > 0;
+  const rateable = Boolean(onRate) && typeof turn === "number" && turn > 0 && typeof reply === "number" && reply > turn;
   /* Whether the voice is on this reply, and whether it has been silenced. */
   const mine = speakingReply && sameReply(speakingReply.text, text) ? speakingReply : null;
   const spokenLabel = mine
@@ -1424,7 +1428,7 @@ const Reply = memo(function Reply({
             {rateable && <button
               type="button"
               className={`msg-tool ${rating?.up === true ? "is-rated-up" : ""}`.trim()}
-              onClick={() => onRate!(turn!, rating?.up === true ? null : true)}
+              onClick={() => onRate!(turn!, reply!, rating?.up === true ? null : true)}
               title={rating?.up === true ? "You said this reply worked (click to take it back)" : "This reply worked"}
               aria-label={rating?.up === true ? "Take back the thumbs up" : "This reply worked"}
               aria-pressed={rating?.up === true}
@@ -1437,10 +1441,10 @@ const Reply = memo(function Reply({
               onClick={() => {
                 if (rating?.up === false) {
                   setWhyOpen(false);
-                  onRate!(turn!, null);
+                  onRate!(turn!, reply!, null);
                   return;
                 }
-                onRate!(turn!, false);
+                onRate!(turn!, reply!, false);
                 setWhyOpen(true);
               }}
               title={rating?.up === false
@@ -1487,7 +1491,7 @@ const Reply = memo(function Reply({
             className="msg-why"
             onSubmit={(e) => {
               e.preventDefault();
-              onRate!(turn!, false, why.trim() || undefined);
+              onRate!(turn!, reply!, false, why.trim() || undefined);
               setWhyOpen(false);
             }}
           >

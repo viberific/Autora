@@ -97,6 +97,42 @@ async function main() {
     assert.equal(cleared.size, 1);
   });
 
+  await test("a thumb is on one reply: another reply of the same turn stays unrated", async () => {
+    const { derive } = await import("../src/lib/derive");
+    const ev = (seq: number, kind: string, payload: Record<string, unknown>) => ({ seq, ts: seq, session: "s", kind, actor: "agent", payload });
+    const log = [
+      ev(1, "turn.user", { text: "go" }),
+      ev(2, "turn.agent.text", { text: "First, reading the file." }),
+      ev(3, "tool.call", { id: "t1", name: "read", args: {} }),
+      ev(4, "tool.result", { id: "t1", ok: true, output: "x" }),
+      ev(5, "turn.agent.text", { text: "Done: the file is written." }),
+      ev(6, "turn.agent.done", {}),
+      ev(7, "turn.rating", { turn: 1, reply: 2, up: true }),
+    ];
+    const replies = derive(log as never).transcript.filter((t) => t.role === "agent").map((t) => t.seq);
+    assert.equal(replies.length, 2, "the turn has two replies");
+    const one = derive(log as never).ratings;
+    assert.deepEqual(one.get(replies[0]), { up: true });
+    assert.equal(one.get(replies[1]), undefined, "the other reply of the turn is not lit");
+    /* A thumb from before replies had their own is on the turn's last reply only. */
+    const legacy = derive([...log.slice(0, 6), ev(7, "turn.rating", { turn: 1, up: false })] as never).ratings;
+    assert.equal(legacy.get(replies[0]), undefined);
+    assert.deepEqual(legacy.get(replies[1]), { up: false });
+    /* Clearing one reply's thumb leaves the other's. */
+    const both = [...log, ev(8, "turn.rating", { turn: 1, reply: replies[1], up: false }), ev(9, "turn.rating.cleared", { turn: 1, reply: 2 })];
+    const after = derive(both as never).ratings;
+    assert.equal(after.get(replies[0]), undefined);
+    assert.deepEqual(after.get(replies[1]), { up: false });
+    /* The turn's count is the most recent thumb still standing in it. */
+    assert.deepEqual(ratingsFrom(both).get(1), { up: false });
+    assert.equal(ratingsFrom([...both, ev(10, "turn.rating.cleared", { turn: 1, reply: replies[1] })]).has(1), false);
+  });
+
+  await test("a reply number before its turn's is refused", () => {
+    assert.equal(ratingCall({ turn: 3, reply: 2, up: true }, new Set([3])).ok, false);
+    assert.deepEqual(ratingCall({ turn: 3, reply: 5, up: true }, new Set([3])), { ok: true, clear: false, turn: 3, reply: 5, up: true });
+  });
+
   console.log("the route, on a real server");
   const app = await startApp();
   try {

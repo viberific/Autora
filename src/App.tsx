@@ -1134,18 +1134,18 @@ export function App() {
      sends it back down the socket, so what is drawn here is the record rather
      than a guess that a reload would contradict. */
   const rateReply = useCallback(
-    async (turn: number, up: boolean | null, reason?: string) => {
+    async (turn: number, reply: number, up: boolean | null, reason?: string) => {
       if (!sessionId) return;
       await fetch(`/api/sessions/${sessionId}/rating`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ turn, up, reason }),
+        body: JSON.stringify({ turn, reply, up, reason }),
       }).catch(() => undefined);
     },
     [sessionId],
   );
   const ratingOf = useCallback(
-    (turn: number) => view.ratings.get(turn),
+    (reply: number) => view.ratings.get(reply),
     [view.ratings],
   );
 

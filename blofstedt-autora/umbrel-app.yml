@@ -213,4 +213,6 @@ releaseNotes: >-
   phone the canvas loses its top bar: the folder button in the message box is
   the one place to add saved files, open one on the canvas or save the canvas.
   The collapsed chat preview marks each line with the Autora mark or a person
-  icon instead of the letters A and Y.
+  icon instead of the letters A and Y. Tapping a reply's speaker while it is
+  being read now stops it rather than starting it over, and a thumbs up or
+  down lights only the reply you pressed it under, not every reply in the turn.

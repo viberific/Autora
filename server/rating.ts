@@ -8,9 +8,12 @@
  * about, and read back from there: no other store, and a rating that a
  * reload has to fetch separately is a rating that goes missing.
  *
- * The rule, which the page and the digest both rely on: one rating per turn.
- * A second click replaces the first, and clicking the thumb that is already
- * lit clears it. A clear has to be written down as something, and it is not
+ * The rule: one rating per reply. A turn can hold several replies (the agent
+ * talks, works, talks again), and a thumb is on the one it was pressed under,
+ * by that reply's seq (`reply`); a rating written before that has no `reply`
+ * and is the whole turn's. A second click replaces the first, and clicking the
+ * thumb that is already lit clears it. Where a number per turn is wanted (the
+ * digest), a turn's rating is the most recent one still standing in it. A clear has to be written down as something, and it is not
  * a down-vote -- counting it as one would poison exactly the number this
  * exists to produce -- so it is a kind of its own that the counting readers
  * skip.
@@ -18,7 +21,7 @@
 import type { Express, Request, Response } from "express";
 import type { AutoraEvent, Session } from "./session-types";
 
-/** A rating on a turn. `turn` is the seq of the turn's own `turn.user` event. */
+/** A rating on a reply. `turn` is the seq of the turn's own `turn.user` event, `reply` the seq of the reply. */
 const RATING_KIND = "turn.rating";
 /** The rating taken back. Carries the turn and nothing else. */
 const RATING_CLEAR_KIND = "turn.rating.cleared";
@@ -51,6 +54,37 @@ function turnSeqs(events: readonly { kind: string; seq: number }[]): Set<number>
   return out;
 }
 
+/** The reply a rating event is on, or undefined for one on the whole turn (written before replies had their own). */
+const replyOf = (p: Record<string, any>) => {
+  const reply = Number(p.reply);
+  return Number.isInteger(reply) && reply > 0 ? reply : undefined;
+};
+
+/**
+ * Fold one rating event into the ratings standing in each turn, keyed by reply (0 for the whole turn). A clear
+ * on a reply takes back that reply's; one with no reply, the whole turn's. Order of setting is kept, so the
+ * last entry is the most recent.
+ */
+export function foldRating(into: Map<number, Map<number, Rating>>, kind: string, p: Record<string, any>): void {
+  const turn = Number(p.turn);
+  if (!Number.isInteger(turn) || turn <= 0) return;
+  const reply = replyOf(p);
+  if (kind === RATING_CLEAR_KIND) {
+    if (reply === undefined) into.delete(turn);
+    else into.get(turn)?.delete(reply);
+    if (into.get(turn)?.size === 0) into.delete(turn);
+  } else if (kind === RATING_KIND && typeof p.up === "boolean") {
+    const reason = cleanReason(p.reason);
+    const standing = into.get(turn) ?? new Map<number, Rating>();
+    standing.delete(reply ?? 0);
+    standing.set(reply ?? 0, reason ? { up: p.up, reason } : { up: p.up });
+    into.set(turn, standing);
+  }
+}
+
+/** A turn's rating, for counting: the most recent one still standing in it. */
+export const turnRating = (standing: Map<number, Rating>): Rating | undefined => [...standing.values()].at(-1);
+
 /**
  * Every turn's rating, last word winning, a clear removing it. Read from the
  * log in order, which is why a replacement needed no rewriting of anything.
@@ -58,16 +92,12 @@ function turnSeqs(events: readonly { kind: string; seq: number }[]): Set<number>
 export function ratingsFrom(
   events: readonly { kind: string; payload?: Record<string, any> }[],
 ): Map<number, Rating> {
+  const standing = new Map<number, Map<number, Rating>>();
+  for (const e of events) foldRating(standing, e.kind, e.payload ?? {});
   const out = new Map<number, Rating>();
-  for (const e of events) {
-    const p = e.payload ?? {};
-    const turn = Number(p.turn);
-    if (!Number.isInteger(turn) || turn <= 0) continue;
-    if (e.kind === RATING_CLEAR_KIND) out.delete(turn);
-    else if (e.kind === RATING_KIND && typeof p.up === "boolean") {
-      const reason = cleanReason(p.reason);
-      out.set(turn, reason ? { up: p.up, reason } : { up: p.up });
-    }
+  for (const [turn, replies] of standing) {
+    const rating = turnRating(replies);
+    if (rating) out.set(turn, rating);
   }
   return out;
 }
@@ -77,8 +107,8 @@ export function ratingsFrom(
  * without a server: what to write down, or why nothing is written.
  */
 type RatingCall =
-  | { ok: true; clear: true; turn: number }
-  | { ok: true; clear: false; turn: number; up: boolean; reason?: string }
+  | { ok: true; clear: true; turn: number; reply?: number }
+  | { ok: true; clear: false; turn: number; reply?: number; up: boolean; reason?: string }
   | { ok: false; status: number; error: string };
 
 export function ratingCall(
@@ -94,20 +124,28 @@ export function ratingCall(
      would attach to nothing, and would count in a digest for a conversation it
      never happened in. */
   if (!turnOf.has(turn)) return { ok: false, status: 404, error: "That turn is not in this chat." };
+  /* The reply it is on, when the page says: after the turn's prompt, never before it. */
+  let on: { reply?: number } = {};
+  if (b.reply !== undefined) {
+    const reply = Number(b.reply);
+    if (!Number.isInteger(reply) || reply <= turn) return { ok: false, status: 400, error: "Which reply? Give the reply's number, after its turn's." };
+    on = { reply };
+  }
   const clear = b.up === null || b.clear === true;
-  if (clear) return { ok: true, clear: true, turn };
+  if (clear) return { ok: true, clear: true, turn, ...on };
   if (typeof b.up !== "boolean") {
     return { ok: false, status: 400, error: "A rating is up true or false, or null to take it back." };
   }
   const reason = cleanReason(b.reason);
-  return reason ? { ok: true, clear: false, turn, up: b.up, reason } : { ok: true, clear: false, turn, up: b.up };
+  return reason ? { ok: true, clear: false, turn, ...on, up: b.up, reason } : { ok: true, clear: false, turn, ...on, up: b.up };
 }
 
 /** The event a call writes, in the one place both the route and a test look. */
 function ratingEvent(call: Extract<RatingCall, { ok: true }>): { kind: string; payload: Record<string, any> } {
+  const on = call.reply === undefined ? {} : { reply: call.reply };
   return call.clear
-    ? { kind: RATING_CLEAR_KIND, payload: { turn: call.turn } }
-    : { kind: RATING_KIND, payload: call.reason ? { turn: call.turn, up: call.up, reason: call.reason } : { turn: call.turn, up: call.up } };
+    ? { kind: RATING_CLEAR_KIND, payload: { turn: call.turn, ...on } }
+    : { kind: RATING_KIND, payload: { turn: call.turn, ...on, up: call.up, ...(call.reason ? { reason: call.reason } : {}) } };
 }
 
 export function ratingRoutes(app: Express, deps: {
@@ -116,7 +154,7 @@ export function ratingRoutes(app: Express, deps: {
 }) {
   const { sessions, emitEvent } = deps;
 
-  /* POST /api/sessions/:id/rating { turn, up: true|false|null, reason? }
+  /* POST /api/sessions/:id/rating { turn, reply?, up: true|false|null, reason? }
      Thumbs go through the same emitEvent as every other kind, so the event is
      in the log, on the websocket and in the Logs page like the rest. */
   app.post("/api/sessions/:id/rating", (req: Request, res: Response) => {
@@ -127,7 +165,7 @@ export function ratingRoutes(app: Express, deps: {
     const made = ratingEvent(call);
     emitEvent(session, made.kind, "user", made.payload);
     const rating = call.clear ? null : call.reason ? { up: call.up, reason: call.reason } : { up: call.up };
-    res.json({ ok: true, turn: call.turn, rating });
+    res.json({ ok: true, turn: call.turn, ...(call.reply === undefined ? {} : { reply: call.reply }), rating });
   });
 
   /* GET /api/sessions/:id/ratings -- every rated turn in the chat, for a page
