@@ -638,18 +638,21 @@
     font-weight: 600;
   }
 
-  /* One letter for who spoke, in place of a name: the strip is a glance, not a transcript. */
+  /* Who spoke, as the thread's own glyphs in place of a name: the Autora mark, or the person. The strip is a glance,
+     not a transcript. */
   .conversation-flow__who {
     display: inline-grid;
     place-items: center;
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     margin-right: 6px;
-    border-radius: var(--r-pill);
-    background: var(--s1);
-    color: var(--text);
-    font: 600 var(--fs-2xs) / 1 var(--sans);
+    vertical-align: -3px;
+    color: var(--text-2);
     font-style: normal;
+  }
+
+  .conversation-flow__who svg {
+    display: block;
   }
 
   .conversation-flow__who.is-agent {

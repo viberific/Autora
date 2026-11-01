@@ -1,5 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { PANEL_DEFAULT, PANEL_MAX, PANEL_MIN, PANEL_STEP, clampPanelWidth, type PreviewLine, type Sheet } from "./chatLayout";
+import { AutoraMark } from "../AutoraMark";
+import { IconUser } from "../Icons";
 import "./ConversationFlow.css";
 
 interface ConversationFlowProps {
@@ -571,7 +573,7 @@ export function ConversationFlow({
             >
               {preview.map((line, index) => (
                 <span className="conversation-flow__preview-line" key={index} aria-hidden="true">
-                  <i className={`conversation-flow__who is-${line.who === "You" ? "you" : "agent"}`}>{line.who === "You" ? "Y" : "A"}</i>
+                  <i className={`conversation-flow__who is-${line.who === "You" ? "you" : "agent"}`}>{line.who === "You" ? <IconUser size={11} /> : <AutoraMark size={16} />}</i>
                   {line.text}
                 </span>
               ))}

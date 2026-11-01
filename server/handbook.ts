@@ -24,7 +24,7 @@ const OVERVIEW = [
     "directly above it. The conversation is individual bubbles in the panel; the oldest bubble fades at the top edge. Retract conversation " +
     "slides the panel away so the canvas gets the whole width, leaving a slim edge tab, Show conversation, on the right edge to bring it back; the entry bar, the TODO list and the " +
     "Show conversation toggle stay in a slim strip along the foot of the workspace, so you can always type. " +
-    "On a phone the conversation is a bottom sheet under the canvas, dragged up or down on its left half (anywhere there but the text box), where a swipe never scrolls, while a swipe on its right half only scrolls the conversation and never resizes the sheet; it has no Show/Retract button or grip line: Canvas only (a compact preview of the last three messages and a count of the steps it leaves out, the TODO list and the entry bar; tap or drag it open), " +
+    "On a phone the conversation is a bottom sheet under the canvas, dragged up or down on its left half (anywhere there but the text box), where a swipe never scrolls, while a swipe on its right half only scrolls the conversation and never resizes the sheet; it has no Show/Retract button or grip line: Canvas only (a compact preview of the last three messages, each marked with the Autora mark for yours or a small person glyph for theirs, and a count of the steps it leaves out, the TODO list and the entry bar; tap or drag it open), " +
     "Half (the default: messages only, no memory notes or tool steps) and Full (adds those steps and notes, messages from the top). The views blend as it follows the finger, then settles on the nearest height, or use the up/down keys on its hidden handle, " +
     "and the height is remembered. Retracting keeps the complete history mounted and never hides required questions/permissions: while one " +
     "is waiting the conversation stays open, and on a phone the sheet cannot be lowered below Half. " +
@@ -438,7 +438,9 @@ const PANACEA = [
   "  Saving. Native work is saved as you go; the workspace's top bar also has Save native work, which keeps native panels and surfaces " +
     "in Artifacts as <canvas name>.panacea.json. This is not a bundle of hosted engine files: Music, Office, PDF, video and other engines " +
     "save through their own work cards and retain their own undo/history. Beside it, Load opens supported work from Artifacts into the " +
-    "same scene, using the native surface or retained engine appropriate to the file. " +
+    "same scene, using the native surface or retained engine appropriate to the file. On a phone the workspace has no top bar: " +
+    "the folder button in the message box opens one Artifacts sheet that adds files or project folders to the message, opens a " +
+    "picked file on the canvas (Open on canvas, the same as Load) and, when the canvas has native work, saves it (Save this canvas to Artifacts). " +
     "Exports (panacea_export, or a panel's Export) go to the project's folder: a photo as PNG with every adjustment, a table as CSV as filtered, a chart as SVG, a document or a board as Markdown.",
 ].join("\n");
 

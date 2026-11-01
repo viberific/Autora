@@ -209,4 +209,8 @@ releaseNotes: >-
   already fully open or closed. A swipe on the right half only scrolls the
   conversation and never resizes the sheet. Pop-up windows, such as the
   notebook picker and the tools sheet opened from the message box, now ease
-  in when they open and ease out when they close instead of vanishing.
+  in when they open and ease out when they close instead of vanishing. On a
+  phone the canvas loses its top bar: the folder button in the message box is
+  the one place to add saved files, open one on the canvas or save the canvas.
+  The collapsed chat preview marks each line with the Autora mark or a person
+  icon instead of the letters A and Y.

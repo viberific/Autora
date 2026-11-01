@@ -23,7 +23,8 @@ import type { PanelActions } from "./panacea/PanelCard";
 import { pictureOf } from "./panacea/Surfaces";
 import { useCanvas } from "./panacea/useCanvas";
 import { SaveButton, keptAs } from "./SaveButton";
-import { LoadButton } from "./LoadButton";
+import { LoadButton, type LoadResult } from "./LoadButton";
+import { PANACEA_LOADED, offerKeep } from "../lib/panaceaBridge";
 import { IconSparkle, IconX } from "./Icons";
 import { usePhone } from "../lib/stage";
 import type { HostedWork } from "../lib/workspaceScene";
@@ -615,6 +616,14 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
     return keptAs(await fetch(`${base}/keep`, { method: "POST" }));
   }, [doc, base]);
 
+  // On a phone the bar is gone; the message box's folder sheet opens files here and saves the canvas (panaceaBridge).
+  useEffect(() => {
+    const onLoaded = (e: Event) => { void loaded((e as CustomEvent<LoadResult>).detail).catch((err: unknown) => setProblem(err instanceof Error ? err.message : String(err))); };
+    window.addEventListener(PANACEA_LOADED, onLoaded);
+    return () => window.removeEventListener(PANACEA_LOADED, onLoaded);
+  }, [loaded]);
+  useEffect(() => offerKeep(nativeOpen && doc.ready ? keep : null), [keep, nativeOpen, doc.ready]);
+
   const empty = !canvas.surfaces.length && !canvas.panels.length;
   const note = doc.notice ?? problem;
   const selectionGrouped = selected.size > 1 && (() => { const ids = [...selected]; const g = canvas.panels.find((p) => p.id === ids[0])?.group; return !!g && ids.every((id) => canvas.panels.find((p) => p.id === id)?.group === g); })();
@@ -626,7 +635,7 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
         onPointerDownCapture={() => setPointerBusy(true)}
         onFocusCapture={(e) => { if ((e.target as HTMLElement).closest("input,textarea,[contenteditable='true']")) setFieldBusy(true); }}
         onBlurCapture={(e) => { if (!(e.relatedTarget as HTMLElement | null)?.closest?.("input,textarea,[contenteditable='true']")) setFieldBusy(false); }}>
-        <div className="pdf-bar">
+        {!phone && <div className="pdf-bar">
           <span className="pdf-bar-ico" aria-hidden="true"><IconSparkle size={14} /></span>
           <span className="pdf-bar-app">Panacea</span>
           {nativeOpen && <input className="st-song-name" value={canvas.name} size={Math.max(4, canvas.name.length + 1)} maxLength={80} aria-label="Canvas name"
@@ -636,7 +645,7 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
           <div className="spacer" />
           <span ref={saveRef} className="st-save-btn"><LoadButton app="panacea" session={sessionId} phone={phone} onLoaded={loaded} disabled={!sessionId} />{nativeOpen &&
             <SaveButton onSave={keep} phone={phone} disabled={!doc.ready} label="Save native work" tooltip="Keep native panels and surfaces as .panacea.json. Engine files save on their own work cards." />}</span>
-        </div>
+        </div>}
         {note && (
           <div className="pdf-problem" role="status">
             {note}

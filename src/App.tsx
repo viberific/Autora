@@ -81,9 +81,12 @@ const Triggers = lazyPage(() => import("./components/Triggers"), "Triggers");
 // Talk mode (and the 1,900-line speech code behind it) loads when it is turned on.
 const LiveChat = lazyPage(() => import("./components/LiveChat"), "LiveChat", false);
 import { LibraryPicker, type LibraryTab } from "./components/LibraryPicker";
+import { loadInto } from "./components/LoadButton";
+import { loadable } from "./lib/loadable";
+import { announceLoaded, canKeepCanvas, keepCanvas } from "./lib/panaceaBridge";
 import { ToolsSheet } from "./components/ToolsSheet";
 import { VisibleWork } from "./components/VisibleWork";
-import { OPEN_NOTEBOOK, type NotebookRef } from "./lib/notebooks";
+import { OPEN_NOTEBOOK, type ArtifactInfo, type NotebookRef } from "./lib/notebooks";
 import { MONEY_CHANGED } from "./lib/spend";
 import type { Bucket } from "./lib/memory";
 import {
@@ -119,7 +122,7 @@ import {
   splitSpeakable, useSpeech,
 } from "./lib/voice";
 import {
-  IconArrow, IconArrowUp, IconChevron, IconFile, IconFolder, IconMask, IconMenu, IconNotebook, IconPlus, IconStop,
+  IconArrow, IconArrowUp, IconChevron, IconFile, IconFolder, IconMask, IconMenu, IconNotebook, IconPlus, IconSave, IconStop,
   IconWrench,
   IconX,
 } from "./components/Icons";
@@ -1565,6 +1568,24 @@ export function App() {
   /* The app window takes the right of the chat on a wide screen, for a live
      session; on a phone it lives in the pinned view. */
   const phoneLayout = usePhone();
+  /* On a phone the canvas has no bar: the folder sheet also opens a saved file on it and saves it (lib/panaceaBridge). */
+  const canvasOpen = useMemo(() => ({
+    label: "Open on canvas",
+    fits: (file: ArtifactInfo) => loadable("panacea", file),
+    run: (file: ArtifactInfo) => {
+      setArtifactsOpen(false);
+      if (!sessionId) return;
+      loadInto("panacea", sessionId, file).then((result) => {
+        if (!result) return;
+        announceLoaded(result);
+        setNotice(result.said ?? `${file.name} is open.`);
+      }, (err: unknown) => setNotice(err instanceof Error ? err.message : String(err)));
+    },
+  }), [sessionId]);
+  const keepFromSheet = useCallback(() => {
+    setArtifactsOpen(false);
+    keepCanvas().then(setNotice, (err: unknown) => setNotice(err instanceof Error ? err.message : String(err)));
+  }, []);
   const preview = usePreviewState();
   const desk = useDeskState();
   const video = useVideoState();
@@ -2698,9 +2719,17 @@ export function App() {
                       {artifactsOpen && (
                         <LibraryPicker
                           tabs={ARTIFACT_TABS}
-                          title="Add from Artifacts"
+                          title={phoneLayout ? "Artifacts" : "Add from Artifacts"}
                           action="Add"
                           exclude={new Set(attached.map((f) => f.id))}
+                          open={phoneLayout ? canvasOpen : undefined}
+                          extra={phoneLayout && canKeepCanvas() ? (
+                            <button type="button" className="lib-row lib-keep" onClick={keepFromSheet}>
+                              <span className="lib-tick" aria-hidden="true" />
+                              <span className="lib-icon"><IconSave size={16} /></span>
+                              <span className="lib-main"><b>Save this canvas to Artifacts</b><em>Kept as a .panacea.json file</em></span>
+                            </button>
+                          ) : undefined}
                           onClose={closeArtifacts}
                           onPick={addFromArtifacts}
                         />

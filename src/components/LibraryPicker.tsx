@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { IconCheck, IconFile, IconFolder, IconNotebook, IconSearch, IconX } from "./Icons";
 import {
@@ -15,7 +15,7 @@ const TAB_LABEL: Record<LibraryTab, string> = { notebooks: "Notebooks", files: "
  * file in a notebook. Portalled to the body so it sits over everything.
  */
 export function LibraryPicker({
-  tabs, title, action, exclude, allowNew = false, filter, single = false, onPick, onClose,
+  tabs, title, action, exclude, allowNew = false, filter, single = false, open, extra, onPick, onClose,
 }: {
   tabs: LibraryTab[];
   title: string;
@@ -29,6 +29,10 @@ export function LibraryPicker({
   filter?: (file: ArtifactInfo) => boolean;
   /** One thing at a time: choosing another replaces the choice. */
   single?: boolean;
+  /** A second way to use one picked file, beside the main action (a phone's chat: open it on the canvas). */
+  open?: { label: string; fits: (file: ArtifactInfo) => boolean; run: (file: ArtifactInfo) => void };
+  /** Shown above the list, for something that is not a pick (a phone's chat: save the canvas). */
+  extra?: ReactNode;
   onPick: (picked: { notebooks: Notebook[]; files: ArtifactInfo[]; folders: ArtifactFolder[] }) => void;
   onClose: () => void;
 }) {
@@ -106,6 +110,8 @@ export function LibraryPicker({
       folders: (lib?.folders ?? []).filter((f) => picked.includes(f.id)),
     });
   };
+
+  const openable = open && picked.length === 1 ? (files ?? []).find((f) => f.id === picked[0] && open.fits(f)) : undefined;
 
   const makeNew = async () => {
     const name = newTitle.trim();
@@ -205,6 +211,7 @@ export function LibraryPicker({
 
         <div className="modal-body lib-body">
           {error && <p className="set-warn">{error}</p>}
+          {extra}
           {allowNew && tab === "notebooks" && (
             <form className="lib-new" onSubmit={(e) => { e.preventDefault(); void makeNew(); }}>
               <input
@@ -246,6 +253,12 @@ export function LibraryPicker({
           </span>
           <div className="spacer" />
           <button className="btn ghost" onClick={onClose}>Cancel</button>
+          {open && (
+            <button className="btn ghost" disabled={!openable} onClick={() => { if (openable) open.run(openable); }}
+              title={openable ? `${open.label}: ${openable.name}` : "Pick one file this can open"}>
+              {open.label}
+            </button>
+          )}
           <button className="btn primary" disabled={picked.length === 0} onClick={confirm}>
             {action}{picked.length > 1 ? ` ${picked.length}` : ""}
           </button>
