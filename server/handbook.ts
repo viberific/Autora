@@ -30,7 +30,7 @@ const OVERVIEW = [
     "is waiting the conversation stays open, and on a phone the sheet cannot be lowered below Half. " +
     "On a phone the spend line above the box is one line for the account being spent (tap it for every account), a long draft scrolls " +
     "inside the box so Send stays on screen, and two fingers on the canvas pinch-zoom it about the point between them. " +
-    "Capabilities opens its chooser. All native surfaces and hosted engine work cards live together in one pannable, zoomable scene, " +
+    "Capabilities (the wrench by the message box) opens its chooser; Follow and the eye (Visible work) sit in the top bar. All native surfaces and hosted engine work cards live together in one pannable, zoomable scene, " +
     "not tabs, a mode combobox or separate applications. The fixed right-side icon dock jumps the camera to an existing item of work; " +
     "Zoom out reduces magnification and Show all work [ ] frames every surface and engine. Jumping never hides another item or restarts " +
     "its engine: all engines stay mounted with their unsaved work. Engine card headers can be dragged and pinned; x closes a card. \"Follow\" may move the " +
@@ -43,8 +43,7 @@ const OVERVIEW = [
   "- Shared hands. In every window the person can work on the same thing at the same time. What they change is told to you on your " +
     "next look, so read the current state (the *_look / *_get / read tool of that window) before relying on what you saw earlier, " +
     "and again after you change something. Never overwrite the person's edit with an old copy.",
-  "- You are seen working. With Visible work on (the eye switch left of \"Follow\" above the windows, the eye beside Follow on a " +
-    "phone, or Settings), a labelled cursor pops in, moves in the window to what you are changing, " +
+  "- You are seen working. With Visible work on (the eye switch in the top bar, left of \"Follow\", or Settings), a labelled cursor pops in, moves in the window to what you are changing, " +
     "clicks, and types, with a few words beside it about what that act is (made from the tool call itself: \"Clicking Save\", \"Making 3 changes\"). " +
     "It shows in Panacea's Web, Apps & code, PDF, Documents, Spreadsheets, Presentations, Video, Music, Canvas, Games, 3D and Images surfaces, " +
     "where the retained engine supports live hand work. Shell commands run non-interactively without a simulated terminal cursor. " +

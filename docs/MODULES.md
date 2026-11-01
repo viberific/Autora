@@ -567,7 +567,7 @@ Spectra's fetched renderer is most of what is on disk.
   tempo and clicks drum hits by hand), `tests/studiohand.test.ts` (the steps).
 - `server/panacea.ts`, `server/specs/panacea.ts`, `src/lib/panacea/`, `src/components/PanaceaWindow.tsx` + `src/components/panacea/`,
   `server/projectbook.ts`: **Panacea**, the single workspace (design and plan: `docs/PANACEA.md`).
-  `src/components/PanaceaWorkspace.tsx` supplies Capabilities and Follow on desktop and phone, both hosted by `App.tsx`.
+  `src/components/PanaceaWorkspace.tsx` hosts the scene and has no bar of its own in the app: Follow and the Visible work eye sit in `App.tsx`'s header (`.top-work`), and Capabilities is the wrench by the message box.
   There is no mode selector or exclusive pane: `panacea/Board.tsx` renders every native surface and hosted engine card under
   one world transform. `workspaceScene.ts` gives hosted contents stable identities even when other work is inserted.
   The viewport-level right icon dock jumps the camera, Zoom out is anchored, and Show all work fits native/engine bounds together.

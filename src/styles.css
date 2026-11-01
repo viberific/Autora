@@ -6612,6 +6612,12 @@ button.dock-card:hover { border-color: var(--border-strong); }
 .stage-follow.visible-work { margin-left: auto; }
 .stage-follow.visible-work.is-compact { width: 28px; padding: 0; justify-content: center; }
 .stage-follow.visible-work + .stage-follow { margin-left: 6px; }
+/* Follow and Visible work in the header, beside the page's own action. */
+.top-work { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; }
+.top-work .stage-follow, .top-work .stage-follow.visible-work, .top-work .stage-follow.visible-work + .stage-follow { margin: 0; height: 30px; }
+.top-work .stage-follow.visible-work.is-compact { width: 30px; }
+/* On a phone the open page's address would take the room Follow and the eye need; the browser card has its own close. */
+@media (max-width: 680px) { header.top .badge.browsing { display: none; } }
 .immersive-follow.visible-work { display: inline-flex; align-items: center; gap: 5px; }
 .immersive-follow.visible-work.is-compact { aspect-ratio: 1; padding: 0; justify-content: center; }
 .immersive-follow.visible-work.is-on { opacity: 1; }

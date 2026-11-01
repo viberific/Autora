@@ -99,7 +99,7 @@ async function main() {
       await dock.getByRole("button", { name: "Zoom out", exact: true }).click();
       await dock.getByRole("button", { name: "Show all work", exact: true }).click();
       assert.equal(await music.getAttribute("data-kept-work"), "yes");
-      const caps = workspace.getByRole("button", { name: "Capabilities", exact: true });
+      const caps = page.getByRole("button", { name: "Panacea capabilities", exact: true });
       await caps.click();
       const capabilityDialog = page.getByRole("dialog", { name: "Panacea capabilities" });
       await capabilityDialog.waitFor();

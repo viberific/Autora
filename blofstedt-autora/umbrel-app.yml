@@ -204,9 +204,9 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  On a phone the conversation sheet is now three views that flow into one
-  another as you drag. Canvas only shows a compact preview of the last three
-  messages and says how many steps it leaves out. Half is the conversation
-  alone, with no memory notes or tool steps. Full adds them back and starts the
-  messages from the top. While you drag, the preview fades into the messages and
-  the steps fade in, so there is never an empty gap at the top of the sheet.
+  The Panacea / Capabilities bar under the top bar is gone. Follow and the eye
+  (watch the agent's mouse and keyboard) are now in the top bar, so they are
+  always in reach. Capabilities is the wrench beside the message box. On a
+  phone the conversation sheet has no bubble button or grip line, follows your
+  finger as you drag it from anywhere but the text box, and moves between a
+  compact preview, messages only, and the full view with its steps.

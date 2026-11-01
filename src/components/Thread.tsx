@@ -83,7 +83,6 @@ export function Thread({
   live,
   onPermissionDecide,
   onSuggest,
-  onWorkspaceAsk,
   placeholder,
   dock,
   dockedPlanKey = "",
@@ -101,8 +100,6 @@ export function Thread({
   buckets: Bucket[];
   /** Sends a follow-up chip's words, as though typed. */
   onSuggest?: (text: string, title?: string) => void;
-  /** Draft an intention from Panacea's capability chooser, without starting a turn. */
-  onWorkspaceAsk?: (text: string) => void;
   /** What an empty session shows: the setup card, or tasks to start from. */
   placeholder?: ReactNode;
   /** The pinned corner widgets, if any: they sit in the pane's corners, over
@@ -487,7 +484,6 @@ export function Thread({
       {activeKind && (
         <Stage
           sessionId={sessionId}
-          onAsk={onWorkspaceAsk}
           surfaces={surfaces}
           active={activeKind}
           collapsed={folded}
