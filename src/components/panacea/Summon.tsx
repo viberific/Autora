@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { DOMAIN_NAMES, searchLibrary, type Recipe } from "../../lib/panacea/library";
 import type { Node } from "../../lib/panacea/recipe";
 
@@ -38,6 +38,20 @@ export function Summon({ x, y, recipes, onPick, onClose }: {
   const input = useRef<HTMLInputElement>(null);
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => { input.current?.focus(); }, []);
+  /* Opened where the grid was double-clicked, but never hanging off the board: near an edge (and on a phone, where the
+     board is narrower than the picker is wide) it moves in, so all of it can be seen and reached. */
+  const [shift, setShift] = useState({ x: 0, y: 0 });
+  useLayoutEffect(() => {
+    const el = box.current;
+    const host = el?.offsetParent;
+    if (!el || !(host instanceof HTMLElement)) return;
+    const r = el.getBoundingClientRect();
+    const h = host.getBoundingClientRect();
+    const pad = 8;
+    const dx = r.right > h.right - pad ? h.right - pad - r.right : r.left < h.left + pad ? h.left + pad - r.left : 0;
+    const dy = r.bottom > h.bottom - pad ? Math.max(h.top + pad - r.top, h.bottom - pad - r.bottom) : r.top < h.top + pad ? h.top + pad - r.top : 0;
+    if (dx || dy) setShift({ x: dx, y: dy });
+  }, [x, y]);
   useEffect(() => {
     const away = (e: PointerEvent) => { if (!box.current?.contains(e.target as globalThis.Node)) onClose(); };
     document.addEventListener("pointerdown", away, true);
@@ -59,7 +73,7 @@ export function Summon({ x, y, recipes, onPick, onClose }: {
     else if (e.key === "Escape") { e.preventDefault(); onClose(); }
   };
   return (
-    <div className="pa-summon" ref={box} style={{ left: x, top: y }} role="dialog" aria-label="Add a panel" onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+    <div className="pa-summon" ref={box} style={{ left: x + shift.x, top: y + shift.y }} role="dialog" aria-label="Add a panel" onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
       <input ref={input} className="pa-summon-q" value={q} placeholder="What do you need?" aria-label="Search pieces" onChange={(e) => setQ(e.target.value)} onKeyDown={key} />
       <div className="pa-summon-list" role="listbox">
         {found.map((r, i) => (

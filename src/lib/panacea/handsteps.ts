@@ -13,6 +13,9 @@ import type { Canvas } from "./canvas";
 import { ATOMS } from "./atoms";
 import type { Node } from "./recipe";
 
+/** Nothing set: zero, empty words, nothing chosen, off. */
+const blank = (v: Value): boolean => v === 0 || v === "" || v === false || v === null || (Array.isArray(v) && v.length === 0);
+
 export type HandStep =
   | { op: "place"; id: string; recipe: string; name: string; x: number; y: number }
   | { op: "set"; key: string; value: Value; panel: string }
@@ -70,7 +73,12 @@ export function panaceaSteps(before: Canvas, after: Canvas): { steps: HandStep[]
     if (!b) continue;
     for (const [k, v] of Object.entries(s.params)) if (!same(b.params[k], v)) changed.push({ key: `@${s.id}.${k}`, value: v });
   }
-  for (const [k, v] of Object.entries(after.values)) if (!same(before.values[k], v)) changed.push({ key: k, value: v });
+  for (const [k, v] of Object.entries(after.values)) {
+    /* A value that first exists now and is blank (a new panel opening on 0, "", nothing chosen) is what its control
+       already shows: there is nothing for a hand to press, and trying left a step that could not be done. */
+    if (!(k in before.values) && blank(v)) continue;
+    if (!same(before.values[k], v)) changed.push({ key: k, value: v });
+  }
   for (const c of changed) {
     const panel = controlFor(after, c.key);
     if (panel) steps.push({ op: "set", key: c.key, value: c.value, panel });

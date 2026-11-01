@@ -269,7 +269,9 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
       setView({ x: -camera.x / camera.zoom, y: -camera.y / camera.zoom, zoom: camera.zoom });
     },
     reveal: async (x, y) => {
-      const r = root.current!.getBoundingClientRect();
+      /* What the person can see of the board, not all of it: on a phone the conversation sheet covers its foot, and a
+         point under the sheet is a hand nobody watches (and a picker opened there is out of reach). */
+      const r = workViewport(root.current!);
       const v = viewRef.current;
       const margin = 80 / v.zoom;
       if (x < v.x + margin || y < v.y + margin || x > v.x + r.width / v.zoom - margin || y > v.y + r.height / v.zoom - margin) {

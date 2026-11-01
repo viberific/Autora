@@ -6361,7 +6361,7 @@ async function startServer() {
     push: (id: string, message: Record<string, unknown>) => sendEphemeral(id, message),
     loadFile: (id, artifact, options) => loadPanaceaFile(id, artifact, options, fileLoadGuards),
   });
-  panaceaVisible(() => state.agentCursor);
+  panaceaVisible((session) => state.agentCursor && watched(session));
 
   /* File -> Export PDF in the Office window: the server lays the document out (the same pages office_pdf
      makes), and the PDF opens in the PDF editor -- PDFs always go to our own. */

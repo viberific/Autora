@@ -294,6 +294,19 @@ await test("the hand's steps go from the canvas as it is to the canvas as the ca
   assert.equal(plan.skipped, 1, "grain has no control on screen");
 });
 
+await test("a new panel's blank opening values are not steps: there is nothing for a hand to press", () => {
+  const before = withSurfaces();
+  const after = structuredClone(before);
+  const placed = placeRecipe(after, find("general.budget")!, { why: "x", by: "agent" });
+  if ("error" in placed) throw new Error(placed.error);
+  const opened = structuredClone(after);
+  opened.values = { ...opened.values, budget: 0, currency: "", "budget.on": [] };
+  assert.deepEqual(panaceaSteps(before, opened).steps.map((s) => s.op), ["place"]);
+  /* A value the agent chose is still set by hand. */
+  opened.values.budget = 3000;
+  assert.deepEqual(panaceaSteps(before, opened).steps.map((s) => s.op).sort(), ["place", "set"]);
+});
+
 // --------------------------------------------------------------- the tools --
 
 const S = "panaceatest";

@@ -88,11 +88,14 @@ interface Saved {
 const entries = new Map<string, Entry>();
 const listeners = new Set<(session: string) => void>();
 let pushed: (session: string, message: Record<string, unknown>) => void = () => undefined;
-let visible: () => boolean = () => false;
-/** Whether Visible work is on (server.ts says). */
-export function panaceaVisible(fn: () => boolean) {
+let visible: (session: string) => boolean = () => false;
+/** Whether Visible work is on and somebody has this chat on screen to watch it (server.ts says). */
+export function panaceaVisible(fn: (session: string) => boolean) {
   visible = fn;
 }
+
+/** How long a change waits for a window it has just opened to come up, so even the first one is done by hand. */
+const HAND_OPEN_WAIT_MS = 8_000;
 
 const validSession = (id: string) => /^[A-Za-z0-9_-]{1,80}$/.test(id);
 const savedName = (session: string) => `panacea-${session}`;
@@ -348,7 +351,11 @@ async function command(session: string, name: string, args: Record<string, unkno
 
 /** With Visible work on and the window up, the change is done there by the agent's hand while this waits. */
 async function byHand(session: string, e: Entry, next: Canvas): Promise<string | null> {
-  if (!visible() || !e.open || !e.ready) return null;
+  if (!visible(session) || !e.open) return null;
+  /* The call has just opened the window (setOpen marks it not ready until the page has drawn it): wait for it, or
+     the first change of a chat -- usually the one the person is watching for -- appears instead of being done. */
+  for (let waited = 0; !e.ready && waited < HAND_OPEN_WAIT_MS; waited += 150) await sleep(150);
+  if (!e.ready) return null;
   const plan = panaceaSteps(e.canvas, next);
   if (!plan.steps.length) return null;
   type Reply = { results?: Array<{ i: number; ok: boolean; error?: string }> } | null;

@@ -45,8 +45,15 @@ const ptr = (type: string, p: Point, extra: PointerEventInit = {}) =>
 const mouse = (type: string, p: Point, detail = 1) =>
   new MouseEvent(type, { bubbles: true, cancelable: true, composed: true, clientX: p.x, clientY: p.y, button: 0, buttons: type === "mouseup" || type === "click" || type === "dblclick" ? 0 : 1, detail });
 
+/** Whether a press at the middle of `el` lands on it: what a person needs to click it, even when an edge of it is covered. */
+function pressable(el: Element): boolean {
+  const p = centreOf(el);
+  const hit = p && document.visibilityState === "visible" ? document.elementFromPoint(p.x, p.y) : null;
+  return !!hit && (hit === el || el.contains(hit));
+}
+
 async function into(el: Element): Promise<Point> {
-  if (el.closest(".pa-board") && !isWorkVisible(el)) throw new Skip("the control is outside the workspace view");
+  if (el.closest(".pa-board") && !isWorkVisible(el) && !pressable(el)) throw new Skip("the control is outside the workspace view");
   let p = centreOf(el);
   const r = el.getBoundingClientRect();
   if (!p || r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) {
