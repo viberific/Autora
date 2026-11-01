@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { PANEL_DEFAULT, PANEL_MAX, PANEL_MIN, PANEL_STEP, clampPanelWidth, type PreviewLine, type Sheet } from "./chatLayout";
 import "./ConversationFlow.css";
 
@@ -22,6 +22,21 @@ interface ConversationFlowProps {
   locked?: boolean;
   /** The last thing or two said, shown on a phone while the sheet is retracted; a tap opens the sheet. */
   preview?: readonly PreviewLine[];
+  /** How many steps and memory notes the newest turn holds that the preview leaves out. */
+  hiddenSteps?: number;
+}
+
+/** A finger must move this far before a press on the handle is a drag rather than a tap. */
+const SHEET_SLOP = 8;
+/** Where a touch never moves the sheet: the entry box, where you type. */
+const NO_SHEET_DRAG = "textarea, input, select, [contenteditable], .conversation-flow__entry";
+/** The handle row, and the column's padding and gap under the entry strip (ConversationFlow.css). */
+const HANDLE_H = 0;
+const SHEET_PAD = 17;
+
+interface SheetDrag {
+  y: number; lastY: number; lastT: number; speed: number; active: boolean;
+  startH: number; h: number; wasFull: boolean; parentH: number;
 }
 
 const LEVELS = ["Canvas only", "Half", "Full"] as const;
@@ -53,6 +68,7 @@ export function ConversationFlow({
   onSheet,
   locked = false,
   preview,
+  hiddenSteps = 0,
 }: ConversationFlowProps) {
   const conversationId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -110,6 +126,107 @@ export function ConversationFlow({
   // Phone sheet: Canvas only (the retracted conversation), half, full. A tap steps up and wraps to the canvas;
   // a drag or the arrow keys move one level. Lowering to the canvas goes through the same refusal as Retract.
   const level = collapsed ? 0 : sheet === "full" ? 2 : 1;
+  // The sheet glides between heights. The new level is laid out at once (the canvas resizes to it); the root's own
+  // height is then animated from where it was, so the conversation slides rather than snaps. Full lies over the canvas,
+  // so going to or from it moves the top edge instead.
+  const lastBox = useRef<DOMRect | null>(null);
+  const restBox = useRef<number | null>(null);
+  const gliding = useRef(false);
+  const sheetDrag = useRef<SheetDrag | null>(null);
+  /** Animates the root from a box it was in to the one it is in now. Returns a way to stop it. */
+  const glide = (root: HTMLElement, from: { top: number; height: number }, to: { height: number }, toFull: boolean) => {
+    if (Math.abs(from.height - to.height) < 2 || typeof root.animate !== "function") return undefined;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
+    const style = getComputedStyle(root);
+    const duration = (parseFloat(style.getPropertyValue("--dur-3")) || 0.4) * 1000;
+    const easing = style.getPropertyValue("--ease").trim() || "ease";
+    const parentTop = root.parentElement?.getBoundingClientRect().top ?? 0;
+    const frames = toFull
+      ? [{ top: `${from.top - parentTop}px` }, { top: "0px" }]
+      : [{ flexBasis: `${from.height}px` }, { flexBasis: `${to.height}px` }];
+    gliding.current = true;
+    root.dataset.gliding = "";
+    const run = root.animate(frames, { duration, easing });
+    follow();
+    const done = () => {
+      // A cancelled run reports late; by then a newer one (or a finger) may own the sheet.
+      if (sheetDrag.current?.active) return;
+      if (root.getAnimations().some((a) => a !== run && a.playState === "running")) return;
+      gliding.current = false;
+      delete root.dataset.gliding;
+      lastBox.current = root.getBoundingClientRect();
+    };
+    run.onfinish = done;
+    run.oncancel = done;
+    return () => run.cancel();
+  };
+  // How far open the sheet is, as two numbers on the root for the stylesheet: p runs 0 to 1 from canvas only to half
+  // (the preview gives way to the messages), q from half to full (the steps fade in and the list sets off from the
+  // top). At rest they follow the level; while the sheet moves they follow its height, frame by frame.
+  const levelRef = useRef(level);
+  levelRef.current = level;
+  const lockedRef = useRef(locked);
+  lockedRef.current = locked;
+  const frame = useRef(0);
+  const paintDone = (root: HTMLElement) => {
+    const at = levelRef.current;
+    root.style.setProperty("--flow-p", at === 0 ? "0" : "1");
+    root.style.setProperty("--flow-q", at === 2 ? "1" : "0");
+  };
+  const paint = (root: HTMLElement) => {
+    const parentH = root.parentElement?.getBoundingClientRect().height ?? 0;
+    const half = Math.max(parentH * 0.55, Math.min(parentH, 320));
+    const entry = root.querySelector<HTMLElement>(".conversation-flow__entry-area")?.offsetHeight ?? 90;
+    const min = Math.min(restBox.current ?? (HANDLE_H + entry + SHEET_PAD), half);
+    const h = root.getBoundingClientRect().height;
+    const p = half > min ? Math.max(0, Math.min(1, (h - min) / (half - min))) : 1;
+    const q = parentH > half ? Math.max(0, Math.min(1, (h - half) / (parentH - half))) : 0;
+    root.style.setProperty("--flow-p", p.toFixed(3));
+    root.style.setProperty("--flow-q", q.toFixed(3));
+    // Messages stay on the newest while the sheet opens to half, and slide to the oldest as it opens to full.
+    const list = root.querySelector<HTMLElement>(".thread");
+    if (list && gliding.current) {
+      const room = list.scrollHeight - list.clientHeight;
+      if (room > 0) list.scrollTop = room * (1 - q);
+    }
+  };
+  const follow = () => {
+    cancelAnimationFrame(frame.current);
+    const tick = () => {
+      const root = rootRef.current;
+      if (!root) return;
+      if (gliding.current) { paint(root); frame.current = requestAnimationFrame(tick); } else paintDone(root);
+    };
+    frame.current = requestAnimationFrame(tick);
+  };
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root || !phone) return;
+    if (!gliding.current) paintDone(root);
+  }, [phone, level]);
+  useEffect(() => () => cancelAnimationFrame(frame.current), []);
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || !phone || typeof ResizeObserver === "undefined") return;
+    const watch = new ResizeObserver(() => {
+      if (gliding.current) return;
+      lastBox.current = root.getBoundingClientRect();
+      if (root.classList.contains("is-collapsed")) restBox.current = lastBox.current.height;
+    });
+    watch.observe(root);
+    return () => watch.disconnect();
+  }, [phone]);
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root || !phone) { lastBox.current = null; return; }
+    const from = lastBox.current;
+    const to = root.getBoundingClientRect();
+    lastBox.current = to;
+    if (!from) return;
+    return glide(root, from, to, level === 2);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- glide only reads refs and the DOM
+  }, [phone, level]);
+
   const setLevel = (target: number) => {
     const next = Math.max(0, Math.min(2, target));
     if (next === level) return;
@@ -118,7 +235,126 @@ export function ConversationFlow({
     onSheet?.(next === 2 ? "full" : "half");
   };
   const cycle = () => setLevel(level === 2 ? (locked ? 1 : 0) : level + 1);
-  const gesture = useRef<number | null>(null);
+  /** The heights a finger can settle the sheet at: canvas only, half, full (the first is out of reach while locked). */
+  const restHeights = (parentH: number) => {
+    const half = Math.max(parentH * 0.55, Math.min(parentH, 320));
+    // Retracted, the sheet is its handle and the entry strip. Before it has been seen retracted, that is measured.
+    const entry = rootRef.current?.querySelector<HTMLElement>(".conversation-flow__entry-area")?.offsetHeight ?? 90;
+    const retracted = restBox.current ?? (HANDLE_H + entry + SHEET_PAD);
+    return [locked ? half : Math.min(retracted, half), half, parentH];
+  };
+  const beginSheetDrag = (y: number) => {
+    const root = rootRef.current;
+    if (!root) return;
+    const box = root.getBoundingClientRect();
+    sheetDrag.current = {
+      y, lastY: y, lastT: performance.now(), speed: 0, active: false,
+      startH: box.height, h: box.height, wasFull: level === 2,
+      parentH: root.parentElement?.getBoundingClientRect().height ?? box.height,
+    };
+  };
+  const dragSheet = (y: number) => {
+    const root = rootRef.current;
+    const state = sheetDrag.current;
+    if (!root || !state) return;
+    const moved = y - state.y;
+    if (!state.active) {
+      if (Math.abs(moved) < SHEET_SLOP) return;
+      state.active = true;
+      // The finger owns the height now: stop any glide and let the conversation draw while it is pulled open.
+      gliding.current = true;
+      root.dataset.gliding = "";
+      for (const run of root.getAnimations()) run.cancel();
+      follow();
+    }
+    const heights = restHeights(state.parentH);
+    const h = Math.max(heights[0], Math.min(state.parentH, state.startH - moved));
+    if (state.wasFull) root.style.top = `${state.parentH - h}px`;
+    else root.style.flexBasis = `${h}px`;
+    const now = performance.now();
+    state.speed = (y - state.lastY) / Math.max(1, now - state.lastT);
+    state.lastY = y;
+    state.lastT = now;
+    state.h = h;
+  };
+  const endSheetGesture = () => {
+    const root = rootRef.current;
+    const state = sheetDrag.current;
+    sheetDrag.current = null;
+    if (!root || !state) return;
+    if (!state.active) return;
+    // Let go: settle on the nearest height, carried a little further by a flick, gliding from where the finger left it.
+    const box = root.getBoundingClientRect();
+    root.style.removeProperty("flex-basis");
+    root.style.removeProperty("top");
+    gliding.current = false;
+    delete root.dataset.gliding;
+    follow();
+    const heights = restHeights(state.parentH);
+    const reach = state.h - state.speed * 180;
+    let target = 0;
+    heights.forEach((h, i) => { if (Math.abs(h - reach) < Math.abs(heights[target] - reach)) target = i; });
+    if (target === level) {
+      glide(root, box, root.getBoundingClientRect(), level === 2);
+    } else {
+      lastBox.current = box;
+      setLevel(target);
+    }
+  };
+  // A drag may start anywhere in the sheet but where you type. The message list still scrolls: a swipe on it moves the
+  // sheet only when it has nothing to scroll that way (up, until the sheet is full; down, once it is at its top).
+  // Touch events, not pointer events, because a pan the browser takes up is cancelled from under pointer events.
+  const touchRef = useRef({ begin: beginSheetDrag, drag: dragSheet, end: endSheetGesture, level });
+  touchRef.current = { begin: beginSheetDrag, drag: dragSheet, end: endSheetGesture, level };
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || !phone) return;
+    let from = 0;
+    let mode: "idle" | "pending" | "drag" | "scroll" = "idle";
+    let scroller: HTMLElement | null = null;
+    const scrollerOf = (start: HTMLElement) => {
+      for (let el: HTMLElement | null = start; el && el !== root; el = el.parentElement) {
+        const overflow = getComputedStyle(el).overflowY;
+        if ((overflow === "auto" || overflow === "scroll") && el.scrollHeight > el.clientHeight + 1) return el;
+      }
+      return null;
+    };
+    const onStart = (event: TouchEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (event.touches.length !== 1 || !target || target.closest(NO_SHEET_DRAG) || target.closest(".conversation-flow__handle")) { mode = "idle"; return; }
+      from = event.touches[0].clientY;
+      scroller = scrollerOf(target);
+      mode = "pending";
+    };
+    const onMove = (event: TouchEvent) => {
+      if (mode === "idle" || mode === "scroll") return;
+      const y = event.touches[0].clientY;
+      if (mode === "pending") {
+        const moved = y - from;
+        if (Math.abs(moved) < 3) return;
+        const takes = !scroller || (moved < 0 ? touchRef.current.level < 2 : scroller.scrollTop <= 1);
+        if (!takes) { mode = "scroll"; return; }
+        mode = "drag";
+        touchRef.current.begin(from);
+      }
+      if (event.cancelable) event.preventDefault();
+      touchRef.current.drag(y);
+    };
+    const onEnd = () => {
+      if (mode === "drag") touchRef.current.end();
+      mode = "idle";
+    };
+    root.addEventListener("touchstart", onStart, { passive: true });
+    root.addEventListener("touchmove", onMove, { passive: false });
+    root.addEventListener("touchend", onEnd);
+    root.addEventListener("touchcancel", onEnd);
+    return () => {
+      root.removeEventListener("touchstart", onStart);
+      root.removeEventListener("touchmove", onMove);
+      root.removeEventListener("touchend", onEnd);
+      root.removeEventListener("touchcancel", onEnd);
+    };
+  }, [phone]);
   const keySheet = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "ArrowUp") setLevel(level + 1);
     else if (event.key === "ArrowDown") setLevel(level - 1);
@@ -128,15 +364,6 @@ export function ConversationFlow({
     else return;
     event.preventDefault();
   };
-  const endSheetGesture = (event: PointerEvent<HTMLDivElement>) => {
-    const from = gesture.current;
-    gesture.current = null;
-    if (from == null) return;
-    const moved = event.clientY - from;
-    if (Math.abs(moved) < PANEL_STEP * 3) cycle();
-    else setLevel(level + (moved < 0 ? 1 : -1));
-  };
-
   useEffect(() => {
     const history = historyRef.current;
     if (!history) return;
@@ -227,9 +454,10 @@ export function ConversationFlow({
           aria-valuenow={level}
           aria-valuetext={LEVELS[level]}
           onKeyDown={keySheet}
-          onPointerDown={(event) => { gesture.current = event.clientY; event.currentTarget.setPointerCapture(event.pointerId); }}
+          onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); beginSheetDrag(event.clientY); }}
+          onPointerMove={(event) => dragSheet(event.clientY)}
           onPointerUp={endSheetGesture}
-          onPointerCancel={() => { gesture.current = null; }}
+          onPointerCancel={endSheetGesture}
         >
           <span aria-hidden="true" />
         </div>
@@ -294,19 +522,26 @@ export function ConversationFlow({
               <ConversationIcon />
             </button>
           )}
-          {phone && collapsed && onToggle && preview && preview.length > 0 && (
+          {phone && onToggle && preview && preview.length > 0 && (
             <button
               className="conversation-flow__preview"
               type="button"
               onClick={() => { restoreFocus.current = "toggle"; onToggle(); }}
               aria-controls={conversationId}
+              tabIndex={collapsed ? 0 : -1}
               aria-label={`Open the conversation. ${preview.map((line) => `${line.who}: ${line.text}`).join(" ")}`}
             >
               {preview.map((line, index) => (
                 <span className="conversation-flow__preview-line" key={index} aria-hidden="true">
-                  <b>{line.who}</b> {line.text}
+                  <i className={`conversation-flow__who is-${line.who === "You" ? "you" : "agent"}`}>{line.who === "You" ? "Y" : "A"}</i>
+                  {line.text}
                 </span>
               ))}
+              {hiddenSteps > 0 && (
+                <span className="conversation-flow__preview-more" aria-hidden="true">
+                  {hiddenSteps} {hiddenSteps === 1 ? "step" : "steps"} and memory notes hidden · tap to see
+                </span>
+              )}
             </button>
           )}
           {todos != null && <div className="conversation-flow__todos">{todos}</div>}

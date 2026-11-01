@@ -31,10 +31,10 @@ import { resetCollab, setCollabState } from "./lib/collab";
 import { cellKey, dockedPlan, pickSurfaces, usePhone } from "./lib/stage";
 import { lastWorkedPane } from "./lib/followPane";
 import { setFollowing, useFollowing } from "./lib/follow";
-import { setFullscreen } from "./lib/fullscreen";
 import { Thread, type Outgoing } from "./components/Thread";
 import { ConversationFlow } from "./components/panacea/ConversationFlow";
 import { previewOf, useChatLayout } from "./components/panacea/chatLayout";
+import { hiddenStepCount } from "./lib/workspaceThread";
 import { Dock } from "./components/Dock";
 import { Rail, pageLabel, PAGES, type PageId } from "./components/Rail";
 import { isSystemTab, type SystemTab } from "./lib/systemTabs";
@@ -82,6 +82,7 @@ const Triggers = lazyPage(() => import("./components/Triggers"), "Triggers");
 const LiveChat = lazyPage(() => import("./components/LiveChat"), "LiveChat", false);
 import { LibraryPicker, type LibraryTab } from "./components/LibraryPicker";
 import { ToolsSheet } from "./components/ToolsSheet";
+import { VisibleWork } from "./components/VisibleWork";
 import { OPEN_NOTEBOOK, type NotebookRef } from "./lib/notebooks";
 import { MONEY_CHANGED } from "./lib/spend";
 import type { Bucket } from "./lib/memory";
@@ -1718,14 +1719,10 @@ export function App() {
     }
     return best;
   }, [view.buckets]);
-  const workspaceAsk = useCallback((text: string) => {
-    setFullscreen(false);
-    setDraft(text);
-    window.setTimeout(() => composerRef.current?.focus(), 0);
-  }, []);
   const requiresInput = !!view.asking || view.approvals.some((approval) => !approval.settled);
   // What the phone's retracted sheet shows of the conversation: the last two things said.
-  const chatPreview = useMemo(() => previewOf(view.transcript), [view.transcript]);
+  const chatPreview = useMemo(() => previewOf(view.transcript, 3), [view.transcript]);
+  const hiddenSteps = useMemo(() => hiddenStepCount(view.buckets[view.buckets.length - 1]?.cells ?? []), [view.buckets]);
   const retractChat = useCallback(() => {
     if (requiresInput) { setNotice("A question or permission needs your answer before work can continue."); return; }
     setChatCollapsed((collapsed) => !collapsed);
@@ -2134,6 +2131,23 @@ export function App() {
             </button>
           )}
 
+          {/* Following the agent's work, and watching it work (its mouse and keyboard), where they are always in reach
+              rather than in a bar of the workspace's own. */}
+          {page === "chat" && sessionId && (
+            <span className="top-work">
+              <VisibleWork className="stage-follow" compact />
+              <button
+                type="button"
+                className={`stage-follow${followAgent ? " is-on" : ""}`}
+                onClick={() => setFollow(!followAgent)}
+                aria-pressed={followAgent}
+                title={followAgent ? "Following the agent — stop following" : "Follow the agent's work"}
+              >
+                <span className="watch-dot" aria-hidden="true" /> Follow
+              </button>
+            </span>
+          )}
+
           {/* The page's own action, in the corner it is looked for in: a page
               that can make something should say so where its name is, rather
               than in a bar of its own under the title. Rightmost, because a
@@ -2200,7 +2214,7 @@ export function App() {
 
         <ConversationFlow collapsed={chatCollapsed && !requiresInput} onToggle={retractChat}
           phone={phoneLayout} width={chatLayout.width} onWidth={chatLayout.setWidth}
-          sheet={chatLayout.sheet} onSheet={chatLayout.setSheet} locked={requiresInput} preview={chatPreview}
+          sheet={chatLayout.sheet} onSheet={chatLayout.setSheet} locked={requiresInput} preview={chatPreview} hiddenSteps={hiddenSteps}
           conversation={<>
           {openWindows.length === 0 && !view.buckets.some((bucket) => bucket.prompt || bucket.attachments.length > 0) && (
             <div className="pw-launch">
@@ -2213,7 +2227,6 @@ export function App() {
           )}
           <Thread
             workspaceHosted
-            onWorkspaceAsk={workspaceAsk}
             chatOnly={false}
             buckets={view.buckets}
             // Stopped on a question is not working; the card says what it is.
@@ -2747,7 +2760,6 @@ export function App() {
           <div className="pw-scene-stack">
             <PanaceaWorkspace sessionId={sessionId ?? ""} modes={sideWindows.map((w) => w.pane)} active={sidePane ?? "panacea"}
               following={followAgent} onPick={pickWindow} onFollow={() => setFollow(!followAgent)}
-              onAsk={workspaceAsk}
               phone={phoneLayout}
               navigationHost={workNavigationHost}
               nativeActionsRef={nativeWorkspaceActions}

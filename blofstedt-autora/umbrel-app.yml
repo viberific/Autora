@@ -204,11 +204,11 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  The conversation no longer covers the canvas. On desktop it is a panel docked
-  at the right that the workspace resizes around: drag its edge to change the
-  width (remembered), retract it to a slim strip that keeps the Ask bar and the
-  to-do list, and reopen it from the "Show conversation" tab. On a phone it is a
-  bottom sheet in three heights: half, full, and canvas-only. On mobile the
-  spend strip is a single line, the retracted strip previews your last message,
-  a long draft no longer pushes Send off the sheet, pinch zooms the canvas, and
-  the retract control is one icon with no words.
+  The top bar is tidier. The chat name pill grows to fill the spare room, so
+  there is no dead space, and the gaps between the pills are all equal. Every
+  pill is also the same height (taller on a touch screen). The Panacea /
+  Capabilities bar is gone, with Follow and the eye in the top bar and
+  Capabilities on the wrench by the message box. On a phone the conversation
+  sheet has no bubble button or grip line, follows your finger when dragged
+  from anywhere but the text box, and moves between a compact preview, messages
+  only, and the full view with its steps.

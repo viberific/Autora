@@ -44,7 +44,8 @@ test("Panacea owns one scene, with no exclusive mode selector", () => {
       h("div", { key: "panacea", hidden: true, "data-engine": "canvas" }, "kept canvas")],
   }));
   assert.match(html, /aria-label="Panacea workspace"/);
-  assert.match(html, /Capabilities/);
+  // The app hosts Follow and Visible work in its header, so the workspace has no bar of its own.
+  assert.doesNotMatch(html, /Capabilities|pw-bar|>Panacea</);
   assert.match(html, /Opening the workspace/);
   assert.doesNotMatch(html, /role="tablist"|Autora Terminal|Panacea work mode|<select/);
 });

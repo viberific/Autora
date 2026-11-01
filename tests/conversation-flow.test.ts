@@ -122,10 +122,19 @@ test("a retracted phone sheet previews the last two things said and opens on a t
   const phone = renderToStaticMarkup(h(ConversationFlow, { ...slots, phone: true }));
   assert.match(phone, /class="conversation-flow__preview"[^>]*aria-label="Open the conversation\. You: Make it blue Autora: Done\./);
   assert.ok(phone.indexOf("</section>") < phone.indexOf("conversation-flow__preview"));
-  assert.doesNotMatch(renderToStaticMarkup(h(ConversationFlow, { ...slots, phone: true, collapsed: false })), /conversation-flow__preview/);
+  // Drawn whenever the sheet is on a phone, so it can fade into the messages while the sheet moves; it is out of the
+  // tab order and hidden by CSS unless the sheet is retracted or moving.
+  const open = renderToStaticMarkup(h(ConversationFlow, { ...slots, phone: true, collapsed: false }));
+  assert.match(open, /class="conversation-flow__preview"[^>]*tabindex="-1"/);
+  assert.match(phone, /class="conversation-flow__preview"[^>]*tabindex="0"/);
   assert.doesNotMatch(renderToStaticMarkup(h(ConversationFlow, { ...slots, phone: false })), /conversation-flow__preview/);
+  assert.match(renderToStaticMarkup(h(ConversationFlow, { ...slots, phone: true, hiddenSteps: 3 })), /3 steps and memory notes hidden/);
+  assert.doesNotMatch(phone, /memory notes hidden/);
   const css = fs.readFileSync(new URL("../src/components/panacea/ConversationFlow.css", import.meta.url), "utf8");
   assert.match(css, /\.conversation-flow__preview\s*\{[^}]*min-height: 44px;/);
+  // The three views run into one another: the preview by --flow-p, the steps and the list's anchor by --flow-q.
+  assert.match(css, /\.conversation-flow__preview\s*\{[^}]*\n\s*\}[\s\S]*opacity: calc\(1 - var\(--flow-p, 0\) \* 1\.8\)/);
+  assert.match(css, /\.flow-detail\s*\{[^}]*max-height: calc\(var\(--flow-q, 0\) \* 90px\);[^}]*opacity: var\(--flow-q, 0\)/);
   assert.match(css, /\.conversation-flow__entry \.composer textarea\s*\{[^}]*flex: 1 1 auto;[^}]*max-height: min\(18dvh, 160px\);/);
 });
 

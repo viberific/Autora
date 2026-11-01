@@ -34,10 +34,9 @@ const ICON: Record<SurfaceKind, ReactNode> = {
 export const NAME: Record<SurfaceKind, string> = { app: "Apps & code", pdf: "PDF", video: "Video", cad: "3D", game: "Games", photo: "Images", panacea: "Canvas", studio: "Music", docx: "Documents", pptx: "Presentations", xlsx: "Spreadsheets", browser: "Web", plan: "To do", widget: "Explainers" };
 
 export function Stage({
-  sessionId, onAsk, surfaces, active, collapsed, expanded, following, onPick, onFollow, onToggle, onExpand, render,
+  sessionId, surfaces, active, collapsed, expanded, following, onPick, onFollow, onToggle, onExpand, render,
 }: {
   sessionId: string;
-  onAsk?: (text: string) => void;
   surfaces: readonly Surface[];
   active: SurfaceKind;
   collapsed: boolean;
@@ -59,7 +58,7 @@ export function Stage({
       aria-label="Pinned Panacea workspace"
     >
       <PanaceaWorkspace sessionId={sessionId} modes={modes} active={workspaceMode(active) ?? "panacea"} phone
-        following={following} onPick={picked} onFollow={onFollow} onAsk={onAsk}
+        following={following} onPick={picked} onFollow={onFollow}
         collapsed={collapsed} expanded={expanded} onToggle={onToggle} onExpand={onExpand}>
         {surfaces.map((surface) => (
           <div

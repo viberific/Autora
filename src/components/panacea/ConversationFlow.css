@@ -456,12 +456,24 @@
     flex: 0 0 45%;
   }
 
+  /* No grip line: the whole sheet drags (see ConversationFlow.tsx). The handle stays as the keyboard and screen
+     reader control, and as a strip along the top edge that drags too. */
   .conversation-flow__handle {
     display: flex;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 20px;
+    z-index: 1;
+  }
+
+  .conversation-flow__handle > span {
+    display: none;
   }
 
   .conversation-flow__column {
-    padding: 0 8px 8px;
+    padding: 8px 8px 8px;
     gap: 8px;
   }
 
@@ -483,6 +495,21 @@
 
   .conversation-flow__todos {
     margin-inline: 2px;
+  }
+
+  /* While the sheet glides to its new height (see ConversationFlow.tsx) it clips what does not fit yet, may be
+     shorter than its resting minimum, and keeps the conversation drawn so it slides away rather than vanishing. */
+  .conversation-flow[data-gliding] {
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  .conversation-flow.is-sheet.is-collapsed[data-gliding] .conversation-flow__conversation {
+    position: static;
+    flex: 1 1 0;
+    min-height: 0;
+    height: auto;
+    visibility: visible;
   }
 
   /* The sheet is a fixed-height column, so what is typed must give way, not push. Every box between the
@@ -531,14 +558,14 @@
     column-gap: 8px;
   }
 
-  .conversation-flow.is-sheet.is-collapsed .conversation-flow__toggle {
-    grid-column: 2;
-    grid-row: 1;
-    margin: 0;
+  /* No speech-bubble button on a phone: it took a 44px row of the sheet. The handle above the sheet and the
+     preview strip (a tap on either) open and close it. */
+  .conversation-flow.is-sheet .conversation-flow__toggle {
+    display: none;
   }
 
   .conversation-flow.is-sheet.is-collapsed .conversation-flow__preview {
-    grid-column: 1;
+    grid-column: 1 / -1;
     grid-row: 1;
   }
 
@@ -592,6 +619,68 @@
   .conversation-flow__preview-line > b {
     color: var(--text);
     font-weight: 600;
+  }
+
+  /* One letter for who spoke, in place of a name: the strip is a glance, not a transcript. */
+  .conversation-flow__who {
+    display: inline-grid;
+    place-items: center;
+    width: 14px;
+    height: 14px;
+    margin-right: 6px;
+    border-radius: var(--r-pill);
+    background: var(--s1);
+    color: var(--text);
+    font: 600 var(--fs-2xs) / 1 var(--sans);
+    font-style: normal;
+  }
+
+  .conversation-flow__who.is-agent {
+    color: var(--accent);
+  }
+
+  .conversation-flow__preview-more {
+    margin-top: 2px;
+    color: var(--accent);
+    font-size: var(--fs-2xs);
+  }
+
+  /* The sheet opens in three views that run into one another (ConversationFlow sets --flow-p and --flow-q on the
+     root as it moves): canvas only is the preview; half is the conversation alone, newest at the bottom; full adds
+     the steps and memory notes behind it, and the list sets off from the oldest message. */
+  .conversation-flow.is-sheet .conversation-flow__preview {
+    display: none;
+  }
+
+  .conversation-flow.is-sheet.is-collapsed .conversation-flow__preview,
+  .conversation-flow.is-sheet[data-gliding] .conversation-flow__preview {
+    display: flex;
+    max-height: calc((1 - var(--flow-p, 0)) * 96px);
+    opacity: calc(1 - var(--flow-p, 0) * 1.8);
+    overflow: hidden;
+  }
+
+  .conversation-flow.is-sheet .flow-detail {
+    overflow: hidden;
+    max-height: calc(var(--flow-q, 0) * 90px);
+    opacity: var(--flow-q, 0);
+    /* Cancels the flex gap the hidden step would otherwise keep open. */
+    margin-top: calc((var(--flow-q, 0) - 1) * 10px) !important;
+  }
+
+  .conversation-flow.is-sheet.is-full:not([data-gliding]) .flow-detail {
+    max-height: none;
+  }
+
+  /* Short conversations sit at the bottom of the half sheet and move up to the top as it opens to full. */
+  .conversation-flow.is-sheet .thread-content {
+    min-height: 100%;
+  }
+
+  .conversation-flow.is-sheet .thread-content::before {
+    content: "";
+    flex: 1 1 0;
+    max-height: calc((1 - var(--flow-q, 0)) * (1 - var(--flow-q, 0)) * 100dvh);
   }
 
   .conversation-flow__work-navigation {
