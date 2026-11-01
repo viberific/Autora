@@ -257,7 +257,7 @@ await test("a tool finds its window's manual, and a tool with no window finds no
 
 await test("the overview every turn explains the layout and points at the manuals", async () => {
   const overview = windowsOverview();
-  for (const needle of ["Panacea is the main area", "slim strip along the foot of the workspace", "Open Panacea", "without a message", "Capabilities", "right-side icon dock", "stay mounted", "manual jump", "Follow", "tool_manual", "Shell commands", "Show all work", "Ask Autora bar", "docked beside it", "edge tab", "bottom sheet", "Canvas only", "TODO", "Retract conversation", "contracted by default", "compact preview", "pinch-zoom"]) {
+  for (const needle of ["Panacea is the main area", "slim strip along the foot of the workspace", "Open Panacea", "without a message", "Capabilities", "right-side icon dock", "stay mounted", "manual jump", "Follow", "tool_manual", "Shell commands", "Show all work", "Ask Autora bar", "docked beside it", "edge tab", "bottom sheet", "left half", "Canvas only", "TODO", "Retract conversation", "contracted by default", "compact preview", "pinch-zoom"]) {
     assert.ok(overview.includes(needle), `the overview lacks ${needle}`);
   }
   assert.doesNotMatch(overview, /x on its tab|Autora Terminal|Working on/);

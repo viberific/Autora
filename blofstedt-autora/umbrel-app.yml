@@ -204,11 +204,9 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  The top bar is tidier. The chat name pill grows to fill the spare room, so
-  there is no dead space, and the gaps between the pills are all equal. Every
-  pill is also the same height (taller on a touch screen). The Panacea /
-  Capabilities bar is gone, with Follow and the eye in the top bar and
-  Capabilities on the wrench by the message box. On a phone the conversation
-  sheet has no bubble button or grip line, follows your finger when dragged
-  from anywhere but the text box, and moves between a compact preview, messages
-  only, and the full view with its steps.
+  On a phone the conversation sheet opens and closes smoothly: while it moves
+  it slides over the canvas instead of resizing it (and every editor in it) on
+  each frame, follows your finger frame by frame without jumping when it takes
+  hold, and leaves the message fade for when it settles. Swipe up or down on
+  the left half of the sheet to open or close it; on the right half a swipe
+  only scrolls the conversation.
