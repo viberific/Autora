@@ -204,8 +204,9 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  On a phone the grip line at the top of the conversation is gone. Drag from
-  anywhere in the chat except the box you type in: the conversation follows your
-  finger, then glides to canvas-only, half or full when you let go. In the
-  message list a swipe still scrolls; it moves the sheet only when the list has
-  nothing left to scroll that way.
+  On a phone the conversation sheet is now three views that flow into one
+  another as you drag. Canvas only shows a compact preview of the last three
+  messages and says how many steps it leaves out. Half is the conversation
+  alone, with no memory notes or tool steps. Full adds them back and starts the
+  messages from the top. While you drag, the preview fades into the messages and
+  the steps fade in, so there is never an empty gap at the top of the sheet.

@@ -22,6 +22,8 @@ interface ConversationFlowProps {
   locked?: boolean;
   /** The last thing or two said, shown on a phone while the sheet is retracted; a tap opens the sheet. */
   preview?: readonly PreviewLine[];
+  /** How many steps and memory notes the newest turn holds that the preview leaves out. */
+  hiddenSteps?: number;
 }
 
 /** A finger must move this far before a press on the handle is a drag rather than a tap. */
@@ -66,6 +68,7 @@ export function ConversationFlow({
   onSheet,
   locked = false,
   preview,
+  hiddenSteps = 0,
 }: ConversationFlowProps) {
   const conversationId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -144,6 +147,7 @@ export function ConversationFlow({
     gliding.current = true;
     root.dataset.gliding = "";
     const run = root.animate(frames, { duration, easing });
+    follow();
     const done = () => {
       // A cancelled run reports late; by then a newer one (or a finger) may own the sheet.
       if (sheetDrag.current?.active) return;
@@ -156,6 +160,51 @@ export function ConversationFlow({
     run.oncancel = done;
     return () => run.cancel();
   };
+  // How far open the sheet is, as two numbers on the root for the stylesheet: p runs 0 to 1 from canvas only to half
+  // (the preview gives way to the messages), q from half to full (the steps fade in and the list sets off from the
+  // top). At rest they follow the level; while the sheet moves they follow its height, frame by frame.
+  const levelRef = useRef(level);
+  levelRef.current = level;
+  const lockedRef = useRef(locked);
+  lockedRef.current = locked;
+  const frame = useRef(0);
+  const paintDone = (root: HTMLElement) => {
+    const at = levelRef.current;
+    root.style.setProperty("--flow-p", at === 0 ? "0" : "1");
+    root.style.setProperty("--flow-q", at === 2 ? "1" : "0");
+  };
+  const paint = (root: HTMLElement) => {
+    const parentH = root.parentElement?.getBoundingClientRect().height ?? 0;
+    const half = Math.max(parentH * 0.55, Math.min(parentH, 320));
+    const entry = root.querySelector<HTMLElement>(".conversation-flow__entry-area")?.offsetHeight ?? 90;
+    const min = Math.min(restBox.current ?? (HANDLE_H + entry + SHEET_PAD), half);
+    const h = root.getBoundingClientRect().height;
+    const p = half > min ? Math.max(0, Math.min(1, (h - min) / (half - min))) : 1;
+    const q = parentH > half ? Math.max(0, Math.min(1, (h - half) / (parentH - half))) : 0;
+    root.style.setProperty("--flow-p", p.toFixed(3));
+    root.style.setProperty("--flow-q", q.toFixed(3));
+    // Messages stay on the newest while the sheet opens to half, and slide to the oldest as it opens to full.
+    const list = root.querySelector<HTMLElement>(".thread");
+    if (list && gliding.current) {
+      const room = list.scrollHeight - list.clientHeight;
+      if (room > 0) list.scrollTop = room * (1 - q);
+    }
+  };
+  const follow = () => {
+    cancelAnimationFrame(frame.current);
+    const tick = () => {
+      const root = rootRef.current;
+      if (!root) return;
+      if (gliding.current) { paint(root); frame.current = requestAnimationFrame(tick); } else paintDone(root);
+    };
+    frame.current = requestAnimationFrame(tick);
+  };
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root || !phone) return;
+    if (!gliding.current) paintDone(root);
+  }, [phone, level]);
+  useEffect(() => () => cancelAnimationFrame(frame.current), []);
   useEffect(() => {
     const root = rootRef.current;
     if (!root || !phone || typeof ResizeObserver === "undefined") return;
@@ -175,6 +224,7 @@ export function ConversationFlow({
     lastBox.current = to;
     if (!from) return;
     return glide(root, from, to, level === 2);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- glide only reads refs and the DOM
   }, [phone, level]);
 
   const setLevel = (target: number) => {
@@ -215,6 +265,7 @@ export function ConversationFlow({
       gliding.current = true;
       root.dataset.gliding = "";
       for (const run of root.getAnimations()) run.cancel();
+      follow();
     }
     const heights = restHeights(state.parentH);
     const h = Math.max(heights[0], Math.min(state.parentH, state.startH - moved));
@@ -238,6 +289,7 @@ export function ConversationFlow({
     root.style.removeProperty("top");
     gliding.current = false;
     delete root.dataset.gliding;
+    follow();
     const heights = restHeights(state.parentH);
     const reach = state.h - state.speed * 180;
     let target = 0;
@@ -470,19 +522,26 @@ export function ConversationFlow({
               <ConversationIcon />
             </button>
           )}
-          {phone && collapsed && onToggle && preview && preview.length > 0 && (
+          {phone && onToggle && preview && preview.length > 0 && (
             <button
               className="conversation-flow__preview"
               type="button"
               onClick={() => { restoreFocus.current = "toggle"; onToggle(); }}
               aria-controls={conversationId}
+              tabIndex={collapsed ? 0 : -1}
               aria-label={`Open the conversation. ${preview.map((line) => `${line.who}: ${line.text}`).join(" ")}`}
             >
               {preview.map((line, index) => (
                 <span className="conversation-flow__preview-line" key={index} aria-hidden="true">
-                  <b>{line.who}</b> {line.text}
+                  <i className={`conversation-flow__who is-${line.who === "You" ? "you" : "agent"}`}>{line.who === "You" ? "Y" : "A"}</i>
+                  {line.text}
                 </span>
               ))}
+              {hiddenSteps > 0 && (
+                <span className="conversation-flow__preview-more" aria-hidden="true">
+                  {hiddenSteps} {hiddenSteps === 1 ? "step" : "steps"} and memory notes hidden · tap to see
+                </span>
+              )}
             </button>
           )}
           {todos != null && <div className="conversation-flow__todos">{todos}</div>}

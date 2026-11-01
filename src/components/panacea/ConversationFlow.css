@@ -621,6 +621,68 @@
     font-weight: 600;
   }
 
+  /* One letter for who spoke, in place of a name: the strip is a glance, not a transcript. */
+  .conversation-flow__who {
+    display: inline-grid;
+    place-items: center;
+    width: 14px;
+    height: 14px;
+    margin-right: 6px;
+    border-radius: var(--r-pill);
+    background: var(--s1);
+    color: var(--text);
+    font: 600 var(--fs-2xs) / 1 var(--sans);
+    font-style: normal;
+  }
+
+  .conversation-flow__who.is-agent {
+    color: var(--accent);
+  }
+
+  .conversation-flow__preview-more {
+    margin-top: 2px;
+    color: var(--accent);
+    font-size: var(--fs-2xs);
+  }
+
+  /* The sheet opens in three views that run into one another (ConversationFlow sets --flow-p and --flow-q on the
+     root as it moves): canvas only is the preview; half is the conversation alone, newest at the bottom; full adds
+     the steps and memory notes behind it, and the list sets off from the oldest message. */
+  .conversation-flow.is-sheet .conversation-flow__preview {
+    display: none;
+  }
+
+  .conversation-flow.is-sheet.is-collapsed .conversation-flow__preview,
+  .conversation-flow.is-sheet[data-gliding] .conversation-flow__preview {
+    display: flex;
+    max-height: calc((1 - var(--flow-p, 0)) * 96px);
+    opacity: calc(1 - var(--flow-p, 0) * 1.8);
+    overflow: hidden;
+  }
+
+  .conversation-flow.is-sheet .flow-detail {
+    overflow: hidden;
+    max-height: calc(var(--flow-q, 0) * 90px);
+    opacity: var(--flow-q, 0);
+    /* Cancels the flex gap the hidden step would otherwise keep open. */
+    margin-top: calc((var(--flow-q, 0) - 1) * 10px) !important;
+  }
+
+  .conversation-flow.is-sheet.is-full:not([data-gliding]) .flow-detail {
+    max-height: none;
+  }
+
+  /* Short conversations sit at the bottom of the half sheet and move up to the top as it opens to full. */
+  .conversation-flow.is-sheet .thread-content {
+    min-height: 100%;
+  }
+
+  .conversation-flow.is-sheet .thread-content::before {
+    content: "";
+    flex: 1 1 0;
+    max-height: calc((1 - var(--flow-q, 0)) * (1 - var(--flow-q, 0)) * 100dvh);
+  }
+
   .conversation-flow__work-navigation {
     top: auto;
     bottom: calc(100% + 8px);

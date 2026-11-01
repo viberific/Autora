@@ -35,6 +35,7 @@ import { setFullscreen } from "./lib/fullscreen";
 import { Thread, type Outgoing } from "./components/Thread";
 import { ConversationFlow } from "./components/panacea/ConversationFlow";
 import { previewOf, useChatLayout } from "./components/panacea/chatLayout";
+import { hiddenStepCount } from "./lib/workspaceThread";
 import { Dock } from "./components/Dock";
 import { Rail, pageLabel, PAGES, type PageId } from "./components/Rail";
 import { isSystemTab, type SystemTab } from "./lib/systemTabs";
@@ -1725,7 +1726,8 @@ export function App() {
   }, []);
   const requiresInput = !!view.asking || view.approvals.some((approval) => !approval.settled);
   // What the phone's retracted sheet shows of the conversation: the last two things said.
-  const chatPreview = useMemo(() => previewOf(view.transcript), [view.transcript]);
+  const chatPreview = useMemo(() => previewOf(view.transcript, 3), [view.transcript]);
+  const hiddenSteps = useMemo(() => hiddenStepCount(view.buckets[view.buckets.length - 1]?.cells ?? []), [view.buckets]);
   const retractChat = useCallback(() => {
     if (requiresInput) { setNotice("A question or permission needs your answer before work can continue."); return; }
     setChatCollapsed((collapsed) => !collapsed);
@@ -2200,7 +2202,7 @@ export function App() {
 
         <ConversationFlow collapsed={chatCollapsed && !requiresInput} onToggle={retractChat}
           phone={phoneLayout} width={chatLayout.width} onWidth={chatLayout.setWidth}
-          sheet={chatLayout.sheet} onSheet={chatLayout.setSheet} locked={requiresInput} preview={chatPreview}
+          sheet={chatLayout.sheet} onSheet={chatLayout.setSheet} locked={requiresInput} preview={chatPreview} hiddenSteps={hiddenSteps}
           conversation={<>
           {openWindows.length === 0 && !view.buckets.some((bucket) => bucket.prompt || bucket.attachments.length > 0) && (
             <div className="pw-launch">

@@ -271,7 +271,7 @@ export function MemoryCell({
   const count = items.length;
 
   return (
-    <div className={`mem-pulse is-${cell.action} ${inline ? "is-inline" : ""} ${open ? "is-open" : ""}`.trim()}>
+    <div className={`mem-pulse is-${cell.action} ${inline ? "is-inline flow-detail" : ""} ${open ? "is-open" : ""}`.trim()}>
       <button
         type="button"
         className="mem-pulse-head"

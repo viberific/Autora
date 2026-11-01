@@ -24,8 +24,8 @@ const OVERVIEW = [
     "directly above it. The conversation is individual bubbles in the panel; the oldest bubble fades at the top edge. Retract conversation " +
     "slides the panel away so the canvas gets the whole width, leaving a slim edge tab, Show conversation, on the right edge to bring it back; the entry bar, the TODO list and the " +
     "Show conversation toggle stay in a slim strip along the foot of the workspace, so you can always type. " +
-    "On a phone the conversation is a bottom sheet under the canvas that has no grip line (drag from anywhere except the text box; the list still scrolls first): Canvas only (retracted: the last two things said as a full-width tappable two-line preview, the TODO list and the entry bar; a phone has no Show/Retract conversation button, the handle and the preview do that), " +
-    "Half (the default) and Full (the sheet owns the screen, the handle still drops it back); drag it with a finger (it follows live, then settles on the nearest height) or use the up/down keys on its hidden handle, " +
+    "On a phone the conversation is a bottom sheet under the canvas, dragged from anywhere but the text box (the list scrolls first); it has no Show/Retract button or grip line: Canvas only (a compact preview of the last three messages and a count of the steps it leaves out, the TODO list and the entry bar; tap or drag it open), " +
+    "Half (the default: messages only, no memory notes or tool steps) and Full (adds those steps and notes, messages from the top). The views blend as it follows the finger, then settles on the nearest height, or use the up/down keys on its hidden handle, " +
     "and the height is remembered. Retracting keeps the complete history mounted and never hides required questions/permissions: while one " +
     "is waiting the conversation stays open, and on a phone the sheet cannot be lowered below Half. " +
     "On a phone the spend line above the box is one line for the account being spent (tap it for every account), a long draft scrolls " +

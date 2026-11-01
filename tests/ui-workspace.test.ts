@@ -16,6 +16,11 @@ async function main() {
   try {
     for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
       await page.setViewportSize(viewport);
+      // A phone's sheet has no Show/Retract button: its handle is a slider, and drag or arrow keys move it.
+      const phone = viewport.width < 680;
+      const sheet = page.getByRole("slider", { name: "Conversation size", exact: true });
+      const retract = () => (phone ? sheet.press("Home") : page.getByRole("button", { name: "Retract conversation", exact: true }).click());
+      const show = () => (phone ? sheet.press("ArrowUp") : page.getByRole("button", { name: "Show conversation", exact: true }).first().click());
       const session = await app.newSession("Spatial workspace", "build");
       await page.goto(`${app.base}/?session=${session}`);
       await page.getByRole("button", { name: "Open Panacea", exact: true }).press("Enter");
@@ -51,10 +56,10 @@ async function main() {
       await thread.evaluate((node) => node.setAttribute("data-history-kept", "yes"));
       const todo = page.locator(".conversation-flow__todos .todo-dock");
       await todo.waitFor();
-      await page.getByRole("button", { name: "Retract conversation", exact: true }).click();
+      await retract();
       assert.equal(await thread.getAttribute("data-history-kept"), "yes", "retract keeps the original history viewport mounted");
       assert.equal(await todo.isVisible(), true, "TODO stays attached to the entry when chat retracts");
-      await page.getByRole("button", { name: "Show conversation", exact: true }).click();
+      await show();
       assert.equal(await page.getByRole("textbox", { name: "Ask Autora", exact: true }).count(), 1, "there is only one main entry");
       assert.equal(await page.getByRole("separator", { name: "Resize the conversation" }).count(), 0, "there is no left chat allocation");
       assert.equal(await workspace.locator('[data-engine="work"]').count(), 0, "activity is contracted in conversation, not a world card");
@@ -72,7 +77,7 @@ async function main() {
       });
       assert.ok(allVisible, "Show all fits native work and hosted engines in one camera");
       await dock.getByRole("button", { name: "Jump to Project notes", exact: true }).click();
-      await page.getByRole("button", { name: "Retract conversation", exact: true }).click();
+      await retract();
       assert.equal(await music.getAttribute("data-kept-work"), "yes", "jumping did not reconstruct the engine");
       assert.equal(await music.getAttribute("hidden"), null, "work is never hidden by a jump");
       const editor = documentCard.locator(".ProseMirror");

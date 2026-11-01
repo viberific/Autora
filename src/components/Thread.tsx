@@ -30,7 +30,7 @@ import { usePhotoState } from "../lib/photodesk";
 import { usePanaceaState } from "../lib/panacea";
 import { lastWorkedPane } from "../lib/followPane";
 import { workspaceSurface } from "../lib/workspace";
-import { conversationCells } from "../lib/workspaceThread";
+import { conversationCells, isDetailCell } from "../lib/workspaceThread";
 import { useWorkspaceFocus, workspaceToolKey } from "../lib/workspaceFocus";
 import { useStudioState } from "../lib/studio";
 import { PermissionCell } from "./PermissionCell";
@@ -938,7 +938,7 @@ const WorkingLine = memo(function WorkingLine({ tail, doing, elapsedMs, steps, p
         <span className="working-chev" aria-hidden="true"><IconChevron size={11} /></span>
       </button>
       {open && (
-        <div className="working-peek">
+        <div className="working-peek flow-detail">
           {thinking && (
             <div className="working-thought">
               <span className="working-peek-label"><IconBrain size={12} /> Thinking</span>
@@ -990,7 +990,7 @@ const StepGroup = memo(function StepGroup({ steps, unfolded = false, ...cell }: 
   const tone = failed ? "is-bad" : denied ? "is-warn" : running ? "is-live" : "";
 
   return (
-    <section className={`steps ${tone} ${open ? "is-open" : ""}`.trim()}>
+    <section className={`steps flow-detail ${tone} ${open ? "is-open" : ""}`.trim()}>
       <button className="steps-top" onClick={() => setOpen(!open)} aria-expanded={open}>
         <span className="steps-chev"><IconChevron size={11} /></span>
         {steps.some((s) => s.kind === "terminal")
@@ -1024,6 +1024,11 @@ const StepRun = memo(function StepRun({
       {turnItems(cells).map((item) =>
         item.kind === "steps" ? (
           <StepGroup key={item.key} steps={item.cells} unfolded={unfolded} {...cell} />
+        ) : isDetailCell(item.cell) ? (
+          // A step behind the conversation: a phone's sheet fades it in as it opens (ConversationFlow.css).
+          <div key={item.key} className="flow-detail">
+            <CellView cell={item.cell} active={false} {...cell} />
+          </div>
         ) : (
           <CellView
             key={item.key}
