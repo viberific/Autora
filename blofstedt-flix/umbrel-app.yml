@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.86"
+version: "0.3.87"
 port: 8096
 # umbrelOS only hands a container the GPU when the manifest says so: with this
 # permission it adds /dev/dri plus the render/video groups those nodes belong
@@ -60,5 +60,10 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Hardware encoding is now a switch in Settings, and Quick Sync actually works:
-  the transcode hands the resize to the GPU instead of doing it on the CPU.
+  Subtitles now line themselves up with the audio: Flix measures where the
+  speech is in each episode, shifts the cues to match, and remembers it, so you
+  stop nudging the timing by hand. The player bar hides five seconds after you
+  last touch it, and a half-watched episode resumes where you left it instead of
+  dropping back to where it first started. Downloads now ease off while
+  something is playing, so a torrent writing to the same drives can't starve the
+  stream -- the episode you have open keeps priority, then the next one.
