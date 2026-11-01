@@ -204,9 +204,10 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  The Panacea / Capabilities bar under the top bar is gone. Follow and the eye
-  (watch the agent's mouse and keyboard) are now in the top bar, so they are
-  always in reach. Capabilities is the wrench beside the message box. On a
+  Every pill in the top bar is now the same height: the chat name, the
+  permissions pill, Follow and the eye (taller on a touch screen, where a thumb
+  needs the room). The Panacea / Capabilities bar is gone, with Follow and the
+  eye in the top bar and Capabilities on the wrench by the message box. On a
   phone the conversation sheet has no bubble button or grip line, follows your
-  finger as you drag it from anywhere but the text box, and moves between a
+  finger when dragged from anywhere but the text box, and moves between a
   compact preview, messages only, and the full view with its steps.

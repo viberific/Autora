@@ -6614,8 +6614,7 @@ button.dock-card:hover { border-color: var(--border-strong); }
 .stage-follow.visible-work + .stage-follow { margin-left: 6px; }
 /* Follow and Visible work in the header, beside the page's own action. */
 .top-work { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; }
-.top-work .stage-follow, .top-work .stage-follow.visible-work, .top-work .stage-follow.visible-work + .stage-follow { margin: 0; height: 30px; }
-.top-work .stage-follow.visible-work.is-compact { width: 30px; }
+.top-work .stage-follow, .top-work .stage-follow.visible-work, .top-work .stage-follow.visible-work + .stage-follow { margin: 0; }
 /* On a phone the open page's address would take the room Follow and the eye need; the browser card has its own close. */
 @media (max-width: 680px) { header.top .badge.browsing { display: none; } }
 .immersive-follow.visible-work { display: inline-flex; align-items: center; gap: 5px; }
@@ -8790,3 +8789,14 @@ body.is-resizing iframe { pointer-events: none; }
 .win-save.is-saved { color: var(--live); border-color: rgba(var(--live-rgb), 0.5); }
 .win-save.is-failed { color: var(--danger); border-color: rgba(var(--danger-rgb), 0.45); }
 .st-save-btn { display: contents; }
+
+/* Every pill in the header is one height: the chat's name, the permissions pill, the badges, Follow and the eye.
+   Taller where a thumb drives it. A round one (the dot-only permissions pill, the eye) is as wide as it is tall. */
+header.top { --top-pill-h: 32px; }
+@media (pointer: coarse), (max-width: 680px) { header.top { --top-pill-h: 36px; } }
+header.top .session-btn,
+header.top .badge,
+header.top .badge.mode-pill,
+header.top .top-work .stage-follow { height: var(--top-pill-h); min-height: 0; box-sizing: border-box; }
+header.top .badge.mode-pill.is-dot,
+header.top .top-work .stage-follow.visible-work.is-compact { width: var(--top-pill-h); }
