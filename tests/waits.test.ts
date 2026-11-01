@@ -40,6 +40,16 @@ assert.equal(waitsInside("timeout 60 ./build.sh"), null);
 assert.equal(waitsInside("wait"), null);
 assert.equal(waitsInside(""), null);
 
+/* A sleep inside quotes or a heredoc body is text being printed or written, not a
+   wait: `echo "sleep 120"` returns at once. The one made of quotes alone is
+   still the sleep command and is still caught. */
+assert.equal(waitsInside('echo "sleep 120"'), null);
+assert.equal(waitsInside('grep "sleep 120" notes.txt'), null);
+assert.equal(waitsInside('git commit -m "do not sleep 120"'), null);
+assert.equal(waitsInside("cat <<'EOF'\nsleep 120\nEOF"), null);
+assert.equal(waitsInside('sleep "120"'), 120, "a quoted duration is still a duration");
+assert.equal(waitsInside("sleep 60; echo 'sleep 60'"), null);
+
 /* Real commands, exactly as they are run here: none may be refused. */
 for (const cmd of [
   "npm run typecheck",

@@ -99,5 +99,44 @@ await test("the terminal makes no timer of its own: crontab, at, batch, systemd-
   assert.match(r.summary, /schedule tool/);
 });
 
+await test("quoted text and heredoc bodies are data: a message that says `at` or holds a separator is not a job", async () => {
+  for (const command of [
+    'git commit -m "fix: bar hide; at 264 the seek"',
+    'git commit -m "a && b | c"',
+    'git commit -m "fix: bar hide\nat 264 the seek"',
+    'node -e "const p = payload.at(0); console.log(p); at 264 the seek"',
+    "git commit -F - <<'EOF'\nfix: bar hide\nat 264 the seek\nEOF",
+    'git commit -F - <<-EOF\n\tat 264 the seek\n\tEOF',
+    'git commit -F - <<"EOF"\nat 264 the seek\nEOF',
+    'echo "at now + 1 minute"',
+    'grep "at " file',
+    'echo "crontab -e"',
+    'git commit -m "x" # at now + 1 minute',
+  ]) {
+    assert.equal(makesTimerOrWake(command), null, command);
+  }
+  /* The complaint was the terminal answering "an `at` job" for a commit message.
+     Whatever a bare ctx does with the call, the reason must not be a timer. */
+  const r = await runTool(findTool("terminal")!, { command: 'git commit -m "fix: bar hide; at 264 the seek"' }, ctx);
+  assert.doesNotMatch(String(r.summary ?? ""), /at` job|timer|schedule tool/, String(r.summary));
+});
+
+await test("a real at, crontab or systemd timer is refused however it is dressed", async () => {
+  for (const command of [
+    "at now + 1 minute",
+    "echo hi | at now + 1 minute",
+    "(crontab -l; echo '* * * * * x') | crontab -",
+    "crontab -e",
+    "sudo systemd-run --on-calendar=hourly foo",
+    "systemctl start foo.timer",
+    "batch < job.sh",
+    "git commit -m 'x' && at now + 1 minute",
+    "git commit -F - <<'EOF'\nfix\nEOF\nat now + 1 minute",
+    "\\at now + 1 minute",
+  ]) {
+    assert.ok(makesTimerOrWake(command), command);
+  }
+});
+
 console.log(`${passed} passed`);
 process.exit(0);
