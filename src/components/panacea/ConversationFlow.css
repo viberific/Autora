@@ -504,6 +504,23 @@
     min-height: 0;
   }
 
+  /* While it moves, the sheet lies over the bottom of the canvas at the height ConversationFlow gives it, and the
+     canvas holds still at --flow-canvas-h (the room above the lowest height the move passes through). The canvas,
+     and the editors in it, is laid out once when the sheet settles instead of on every frame of the move. */
+  .conversation-flow.is-sheet[data-gliding] {
+    position: absolute;
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: var(--z-pop);
+  }
+
+  .chat-view.pw-full-workspace:has(.conversation-flow[data-gliding]) > .pw-scene-stack {
+    flex: 0 0 var(--flow-canvas-h, 45%);
+    contain: layout paint;
+  }
+
   .conversation-flow.is-sheet.is-collapsed[data-gliding] .conversation-flow__conversation {
     position: static;
     flex: 1 1 0;
