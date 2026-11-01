@@ -577,7 +577,7 @@ Spectra's fetched renderer is most of what is on disk.
   3D, game, photo, app and browser engines run inside that shell alongside the native Canvas; their models, APIs, hand-work
   handlers and sandboxing are not replaced. `panacea/ConversationFlow.tsx` hosts the original Thread and composer docked beside the scene
   (a right-hand panel on desktop, width draggable and remembered via `panacea/chatLayout.ts`; a three-height bottom sheet on a
-  phone, moved by swipes on its left half only, the right half scrolling the list; while it moves it lies over a canvas held
+  phone, moved by swipes on its left half only, which never scroll (every move there is claimed from the first), the right half only scrolling the list; while it moves it lies over a canvas held
   at one size, `data-gliding`, so only the sheet is laid out per frame), never over it at rest. It keeps complete history mounted when retracted (edge tab on desktop, canvas-only on a phone) and
   attaches TODO above the entry. `lib/frameCoordinates.ts` subtracts the entry and rail only where they overlap the board.
   `src/lib/steps.ts` contracts all tool/output/file activity in chat and lifts nested browser questions/permissions out of folds;

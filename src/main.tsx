@@ -2,11 +2,15 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import "./styles.css";
 import { applyAppearance, cachedAppearance } from "./lib/theme";
+import { installModalExit } from "./lib/modalExit";
 
 // Before the first paint, so a saved theme never flashes the default one.
 applyAppearance(cachedAppearance());
 
 createRoot(document.getElementById("root")!).render(<App />);
+
+// Modals fade and slide out when closed, not just vanish (lib/modalExit.ts).
+installModalExit();
 
 /**
  * The service worker, and getting off an old copy of the app.

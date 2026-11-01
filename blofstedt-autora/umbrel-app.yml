@@ -204,9 +204,9 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  On a phone the conversation sheet opens and closes smoothly: while it moves
-  it slides over the canvas instead of resizing it (and every editor in it) on
-  each frame, follows your finger frame by frame without jumping when it takes
-  hold, and leaves the message fade for when it settles. Swipe up or down on
-  the left half of the sheet to open or close it; on the right half a swipe
-  only scrolls the conversation.
+  On a phone, a swipe on the left half of the conversation sheet now only
+  opens and closes it and never scrolls the messages, even when the sheet is
+  already fully open or closed. A swipe on the right half only scrolls the
+  conversation and never resizes the sheet. Pop-up windows, such as the
+  notebook picker and the tools sheet opened from the message box, now ease
+  in when they open and ease out when they close instead of vanishing.

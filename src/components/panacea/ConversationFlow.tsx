@@ -322,18 +322,19 @@ export function ConversationFlow({
       setLevel(target);
     }
   };
-  // The sheet is split down the middle. A vertical swipe on its left half moves the sheet (anywhere but where you
-  // type); on its right half it scrolls the conversation, and never moves the sheet. On the left, a swipe the sheet
-  // cannot follow (up once it is full) scrolls instead. Moves are applied once per frame, not once per touch event:
-  // a phone reports touches faster than it draws. Touch events, not pointer events, because a pan the browser takes
-  // up is cancelled from under pointer events.
-  const touchRef = useRef({ begin: beginSheetDrag, drag: dragSheet, end: endSheetGesture, level });
-  touchRef.current = { begin: beginSheetDrag, drag: dragSheet, end: endSheetGesture, level };
+  // The sheet is split down the middle. A swipe on its left half only ever moves the sheet (anywhere but where you
+  // type): it never scrolls, not even when the sheet cannot follow (up once it is full, down once it is retracted),
+  // so every move there is claimed from the first one, before the browser can start a pan of its own. On its right
+  // half a swipe only scrolls the conversation and never moves the sheet. Moves are applied once per frame, not once
+  // per touch event: a phone reports touches faster than it draws. Touch events, not pointer events, because a pan
+  // the browser takes up is cancelled from under pointer events.
+  const touchRef = useRef({ begin: beginSheetDrag, drag: dragSheet, end: endSheetGesture });
+  touchRef.current = { begin: beginSheetDrag, drag: dragSheet, end: endSheetGesture };
   useEffect(() => {
     const root = rootRef.current;
     if (!root || !phone) return;
     let from = 0;
-    let mode: "idle" | "pending" | "drag" | "scroll" = "idle";
+    let mode: "idle" | "pending" | "drag" = "idle";
     let pendingY: number | null = null;
     let tick = 0;
     const flush = () => {
@@ -352,17 +353,14 @@ export function ConversationFlow({
       mode = "pending";
     };
     const onMove = (event: TouchEvent) => {
-      if (mode === "idle" || mode === "scroll") return;
+      if (mode === "idle") return;
+      if (event.cancelable) event.preventDefault();
       const y = event.touches[0].clientY;
       if (mode === "pending") {
-        const moved = y - from;
-        if (Math.abs(moved) < 3) return;
-        const takes = moved < 0 ? touchRef.current.level < 2 : touchRef.current.level > 0;
-        if (!takes) { mode = "scroll"; return; }
+        if (Math.abs(y - from) < 3) return;
         mode = "drag";
         touchRef.current.begin(from);
       }
-      if (event.cancelable) event.preventDefault();
       pendingY = y;
       if (!tick) tick = requestAnimationFrame(flush);
     };
