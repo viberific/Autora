@@ -41,7 +41,7 @@ const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 2;
 
 /**
- * The canvas: a dotted grid as far as the person cares to go. Drag the grid (or scroll) to pan, Ctrl+scroll to zoom,
+ * The canvas: a dotted grid as far as the person cares to go. Drag the grid (or scroll) to pan, Ctrl+scroll or pinch to zoom,
  * double-click or press / to summon a panel, Shift+drag to pick several, drop a file or paste a table to add a surface.
  * Panels move by their title bars and widen by their right edge, and land on the grid.
  */
@@ -87,6 +87,8 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
     setGlide(smooth);
     if (smooth) glideTimer.current = setTimeout(() => { glideTimer.current = null; setGlide(false); }, 450);
   }, []);
+  /* Every finger on the canvas, by pointer id. Two are a pinch (see the effect below); one is the pan. */
+  const fingers = useRef(new Map<number, { x: number; y: number }>());
   const [drag, setDrag] = useState<{ ids: Set<string>; dx: number; dy: number } | null>(null);
   const [widen, setWiden] = useState<{ id: string; w: number } | null>(null);
   const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
@@ -313,6 +315,8 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
   const onGridDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.button !== 0 && e.button !== 1) return;
     if ((e.target as HTMLElement).closest(".pa-panel, .pa-surface, .pa-summon, .pa-chrome, .pw-engine")) return;
+    // A second finger is the pinch's, never a second pan.
+    if (fingers.current.size > 1) return;
     interacted.current = true;
     if (e.isTrusted) onJumpWork?.(followTarget ?? "panacea");
     e.preventDefault();
@@ -337,12 +341,77 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
       return;
     }
     if (selected.size) setSelected(new Set());
-    const start = { x: e.clientX, y: e.clientY, v: viewRef.current };
-    const move = (ev: PointerEvent) => setView({ ...start.v, x: start.v.x - (ev.clientX - start.x) / start.v.zoom, y: start.v.y - (ev.clientY - start.y) / start.v.zoom });
-    const up = () => { el.removeEventListener("pointermove", move); el.removeEventListener("pointerup", up); };
+    // Incremental, so a pinch in the middle (which moves the view itself) leaves the pan going from where the finger is.
+    const id = e.pointerId;
+    let last = { x: e.clientX, y: e.clientY };
+    const move = (ev: PointerEvent) => {
+      if (ev.pointerId !== id) return;
+      const dx = ev.clientX - last.x, dy = ev.clientY - last.y;
+      last = { x: ev.clientX, y: ev.clientY };
+      if (fingers.current.size > 1) return;
+      const v = viewRef.current;
+      setView({ ...v, x: v.x - dx / v.zoom, y: v.y - dy / v.zoom });
+    };
+    const up = (ev: PointerEvent) => {
+      if (ev.pointerId !== id) return;
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", up);
+    };
     el.addEventListener("pointermove", move);
     el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
   };
+
+  // Pinch: two fingers zoom about the midpoint between them (and carry the canvas with it); lifting one ends the
+  // pinch and the finger left down pans on. Counted in the capture phase, as on the Mind map, because a panel
+  // stops its own presses and two fingers on two panels are as much a pinch as two on the empty grid.
+  useEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    let pinch: { d: number; zoom: number; wx: number; wy: number } | null = null;
+    const pair = () => {
+      const [a, b] = [...fingers.current.values()];
+      return a && b ? { d: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 } : null;
+    };
+    const down = (e: PointerEvent) => {
+      if (e.pointerType === "mouse") return;
+      fingers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const two = fingers.current.size === 2 ? pair() : null;
+      if (!two) return;
+      const v = viewRef.current;
+      const r = el.getBoundingClientRect();
+      interacted.current = true;
+      pinch = { d: Math.max(two.d, 1), zoom: v.zoom, wx: v.x + (two.mx - r.left) / v.zoom, wy: v.y + (two.my - r.top) / v.zoom };
+    };
+    const move = (e: PointerEvent) => {
+      const f = fingers.current.get(e.pointerId);
+      if (!f) return;
+      f.x = e.clientX; f.y = e.clientY;
+      const two = pinch && pair();
+      if (!pinch || !two) return;
+      e.preventDefault();
+      const zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, pinch.zoom * (two.d / pinch.d)));
+      const r = el.getBoundingClientRect();
+      setView({ zoom, x: pinch.wx - (two.mx - r.left) / zoom, y: pinch.wy - (two.my - r.top) / zoom });
+    };
+    const lift = (e: PointerEvent) => {
+      if (!fingers.current.delete(e.pointerId)) return;
+      if (fingers.current.size < 2) pinch = null;
+    };
+    el.addEventListener("pointerdown", down, true);
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", lift, true);
+    el.addEventListener("pointercancel", lift, true);
+    const fingerSet = fingers.current;
+    return () => {
+      el.removeEventListener("pointerdown", down, true);
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", lift, true);
+      el.removeEventListener("pointercancel", lift, true);
+      fingerSet.clear();
+    };
+  }, [setView]);
 
   // Wheel: pan, or zoom about the pointer with Ctrl (a pinch on a trackpad comes as Ctrl+wheel). Not passive, so it can stop the page scrolling.
   useEffect(() => {

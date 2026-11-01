@@ -208,4 +208,7 @@ releaseNotes: >-
   at the right that the workspace resizes around: drag its edge to change the
   width (remembered), retract it to a slim strip that keeps the Ask bar and the
   to-do list, and reopen it from the "Show conversation" tab. On a phone it is a
-  bottom sheet in three heights: half, full, and canvas-only.
+  bottom sheet in three heights: half, full, and canvas-only. On mobile the
+  spend strip is a single line, the retracted strip previews your last message,
+  a long draft no longer pushes Send off the sheet, pinch zooms the canvas, and
+  the retract control is one icon with no words.

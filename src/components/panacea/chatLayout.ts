@@ -9,6 +9,24 @@ export const PANEL_STEP = 16;
 /** The two open heights of the phone's bottom sheet. Closed (peek) is the retracted conversation. */
 export type Sheet = "half" | "full";
 
+/** One line of the retracted sheet's preview: who said it and a flat, markdown-free run of what they said. */
+export type PreviewLine = { who: "You" | "Autora"; text: string };
+
+/** The last `count` things said, oldest first, flattened to plain text for a clamped line. Empty turns are skipped. */
+export function previewOf(turns: readonly { role: "user" | "agent"; text: string }[], count = 2): PreviewLine[] {
+  const lines: PreviewLine[] = [];
+  for (let i = turns.length - 1; i >= 0 && lines.length < count; i -= 1) {
+    const text = turns[i].text
+      .replace(/```[\s\S]*?```/g, " code ")
+      .replace(/[`*_#>~|]+/g, "")
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (text) lines.unshift({ who: turns[i].role === "user" ? "You" : "Autora", text: text.slice(0, 280) });
+  }
+  return lines;
+}
+
 const WIDTH_KEY = "autora.chat.width";
 const SHEET_KEY = "autora.chat.sheet";
 

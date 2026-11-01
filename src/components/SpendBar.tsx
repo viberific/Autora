@@ -3,6 +3,7 @@ import { money } from "./Billing";
 import { barVendor, creditTotal, ownSpent, spendView, vendorSpendView } from "../lib/spend";
 import { SpendPeek } from "./SpendPeek";
 import { VendorLogo } from "./VendorLogo";
+import { usePhone } from "../lib/stage";
 
 /** What `/api/usage` answers with, as far as this bar is concerned. */
 export type Usage = {
@@ -77,6 +78,10 @@ export const SpendBar = memo(function SpendBar({
   onOpen: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  /* On a phone the several vendors are one line (the one being spent), and the list of all of them is a tap away
+     rather than a row each above the box. */
+  const [listOpen, setListOpen] = useState(false);
+  const phone = usePhone();
 
   /* Per-provider lines when more than one till can be named; the old single bar
      otherwise. A vendor that publishes no balance counts too, as long as the
@@ -102,6 +107,7 @@ export const SpendBar = memo(function SpendBar({
     const rows = readableVendors
       .map((v) => ({
         month: v.month_usd ?? 0,
+        selected: v.selected === true,
         view: vendorSpendView({
           provider: v.provider,
           label: v.label,
@@ -116,12 +122,49 @@ export const SpendBar = memo(function SpendBar({
 
     const share = (n: number) => `${Math.min(100, Math.max(0, n * 100))}%`;
 
+    /* A phone: the account being spent, as one line (its mark, its name, what is left of its top-up as the bar,
+       and its month), and the list of every account behind a tap on it. */
+    const head = rows.find((row) => row.selected) ?? rows[0];
+    const headLeft = Math.max(0, (head.view.paid ?? 0) - head.view.drawn);
+    const headShare = head.view.ledgerOnly
+      ? 0
+      : head.view.remaining
+        ? 1
+        : head.view.paid && head.view.paid > 0
+          ? Math.min(1, headLeft / head.view.paid)
+          : 0;
+    const headTone = head.view.over ? "is-over" : head.view.near ? "is-near" : "";
+    const headSaid = `${head.view.label}: ${money(head.month)} this month. ${listOpen ? "Hide" : "Show"} every account.`;
+    const showList = !phone || listOpen;
+
     return (
       <>
-        {/* No combined bar: one line per API, always open. The list is the bar
-            now, so there is nothing to tap to see whose money is whose. */}
-        <div className="spend-stack is-open">
-          <div className="spend-each">
+        {/* On a desktop, no combined bar: one line per API, always open. On a phone, the one line above the list. */}
+        <div className={`spend-stack${showList ? " is-open" : ""}${phone ? " is-compact" : ""}`}>
+          {phone && (
+            <button
+              type="button"
+              className={`spend ${headTone}`.trim()}
+              onClick={() => setListOpen((was) => !was)}
+              aria-expanded={listOpen}
+              aria-label={headSaid}
+              title={headSaid}
+            >
+              <VendorLogo provider={head.view.provider} size={12} />
+              <span className="spend-row-name">{head.view.label}</span>
+              <span className="spend-track" aria-hidden="true">
+                <i
+                  className={`spend-used ${headShare > 0 ? "is-any" : ""}`.trim()}
+                  style={{ width: share(headShare) }}
+                />
+              </span>
+              <span className="spend-text">{money(head.month)} this month</span>
+              <svg className="spend-caret" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                <path d="M3 1.5 6.5 5 3 8.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
+          {showList && <div className="spend-each">
             {rows.map(({ view, month }) => {
               const rowTone = view.over ? "is-over" : view.near ? "is-near" : "";
               /* Said as what is left, set first: the bar beside these words
@@ -177,7 +220,7 @@ export const SpendBar = memo(function SpendBar({
                 Details
               </button>
             </div>
-          </div>
+          </div>}
         </div>
         {open && <SpendPeek session={session} onUsage={onOpen} onClose={() => setOpen(false)} />}
       </>

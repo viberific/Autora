@@ -160,6 +160,9 @@
   width: var(--flow-edge-w);
   min-height: 132px;
   padding: 12px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--border-strong);
   border-right: 0;
   border-radius: var(--r-md) 0 0 var(--r-md);
@@ -387,9 +390,11 @@
   align-self: flex-end;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  min-width: 44px;
   min-height: 44px;
   margin: 0 4px 4px;
-  padding: 6px 12px;
+  padding: 6px;
   border: 1px solid var(--border-strong);
   border-radius: var(--r-pill);
   background: var(--s2);
@@ -460,17 +465,133 @@
     gap: 8px;
   }
 
+  /* More message to the screen: tighter bubbles and gaps, and 14px reading text (the app's phone size was 15px
+     at 1.6). Never below 13px. */
+  .conversation-flow .thread-content {
+    gap: 12px;
+  }
+
   .conversation-flow .msg {
-    padding: 10px 12px;
-    gap: 8px;
+    padding: 8px 10px;
+    gap: 6px;
+  }
+
+  .conversation-flow .msg-text {
+    font-size: var(--fs-md);
+    line-height: 1.5;
   }
 
   .conversation-flow__todos {
     margin-inline: 2px;
   }
 
-  .conversation-flow__entry textarea {
-    max-height: min(24dvh, 240px);
+  /* The sheet is a fixed-height column, so what is typed must give way, not push. Every box between the
+     column and the textarea may shrink (min-height: 0) and the textarea is the one that does, scrolling inside
+     itself; the message list is already at flex-basis 0, so it gives its room up first. The send row never
+     shrinks and so can never be pushed past the sheet's edge. */
+  .conversation-flow__entry-area {
+    flex: 0 1 auto;
+    min-height: 0;
+  }
+
+  .conversation-flow__entry,
+  .conversation-flow__entry .composer,
+  .conversation-flow__entry .composer-box {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .conversation-flow__entry .composer-box > :not(textarea) {
+    flex-shrink: 0;
+  }
+
+  .conversation-flow__entry .composer textarea {
+    flex: 1 1 auto;
+    min-height: 44px;
+    max-height: min(18dvh, 160px);
+  }
+
+  .conversation-flow.is-full .conversation-flow__entry .composer textarea {
+    max-height: min(30dvh, 260px);
+  }
+
+  /* A keyboard hint is no use on a touch screen, and costs a line of the sheet. */
+  .conversation-flow__entry .composer-hint {
+    display: none;
+  }
+
+  /* Retracted: the last two things said sit beside the Show button, in the row the button already had, so the
+     strip does not grow. A tap opens the sheet. */
+  .conversation-flow.is-sheet.is-collapsed .conversation-flow__entry-area {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 8px;
+  }
+
+  .conversation-flow.is-sheet.is-collapsed .conversation-flow__toggle {
+    grid-column: 2;
+    grid-row: 1;
+    margin: 0;
+  }
+
+  .conversation-flow.is-sheet.is-collapsed .conversation-flow__preview {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .conversation-flow.is-sheet.is-collapsed .conversation-flow__todos,
+  .conversation-flow.is-sheet.is-collapsed .conversation-flow__entry {
+    grid-column: 1 / -1;
+  }
+
+  .conversation-flow.is-sheet.is-collapsed .conversation-flow__todos {
+    grid-row: 2;
+  }
+
+  .conversation-flow.is-sheet.is-collapsed .conversation-flow__entry {
+    grid-row: 3;
+  }
+
+  .conversation-flow__preview {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+    min-height: 44px;
+    padding: 2px 8px;
+    border: 0;
+    border-radius: var(--r-md);
+    background: var(--s2);
+    color: var(--text-2);
+    font: var(--fs-sm) / 1.35 var(--sans);
+    text-align: left;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+  }
+
+  .conversation-flow__preview:active {
+    background: var(--accent-soft);
+    color: var(--text);
+  }
+
+  .conversation-flow__preview:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .conversation-flow__preview-line {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .conversation-flow__preview-line > b {
+    color: var(--text);
+    font-weight: 600;
   }
 
   .conversation-flow__work-navigation {

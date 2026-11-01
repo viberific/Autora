@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
-import { PANEL_DEFAULT, PANEL_MAX, PANEL_MIN, PANEL_STEP, clampPanelWidth, type Sheet } from "./chatLayout";
+import { PANEL_DEFAULT, PANEL_MAX, PANEL_MIN, PANEL_STEP, clampPanelWidth, type PreviewLine, type Sheet } from "./chatLayout";
 import "./ConversationFlow.css";
 
 interface ConversationFlowProps {
@@ -20,9 +20,21 @@ interface ConversationFlowProps {
   onSheet?: (sheet: Sheet) => void;
   /** A question or permission is waiting: the sheet may not be lowered below half. */
   locked?: boolean;
+  /** The last thing or two said, shown on a phone while the sheet is retracted; a tap opens the sheet. */
+  preview?: readonly PreviewLine[];
 }
 
 const LEVELS = ["Canvas only", "Half", "Full"] as const;
+
+/** The one glyph for showing and retracting the conversation: a speech bubble, the same open or retracted. */
+function ConversationIcon() {
+  return (
+    <svg className="conversation-flow__icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+      strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+      <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z" />
+    </svg>
+  );
+}
 
 /** Hosts the live Thread and native composer without taking ownership of either: docked beside the canvas on a
     desktop, a bottom sheet under it on a phone. The canvas is resized around it, never covered. */
@@ -40,6 +52,7 @@ export function ConversationFlow({
   sheet = "half",
   onSheet,
   locked = false,
+  preview,
 }: ConversationFlowProps) {
   const conversationId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -248,9 +261,10 @@ export function ConversationFlow({
               onClick={() => { restoreFocus.current = "toggle"; onToggle(); }}
               aria-expanded={!collapsed}
               aria-controls={conversationId}
+              aria-label="Show conversation"
               tabIndex={collapsed ? 0 : -1}
             >
-              Show conversation
+              <ConversationIcon />
             </button>
           )}
         </>
@@ -275,8 +289,24 @@ export function ConversationFlow({
               onClick={() => { if (!phone) restoreFocus.current = "edge"; onToggle(); }}
               aria-expanded={!collapsed}
               aria-controls={conversationId}
+              aria-label={collapsed ? "Show conversation" : "Retract conversation"}
             >
-              {collapsed ? "Show conversation" : "Retract conversation"}
+              <ConversationIcon />
+            </button>
+          )}
+          {phone && collapsed && onToggle && preview && preview.length > 0 && (
+            <button
+              className="conversation-flow__preview"
+              type="button"
+              onClick={() => { restoreFocus.current = "toggle"; onToggle(); }}
+              aria-controls={conversationId}
+              aria-label={`Open the conversation. ${preview.map((line) => `${line.who}: ${line.text}`).join(" ")}`}
+            >
+              {preview.map((line, index) => (
+                <span className="conversation-flow__preview-line" key={index} aria-hidden="true">
+                  <b>{line.who}</b> {line.text}
+                </span>
+              ))}
             </button>
           )}
           {todos != null && <div className="conversation-flow__todos">{todos}</div>}

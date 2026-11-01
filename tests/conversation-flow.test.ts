@@ -15,6 +15,7 @@ const hooks = registerHooks({
 });
 const { ConversationFlow } = await import("../src/components/panacea/ConversationFlow");
 hooks.deregister();
+const { previewOf } = await import("../src/components/panacea/chatLayout");
 
 let passed = 0;
 function test(name: string, run: () => void) {
@@ -84,9 +85,13 @@ test("retraction keeps history mounted and todos/composer outside the inert regi
   }
   assert.match(closed, /conversation-flow is-collapsed/);
   assert.match(closed, /<section[^>]*aria-hidden="true"[^>]*inert=""/);
-  assert.match(closed, /aria-expanded="false"[^>]*>Show conversation/);
-  assert.match(open, /aria-expanded="true"[^>]*>Retract conversation/);
-  assert.doesNotMatch(open, /aria-hidden=|inert=/);
+  assert.match(closed, /aria-expanded="false"[^>]*aria-label="Show conversation"/);
+  assert.match(open, /aria-expanded="true"[^>]*aria-label="Retract conversation"/);
+  // One icon, no words: the control's glyph is the same open or retracted, and it shows no text.
+  const toggleOf = (html: string) => /<button[^>]*conversation-flow__toggle[^>]*>(.*?)<\/button>/.exec(html)?.[1] ?? "";
+  assert.match(toggleOf(open), /^<svg[^>]*aria-hidden="true"[^>]*>.*<\/svg>$/);
+  assert.equal(toggleOf(open), toggleOf(closed));
+  assert.doesNotMatch(open, /<section[^>]*\s(?:aria-hidden|inert)=/);
   assert.doesNotMatch(closed, /<section[^>]*\shidden=/);
 });
 
@@ -106,6 +111,24 @@ test("desktop gets a resize separator and edge tab; a phone gets the sheet handl
   assert.match(peek, /aria-valuenow="0"[^>]*aria-valuetext="Canvas only"/);
 });
 
+test("a retracted phone sheet previews the last two things said and opens on a tap; a desktop strip does not", () => {
+  const lines = previewOf([
+    { role: "user", text: "Make it **blue**" },
+    { role: "agent", text: "" },
+    { role: "agent", text: "Done.\n\nSee [the file](http://x) `now`." },
+  ]);
+  assert.deepEqual(lines, [{ who: "You", text: "Make it blue" }, { who: "Autora", text: "Done. See the file now." }]);
+  const slots = { conversation: h("div", null, "history"), entry: h("textarea"), onToggle: () => undefined, preview: lines, collapsed: true };
+  const phone = renderToStaticMarkup(h(ConversationFlow, { ...slots, phone: true }));
+  assert.match(phone, /class="conversation-flow__preview"[^>]*aria-label="Open the conversation\. You: Make it blue Autora: Done\./);
+  assert.ok(phone.indexOf("</section>") < phone.indexOf("conversation-flow__preview"));
+  assert.doesNotMatch(renderToStaticMarkup(h(ConversationFlow, { ...slots, phone: true, collapsed: false })), /conversation-flow__preview/);
+  assert.doesNotMatch(renderToStaticMarkup(h(ConversationFlow, { ...slots, phone: false })), /conversation-flow__preview/);
+  const css = fs.readFileSync(new URL("../src/components/panacea/ConversationFlow.css", import.meta.url), "utf8");
+  assert.match(css, /\.conversation-flow__preview\s*\{[^}]*min-height: 44px;/);
+  assert.match(css, /\.conversation-flow__entry \.composer textarea\s*\{[^}]*flex: 1 1 auto;[^}]*max-height: min\(18dvh, 160px\);/);
+});
+
 test("layout docks beside the canvas, keeps the history mounted, and speaks the tokens", () => {
   const css = fs.readFileSync(new URL("../src/components/panacea/ConversationFlow.css", import.meta.url), "utf8");
   // A region of the layout, not an overlay: the canvas is a sibling that gives way.
@@ -117,7 +140,14 @@ test("layout docks beside the canvas, keeps the history mounted, and speaks the 
   assert.match(css, /\.conversation-flow \.msg\.user\s*\{[^}]*margin-left: auto;/);
   assert.match(css, /@media \(max-width: 680px\)/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
-  assert.doesNotMatch(css, /(?:^|\n)\s*(?:contain|overflow):/);
+  // The root, the column and the history never clip or scroll their own content (the preview line's
+  // ellipsis is the one place overflow is wanted).
+  for (const rule of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+    const selectors = rule[1].replace(/\/\*[\s\S]*?\*\//g, "").split(",").map((s) => s.trim());
+    const guarded = selectors.some((s) => /^\.conversation-flow(?:\.[\w-]+)*(?:\s+\.conversation-flow__(?:column|conversation))?$|^\.conversation-flow__(?:column|conversation)$/.test(s));
+    if (guarded) assert.doesNotMatch(rule[2], /(?:^|[\s;])(?:contain|overflow(?:-[xy])?):/, `${selectors.join(", ")} must not clip or scroll`);
+  }
+  assert.match(css, /\.conversation-flow__preview-line\s*\{[^}]*overflow: hidden;[^}]*text-overflow: ellipsis;/);
   // Only transform and opacity move: no transition or animation names the panel's width or height.
   for (const found of css.matchAll(/(?:^|\n)\s*(?:transition|animation):[^;]*/g)) assert.doesNotMatch(found[0], /width|height|flex/);
   assert.match(css, /\.conversation-flow \.msg\s*\{[^}]*mask-image: var\(--flow-edge-mask, none\);/);

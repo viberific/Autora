@@ -3575,6 +3575,15 @@ select.set-select {
   .spend-row .spend-short { display: inline; }
   .spend-row-name { max-width: 6em; }
 }
+/* A phone: the several accounts are one line (the one being spent); the list of all of them opens under it on a
+   tap. The line costs one row of the sheet, not a row per account, and its tap area reaches past its drawn size. */
+@media (max-width: 680px) {
+  .spend-stack.is-compact { gap: 2px; padding: 0 0 2px; }
+  .spend-stack.is-compact .spend { position: relative; padding: 0; min-height: 22px; gap: 6px; }
+  .spend-stack.is-compact .spend::after { content: ""; position: absolute; inset: -8px 0; }
+  .spend-stack.is-compact .spend-row-name { max-width: 6em; }
+  .spend-stack.is-compact .spend-each { padding: 2px 0 0; gap: 3px; }
+}
 .spend-peek-vendor { display: grid; gap: 3px; }
 .spend-peek-vendor .spend-track { height: 4px; width: 100%; }
 .spend-peek-said {
