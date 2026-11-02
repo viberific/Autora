@@ -8834,3 +8834,117 @@ header.top .badge.mode-pill,
 header.top .top-work .stage-follow { height: var(--top-pill-h); min-height: 0; box-sizing: border-box; }
 header.top .badge.mode-pill.is-dot,
 header.top .top-work .stage-follow.visible-work.is-compact { width: var(--top-pill-h); }
+
+/* --- a vendor delegate answering for itself (VendorCell.tsx) ---------------
+   A job handed to Claude or Gemini. It has to be tellable from Autora's own
+   work at a glance, so it carries three marks of its own: the vendor's figure,
+   the vendor's colour on one hairline, and the folder it was given. Everything
+   else is the house: one surface, generous padding, no box around the box.
+   The colour is the vendor's, so it is deliberately the only place a hue other
+   than the accent is allowed to lead. */
+.cell-vendor {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 6px 12px 4px;
+  animation: vendorIn var(--dur-3) var(--ease) both;
+}
+@keyframes vendorIn { from { opacity: 0; transform: translateY(6px) scale(0.99); } to { opacity: 1; transform: none; } }
+
+.vendor-handoff {
+  font-size: var(--fs-xs); color: var(--text-3); overflow-wrap: anywhere;
+}
+.vendor-handoff-who { font-weight: 650; color: var(--text-2); letter-spacing: 0.01em; }
+
+.vendor-bubble {
+  --v: 150 150 160;
+  position: relative; min-width: 0; max-width: 66ch;
+  padding: 10px 14px 11px;
+  border-radius: var(--r-md);
+  /* The vendor's own colour on one hairline is the whole signal that this is
+     a delegate and not Autora talking; a failure keeps the vendor's mark but
+     turns the hairline to danger, so "who" and "how it went" stay separate. */
+  border-left: 2px solid var(--hair, rgb(var(--v) / 0.55));
+  background: var(--s2);
+  transition: border-color var(--dur-2) var(--ease), background var(--dur-2) var(--ease);
+}
+.cell-vendor[data-vendor="claude"] .vendor-bubble { --v: 217 119 87; }
+.cell-vendor[data-vendor="gemini"] .vendor-bubble { --v: 124 140 248; }
+.vendor-bubble.is-bad { --hair: rgba(var(--danger-rgb), 0.8); }
+.vendor-bubble.is-live { background: var(--s1); }
+
+.vendor-head { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 7px; min-width: 0; }
+.vendor-mark {
+  flex: 0 0 auto; display: grid; place-items: center;
+  width: 20px; height: 20px; border-radius: var(--r-pill);
+  color: rgb(var(--v)); background: rgb(var(--v) / 0.12);
+}
+.vendor-mark.is-working { animation: vendorWork 1.9s var(--ease) infinite; }
+@keyframes vendorWork {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(var(--v) / 0.34); opacity: 0.92; }
+  50%      { box-shadow: 0 0 0 4px rgb(var(--v) / 0); opacity: 1; }
+}
+.vendor-name { font-size: var(--fs-xs); font-weight: 700; color: var(--text); letter-spacing: 0.01em; }
+.vendor-meta {
+  min-width: 0; font-size: var(--fs-xs); color: var(--text-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  transition: opacity var(--dur-2) var(--ease);
+}
+
+.vendor-body { margin-top: 6px; font-size: var(--fs-base); color: var(--text); overflow-wrap: anywhere; }
+.vendor-body > :first-child { margin-top: 0; }
+.vendor-body > :last-child { margin-bottom: 0; }
+
+/* The caret is the only thing that says "still arriving", so it is small,
+   in the vendor's colour, and it stops the moment the run ends. */
+.vendor-caret {
+  display: inline-block; width: 2px; height: 1em; margin-left: 2px;
+  vertical-align: -0.15em; background: rgb(var(--v));
+  animation: vendorCaret 1.05s steps(1, end) infinite;
+}
+@keyframes vendorCaret { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
+
+.vendor-wait { display: flex; gap: 5px; align-items: center; margin-top: 8px; height: 8px; }
+.vendor-wait-dot {
+  width: 5px; height: 5px; border-radius: var(--r-pill); background: rgb(var(--v) / 0.6);
+  animation: vendorDot 1.2s var(--ease) infinite;
+}
+.vendor-wait-dot:nth-child(2) { animation-delay: 0.14s; }
+.vendor-wait-dot:nth-child(3) { animation-delay: 0.28s; }
+@keyframes vendorDot {
+  0%, 100% { opacity: 0.3; transform: translateY(0); }
+  45%      { opacity: 1; transform: translateY(-2px); }
+}
+
+.vendor-fail { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; }
+.vendor-fail-said { font-size: var(--fs-sm); color: var(--text-2); overflow-wrap: anywhere; }
+.vendor-fail-next { font-size: var(--fs-xs); color: var(--text-3); }
+
+.vendor-files {
+  display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 8px 0 0; padding: 0; list-style: none;
+}
+.vendor-files li {
+  font-size: var(--fs-xs); color: var(--text-2); background: var(--s3);
+  padding: 1px 7px; border-radius: var(--r-pill); max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.vendor-files .vendor-files-more { color: var(--text-3); background: none; padding-left: 0; }
+
+/* Phone width: the bubble keeps its own gutter, never pushes past the column,
+   and the folder and file list stop being one long line. */
+@media (max-width: 560px) {
+  .cell-vendor { padding: 4px 0 2px; }
+  .vendor-bubble { max-width: 100%; padding: 9px 11px 10px; }
+  .vendor-files li { white-space: normal; overflow-wrap: anywhere; }
+  .vendor-meta { white-space: normal; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cell-vendor { animation: none; }
+  .vendor-mark.is-working { animation: none; }
+  .vendor-wait-dot { animation: none; opacity: 0.7; }
+  .vendor-caret {
+    animation: none;
+    /* Still shown, still in the vendor's colour: it says "arriving" without
+       moving, which is what reduced motion asks for. */
+    opacity: 0.85;
+  }
+}

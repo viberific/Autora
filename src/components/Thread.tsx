@@ -17,6 +17,7 @@ import { ScreencastCell } from "./ScreencastCell";
 import { FileCell } from "./FileCell";
 import { RemarkCell } from "./RemarkCell";
 import { ChimeCell } from "./ChimeCell";
+import { VendorCell } from "./VendorCell";
 import { ToolCell, describeArgs } from "./ToolCell";
 import { TodoCell } from "./TodoCell";
 import { usePreviewState } from "../lib/preview";
@@ -1197,6 +1198,10 @@ const CellView = memo(function CellView({
       return <RemarkCell text={cell.text} />;
     case "chime":
       return <ChimeCell name={cell.name} role={cell.role} look={cell.look} text={cell.text} report={cell.report} ok={cell.ok} working={live && !cell.done} progress={cell.progress} />;
+    /* A vendor handed a job: a bubble of its own, in its own name and mark,
+       never folded away with the tool calls around it. */
+    case "vendor":
+      return <VendorCell vendor={cell.vendor} name={cell.name} handoff={cell.handoff} folder={cell.folder} text={cell.text} doing={cell.doing} done={cell.done} ok={cell.ok} reason={cell.reason} message={cell.message} durationMs={cell.durationMs} files={cell.files} working={live} />;
     case "tool":
       return <ToolCell span={cell.span} />;
     case "todo": {

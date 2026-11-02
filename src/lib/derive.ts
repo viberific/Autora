@@ -280,6 +280,23 @@ export type Cell =
   | { kind: "chime"; seq: number; id: string; name: string; role: string; look: AgentLook | null; text: string; done: boolean; report: string; ok: boolean;
       /** The agent's latest word on what it is doing (agent.progress): `at` is when, in ms, `steps` its tool calls so far. */
       progress: { text: string; steps: number; at: number } | null }
+  /** A vendor's subscription CLI handed a job: the lead's line saying who and
+      where, then the vendor's own words in its own bubble, streamed. */
+  | { kind: "vendor"; seq: number; id: string; vendor: string; name: string;
+      /** The line saying who it was handed to, and the folder. */
+      handoff: string; folder: string;
+      /** The vendor's answer, as much as has arrived. */
+      text: string;
+      /** What it says it is doing now, while it works. */
+      doing: string | null;
+      done: boolean; ok: boolean;
+      /** Set when it failed: rate_limit, auth, timeout, not_installed, other. */
+      reason: string | null;
+      /** Why it stopped, in words that say what to do next. */
+      message: string;
+      durationMs: number | null;
+      /** Files it edited, when it did. */
+      files: string[] }
   | { kind: "tool"; seq: number; span: SpanState }
   | { kind: "note"; seq: number; tone: "bad" | "warn" | "plain"; text: string }
   /** The person's words sent while the agent worked, added to the turn in flight: drawn as their own message. `read`
@@ -501,6 +518,8 @@ export function derive(events: AutoraEvent[]): Derived {
   let pendingMark: { x: number; y: number } | null = null;
 
   const chimes = new Map<string, Extract<Cell, { kind: "chime" }>>();
+  /** The vendor bubbles still being written into, by the id the handoff gave. */
+  const vendors = new Map<string, Extract<Cell, { kind: "vendor" }>>();
 
   const push = (cell: Cell): Cell => {
     bucket.cells.push(cell);
@@ -1146,6 +1165,58 @@ export function derive(events: AutoraEvent[]): Derived {
           chime.done = true;
           chime.ok = e.payload.ok !== false;
           if (typeof e.payload.reply === "string") chime.report = e.payload.reply;
+        }
+        break;
+      }
+
+      /* A vendor CLI handed a job. The event carries the line the lead said
+         when it handed over, so the transcript shows two things in order: what
+         was asked of whom, and then the vendor answering for itself. */
+      case Kind.VendorHandoff: {
+        const id = String(e.payload.id ?? e.seq);
+        const cell = push({
+          kind: "vendor", seq: e.seq, id,
+          vendor: String(e.payload.vendor ?? ""),
+          name: String(e.payload.name ?? "Delegate"),
+          handoff: typeof e.payload.text === "string" ? e.payload.text : "",
+          folder: String(e.payload.cwd ?? ""),
+          text: "", doing: null, done: false, ok: true,
+          reason: null, message: "", durationMs: null, files: [],
+        }) as Extract<Cell, { kind: "vendor" }>;
+        vendors.set(id, cell);
+        break;
+      }
+
+      /* Its answer, a piece at a time: appended, never replaced, so what has
+         already been read never changes under the reader. */
+      case Kind.VendorDelta: {
+        const cell = vendors.get(String(e.payload.id ?? ""));
+        if (cell && typeof e.payload.text === "string") {
+          cell.text += e.payload.text;
+          cell.doing = null;
+        }
+        break;
+      }
+
+      case Kind.VendorStatus: {
+        const cell = vendors.get(String(e.payload.id ?? ""));
+        if (cell && !cell.done && typeof e.payload.text === "string") cell.doing = e.payload.text;
+        break;
+      }
+
+      case Kind.VendorDone: {
+        const cell = vendors.get(String(e.payload.id ?? ""));
+        if (cell) {
+          cell.done = true;
+          cell.ok = e.payload.ok !== false;
+          cell.reason = typeof e.payload.reason === "string" && e.payload.reason ? e.payload.reason : null;
+          cell.message = typeof e.payload.message === "string" ? e.payload.message : "";
+          cell.durationMs = Number(e.payload.durationMs) || null;
+          cell.files = Array.isArray(e.payload.files) ? e.payload.files.filter((f: unknown) => typeof f === "string") : [];
+          cell.doing = null;
+          /* A wrapper that cannot stream sends its answer at the end: it lands
+             here, with the finish, rather than being lost. */
+          if (!cell.text && typeof e.payload.text === "string" && e.payload.text) cell.text = e.payload.text;
         }
         break;
       }

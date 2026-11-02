@@ -94,6 +94,16 @@ export const Kind = {
   /** What that agent is doing now, said into the chat that called it while it works (so a quiet one is visibly quiet). */
   AgentProgress: "agent.progress",
   AgentBack: "agent.back",
+  /** A job handed to a vendor's subscription CLI (Claude Code, Gemini): the
+      line saying who it was handed to and the folder, then the vendor's own
+      bubble, streaming. */
+  VendorHandoff: "vendor.handoff",
+  /** A piece of the vendor's answer, as it arrives. */
+  VendorDelta: "vendor.delta",
+  /** What the vendor says it is doing right now, while it works. */
+  VendorStatus: "vendor.status",
+  /** It finished: how long it took, what it edited, or why it stopped. */
+  VendorDone: "vendor.done",
   TodoUpdate: "todo.update",
   ModeSwitch: "mode.switch",
   ChatFresh: "chat.fresh",
