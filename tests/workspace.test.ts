@@ -131,6 +131,9 @@ test("engine openings and revisions override a dispatching Panacea tool's nomina
   ];
   assert.equal(latestWorkspaceChange(before, [before[0], { mode: "pages", open: true, since: 9, revision: 1 }]), "pages");
   assert.equal(latestWorkspaceChange(before, before), null);
+  // A window opened or moved by the person's own control on a Panacea panel does not take the view from the panel.
+  assert.equal(latestWorkspaceChange(before, [before[0], { mode: "studio", open: true, since: 9, revision: 1, quiet: true }]), null);
+  assert.equal(latestWorkspaceChange(before, [before[0], { mode: "studio", open: true, since: 9, revision: 2, quiet: false }]), "studio", "the agent's next change does");
   assert.equal(latestWorkspaceChange(before, [{ ...before[0], revision: 3 }, before[1]]), "panacea");
   assert.equal(latestWorkspaceChange(before, [{ ...before[0], open: false }, before[1]]), null);
 });

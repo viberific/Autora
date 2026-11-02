@@ -351,6 +351,14 @@ const GAME = [
     "Back to the scene chip returns). Name a tool by its button and say \"open All tools\" if it is not on their bar. You have every part " +
     "of the game through the game_* tools whatever is shown. Visible work is not here yet for this window (its bar says \"coming soon\"): " +
     "no cursor is played over a game you have already changed. The game is changed and the editor reloads it.",
+  "  Panacea's Game panels drive this same game: Movement and Physics change the movement behaviour (Platformer or Top-down) of one " +
+    "object, chosen in the panel's Object list (else the first object that moves): Run speed, Jump (platformer only), Gravity " +
+    "(platformer only) and Grip ↔ slippery, which is the behaviour's deceleration, so slippery is its braking taken away. Nothing " +
+    "about the game is kept on the canvas, so panel, window and tools always agree: panacea_set with {\"game.jump\": 800} changes the " +
+    "behaviour and opens this window, and panacea_look shows the game's values. Level sketch, Enemies, Win & lose, Inventory, Dialogue " +
+    "and Power-ups hold the person's own marks, choices and words, with an Ask button that has you build them with game_edit: you build, " +
+    "they decide, and you use exactly their words. There are no panels for camera, health, score, sound, particles or the like: they " +
+    "are events you write, with no setting for a panel to move.",
   "  Saving. The game is saved as you go; the window's top bar (Autora Games, the game's name), on a desktop too, has Save, which keeps the GDevelop project in Artifacts as a .json named after the chat.",
 ].join("\n");
 

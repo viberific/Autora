@@ -8,8 +8,8 @@ session can pick it up without the conversation that produced it.
 | Step | Status | What remains |
 |---|---|---|
 | G0 Make it honest | **Done** (0.9.321, 0.9.322) | — |
-| G1 Engine panels drive the engines | **Music (0.9.323), 3D (0.9.324) and Video (0.9.325) done** | Game |
-| G2 Windows the agent can lay out | Not started | see the plan |
+| G1 Engine panels drive the engines | **Done** (0.9.323 Music, 0.9.324 3D, 0.9.325 Video, 0.9.326 Game, with a phone test for all four) | — |
+| G2 Windows the agent can lay out | **Next** | see the plan; on a phone an app window opened by a panel covers the panels (see "Found on the way") |
 | G7 Verified where it runs | Not started | needs CI or the Docker image |
 | G3 Full native surfaces (full spreadsheet first) | Not started | see the plan |
 | G5 Projects finished | Not started | see the plan |
@@ -63,9 +63,23 @@ agent's `panacea_set` and `panacea_place` values go to the song), `appValue` in 
   OpenCut's own `state` gained `params` (opencut-editor/src/autora/helpers.ts). The editor has only a blur effect: no
   grade, transitions, stabiliser, captions, fades or looks, so those panels are deleted. Tests: `tests/panacea-video.test.ts`,
   `tests/ui-panacea-video.test.ts` (needs `npm --prefix opencut-editor ci` and a build).
-- **Game** (the GDevelop bridge): needs the game editor built to test; movement, physics, health, camera.
+- **Game: done (0.9.326)**: `src/lib/panacea/apps/game.ts` (pure: reads and writes the movement behaviour of the object
+  picked in the Object list: run speed, jump, gravity, and "slippery" as the deceleration taken away), `gamePanel` and
+  `POST /api/game/:session/panel` in `server/gamedesk.ts`. A game has no settings for a camera, health, score, sound or
+  particles (they are events), so those panels are deleted; Level sketch, Enemies, Win & lose, Inventory, Dialogue and
+  Power-ups hold the person's own choices and words, with an Ask button that has the agent build them. Tests:
+  `tests/panacea-game.test.ts`, `tests/ui-panacea-game.test.ts` (needs `npm --prefix gdevelop-editor ci` and a build).
 - Each engine: wired or deleted, read back from the engine, and set by hand in the engine's own window with Visible
   work on. Each one its own release.
+
+## Found on the way (for G2)
+
+- On a phone, the first move of a panel opens its app's window, and the window opens over the board where the panels are.
+  Since 0.9.326 a window opened by the person's own panel does not take the view (`quiet` in `WorkspaceSnapshot`), but it
+  still lands on top of the panels. `tests/ui-panacea-apps-phone.test.ts` therefore uses a fresh chat for each app. Laying
+  out windows so they do not cover the panels is G2.
+- `tests/ui-video.test.ts` fails on one assertion (the title "added by hand" wording) when run with a real browser and
+  the editor built; it was skipping before. Not from this work; look at it when Video is next touched.
 
 ## Things learned in this session that will save time
 

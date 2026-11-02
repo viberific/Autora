@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import type { Bucket } from "./derive";
 import type { WorkspaceMode } from "./workspace";
 
-export type WorkspaceSnapshot = { mode: WorkspaceMode; open: boolean; since?: number; revision?: string | number };
+/** `quiet`: the latest change was the person's own, made on a Panacea panel: the window shows it, but the view stays where they are working. */
+export type WorkspaceSnapshot = { mode: WorkspaceMode; open: boolean; since?: number; revision?: string | number; quiet?: boolean };
 
 /** Actual engine state wins over a dispatching tool's name (panacea_surface may open another engine). */
 export function latestWorkspaceChange(before: readonly WorkspaceSnapshot[], after: readonly WorkspaceSnapshot[]): WorkspaceMode | null {
   const changed = after.filter((next) => {
     const previous = before.find((s) => s.mode === next.mode);
-    return next.open && (!previous?.open || next.since !== previous.since || next.revision !== previous.revision);
+    return next.open && !next.quiet && (!previous?.open || next.since !== previous.since || next.revision !== previous.revision);
   });
   return changed.length ? changed.reduce((best, next) => (next.since ?? 0) >= (best.since ?? 0) ? next : best).mode : null;
 }

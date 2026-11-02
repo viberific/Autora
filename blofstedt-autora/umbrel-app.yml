@@ -204,10 +204,11 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Video panels now work. In Panacea, the Speed, Audio, Title, Picture and Project
-  panels change the clip or film in Autora Video itself, and the Video window
-  shows it, and the other way round. A Clip list picks which clip they act on.
-  The agent sets them with the same effect. Export, Markers and Scenes hold your
-  choices for the agent to act on. Panels for things the editor has no way to
-  do, such as colour grade, transitions, stabilising and captions, are gone.
-  Music and 3D panels from the last releases are unchanged.
+  Game panels now work. In Panacea, the Movement and Physics panels change the
+  movement behaviour of an object in your game in Autora Games, and the game
+  window shows it, and the other way round: run speed, jump, gravity and how
+  slippery. An Object list picks which one. The agent sets them with the same
+  effect. Level sketch, Enemies, Win & lose, Inventory, Dialogue and Power-ups
+  hold your own choices and words, with a button that has the agent build them.
+  Panels for things a game has no setting for, such as camera, health, score and
+  sound, are gone. Music, 3D and Video panels are unchanged.

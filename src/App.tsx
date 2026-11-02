@@ -1703,10 +1703,10 @@ export function App() {
     { mode: "panacea", open: panacea.open, since: panacea.since, revision: panacea.by === "agent" ? panacea.rev : undefined },
     { mode: "pdf", open: desk.open, since: desk.since, revision: desk.rev },
     { mode: "video", open: video.open, since: video.since, revision: `${video.projectId ?? ""}:${video.name ?? ""}` },
-    { mode: "cad", open: cad.open, since: cad.since, revision: cad.by === "agent" && cad.quiet !== cad.rev ? cad.rev : undefined },
-    { mode: "game", open: game.open, since: game.since, revision: game.by === "agent" ? game.rev : undefined },
+    { mode: "cad", open: cad.open, since: cad.since, revision: cad.by === "agent" ? cad.rev : undefined, quiet: cad.quiet !== undefined && cad.quiet === cad.rev },
+    { mode: "game", open: game.open, since: game.since, revision: game.by === "agent" ? game.rev : undefined, quiet: game.quiet !== undefined && game.quiet === game.rev },
     { mode: "photo", open: photo.open, since: photo.since, revision: photo.by === "agent" ? photo.rev : undefined },
-    { mode: "studio", open: studio.open, since: studio.since, revision: studio.by === "agent" && studio.quiet !== studio.rev ? studio.rev : undefined },
+    { mode: "studio", open: studio.open, since: studio.since, revision: studio.by === "agent" ? studio.rev : undefined, quiet: studio.quiet !== undefined && studio.quiet === studio.rev },
     ...OFFICE_PANES.map((o) => { const win = windowAt(o.kind); return { mode: o.pane, open: !!win, since: win?.since, revision: win?.loadRev }; }),
   ], workspaceToolKey(view.buckets));
   const sidePane: SideWindow | null = (() => {

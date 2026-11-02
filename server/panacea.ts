@@ -33,7 +33,9 @@ import { treeLive } from "../src/lib/panacea/wiring";
 import { MUSIC_TRACK, isMusicBind, readMusic } from "../src/lib/panacea/apps/music";
 import { MODEL_PART, isModelBind, readModel } from "../src/lib/panacea/apps/model";
 import { VIDEO_CLIP, isVideoBind, readVideo } from "../src/lib/panacea/apps/video";
+import { GAME_OBJECT, isGameBind, readGame } from "../src/lib/panacea/apps/game";
 import { cadModel, cadPanel } from "./caddesk";
+import { gamePanel, gameProject } from "./gamedesk";
 import { videoPanel, videoSnapshot } from "./opencut";
 import { studioPanel, studioSong } from "./studio";
 import { addStep, createProject, decide, describeProject, linkPieces, phaseFor, setStepDone, stepById, type Project } from "../src/lib/panacea/project";
@@ -490,8 +492,9 @@ interface PanaceaHooks {
 }
 
 /** The tool whose switch turns each app's window off. */
-const APP_SWITCH = { music: "studio_look", model: "cad_scene_get", video: "video_look" } as const;
-const offWords = (app: keyof typeof APP_SWITCH) => `${app === "music" ? "Autora Music" : app === "model" ? "Autora 3D" : "Autora Video"} is switched off on the Tools page`;
+const APP_SWITCH = { music: "studio_look", model: "cad_scene_get", video: "video_look", game: "game_look" } as const;
+const APP_NAME = { music: "Autora Music", model: "Autora 3D", video: "Autora Video", game: "Autora Games" } as const;
+const offWords = (app: keyof typeof APP_SWITCH) => `${APP_NAME[app]} is switched off on the Tools page`;
 
 interface Outcome {
   ok: boolean;
@@ -531,6 +534,10 @@ function setChecked(session: string, c: Canvas, key: string, v: unknown, hooks: 
 /** What the song says for a `music.*` value, for describing the canvas. */
 function songValues(session: string, canvas: Canvas): (bind: string) => Value | undefined {
   return (bind) => {
+    if (isGameBind(bind)) {
+      const game = gameProject(session);
+      return game ? readGame(game, bind, canvas.values[GAME_OBJECT]) : undefined;
+    }
     if (isVideoBind(bind)) {
       const project = videoSnapshot(session);
       return project ? readVideo(project, bind, canvas.values[VIDEO_CLIP]) : undefined;
@@ -545,14 +552,14 @@ function songValues(session: string, canvas: Canvas): (bind: string) => Value | 
 }
 
 /**
- * The `model.*` and `video.*` values in what the agent gave panacea_set or panacea_place are the 3D model's and the video
- * project's, not the canvas's: they are done here by those apps' own tools (src/lib/panacea/apps/) and taken out of the
+ * The `model.*`, `video.*` and `game.*` values in what the agent gave panacea_set or panacea_place are the 3D model's, the video
+ * project's and the game's, not the canvas's: they are done here by those apps' own tools (src/lib/panacea/apps/) and taken out of the
  * rest, which the canvas keeps. The part or clip they act on is `model.part` / `video.clip` (given in the same call, else
  * the canvas's).
  */
 async function applyAppValues(session: string, c: Canvas, args: Record<string, any>, hooks: PanaceaHooks): Promise<{ args: Record<string, any>; done: string[]; problems: string[] }> {
   const given = args.values && typeof args.values === "object" ? Object.entries(args.values as Record<string, unknown>) : [];
-  const appOf = (k: string): "model" | "video" | null => (isModelBind(k) && k !== MODEL_PART ? "model" : isVideoBind(k) && k !== VIDEO_CLIP ? "video" : null);
+  const appOf = (k: string): "model" | "video" | "game" | null => (isModelBind(k) && k !== MODEL_PART ? "model" : isVideoBind(k) && k !== VIDEO_CLIP ? "video" : isGameBind(k) && k !== GAME_OBJECT ? "game" : null);
   const mine = given.filter(([k]) => appOf(k));
   if (!mine.length) return { args, done: [], problems: [] };
   const values = args.values as Record<string, unknown>;
@@ -561,7 +568,9 @@ async function applyAppValues(session: string, c: Canvas, args: Record<string, a
   for (const [k, v] of mine) {
     const app = appOf(k)!;
     if (hooks.windowOff?.(APP_SWITCH[app])) { problems.push(`${k}: ${offWords(app)}`); continue; }
-    const res = app === "model" ? await cadPanel(session, k, v, values[MODEL_PART] ?? c.values[MODEL_PART], "agent") : await videoPanel(session, k, v, values[VIDEO_CLIP] ?? c.values[VIDEO_CLIP]);
+    const res = app === "model" ? await cadPanel(session, k, v, values[MODEL_PART] ?? c.values[MODEL_PART], "agent")
+      : app === "game" ? gamePanel(session, k, v, values[GAME_OBJECT] ?? c.values[GAME_OBJECT], "agent")
+      : await videoPanel(session, k, v, values[VIDEO_CLIP] ?? c.values[VIDEO_CLIP]);
     if (res.ok) done.push(`${k}=${JSON.stringify(v).slice(0, 40)} (${res.did})`);
     else problems.push(`${k}: ${res.error}`);
   }

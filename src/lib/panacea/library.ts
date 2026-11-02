@@ -16,6 +16,7 @@
 import { MUSIC_TRACK } from "./apps/music";
 import { MATERIALS, MODEL_PART } from "./apps/model";
 import { VIDEO_CLIP } from "./apps/video";
+import { GAME_OBJECT } from "./apps/game";
 import { INSTRUMENTS, NOTE_NAMES, SCALE_NAMES } from "../studio/model";
 import { MAX_DEPTH, type Value } from "./atoms";
 import { INTENTS, type RecipeNext, type RecipeWhen } from "./intent";
@@ -266,27 +267,21 @@ const THREE_D: Recipe[] = [
   r("3d", "export", "Export", "for printing or games", "export stl glb print", stack(seg("model.format", "Format", ["STL", "GLB"]), ask("Export", "Export the model in the format set in the Export panel (cad_export)."))),
 ];
 
+// Every control here is wired to the game in Autora Games (src/lib/panacea/apps/game.ts) or holds the person's own
+// choices and words for the agent to build, with an Ask button that has it do so. The movement behaviours have run
+// speed, jump, gravity and deceleration (as "slippery"); a camera, health, score, sound, particles and the like are events
+// the agent writes, and have no setting to move, so there are no panels for them.
+const OBJECT = () => sel(GAME_OBJECT, "Object", "objects");
 const GAME: Recipe[] = [
-  r("game", "movement", "Movement", "how the player runs and jumps", "movement run jump player speed", stack(sl("game.speed", "Run speed", { min: 0, max: 1000 }), sl("game.jump", "Jump", { min: 0, max: 1500 }), tg("game.double", "Double jump"))),
-  r("game", "physics", "Physics", "gravity and how slippery", "physics gravity friction slippery", stack(sl("game.gravity", "Gravity", { min: 0, max: 3000 }), sl("game.friction", "Grip ↔ slippery", { min: 0, max: 100 }))),
-  r("game", "camera", "Camera", "how the view follows", "camera follow view", stack(seg("game.cam", "Follow", ["Locked", "Smooth", "Free"]), sl("game.camsmooth", "Smoothing", { min: 0, max: 100 }))),
-  r("game", "enemy", "Enemies", "how they behave", "enemy enemies ai behaviour", stack(seg("game.enemy", "Behaviour", ["Patrol", "Chase", "Guard"]), sl("game.aggro", "Aggression", { min: 0, max: 100 }))),
-  r("game", "health", "Health", "lives and healing", "health lives hp damage", stack(st("game.hp", "Health", { min: 1, max: 20 }), tg("game.regen", "Heal over time"))),
-  r("game", "level", "Level sketch", "a grid of where things go", "level map layout tiles", stack(pads("game.tiles", "Level", 16, ["Sky", "High", "Mid", "Low", "Ground"])), 480),
-  r("game", "spawner", "Spawner", "how many and how often", "spawn spawner waves enemies", stack(st("game.spawn", "How many", { min: 1, max: 50 }), sl("game.every", "Every", { min: 0.5, max: 30, step: 0.5, unit: "s" }))),
-  r("game", "score", "Score", "points and combos", "score points combo", stack(st("game.points", "Points per hit", { min: 1, max: 1000 }), tg("game.combo", "Combos"))),
-  r("game", "controls", "Controls", "keys for each action", "controls keys input mapping", stack(sel("game.jumpkey", "Jump", ["Space", "W", "Up"]), sel("game.actkey", "Action", ["E", "F", "Enter"]))),
-  r("game", "sound", "Sound", "music and effects levels", "sound music sfx audio", stack(sl("game.music", "Music", { min: 0, max: 100 }), sl("game.sfx", "Effects", { min: 0, max: 100 }))),
-  r("game", "difficulty", "Difficulty", "how hard it is", "difficulty easy hard", stack(seg("game.diff", "Difficulty", ["Easy", "Normal", "Hard"]))),
-  r("game", "time", "Time of day", "day to night", "time day night lighting", stack(sl("game.hour", "Time", { min: 0, max: 24, step: 0.5, unit: "h" }))),
-  r("game", "inventory", "Inventory", "what the player carries", "inventory items pickup", stack(lst("game.items", "Items"))),
-  r("game", "dialogue", "Dialogue", "lines a character says", "dialogue lines npc talk story", stack(lst("game.lines", "Lines", "Hello, traveller…"))),
-  r("game", "particles", "Particles", "sparks, dust or rain", "particles effects sparks rain", stack(seg("game.ptype", "Kind", ["Sparks", "Dust", "Rain", "Snow"]), sl("game.pamt", "Amount", { min: 0, max: 100 }), col("game.pcolor", "Colour"))),
-  r("game", "powerups", "Power-ups", "what can be picked up", "power ups powerups bonus", stack(chips("game.powers", "Power-ups", ["Speed", "Shield", "Magnet", "Extra life", "Double jump"]))),
-  r("game", "rules", "Win & lose", "how a level ends", "win lose rules goal", stack(seg("game.win", "Win by", ["Reach exit", "Collect all", "Survive"]), st("game.limit", "Time limit", { min: 0, max: 600, step: 10, unit: "s" }))),
-  r("game", "sprite", "Sprite", "palette and size", "sprite art pixel palette", stack(sw("game.pal", "Palette", [{ value: "retro", label: "Retro", color: "#e2574c" }, { value: "pastel", label: "Pastel", color: "#f2c6c2" }, { value: "mono", label: "Mono", color: "#5d5d5d" }, { value: "neon", label: "Neon", color: "#41b883" }]), st("game.px", "Size", { min: 8, max: 128, step: 8, unit: "px" }))),
+  r("game", "movement", "Movement", "how fast the player runs and jumps", "movement run jump player speed", stack(OBJECT(), sl("game.speed", "Run speed", { min: 0, max: 1000 }), sl("game.jump", "Jump", { min: 0, max: 1500 }))),
+  r("game", "physics", "Physics", "gravity and how slippery", "physics gravity friction slippery", stack(OBJECT(), sl("game.gravity", "Gravity", { min: 0, max: 3000 }), sl("game.friction", "Grip ↔ slippery", { min: 0, max: 100 }))),
+  r("game", "level", "Level sketch", "a grid of where things go", "level map layout tiles", stack(pads("game.tiles", "Level", 16, ["Sky", "High", "Mid", "Low", "Ground"]), ask("Build it", "Build the level sketched in the Level sketch panel in the game's scene: place what each marked square stands for, row by row. Use exactly the squares I marked.")), 480),
+  r("game", "enemy", "Enemies", "how they behave", "enemy enemies ai behaviour", stack(seg("game.enemy", "Behaviour", ["Patrol", "Chase", "Guard"]), sl("game.aggro", "Aggression", { min: 0, max: 100 }), ask("Make them so", "Give the game's enemies the behaviour and aggression set in the Enemies panel."))),
+  r("game", "rules", "Win & lose", "how a level ends", "win lose rules goal", stack(seg("game.win", "Win by", ["Reach exit", "Collect all", "Survive"]), st("game.limit", "Time limit", { min: 0, max: 600, step: 10, unit: "s" }), ask("Set the rules", "Make the level end the way set in the Win & lose panel (0 seconds is no time limit)."))),
+  r("game", "inventory", "Inventory", "what the player carries", "inventory items pickup", stack(lst("game.items", "Items"), ask("Add them", "Give the player the items in the Inventory panel, with a way to pick each one up. Use exactly the items I listed."))),
+  r("game", "dialogue", "Dialogue", "lines a character says", "dialogue lines npc talk story", stack(lst("game.lines", "Lines", "Hello, traveller…"), ask("Put them in", "Make a character say the lines in the Dialogue panel, in order, when the player comes near. Use my words exactly; do not write more."))),
+  r("game", "powerups", "Power-ups", "what can be picked up", "power ups powerups bonus", stack(chips("game.powers", "Power-ups", ["Speed", "Shield", "Magnet", "Extra life", "Double jump"]), ask("Add them", "Add a pick-up for each power-up chosen in the Power-ups panel, with the effect its name says."))),
   r("game", "test", "Test it", "play and get notes", "test play playtest feedback", row(ask("Play-test it", "Play-test the game and tell me what feels off."), ask("Make it feel better", "Suggest small changes that would make the controls feel better; I will pick."))),
-  r("game", "world", "World rules", "how the world behaves", "world rules physics wrap", stack(tg("game.wrap", "Wrap around edges"), tg("game.fall", "Falling hurts"), tg("game.water", "Water slows you"))),
 ];
 
 const DESIGN: Recipe[] = [

@@ -27,6 +27,7 @@ import { pictureOf } from "./panacea/Surfaces";
 import { useCanvas } from "./panacea/useCanvas";
 import { isAppBind, useAppValues, wantedApps } from "./panacea/useAppValues";
 import { MODEL_PART, isModelBind } from "../lib/panacea/apps/model";
+import { GAME_OBJECT, isGameBind } from "../lib/panacea/apps/game";
 import { VIDEO_CLIP, isVideoBind } from "../lib/panacea/apps/video";
 import { MUSIC_TRACK } from "../lib/panacea/apps/music";
 import { SaveButton, keptAs } from "./SaveButton";
@@ -59,7 +60,7 @@ const show = (v: Value | undefined) => {
  * take or wave away. The canvas lives on the server (server/panacea.ts), where the agent's panacea_* tools work on it.
  */
 /** The canvas value that says which track, part or clip a control acts on. */
-const pickOf = (bind: string) => (isModelBind(bind) ? MODEL_PART : isVideoBind(bind) ? VIDEO_CLIP : MUSIC_TRACK);
+const pickOf = (bind: string) => (isModelBind(bind) ? MODEL_PART : isVideoBind(bind) ? VIDEO_CLIP : isGameBind(bind) ? GAME_OBJECT : MUSIC_TRACK);
 
 export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene, followTarget, onJump, onCloseWork, navigationHost, nativeActions }: {
   sessionId: string;

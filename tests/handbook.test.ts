@@ -252,6 +252,13 @@ await test("the Music manual says an instrument is chosen in the track's menu an
   }
 });
 
+await test("the Games manual says Panacea's Game panels drive the game, with an Object list", () => {
+  const game = manualText("game");
+  for (const needle of ["Panacea's Game panels drive this same game", "Object list", "panacea_set", "no panels for camera"]) {
+    assert.ok(game.includes(needle), `the Games manual lacks "${needle}"`);
+  }
+});
+
 await test("the Games manual says Visible work is not here yet, and that no cursor is played over the game", () => {
   const game = manualText("game");
   assert.ok(game.includes("coming soon") && game.includes("no cursor is played"));
