@@ -253,11 +253,16 @@ const FLUSH_CHARS = 700;
     so and exits 2 before it does anything -- see runVendor. */
 export type PromptForm = "stdin" | "argv";
 
-/** The command line a wrapper is called with: options, then the prompt. */
-export function vendorArgs(opts: VendorRunOptions, form: PromptForm = "stdin"): string[] {
-  const args: string[] = [];
+/** The command line a wrapper is called with: options, then the prompt.
+ *
+ * `--jsonl` asks for the streaming contract at the top of this file; a wrapper
+ * that predates it answers in plain text, which is read as one delta. `--effort`
+ * goes only to Gemini: Antigravity takes a reasoning effort, Claude Code does
+ * not, and its wrapper refuses an option it does not know. */
+export function vendorArgs(opts: VendorRunOptions, form: PromptForm = "stdin", jsonl = true): string[] {
+  const args: string[] = jsonl ? ["--jsonl"] : [];
   if (opts.model) args.push("--model", opts.model);
-  if (opts.effort) args.push("--effort", opts.effort);
+  if (opts.effort && opts.id === "gemini") args.push("--effort", opts.effort);
   if (opts.cwd) args.push("--cwd", opts.cwd);
   if (opts.write) args.push("--write");
   if (opts.timeoutArg) args.push("--timeout", opts.timeoutArg);
@@ -377,23 +382,48 @@ function clip(text: string, n = 400): string {
  * whether it worked, timed out, or was never installed.
  */
 export async function runVendor(opts: VendorRunOptions): Promise<VendorRunResult> {
-  const first = await runAttempt(opts, "stdin");
-  /* A wrapper whose argument parser takes `-` for an unknown option exits 2
-     before spending anything, so asking again with the prompt as the last
-     word is free. /data/bin/gemini-call.sh is one of those as it stands. */
-  if (!first.ok && first.exitCode === 2 && !first.text && stdinRefused(first.message)) {
-    return await runAttempt(opts, "argv");
+  /* A wrapper that does not know an option we passed exits 2 before it spends
+     anything, so asking again without that option is free. Two things can be
+     unknown: `--jsonl` (a wrapper written before the streaming contract) and
+     the bare `-` (a parser that reads every dash as an option). Each is shed
+     in turn, which is why a wrapper written last year still answers and one
+     written to the contract is called once, as the contract asks. */
+  let form: PromptForm = "stdin";
+  let jsonl = true;
+  let last: VendorRunResult | null = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const result = await runAttempt(opts, form, jsonl);
+    last = result;
+    /* Anything said is the answer, and a failure that is not about our options
+       is a failure: both are reported as they are. */
+    if (result.ok || result.text) return result;
+    const refused = refusedOption(result.message);
+    if (!refused) return result;
+    if (refused === "--jsonl" && jsonl) {
+      jsonl = false;
+      continue;
+    }
+    if (refused === "-" && form === "stdin") {
+      form = "argv";
+      continue;
+    }
+    return result;
   }
-  return first;
+  return last ?? (await runAttempt(opts, form, jsonl));
+}
+
+/** The option a wrapper said it did not know, or null. */
+export function refusedOption(message: string): string | null {
+  const found = /unknown (?:option|argument):?\s*(\S+)/i.exec(message);
+  return found ? found[1].replace(/[.,;:]$/, "") : null;
 }
 
 /** Was this a wrapper refusing the bare `-`, rather than one of its options? */
 export function stdinRefused(message: string): boolean {
-  if (!/unknown (option|argument)/i.test(message)) return false;
-  return /unknown (option|argument):?\s*-\s*$/im.test(message) || /unknown (option|argument):?\s*-[^-]/.test(message);
+  return refusedOption(message) === "-";
 }
 
-async function runAttempt(opts: VendorRunOptions, form: PromptForm): Promise<VendorRunResult> {
+async function runAttempt(opts: VendorRunOptions, form: PromptForm, jsonl = true): Promise<VendorRunResult> {
   const started = Date.now();
   const ready = vendorReady(opts.id);
   const base: VendorRunResult = {
@@ -454,7 +484,7 @@ async function runAttempt(opts: VendorRunOptions, form: PromptForm): Promise<Ven
 
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn(ready.path, vendorArgs(opts, form), {
+      child = spawn(ready.path, vendorArgs(opts, form, jsonl), {
         cwd: opts.cwd,
         env: vendorEnv(),
         stdio: ["pipe", "pipe", "pipe"],

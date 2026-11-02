@@ -69,7 +69,18 @@ test("an empty turn folds to nothing", () => {
 
 test("all work activity folds, but questions, permissions and conversation remain actionable", () => {
   for (const kind of ["terminal", "tool", "screen", "file", "files", "images", "widget", "app", "memory", "learned", "chime"]) assert.ok(STEP_KINDS.has(kind));
-  for (const kind of ["ask", "permission", "reply", "said", "todo"]) assert.ok(!STEP_KINDS.has(kind));
+  for (const kind of ["ask", "permission", "reply", "said", "todo", "vendor"]) assert.ok(!STEP_KINDS.has(kind));
+});
+
+test("a delegate's own bubble breaks the activity line rather than hiding inside it", () => {
+  /* Claude or Gemini answering for itself is the point of the feature: folded
+     into a contracted run of commands, the person would never see that the
+     work went to them, or what they said. */
+  const cells = [cell("terminal", 1), cell("vendor", 2), cell("terminal", 3)];
+  assert.deepEqual(kinds(cells), ["steps(terminal)", "vendor", "steps(terminal)"]);
+  const items = turnItems(cells);
+  assert.equal(items.length, 3);
+  assert.deepEqual(items[1].kind === "cell" ? items[1].cell.seq : null, 2);
 });
 
 test("questions and permissions nested in browser work cannot be hidden inside contracted activity", () => {

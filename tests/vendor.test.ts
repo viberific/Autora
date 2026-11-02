@@ -22,7 +22,7 @@ import path from "node:path";
 import { derive } from "../src/lib/derive";
 import { Kind, type AutoraEvent } from "../src/lib/types";
 import {
-  failureOf, filesTouched, lineSplitter, parseLine, redact, runVendor, vendorArgs, vendorEnv, vendorReady,
+  failureOf, filesTouched, lineSplitter, parseLine, redact, refusedOption, runVendor, vendorArgs, vendorEnv, vendorReady,
 } from "../server/vendor";
 
 let passed = 0;
@@ -130,14 +130,30 @@ test("the tail after the last newline waits for the rest of it", () => {
 
 test("the prompt goes in on stdin, never as an option the wrapper could read", () => {
   const args = vendorArgs({ id: "claude", prompt: "-rf /", cwd: "/data/work/x" });
-  assert.deepEqual(args, ["--cwd", "/data/work/x", "-"]);
+  assert.deepEqual(args, ["--jsonl", "--cwd", "/data/work/x", "-"]);
+});
+
+test("a wrapper that predates the streaming contract is called without --jsonl", () => {
+  const args = vendorArgs({ id: "claude", prompt: "go", cwd: "/x" }, "argv", false);
+  assert.deepEqual(args, ["--cwd", "/x", "--", "go"]);
+});
+
+test("the reasoning effort goes to Gemini, whose CLI has one, and not to Claude", () => {
+  assert.ok(vendorArgs({ id: "gemini", prompt: "x", cwd: "/x", effort: "high" }).includes("--effort"));
+  assert.ok(!vendorArgs({ id: "claude", prompt: "x", cwd: "/x", effort: "high" }).includes("--effort"));
+});
+
+test("the option a wrapper did not know is read out of what it said", () => {
+  assert.equal(refusedOption("unknown option: --jsonl"), "--jsonl");
+  assert.equal(refusedOption("unknown option: -"), "-");
+  assert.equal(refusedOption("Error: not signed in"), null);
 });
 
 test("write, timeout, model and effort are passed through in the wrapper's own form", () => {
   const args = vendorArgs({
     id: "gemini", prompt: "x", cwd: "/tmp/x", write: true, timeoutArg: "10m", model: "gemini-3.8-flash-high", effort: "high",
   });
-  assert.deepEqual(args, ["--model", "gemini-3.8-flash-high", "--effort", "high", "--cwd", "/tmp/x", "--write", "--timeout", "10m", "-"]);
+  assert.deepEqual(args, ["--jsonl", "--model", "gemini-3.8-flash-high", "--effort", "high", "--cwd", "/tmp/x", "--write", "--timeout", "10m", "-"]);
 });
 
 /* -------------------------------------------------------------- failures -- */
@@ -325,6 +341,19 @@ await testAsync("a wrapper that does not take stdin is asked again with the prom
       const out = await runVendor({ id: "claude", prompt: "review the diff", cwd: dir });
       assert.equal(out.ok, true);
       assert.ok(out.text.includes("review the diff"), out.text);
+    },
+  );
+});
+
+await testAsync("a wrapper written before --jsonl is still called, without it", async () => {
+  /* The older shape: it knows --cwd and --write and nothing else, and refuses
+     the bare `-` too. Both are shed, and the answer still arrives. */
+  await withWrapper(
+    `for a in "$@"; do case "$a" in --jsonl|-|--effort) echo "unknown option: $a" >&2; exit 2 ;; esac; done; echo "asked: $*"`,
+    async (dir) => {
+      const out = await runVendor({ id: "claude", prompt: "review it", cwd: dir, effort: "high" });
+      assert.equal(out.ok, true, out.message);
+      assert.ok(out.text.includes("review it"), out.text);
     },
   );
 });
