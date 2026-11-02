@@ -307,6 +307,89 @@ await test("a new panel's blank opening values are not steps: there is nothing f
   assert.deepEqual(panaceaSteps(before, opened).steps.map((s) => s.op).sort(), ["place", "set"]);
 });
 
+await test("every new panel is summoned by hand: one not from the library goes as the panel itself, for the picker to list", () => {
+  const before = newCanvas();
+  const after = structuredClone(before);
+  after.panels.push({ id: "pmade", title: "Mix", tree: { atom: "slider", bind: "mix", props: { label: "Mix" } }, x: 0, y: 0, w: 288, h: 0, state: "draft", context: "general", why: "x", by: "agent", at: 1 });
+  const place = panaceaSteps(before, after).steps[0]!;
+  assert.equal(place.op, "place");
+  assert.equal(place.op === "place" && place.recipe, undefined);
+  assert.equal(place.op === "place" && place.panel?.id, "pmade");
+});
+
+await test("a control under More is still set by hand, and a value read off a surface is never a step", () => {
+  const before = newCanvas();
+  before.panels.push({ id: "padv", title: "Adv", tree: { atom: "stack", children: [{ atom: "slider", bind: "b1", advanced: true, props: { label: "B" } }] }, x: 0, y: 0, w: 288, h: 0, state: "live", context: "general", why: "x", by: "agent", at: 1 });
+  const after = structuredClone(before);
+  after.values.b1 = 7;
+  assert.deepEqual(panaceaSteps(before, after).steps.map((st) => st.op), ["set"]);
+});
+
+await test("new surfaces are added as a person adds them, and a document's words are typed after", () => {
+  const before = newCanvas();
+  const after = structuredClone(before);
+  const doc = addSurfaceTo(after, { kind: "doc", name: "Plan.md", title: "Plan", doc: createDoc("# Plan\n\nFirst.\n\n- a\n- b", "agent") }, find);
+  if ("error" in doc) throw new Error(doc.error);
+  const brd = addSurfaceTo(after, { kind: "board", name: "Ideas", title: "Ideas", board: createBoard("agent") }, find);
+  if ("error" in brd) throw new Error(brd.error);
+  const tab = addSurfaceTo(after, { kind: "data", name: "t.csv", title: "T", table: tableFrom(splitDelimited("a,b\n1,2"))! }, find);
+  if ("error" in tab) throw new Error(tab.error);
+  after.panels = [];
+  const { steps } = panaceaSteps(before, after);
+  const surfaces = steps.filter((st) => st.op === "surface");
+  assert.deepEqual(surfaces.map((st) => st.op === "surface" && `${st.how}:${st.piece ?? ""}`), ["picker:blank.document", "picker:blank.board", "paste:"]);
+  // The document goes in empty, and its words are typed: one run of lines, each with its kind.
+  const typed = steps.find((st) => st.op === "doc-type");
+  assert.ok(typed && typed.op === "doc-type");
+  assert.deepEqual(typed.lines.map((l) => l.kind), ["h1", "p", "bullet", "bullet"]);
+  assert.equal(typed.after, null);
+  assert.ok(steps.indexOf(typed) > steps.findIndex((st) => st.op === "surface"), "typed after it is added");
+});
+
+await test("a document's edits by hand: a block rewritten, one deleted, one formatted, one typed after another", async () => {
+  const before = withSurfaces();
+  const d = addSurfaceTo(before, { kind: "doc", name: "D.md", title: "D", doc: createDoc("One.\n\nTwo.\n\nThree.", "agent") }, find);
+  if ("error" in d) throw new Error(d.error);
+  const sid = before.surfaces.at(-1)!.id;
+  const docLib = await import("../src/lib/panacea/document");
+  const ids = docLib.blocksOf(docLib.stateOf(before.surfaces.at(-1)!.doc!).doc).map((b) => b.id);
+  const after = structuredClone(before);
+  let state = docLib.stateOf(after.surfaces.at(-1)!.doc!);
+  state = docLib.replaceBlockText(state, ids[0]!, "Uno.") as typeof state;
+  state = docLib.deleteBlock(state, ids[1]!) as typeof state;
+  state = docLib.formatBlock(state, ids[2]!, "block", "h2") as typeof state;
+  state = docLib.insertBlocks(state, ids[2]!, "Four.") as typeof state;
+  after.surfaces.at(-1)!.doc = docLib.docStateOf(state, "agent");
+  const ops = panaceaSteps(before, after).steps.filter((st) => "surface" in st && st.surface === sid).map((st) => st.op);
+  assert.deepEqual(ops.sort(), ["doc-erase", "doc-format", "doc-retype", "doc-type"]);
+});
+
+await test("a board's edits by hand: cards made, rewritten, moved and taken away, links made and undone", async () => {
+  const boardLib = await import("../src/lib/panacea/board");
+  const before = newCanvas();
+  const made = addSurfaceTo(before, { kind: "board", name: "B", title: "B", board: createBoard("agent") }, find);
+  if ("error" in made) throw new Error(made.error);
+  const s = before.surfaces.at(-1)!;
+  let b = s.board!;
+  const a = boardLib.addCard(b, { text: "A", by: "agent" }); if (typeof a === "string") throw new Error(a); b = a.board;
+  const c = boardLib.addCard(b, { text: "C", by: "agent" }); if (typeof c === "string") throw new Error(c); b = c.board;
+  const l = boardLib.linkCards(b, a.card.id, c.card.id); if (typeof l === "string") throw new Error(l); b = l.board;
+  const e = boardLib.addCard(b, { text: "E", by: "agent" }); if (typeof e === "string") throw new Error(e); b = e.board;
+  s.board = b;
+  const after = structuredClone(before);
+  let n = after.surfaces.at(-1)!.board!;
+  n = boardLib.unlink(n, null, { from: a.card.id, to: c.card.id }) as typeof n;
+  n = boardLib.editCard(n, a.card.id, { text: "A2" }) as typeof n;
+  n = boardLib.moveCard(n, a.card.id, a.card.x + 100, a.card.y) as typeof n;
+  n = boardLib.removeCard(n, e.card.id) as typeof n;
+  const d = boardLib.addCard(n, { text: "D", by: "agent" }); if (typeof d === "string") throw new Error(d); n = d.board;
+  const l2 = boardLib.linkCards(n, a.card.id, d.card.id); if (typeof l2 === "string") throw new Error(l2); n = l2.board;
+  after.surfaces.at(-1)!.board = n;
+  const ops = panaceaSteps(before, after).steps.map((st) => st.op);
+  for (const op of ["unlink", "card-remove", "card", "card-text", "card-move", "link"]) assert.ok(ops.includes(op as never), `no ${op} step in ${ops.join(",")}`);
+  assert.ok(ops.indexOf("card") < ops.indexOf("link"), "the card is made before the link to it");
+});
+
 // --------------------------------------------------------------- the tools --
 
 const S = "panaceatest";

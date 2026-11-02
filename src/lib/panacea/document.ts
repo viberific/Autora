@@ -287,6 +287,31 @@ export function blocksOf(doc: PMNode): BlockInfo[] {
   return out;
 }
 
+/** Where a text block's words are (start and end inside it), by its id; null when it is not there. */
+export function blockRange(doc: PMNode, id: string): { from: number; to: number } | null {
+  let out: { from: number; to: number } | null = null;
+  doc.descendants((node, pos) => {
+    if (out) return false;
+    if (node.isTextblock && String(node.attrs.id ?? "") === id) { out = { from: pos + 1, to: pos + 1 + node.content.size }; return false; }
+    return true;
+  });
+  return out;
+}
+
+/** How one block is formatted, as the document's own controls read it with that block selected (`paramsFromState`). */
+export function paramsAtBlock(state: EditorState, id: string): Record<string, Value> | null {
+  const r = blockRange(state.doc, id);
+  if (!r) return null;
+  return paramsFromState(state.apply(state.tr.setSelection(TextSelection.create(state.doc, r.from, r.to))));
+}
+
+/** Every text block, in order: its id, kind, words, and its whole shape (marks, alignment) as one string to compare. */
+export function blockShapes(doc: PMNode): Array<{ id: string; kind: string; text: string; shape: string }> {
+  const shapes: string[] = [];
+  doc.descendants((node) => { if (node.isTextblock) shapes.push(JSON.stringify(node.toJSON())); return true; });
+  return blocksOf(doc).map((b, i) => ({ ...b, shape: shapes[i] ?? "" }));
+}
+
 /** The headings, in order: the outline. */
 export function outlineOf(doc: PMNode): Array<{ id: string; level: number; text: string }> {
   const out: Array<{ id: string; level: number; text: string }> = [];
@@ -429,8 +454,9 @@ export function applyParam(state: EditorState, name: string, value: Value): Edit
       if (typeof value !== "string" || !(BLOCK_STYLES as readonly string[]).includes(value) || value === now) return null;
       const here = whereIs(state);
       if (value === "quote") return run(state, wrapIn(T.blockquote!));
-      const keep = { align: here.parent.attrs.align ?? "left" };
-      const set = value === "paragraph" ? setBlockType(T.paragraph!, keep) : value === "code" ? setBlockType(T.code_block!) : setBlockType(T.heading!, { ...keep, level: Number(value.slice(1)) });
+      // The block keeps its id (what the agent and the agent's hand address it by) and its alignment.
+      const keep = { id: here.parent.attrs.id ?? null, align: here.parent.attrs.align ?? "left" };
+      const set = value === "paragraph" ? setBlockType(T.paragraph!, keep) : value === "code" ? setBlockType(T.code_block!, { id: keep.id }) : setBlockType(T.heading!, { ...keep, level: Number(value.slice(1)) });
       // Another style from inside a quote leaves the quote first.
       const base = here.quote && now === "quote" ? run(state, lift) : state;
       return base ? (run(base, set) ?? (base === state ? null : base)) : null;

@@ -589,7 +589,7 @@ function Lanes({ node, label, value, set }: { node: Node; label: string; value: 
   };
   const ticks = Array.from({ length: 5 }, (_, i) => (i * length) / 4);
   return (
-    <div className="pa-field pa-lanes" data-atom="lanes" data-bind={node.bind}>
+    <div className="pa-field pa-lanes" data-atom="lanes" data-bind={node.bind} data-length={length}>
       <span className="pa-cap">{label}</span>
       <div className="pa-lanes-body">
         <div className="pa-lanes-ruler">{ticks.map((t) => <span key={t} style={{ left: `${(t / length) * 100}%` }}>{Math.round(t)}{unit}</span>)}</div>

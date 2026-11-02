@@ -9,6 +9,7 @@ import "prosemirror-view/style/prosemirror.css";
 import type { Surface } from "../../lib/panacea/canvas";
 import { docStateOf, idPlugin, schema, stateOf, type DocState } from "../../lib/panacea/document";
 import { usePanacea } from "./context";
+import { docViews } from "./docViews";
 
 const N = schema.nodes;
 const M = schema.marks;
@@ -102,7 +103,8 @@ export function DocView({ surface }: { surface: Surface }) {
       attributes: { spellcheck: "true", "aria-label": `${first.title}, a document`, "aria-multiline": "true", role: "textbox" },
     });
     view.current = v;
-    return () => { v.destroy(); view.current = null; };
+    docViews.set(first.id, v);
+    return () => { if (docViews.get(first.id) === v) docViews.delete(first.id); v.destroy(); view.current = null; };
   }, [has]);
 
   useEffect(() => {

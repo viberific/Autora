@@ -274,10 +274,16 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
       const r = workViewport(root.current!);
       const v = viewRef.current;
       const margin = 80 / v.zoom;
+      // Too far out to press anything (a phone fitting a whole canvas): in to a size a person works at, on the point.
+      if (v.zoom < 0.75) {
+        setView({ zoom: 1, x: x - r.width / 2, y: y - r.height / 3 }, true);
+        await new Promise((res) => setTimeout(res, 420));
+        return toScreen(x, y);
+      }
       if (x < v.x + margin || y < v.y + margin || x > v.x + r.width / v.zoom - margin || y > v.y + r.height / v.zoom - margin) {
-        if (interacted.current || handsBusy() || enginePins.size > 0 || canvasRef.current.panels.some((panel) => panel.pinned)) {
-          throw new Error("The workspace camera is held by the person. Jump to this work before using Visible work.");
-        }
+        /* Only the agent's hand asks, and while it works it has the screen, as someone who took control of it would:
+           it moves the view to where it is working, even where the person had moved it, and even while its own typing
+           has the focus (which `handsBusy` would otherwise read as the person's). */
         setView({ ...v, x: x - r.width / v.zoom / 2, y: y - r.height / v.zoom / 3 }, true);
         await new Promise((res) => setTimeout(res, 380));
       }

@@ -385,7 +385,8 @@ const PANACEA = [
     "`why` the person can read.",
   "  What the person sees and does: panels with a title bar (drag it to move, the right edge to widen, the pin to keep it, × to put it " +
     "away, Shift+click to pick several, then Group); double-click the grid or press / for the picker (search the library, pick, and it " +
-    "lands there); scroll or drag the grid to pan, Ctrl+scroll to zoom; drop a photo or a table on the grid, or paste a table, to add a " +
+    "lands there; it also has blank pieces: a slider, switch, choice, notes, checklist or colour, and a Board, Flowchart or Document, " +
+    "which adds that surface); scroll or drag the grid to pan, Ctrl+scroll to zoom; drop a photo or a table on the grid, or paste a table, to add a " +
     "surface; click a surface to work on it. A photo's Before / after is a line to drag across it. The centered main Ask Autora bar " +
     "sends to this chat; there is no second canvas Ask box. Native history has Undo, Redo and a track of native changes, yours and theirs, to drag back " +
     "through. Panacea learns them: controls they use come out from behind More, panels go on the side they put them, ones they wave " +
@@ -426,15 +427,18 @@ const PANACEA = [
     "or it is productivity work (a packing list, minutes, a to-do), switch it with panacea_arrange writes: {\"<panel>\": \"agent\"} " +
     "(or place it with writes: \"agent\") and say you did. Anything no other window was made for (a brainstorm, a map of ideas, a " +
     "planner) belongs on this canvas: place a recipe if one fits, or compose the panel from atoms.",
-  "  With Visible work on and the window open, your panacea_place, panacea_set and panacea_arrange calls are done there by your hand, " +
-    "live, while the call waits: a library panel summoned the way the person does it (the grid double-clicked where it goes, its " +
-    "name typed in the picker, the result clicked); a value set by dragging that slider, knob or range, pressing that switch, clicking " +
-    "that segment, swatch or chip, choosing in that menu, or typing into that field; a panel dragged by its title bar; × pressed to " +
-    "put one away. Then the finished canvas goes in, with what had no control on screen (a curve's points, a list, a step grid, a " +
-    "timeline, a ghost, a value no panel shows); your result says which was which. With Visible work off (or the window shut) the " +
-    "canvas simply changes, and values glide to where you set them. Writing in a document (panacea_doc) is not done by hand yet: " +
-    "the words arrive with the finished canvas, and the document's bar and history show it. Nor is a board's (panacea_board): its " +
-    "cards, links and questions arrive with the finished canvas.",
+  "  With Visible work on and somebody watching, every Panacea call that changes the canvas is done there by your hand, live, while " +
+    "the call waits, with the view moved and zoomed to where you work: every new panel summoned the way the person does it (the grid " +
+    "double-clicked where it goes, its name typed in the picker, the result clicked; one you composed, a bespoke draft or an offer is " +
+    "listed there as yours); a value set with its control (dragging a slider, knob, range, xy pad or curve point, pressing a switch, " +
+    "segment, swatch, chip or step pad, choosing in a menu, typing into a field or a list, double-clicking a lane for a block), with " +
+    "More opened when it is under More; a panel dragged by its title bar or put away with its ×; a board, flowchart or document " +
+    "added from the picker, a table pasted, a file dropped, a surface removed with its ×; a document's words typed in (with # for a " +
+    "heading, - for a bullet), a block rewritten or deleted after selecting it, a block formatted with its Style, Align or Bold " +
+    "controls; a board's cards made by double-clicking the space and typing, rewritten, dragged, linked by dragging a dot onto " +
+    "another card, unlinked or taken away with Delete. Long passages are typed faster, not cut. Then the finished canvas goes in " +
+    "exactly as the call made it; your result says what was done by hand and anything that could not be (a value no panel shows). " +
+    "With Visible work off (or nobody watching) the canvas simply changes, and values glide to where you set them.",
   "  Saving. Native work is saved as you go; the workspace's top bar also has Save native work, which keeps native panels and surfaces " +
     "in Artifacts as <canvas name>.panacea.json. This is not a bundle of hosted engine files: Music, Office, PDF, video and other engines " +
     "save through their own work cards and retain their own undo/history. Beside it, Load opens supported work from Artifacts into the " +

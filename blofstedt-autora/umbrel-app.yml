@@ -216,6 +216,8 @@ releaseNotes: >-
   icon instead of the letters A and Y. Tapping a reply's speaker while it is
   being read now stops it rather than starting it over, and a thumbs up or
   down lights only the reply you pressed it under, not every reply in the turn.
-  With Visible work on, the agent's cursor shows again in Panacea: its first
-  change in a chat is done by hand like the rest instead of just appearing,
-  and on a phone it no longer gives up on controls near the canvas's edge.
+  With Visible work on, everything the agent does in Panacea is done by its
+  cursor while you watch: panels summoned from the picker, every control set
+  by hand, documents typed, board cards written and linked, tables pasted and
+  files dropped, with the view following its work, on a phone too. The
+  picker also gains a blank Document.

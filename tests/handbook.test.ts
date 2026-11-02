@@ -192,9 +192,12 @@ await test("the Panacea manual distinguishes real flowcharts from idea boards", 
 
 await test("the Panacea manual says that with Visible work on its changes are done in the window by hand, and what has no control", () => {
   const p = manualText("panacea");
-  for (const needle of ["With Visible work on", "by your hand", "name typed in the picker", "dragging that slider", "dragged by its title bar", "finished canvas goes in", "With Visible work off"]) {
+  for (const needle of ["With Visible work on", "every Panacea call that changes the canvas is done there by your hand", "name typed in the picker",
+    "listed there as yours", "dragging a slider", "More opened", "dragged by its title bar", "a table pasted, a file dropped",
+    "a document's words typed in", "linked by dragging a dot", "finished canvas goes in", "With Visible work off", "a Board, Flowchart or Document"]) {
     assert.ok(p.includes(needle), `the Panacea manual lacks "${needle}"`);
   }
+  assert.ok(!p.includes("not done by hand yet"), "the Panacea manual still says writing is not done by hand");
 });
 
 await test("the PDF manual says that with Visible work on pdf_edit is done in the window by hand, and what is not", () => {
