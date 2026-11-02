@@ -119,7 +119,8 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
            opens at its real size: fitted any bigger, the board zooms out and every control in it is too small to use. */
         const room = phone && root.current ? workViewport(root.current) : null;
         const width = phone ? Math.max(320, (room?.width ?? 390) - 16) : 1056;
-        const height = phone ? Math.max(320, (room?.height ?? 600) - 16) : 740;
+        // Never shorter than an app needs to show itself under its own bars (the app preview's phone screen is tall).
+        const height = phone ? Math.max(560, (room?.height ?? 600) - 16) : 740;
         next[id] = { x: -(count % 3 + 1) * 1200, y: Math.floor(count / 3) * 920, w: width, h: height };
         count += 1;
       }
@@ -248,6 +249,15 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
       const current = canvasRef.current;
       const target = id ? engineBoxesRef.current[id] ?? current.surfaces.find((surface) => surface.id === id) : current.surfaces.find((surface) => surface.id === current.focus);
       if (!target) { if (id && !automatic) pendingJump.current = id; return; }
+      // Follow leaves the view alone when what it would show is mostly on screen already (the window being worked in).
+      if (automatic) {
+        const v = viewRef.current;
+        const room = workViewport(el);
+        const x0 = Math.max(target.x, v.x), x1 = Math.min(target.x + target.w, v.x + room.width / v.zoom);
+        const y0 = Math.max(target.y, v.y), y1 = Math.min(target.y + target.h, v.y + room.height / v.zoom);
+        const seen = Math.max(0, x1 - x0) * Math.max(0, y1 - y0);
+        if (target.w * target.h > 0 && seen / (target.w * target.h) >= 0.7) return;
+      }
       if (!automatic && phone) {
         interacted.current = true;
         // A phone's manual jump can enlarge the workspace; fit only after that layout has settled.
