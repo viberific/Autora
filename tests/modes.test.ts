@@ -191,8 +191,7 @@ async function main() {
     assert.equal(client.hasRule("", a), false);
   });
 
-  test("in planning a terminal command that only reads runs; anything that could write is refused", () => {
-    for (const command of [
+  test("in planning a terminal command that only reads runs; anything that could write is refused", () => {    for (const command of [
       "cat /data/out/report.txt", "ls -la ~/project", "head -n 20 notes.md | grep todo", "cd app && ls && git status",
       "git log --oneline -5", "find . -name '*.pdf'", "pdftotext out.pdf - 2>&1 | head", "wc -l a b 2>/dev/null",
       "uniq -c words.txt", "sort -u list.txt", "date +%s", "rg -n todo src",
@@ -235,6 +234,16 @@ async function main() {
     assert.match(m.planRefusal("agent", "plan", "my_deploy", {}) ?? "", /save it again with tool_create reads_only: true/);
     defineCustomTool({ name: "release_status", description: "Says how the release is going.", script: "echo ok" });
     assert.match(m.planRefusal("agent", "plan", "my_release_status", {}) ?? "", /Not run/, "saved again without it, it is a change again");
+  });
+
+  test("a vendor delegate given only to read may run in planning; one given the folder may not", () => {
+    for (const name of ["claude_cli", "gemini_cli"]) {
+      assert.equal(m.planRefusal("plan", undefined, name, { prompt: "review this" }), null, `${name} reading`);
+      assert.equal(m.planRefusal("plan", undefined, name, { prompt: "review this", write: false }), null, `${name} write:false`);
+      assert.match(m.planRefusal("plan", undefined, name, { prompt: "fix it", write: true }) ?? "", /Not run|plan/i, `${name} write:true`);
+      /* Building is not a plan: the same call goes ahead there. */
+      assert.equal(m.planRefusal("build", undefined, name, { prompt: "fix it", write: true }), null, `${name} in build`);
+    }
   });
 
   console.log(`\n${passed} modes cases passed.`);

@@ -4,7 +4,7 @@ name: Autora
 tagline: An agentic AI harness you can watch in real time
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-autora/icon.svg
 category: ai
-version: "0.9.321"
+version: "0.9.324"
 port: 8817
 description: >-
   Autora is a local AI agent that you can watch while it works. Point it at
@@ -204,11 +204,14 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Windows you can lay out. In Panacea, the apps' windows and surfaces keep where
-  you put them: a reload finds them where they were. A click raises one over the
-  rest, a Tidy button puts them in rows with none over another, and a maximised
-  window on a phone now stays clear of the history slider and the buttons. The
-  agent lays them out the same way (move, size, maximise, bring to front, tidy),
-  and with Visible work on you watch it drag and size them. A window's corner can
-  be dragged to size it again. A file now remembers which app made it, so the
-  lines between windows follow the work and not the file's name.
+  Panacea's panels for the apps now work, and its windows can be laid out. The
+  Music, 3D, Video and Game panels change the song, the model, the film and the
+  game themselves, the app's window shows it, and a change made in the app shows
+  on the panel; a Track, Part, Clip or Object list picks what they act on, and the
+  agent sets them with the same effect. Panels for things an app has no way to do
+  are gone, and the rest hold your own choices and words for the agent to build.
+  The apps' windows and surfaces keep where you put them through a reload, a
+  click raises one, a Tidy button puts them in rows, a maximised window on a phone
+  stays clear of the buttons, and the agent lays them out the same way (watch it
+  drag and size them with Visible work on). A file now remembers which app made
+  it, so the lines between windows follow the work.

@@ -663,3 +663,29 @@ export const IconHand = ({ size = 16, className }: Props) => (
     <path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-6-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" />
   </svg>
 );
+
+/* --------------------------------------------------------------- vendors -- */
+
+/**
+ * The two vendors a job can be handed to, drawn on the same 24px grid as
+ * everything else but filled rather than stroked: they are marks, not icons,
+ * and at 13-16px a stroke set reads as a smudge. Each is the vendor's own
+ * figure -- Claude's slanted burst, Gemini's four-point star -- drawn here
+ * rather than shipped as artwork, so nothing is copied into the bundle.
+ */
+export const MarkClaude = ({ size = 14, className }: Props) => (
+  <svg {...base(size)} className={className} fill="currentColor" stroke="none" aria-hidden="true">
+    <path d="M12 2.6 13.15 9.1 18.4 5.6 15.1 10.9 21.4 12 15.1 13.1 18.4 18.4 13.15 14.9 12 21.4 10.85 14.9 5.6 18.4 8.9 13.1 2.6 12 8.9 10.9 5.6 5.6 10.85 9.1Z" />
+  </svg>
+);
+
+export const MarkGemini = ({ size = 14, className }: Props) => (
+  <svg {...base(size)} className={className} fill="currentColor" stroke="none" aria-hidden="true">
+    <path d="M12 2.2c.72 5.2 4.6 9.08 9.8 9.8-5.2.72-9.08 4.6-9.8 9.8-.72-5.2-4.6-9.08-9.8-9.8 5.2-.72 9.08-4.6 9.8-9.8Z" />
+  </svg>
+);
+
+/** By vendor id, so a cell never has to know which mark is which. */
+export function VendorMark({ vendor, size = 14, className }: Props & { vendor: string }) {
+  return vendor === "gemini" ? <MarkGemini size={size} className={className} /> : <MarkClaude size={size} className={className} />;
+}

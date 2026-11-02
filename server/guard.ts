@@ -63,13 +63,101 @@ interface Danger {
   match: string;
 }
 
-/** A command line as the shell sees it: one instruction per piece. Matching a
-    whole line would let `ls && rm -rf /` hide behind the harmless half. */
+/** A word as the shell hands it to the program, and whether it came from inside
+    quotes. Quoted text is data: `git commit -m "at 264 the seek"` carries a
+    message, and `echo "sleep 120"` prints a number rather than waiting. */
+interface Token {
+  text: string;
+  quoted: boolean;
+}
+
+/** The command line split the way the shell splits it: on unquoted newlines and
+    operators only, so `git commit -m "a; at 264"` stays one instruction. A
+    backslash keeps the character after it literal (out of single quotes), and
+    a quote ends at its own kind of quote and nowhere else. */
+function scan(text: string): Token[][] {
+  const out: Token[][] = [];
+  let line: Token[] = [];
+  let word = "";
+  let quoted = false;
+  let quote: "" | "'" | '"' = "";
+  const endWord = () => {
+    if (word) line.push({ text: word, quoted });
+    word = "";
+    quoted = false;
+  };
+  const endLine = () => {
+    endWord();
+    if (line.length) out.push(line);
+    line = [];
+  };
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text[i];
+    if (c === "\\" && quote !== "'") {
+      const next = text[i + 1];
+      /* A backslash before a newline continues the line: still one instruction. */
+      if (next === "\n") { i += 1; continue; }
+      if (next === "\r" && text[i + 2] === "\n") { i += 2; continue; }
+      word += next ?? c;
+      if (next !== undefined) i += 1;
+      continue;
+    }
+    if (quote) {
+      if (c === quote) { quote = ""; continue; }
+      word += c;
+      continue;
+    }
+    if (c === "'" || c === '"') { quote = c; quoted = true; continue; }
+    if (c === "\n" || c === "\r" || c === ";") { endLine(); continue; }
+    if (c === "&" || c === "|") {
+      const doubled = text[i + 1] === c;
+      endLine();
+      if (doubled) i += 1;
+      continue;
+    }
+    if (c === " " || c === "\t") { endWord(); continue; }
+    word += c;
+  }
+  endLine();
+  return out;
+}
+
+/** The lines a heredoc feeds a program on stdin are data, not instructions: a
+    commit message written through `-F -` may hold a line beginning "at ".
+    Handles `<<EOF`, `<<'EOF'`, `<<"EOF"` and `<<-EOF` (leading tabs stripped);
+    an unclosed one makes the rest of the command data, as the shell would. */
+function withoutHeredocs(command: string): string {
+  const lines = command.split(/\r?\n/);
+  const kept: string[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    kept.push(lines[i]);
+    const m = /(^|[^<])<<(-?)[ \t]*(['"]?)([A-Za-z_][\w.-]*)\3/.exec(lines[i]);
+    if (!m) continue;
+    const stripTabs = m[2] === "-";
+    const marker = m[4];
+    for (i += 1; i < lines.length; i += 1) {
+      const body = stripTabs ? lines[i].replace(/^\t+/, "") : lines[i];
+      if (body.trim() === marker) break;
+    }
+    kept.push("");
+  }
+  return kept.join("\n");
+}
+
+/** The command line as the shell sees it: one instruction per piece, and each
+    piece as words the shell would hand over, quote marks removed. A separator
+    inside quotes does not split, so `git commit -m "fix: bar hide; at 264"` is
+    one instruction. Used by the danger tier, which matches the text of a piece. */
 function segments(command: string): string[] {
-  return command
-    .split(/\r?\n|;|&&|\|\||[|&]/)
-    .map((s) => s.trim())
+  return scan(command)
+    .map((tokens) => tokens.map((t) => (t.quoted ? `"${t.text.replace(/"/g, '\\"')}"` : t.text)).join(" "))
     .filter(Boolean);
+}
+
+/** The same, for the two checks that refuse a call: each piece as words, with
+    the heredoc bodies dropped, since what a script is fed on stdin is data. */
+function commands(command: string): Token[][] {
+  return scan(withoutHeredocs(command));
 }
 
 /* ---- timers outside the schedule ------------------------------------------
@@ -82,12 +170,20 @@ function segments(command: string): string[] {
 
 /** Why a command may not be run by an agent: it makes a timer of its own, or calls Autora to start a model turn. */
 export function makesTimerOrWake(command: string, scheduled = false): string | null {
-  for (const segment of segments(command)) {
-    const w = words(segment).filter((x) => !/^(sudo|env|nice|nohup|time|exec)$/.test(x) && !/^\w+=/.test(x));
-    const first = (w[0] ?? "").replace(/^.*\//, "");
-    if (first === "crontab" && !w.slice(1).every((x) => x === "-l")) return "a crontab of the machine's own";
+  for (const segment of commands(command)) {
+    const w = segment.filter((x) => !/^(sudo|env|nice|nohup|time|exec)$/.test(x.text) && !/^\w+=/.test(x.text));
+    /* The command is the first word the shell did not take from inside quotes:
+       `echo "at now + 1 minute"` prints a sentence, it does not make a job.
+       With every word quoted the line still runs something, so the first word
+       stands: quoting the command itself makes no timer safer. */
+    const unquoted = w.findIndex((x) => !x.quoted);
+    if (w.length === 0) continue;
+    const start = unquoted === -1 ? 0 : unquoted;
+    const first = w[start].text.replace(/^.*\//, "");
+    const rest = w.slice(start + 1).map((x) => x.text);
+    if (first === "crontab" && !rest.every((x) => x === "-l")) return "a crontab of the machine's own";
     if (first === "at" || first === "batch") return "an `at` job";
-    if (first === "systemd-run" || (first === "systemctl" && /\.timer\b/.test(segment))) return "a systemd timer";
+    if (first === "systemd-run" || (first === "systemctl" && rest.some((x) => /\.timer\b/.test(x)))) return "a systemd timer";
   }
   if (!scheduled) return null;
   if (/\b(localhost|127\.\d+\.\d+\.\d+|0\.0\.0\.0|\[::1\]|host\.docker\.internal)(:\d+)?\/(api|ws)\b/i.test(command)) return "a call to Autora's own API, which could start a chat";
@@ -116,20 +212,25 @@ function seconds(token: string): number | null {
 }
 
 /** How long this one segment waits, or null when it does anything but wait. */
-function waitOf(segment: string): number | null {
-  const tokens = words(segment).filter((x) => !PREFIXES.has(x) && !/^[A-Za-z_]+=/.test(x));
-  const first = (tokens[0] ?? "").replace(/^.*\//, "");
-  const rest = tokens.slice(1);
+function waitOf(tokens: Token[]): number | null {
+  const usable = tokens.filter((x) => !PREFIXES.has(x.text) && !/^[A-Za-z_]+=/.test(x.text));
+  if (usable.length === 0) return null;
+  /* `echo "sleep 120"` prints the words rather than waiting, so a quoted word is
+     never the command; a quoted duration (`sleep "120"`) is still a duration. */
+  const unquoted = usable.findIndex((x) => !x.quoted);
+  const start = unquoted === -1 ? 0 : unquoted;
+  const first = usable[start].text.replace(/^.*\//, "");
+  const rest = usable.slice(start + 1);
   if (first === "timeout") {
     /* timeout [-s SIG] [-k DUR] DURATION command: the wait is the inner sleep, never the command's own time limit. */
     let args = rest;
-    while (args.length && args[0].startsWith("-")) {
-      const flag = args[0];
+    while (args.length && args[0].text.startsWith("-")) {
+      const flag = args[0].text;
       args = args.slice(/^-[sk]$/.test(flag) ? 2 : 1);
     }
     if (args.length < 2) return null;
-    const limit = seconds(args[0]);
-    const inner = waitOf(args.slice(1).join(" "));
+    const limit = seconds(args[0].text);
+    const inner = waitOf(args.slice(1));
     if (limit === null || inner === null) return null;
     return Math.min(limit, inner);
   }
@@ -137,7 +238,7 @@ function waitOf(segment: string): number | null {
   if (rest.length === 0) return 0;
   let total = 0;
   for (const t of rest) {
-    const s = seconds(t);
+    const s = seconds(t.text);
     if (s === null) return null;
     total += s;
   }
@@ -153,7 +254,7 @@ export function waitsInside(command: string): number | null {
   const text = command.trim();
   if (!text) return null;
   if (/(^|[^&])&\s*$/.test(text)) return null;
-  const parts = segments(text);
+  const parts = commands(text);
   if (parts.length === 0) return null;
   let total = 0;
   for (const part of parts) {
@@ -187,11 +288,9 @@ function isSystemPath(token: string): boolean {
   return !!m && SYSTEM_ROOTS.has(m[1]);
 }
 
-function words(segment: string): string[] {
-  return segment
-    .split(/\s+/)
-    .map((w) => w.replace(/^["']|["']$/g, ""))
-    .filter(Boolean);
+/** The words of one piece, each marked with whether it came from inside quotes. */
+function words(segment: string): Token[] {
+  return scan(segment).flat();
 }
 
 /** Words that may stand in front of a command without changing what runs. */
@@ -200,7 +299,9 @@ const PREFIXES = new Set(["sudo", "doas", "command", "nice", "time", "env", "noh
 /** An `rm` with both the recursive and the force flag, pointed at everything:
     the one form of delete that takes the machine with it. */
 function wholeTreeDelete(segment: string): string | null {
-  const tokens = words(segment);
+  /* The quoted flag is ignored here on purpose: this tier asks rather than
+     refuses, and `"rm" -rf /` deletes exactly as much as the bare word. */
+  const tokens = words(segment).map((t) => t.text);
   /* The command itself has to be the first thing on the line: `echo 'rm -rf
      /' >> notes` writes that text rather than deleting anything, and a guard
      that holds a shell pipeline naming a file called `rm` is a guard people

@@ -181,6 +181,8 @@ import { browserSPECS } from "./specs/browser";
 import { computerSPECS } from "./specs/computer";
 import { personSPECS } from "./specs/person";
 import { voiceSPECS } from "./specs/voice";
+import { vendorSPECS } from "./specs/vendor";
+import { VENDORS, vendorReady } from "./vendor";
 import { filesSPECS } from "./specs/files";
 import { memorySPECS } from "./specs/memory";
 import { skillsSPECS } from "./specs/skills";
@@ -256,6 +258,7 @@ const TOOLS: ToolSpec[] = [
   ...computerSPECS,
   ...personSPECS,
   ...voiceSPECS,
+  ...vendorSPECS,
   ...filesSPECS,
   ...cadSPECS,
   ...gameSPECS,
@@ -547,6 +550,9 @@ export function renderCall(spec: ToolSpec, args: Record<string, any>): string {
       return `show widget "${args.title}"`;
     case "speak":
       return `say aloud: ${JSON.stringify(String(args.text ?? ""))}`;
+    case "claude_cli":
+    case "gemini_cli":
+      return `${spec.name === "claude_cli" ? "Claude" : "Gemini"}: ${JSON.stringify(String(args.prompt ?? "").replace(/\s+/g, " ").slice(0, 90))}${args.write === true ? ` (editing ${args.cwd || "this folder"})` : ""}`;
     case "voice_mute":
       return String(args.muted) === "false"
         ? "unmute the voice"
@@ -626,8 +632,20 @@ export interface ToolContext {
   /** Why something the person is using may not be touched right now (see
       server/presence.ts), or null. `subject` is an object id or a file. */
   held?: (surface: "pdf" | "office" | "app" | "browser" | "code" | "video", subject: string) => string | null;
-  /** Hand a question to a research worker with its own context (see
-      server/subagent.ts) and get its report back. Absent inside the worker. */
+  /** Hand a job to a vendor's subscription CLI and show it in the transcript
+      as the vendor's own bubble (see server/vendor.ts). Absent where there is
+      no transcript to draw it in. */
+  vendor?: (ask: {
+    id: "claude" | "gemini";
+    /** What the person will read as the reason it was called. */
+    handoff: string;
+    prompt: string;
+    cwd: string;
+    write: boolean;
+    timeout: string | null;
+    model: string | null;
+    effort: string | null;
+  }) => Promise<{ ok: boolean; summary: string; text: string; reason: string | null; durationMs: number; files: string[] }>;
   research?: (question: string) => Promise<string>;
   /** The organization (server/agents.ts): which agent this turn is, and a way
       to start another one on a task and wait for its report. */
@@ -3395,6 +3413,55 @@ async function runToolUnredacted(
         };
       }
 
+      /* ------------------------------------------------ vendor delegates -- */
+      case "claude_cli":
+      case "gemini_cli": {
+        const id = spec.name === "claude_cli" ? "claude" : "gemini";
+        const who = VENDORS[id].name;
+        const prompt = String(args.prompt ?? "").trim();
+        if (!prompt) return { ok: false, summary: `Nothing to ask ${who}: the prompt is empty.` };
+        if (!ctx.vendor) {
+          return {
+            ok: false,
+            summary: `${who} cannot be shown here: there is no conversation to draw it in (this call is running without a transcript).`,
+          };
+        }
+        const cwd = String(args.cwd ?? "").trim() || terminalDir();
+        const write = args.write === true;
+        const timeout = typeof args.timeout === "string" && args.timeout.trim() ? args.timeout.trim() : "10m";
+        const model = typeof args.model === "string" && args.model.trim() ? args.model.trim() : null;
+        const effort = typeof args.effort === "string" && args.effort.trim() ? args.effort.trim() : null;
+        const out = await ctx.vendor({
+          id,
+          handoff: `Handing this to ${who}${write ? `, with the run of` : " to read"} ${cwd}.`,
+          prompt,
+          cwd,
+          write,
+          timeout,
+          model,
+          effort,
+        });
+        if (!out.ok) {
+          return {
+            ok: false,
+            summary:
+              `${who} did not finish: ${out.summary}\n\n` +
+              "Its bubble in the conversation says the same, in the person's own view. Do not call it again the " +
+              "same way: either fix what it named (a sign-in, a shorter ask), do this part yourself, or retry " +
+              "with an API model instead (http_request for the vendor's API, if a key is set up).",
+          };
+        }
+        const took = out.durationMs >= 1000 ? `${Math.round(out.durationMs / 100) / 10}s` : `${out.durationMs}ms`;
+        const edited = out.files.length ? ` It edited ${out.files.length} file${out.files.length === 1 ? "" : "s"}: ${out.files.slice(0, 6).join(", ")}${out.files.length > 6 ? ", and more" : ""}.` : " It edited no files.";
+        return {
+          ok: true,
+          summary:
+            `${who} answered in ${took} (in ${cwd}).${edited} Its reply is in the conversation as its own bubble; ` +
+            "build on what it said rather than quoting it back whole.",
+          preview: out.text.replace(/\s+/g, " ").slice(0, 120),
+        };
+      }
+
       /* ------------------------------------------------------- live view -- */
       case "camera_look": {
         const frame = latestFrame(ctx.session);
@@ -3956,6 +4023,20 @@ export async function capabilityBriefing(): Promise<string> {
     "If the task needs it, say so and that it is switched on there.";
   lines.push(SKILLS_GUIDE(catalogue()));
   lines.push(TODO_GUIDE, windows.app.enabled ? APP_GUIDE : offLine("The Creator window"));
+
+  const ready = (["claude", "gemini"] as const).filter((id) => vendorReady(id).ok);
+  lines.push(
+    ready.length
+      ? "- Delegates you can call: " +
+        ready.map((id) => `${VENDORS[id].name} (${id}_cli)`).join(" and ") +
+        ". Each is a subscription CLI signed in on this host: hand it a job and its answer appears in this " +
+        "conversation as its own bubble, in its own name and mark, streamed as it arrives, with what it did and how " +
+        "long it took. Use one when the person names that vendor, or when a second pair of hands is worth it. It " +
+        "spends his subscription quota, not API money, and edits nothing unless you set write. A delegate that fails " +
+        "is not the end of the job: its bubble says why, and you do that part yourself or retry with an API model."
+      : "- Delegates (claude_cli, gemini_cli): neither CLI is installed on this host right now, so they would fail. " +
+        "Do the work yourself rather than calling one.",
+  );
 
   const mcp = mcpTools();
   if (mcp.length > 0) {

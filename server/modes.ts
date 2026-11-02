@@ -316,6 +316,10 @@ export function looksOnly(name: string, args: Record<string, any> = {}): boolean
   if (name === "panacea_open") return !String(args.new ?? "").trim();
   // A command that only reads (cat a file, list a folder) is looking.
   if (name === "terminal") return readOnlyCommand(String(args.command ?? ""));
+  /* A delegate that has been given only to read is looking, the same way a read
+     command is. One given the run of the folder (`write`) is a change, and
+     planning refuses it rather than letting a vendor edit under a plan. */
+  if (name === "claude_cli" || name === "gemini_cli") return args.write !== true;
   // Loading a skill's instructions, reading one of its files and searching for one are looking; writing one is not.
   if (name === "skill") return ["use", "read", "list"].includes(String(args.action ?? "").trim().toLowerCase());
   // Reading notebooks is looking; filing into one is not.

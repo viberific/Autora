@@ -185,6 +185,7 @@ import { addRule, autonomyBriefing, covered, listRules, matchText, revoke as rev
 import { inventoryBriefing } from "./server/inventory";
 import { htmlToText } from "./server/pages";
 import { customToolsGeneration } from "./server/customtools";
+import { VENDORS, filesTouched, runVendor } from "./server/vendor";
 import { REFLECT_SYSTEM, parseReflection, reflectionPrompt, worthReflecting } from "./server/learning";
 import {
   MemoryGraph, doubtNote, freshness, siteOf,
@@ -4679,6 +4680,62 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
       const contextFor = (span: string): ToolContext => ({
         origin: { model: `${worker().provider}/${worker().model}`, version: VERSION },
         research: researchFor,
+        /* A vendor's subscription CLI, shown as it happens. The events carry
+           only what the person may see: server/vendor.ts redacts every word
+           before it gets here, and nothing about a key or a sign-in path is
+           ever in the payload. */
+        vendor: async (ask) => {
+          const vendor = VENDORS[ask.id];
+          const id = `vd-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+          const startedAt = Date.now();
+          emitEvent(session, "vendor.handoff", "agent", {
+            id, vendor: ask.id, name: vendor.name, text: ask.handoff, cwd: ask.cwd,
+          });
+          /* An interrupt reaches the delegate too: the person pressing stop
+             should stop the CLI spending their quota on an answer nobody wants. */
+          const result = await runVendor({
+            id: ask.id,
+            prompt: ask.prompt,
+            cwd: ask.cwd,
+            write: ask.write,
+            ...(ask.timeout ? { timeoutArg: ask.timeout } : {}),
+            ...(ask.model ? { model: ask.model } : {}),
+            ...(ask.effort ? { effort: ask.effort } : {}),
+            signal: running.get(session.id)?.signal,
+            onDelta: (text) => emitEvent(session, "vendor.delta", "agent", { id, text }),
+            onStatus: (text) => emitEvent(session, "vendor.status", "agent", { id, text }),
+          });
+          /* What it touched: its own report when it gives one, otherwise the
+             files in the folder that changed while it ran -- in the folder's
+             own terms, so a bubble says src/app.ts and not /data/work/x/src/app.ts. */
+          const reported = result.files.length
+            ? result.files
+            : ask.write && result.ok
+              ? filesTouched(ask.cwd, startedAt)
+              : [];
+          const files = reported
+            .map((file) => (path.isAbsolute(file) ? path.relative(ask.cwd, file) || file : file))
+            .slice(0, 12);
+          emitEvent(session, "vendor.done", "agent", {
+            id,
+            ok: result.ok,
+            reason: result.reason,
+            message: result.message,
+            durationMs: result.durationMs,
+            files,
+          });
+          log("info", "vendor", `${vendor.name} ${result.ok ? "answered" : `failed (${result.reason ?? "?"})`} in ${result.durationMs}ms in ${ask.cwd}`);
+          return {
+            ok: result.ok,
+            summary: result.ok
+              ? `${vendor.name} answered.`
+              : `${vendor.name} failed (${result.reason ?? "other"}): ${result.message}`,
+            text: result.text,
+            reason: result.reason,
+            durationMs: result.durationMs,
+            files,
+          };
+        },
         /* A session doing work someone handed it -- an agent started on a task,
            or an automated run -- may read Threads and may not post to it: the
            forum is not where that work is reported. */

@@ -8,8 +8,8 @@ session can pick it up without the conversation that produced it.
 | Step | Status | What remains |
 |---|---|---|
 | G0 Make it honest | **Done** (0.9.321, 0.9.322) | — |
-| G1 Engine panels drive the engines | **Done** (0.9.323 Music, 0.9.324 3D, 0.9.325 Video, 0.9.326 Game, with a phone test for all four) | — |
-| G2 Windows the agent can lay out | **Done (0.9.327)** | — |
+| G1 Engine panels drive the engines | **Done** (release 0.9.325: Music, 3D, Video and Game, with a phone test for all four) | — |
+| G2 Windows the agent can lay out | **Done (release 0.9.325)** | — |
 | G7 Verified where it runs | **Next** | needs CI or the Docker image |
 | G3 Full native surfaces (full spreadsheet first) | Not started | see the plan |
 | G5 Projects finished | Not started | see the plan |
@@ -32,7 +32,7 @@ The order and the "done when" of every step are in `docs/PANACEA-GAPS.md`, "The 
 - So wiring an app = an adapter that acts on its binds, then adding them to `WIRED`. `tests/panacea.test.ts` already
   fails if an offered recipe has an unwired bind.
 
-## Music: done (0.9.323), and the shape to repeat
+## Music: done (0.9.325), and the shape to repeat
 
 The code is in the tree, not here any more: `src/lib/panacea/apps/music.ts` (the pure adapter, shared by server and
 page), `src/components/panacea/useAppValues.ts` (the page reads the song and sends changes 120 ms apart), `studioPanel`
@@ -50,20 +50,20 @@ agent's `panacea_set` and `panacea_place` values go to the song), `appValue` in 
 
 ## After Music
 
-- **3D: done (0.9.324)**, the same shape as Music: `src/lib/panacea/apps/model.ts` (pure: reads the model's bodies, and
+- **3D: done**, the same shape as Music: `src/lib/panacea/apps/model.ts` (pure: reads the model's bodies, and
   turns a value into the modeller's own `shape_*` / `edge_bevel` / `repeat_set` calls on the part picked in the panel's
   Part list), `cadPanel` / `cadModel` in `server/caddesk.ts`, `POST /api/cad/:session/panel`, `applyModelValues` in
   `server/panacea.ts` (async, so it runs before the sync `edit`). The modeller has no absolute rotation, light, camera,
   environment, render quality or printer path, so those panels are deleted. Tests: `tests/panacea-model.test.ts`,
   `tests/ui-panacea-model.test.ts`. A browser test needs `npm --prefix autora-3d ci` and a build of it.
-- **Video: done (0.9.325)**: `src/lib/panacea/apps/video.ts` (pure: reads the editor's `state`, turns a value into its
+- **Video: done**: `src/lib/panacea/apps/video.ts` (pure: reads the editor's `state`, turns a value into its
   `retime` / `set_params` / `settings` commands on the clip picked in the Clip list), `videoPanel` and `GET
   /api/opencut/:session/project` (a read that never opens the window) in `server/opencut.ts`, polling by the page every
   2 s while the window is open (the editor says nothing when a clip changes), and `applyAppValues` in `server/panacea.ts`.
   OpenCut's own `state` gained `params` (opencut-editor/src/autora/helpers.ts). The editor has only a blur effect: no
   grade, transitions, stabiliser, captions, fades or looks, so those panels are deleted. Tests: `tests/panacea-video.test.ts`,
   `tests/ui-panacea-video.test.ts` (needs `npm --prefix opencut-editor ci` and a build).
-- **Game: done (0.9.326)**: `src/lib/panacea/apps/game.ts` (pure: reads and writes the movement behaviour of the object
+- **Game: done**: `src/lib/panacea/apps/game.ts` (pure: reads and writes the movement behaviour of the object
   picked in the Object list: run speed, jump, gravity, and "slippery" as the deceleration taken away), `gamePanel` and
   `POST /api/game/:session/panel` in `server/gamedesk.ts`. A game has no settings for a camera, health, score, sound or
   particles (they are events), so those panels are deleted; Level sketch, Enemies, Win & lose, Inventory, Dialogue and
@@ -74,9 +74,9 @@ agent's `panacea_set` and `panacea_place` values go to the song), `appValue` in 
 
 ## Found on the way (G1 and G2)
 
-- On a phone, the first move of a panel opens its app's window and, since 0.9.326, does not take the view from the panel
+- On a phone, the first move of a panel opens its app's window and, does not take the view from the panel
   (`quiet` in `WorkspaceSnapshot`). `tests/ui-panacea-apps-phone.test.ts` still uses a fresh chat for each app, because the
-  view follows an app window that opens. G2 (0.9.327) gives the person Tidy and a kept layout, and the agent
+  view follows an app window that opens. G2 gives the person Tidy and a kept layout, and the agent
   `panacea_arrange windows`, to put windows where they do not cover the panels.
 - A later CSS rule (a panel's right-edge grip) had turned the corner grip of every surface and app window into a thin strip
   at its top right; it is scoped to panels now (`.pa-panel > .pa-resize`).
