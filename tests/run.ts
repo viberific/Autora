@@ -60,6 +60,9 @@ if (files.length === 0) {
 
 type Result = { file: string; ok: boolean; ms: number; code: number | null };
 
+/** The longest a test file may run, in seconds (the slowest takes about two minutes). */
+const LIMIT_S = Number(process.env.AUTORA_TEST_TIMEOUT_S) || 900;
+
 function run(file: string): Promise<Result> {
   const started = Date.now();
   const serial = jobs === 1;
@@ -77,10 +80,28 @@ function run(file: string): Promise<Result> {
       child.stdout?.on("data", (d) => { out += d; });
       child.stderr?.on("data", (d) => { out += d; });
     }
-    child.on("close", (code) => {
-      if (!serial) process.stdout.write(`\n== ${file} ==\n${out}`);
+    let done = false;
+    const finish = (code: number | null, note = "") => {
+      if (done) return;
+      done = true;
+      clearTimeout(limit);
+      if (!serial) {
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+        process.stdout.write(`\n== ${file} ==\n${out}${note}`);
+      } else if (note) process.stdout.write(note);
       resolve({ file, ok: code === 0, code, ms: Date.now() - started });
-    });
+    };
+    /* A file that never ends (a hang) must be a named failure, not a CI run that goes on for hours: it is killed after
+       LIMIT seconds. */
+    const limit = setTimeout(() => {
+      child.kill("SIGKILL");
+      finish(null, `\n${file} did not finish in ${LIMIT_S} seconds and was stopped.\n`);
+    }, LIMIT_S * 1000);
+    /* `exit`, not only `close`: a test that leaves a process behind (a server, a fake CLI) keeps its output pipes open,
+       and `close` then never comes for a file that has long finished. A moment is given for the last of its output. */
+    child.on("exit", (code) => setTimeout(() => finish(code), 1500));
+    child.on("close", (code) => finish(code));
   });
 }
 
