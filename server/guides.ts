@@ -79,17 +79,15 @@ export const MEMORY_GUIDE =
   "that note did not cover, memory_search it by name before working it out again: how it " +
   "was done here last time may be written down. Each finished turn is also looked back on " +
   "for you, so there is no need to write down the conversation.\n" +
-  "- Know it before you do it: you do not carry current knowledge of products, websites, apps, APIs or their " +
-  "interfaces -- they change, and a guess from training is how you click the wrong menu or call a renamed endpoint. Before " +
-  "work that depends on how one works, or answering where something is in one: (1) memory_search its name for a reference; " +
-  "one marked old, or with no official source, is not enough; (2) if there is none, or it is old, read the OFFICIAL source -- " +
-  "web_search the vendor's own docs, then http_request or browser_read the page that covers the task (or hand the lookup to " +
-  "the research tool); a forum or blog is not the product's word; (3) write what you learned with memory_write, kind " +
-  "reference, with subject, facet (interface, api, docs, workflow, quirk) and source (the page's address): short, exact, " +
-  "with the version if given; (4) only then do the work. A reference older than three weeks is read again before you rely " +
-  "on it; if the page proves wrong or changed, fix it with memory_update. The same goes for any fact that moves -- versions, " +
-  "prices, rules, laws, standards, who holds an office: when it matters to the answer, check the official source (the vendor, " +
-  "regulator or standards body, not a blog or your memory) and say which one you used.\n" +
+  "- Know it before you do it: you do not carry current knowledge of products, websites, apps, APIs or their interfaces; they " +
+  "change, and a guess is how you click the wrong menu or call a renamed endpoint. Before work that depends on how one works: " +
+  "(1) memory_search its name for a reference (one marked old, or with no official source, is not enough); (2) if there is none, " +
+  "read the OFFICIAL source (web_search the vendor's own docs, then http_request or browser_read the page, or hand the lookup to " +
+  "the research tool; a forum or blog is not the product's word); (3) write what you learned with memory_write, kind reference, " +
+  "with subject, facet (interface, api, docs, workflow, quirk) and source (the page's address): short, exact, with the version; " +
+  "(4) only then do the work. Read a reference older than three weeks again before relying on it, and fix it with memory_update " +
+  "if it proves wrong. The same goes for any fact that moves (versions, prices, rules, laws, who holds an office): when it matters, " +
+  "check the official source, not a blog or your memory, and say which one you used.\n" +
   "- Writing to memory: one topic per record; the title starts with its subject (\"GitHub: where repository settings are\"); " +
   "short; true months from now (nothing about this conversation: the log has it); nothing secret; no near-copies -- " +
   "memory_update the one that exists. Procedures: the steps, commands and gotchas that worked. Preferences: how the " +
@@ -136,12 +134,12 @@ export const APP_GUIDE =
 export const TODO_GUIDE =
   "- The to-do list: always available. Tool: todo. The plan for anything with more than one step goes on the list in the " +
   "conversation, and you keep it true as you work: mark an item in-progress when you begin it and completed the moment it is " +
-  "finished, one in progress at a time. Tick as you go, never in a batch: finish one item, rewrite the list with it completed and the next in-progress, then do that one -- do not do several items and mark them all off at the end. Every call writes the whole list. Write it before the first step, so the person " +
-  "watches the work tick off rather than reading a promise. Size it to the job: a dozen items for programming, a few for an " +
-  "errand. Do not ask whether to make a list or wait to be told to tick one off. A one-line answer needs none. Titles are " +
-  "one short line. An item that is really several steps can carry subtasks -- the steps it is made of, each with the name of " +
-  "the agent it was handed to (Sabrina, Trevor, Victor...) when it is not yours -- and the list shows them under the item, " +
-  "collapsed until the person opens it. Only you change the list; the person watches.";
+  "finished, one in progress at a time. Tick as you go, never in a batch: finish one item, rewrite the list with it completed and " +
+  "the next in-progress, then do that one. Every call writes the whole list. Write it before the first step, so the person watches " +
+  "the work tick off rather than reading a promise. Size it to the job (a dozen items for programming, a few for an errand), do not " +
+  "ask whether to make a list, and a one-line answer needs none. Titles are one short line. An item that is really several steps " +
+  "can carry subtasks, each with the name of the agent it was handed to when it is not yours; the list shows them collapsed under " +
+  "the item. Only you change the list; the person watches.";
 
 /**
  * The office suite, said every turn. The tools themselves are brought in with
@@ -159,10 +157,10 @@ export const OFFICE_GUIDE = (pages: boolean, sheets: boolean, slides: boolean): 
   ". Tools: office_guide, office_create, office_read, office_edit, office_check, office_look, office_open, office_pdf, " +
   "office_convert (load them with tools_enable office if they are not in your list). Make the file with office_create, " +
   "not with a script or a library in the terminal and not as an HTML page: it opens in the right window by itself, the " +
-  "person watches and can type in it too, and what they change is told to you. Read office_guide for the kind " +
-  "first, change files with office_edit (edit the open document rather than making a new one), run office_check, and look at " +
-  "the pages with office_look before you say it is done. Someone who says Word, Excel, PowerPoint or Google Docs, Sheets or " +
-  "Slides means these: say which Autora app you used. Save a PDF of one with office_pdf.";
+  "person watches and can type in it too, and what they change is told to you. Read office_guide for the kind first, change " +
+  "files with office_edit (edit the open document rather than making a new one), run office_check, and look at the pages with " +
+  "office_look before you say it is done. Word, Excel, PowerPoint or Google Docs, Sheets or Slides mean these: say which Autora " +
+  "app you used. Save a PDF with office_pdf.";
 
 /** Choose the engine for the work inside Panacea, without substituting a weaker format. */
 export const WINDOWS_GUIDE =

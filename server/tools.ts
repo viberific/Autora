@@ -4089,11 +4089,11 @@ export async function capabilityBriefing(): Promise<string> {
     ? "- Autora Video (the video window, OpenCut's editor): always available. Tools: video_open, video_look, video_import " +
       "(an artifact id or a path), video_edit, video_style, video_project, video_ui (any control on the editor's screen, " +
       "clicked and typed into), video_catalog, video_frame (see a moment of the video) and video_export. Every part of the " +
-      "editor is yours: when the typed tools do not cover something, read the screen with video_ui and do it as a person would. For any video the person wants made or " +
-      "changed: open a project, import their footage, pictures and music, build the cut with video_edit, then read it back with " +
-      "video_look and see it with video_frame before you say it is done. The person watches the timeline change and can take " +
-      "the editor over; leave it alone while they hold it. Their creative choices (the story, the pacing, the " +
-      "music, the look) stay theirs: ask and suggest, and do the technical work completely. Export only when they ask for a file."
+      "editor is yours: when the typed tools do not cover something, read the screen with video_ui and do it as a person would. " +
+      "To make or change a video: open a project, import the footage, pictures and music, build the cut with video_edit, then " +
+      "read it back with video_look and see it with video_frame before you say it is done. The person watches the timeline " +
+      "change and can take the editor over; leave it alone while they hold it. Their creative choices (the story, the pacing, " +
+      "the music, the look) stay theirs: ask and suggest, and do the technical work completely. Export only when asked for a file."
     : offLine("Autora Video"));
   lines.push(studioBriefing(windows.studio.enabled));
   lines.push(panaceaBriefing(windows.panacea.enabled));

@@ -56,13 +56,18 @@ const song = await runTool(spec, { file: file("example.song.json", "{}") }, ctx)
 assert.equal(song.ok, false);
 assert.match(song.summary, /studio engine is disabled or unavailable/);
 state.tools.studio.enabled = true;
+// Said one way when the engine is switched off and another when this machine has not built it.
+const OFF_OR_MISSING = /sheets engine is disabled or unavailable|Autora Sheets \(\.xlsx files\) is switched off/;
+// The sheets engine is switched off here, so the test does not depend on whether this machine has built it.
+state.tools.sheets.enabled = false;
 const workbookFile = file("table.xlsx", "invalid workbook");
 const workbook = await runTool(spec, { file: workbookFile }, ctx);
 assert.equal(workbook.ok, false);
-assert.match(workbook.summary, /sheets engine is disabled or unavailable/, "a workbook must not silently flatten into a readonly data view");
+assert.match(workbook.summary, OFF_OR_MISSING, "a workbook must not silently flatten into a readonly data view");
 const explicitWorkbook = await runTool(spec, { file: workbookFile, engine: "sheets" }, ctx);
 assert.equal(explicitWorkbook.ok, false);
-assert.match(explicitWorkbook.summary, /sheets engine is disabled or unavailable/);
+assert.match(explicitWorkbook.summary, OFF_OR_MISSING);
+state.tools.sheets.enabled = true;
 
 const midi = await runTool(spec, { file: file("notes.mid", "not MIDI") }, ctx);
 assert.equal(midi.ok, false);

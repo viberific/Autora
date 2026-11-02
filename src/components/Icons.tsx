@@ -673,13 +673,13 @@ export const IconHand = ({ size = 16, className }: Props) => (
  * figure -- Claude's slanted burst, Gemini's four-point star -- drawn here
  * rather than shipped as artwork, so nothing is copied into the bundle.
  */
-export const MarkClaude = ({ size = 14, className }: Props) => (
+const MarkClaude = ({ size = 14, className }: Props) => (
   <svg {...base(size)} className={className} fill="currentColor" stroke="none" aria-hidden="true">
     <path d="M12 2.6 13.15 9.1 18.4 5.6 15.1 10.9 21.4 12 15.1 13.1 18.4 18.4 13.15 14.9 12 21.4 10.85 14.9 5.6 18.4 8.9 13.1 2.6 12 8.9 10.9 5.6 5.6 10.85 9.1Z" />
   </svg>
 );
 
-export const MarkGemini = ({ size = 14, className }: Props) => (
+const MarkGemini = ({ size = 14, className }: Props) => (
   <svg {...base(size)} className={className} fill="currentColor" stroke="none" aria-hidden="true">
     <path d="M12 2.2c.72 5.2 4.6 9.08 9.8 9.8-5.2.72-9.08 4.6-9.8 9.8-.72-5.2-4.6-9.08-9.8-9.8 5.2-.72 9.08-4.6 9.8-9.8Z" />
   </svg>

@@ -1106,14 +1106,14 @@ export function gameBriefing(on: boolean): string {
   return (
     "- Autora Games (the game window, GDevelop's editor): available. Tools: game_open, game_look, game_edit, game_check, game_catalog, " +
     "game_template and game_import. The game is the project file GDevelop saves (JSON: scenes, objects, behaviors, instances, events, " +
-    "resources); you read and change it with game_look and game_edit (set, insert, remove, merge at a path such as " +
-    "layouts[Scene].objects[Player].behaviors), and the person sees it change in the editor beside the chat and can change anything " +
-    "by hand: call game_look again before relying on what you saw earlier. Never write an instruction from memory: search the engine's " +
-    "own list with game_catalog (it has the exact type and the parameter order), copy shapes from game_template, and run game_check " +
-    "before you say a game is done. The technical work (events, behaviors, physics, wiring, the settings that make it run) is yours: " +
-    "do it completely. The creative choices (the idea, the story, the characters, the world, the look, how it feels, the levels) are " +
-    "theirs: ask, suggest and explain, and let them choose; if they ask for an action or a property (\"make it slippery\", \"jump\"), " +
-    "make it and leave every setting where they can change it."
+    "resources); read and change it with game_look and game_edit (set, insert, remove, merge at a path such as " +
+    "layouts[Scene].objects[Player].behaviors). The person sees it change in the editor beside the chat and can change anything by " +
+    "hand: call game_look again before relying on what you saw. Never write an instruction from memory: search the engine's own list " +
+    "with game_catalog (exact type and parameter order), copy shapes from game_template, and run game_check before you say a game is " +
+    "done. The technical work (events, behaviors, physics, wiring, the settings that make it run) is yours: do it completely. The " +
+    "creative choices (the idea, the story, the characters, the world, the look, how it feels, the levels) are theirs: ask, suggest " +
+    "and explain, and let them choose; if they ask for an action or a property (\"make it slippery\", \"jump\"), make it and leave " +
+    "every setting where they can change it."
   );
 }
 
