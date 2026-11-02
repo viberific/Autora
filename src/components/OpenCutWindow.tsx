@@ -656,7 +656,8 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
 
   /** One command from the agent: pointed at, then done, then answered. */
   const play = useCallback(async (cmd: VideoCommand): Promise<unknown> => {
-    beginHandRun();
+    // Its typing happens in the editor's frame, which keeps its own keyboard down.
+    beginHandRun(false);
     let args = cmd.args;
     const name = cmd.name;
     const onScreen = !!frame.current && isWorkVisible(frame.current);

@@ -22,10 +22,40 @@ export function handsStopped(): boolean {
   return stopped;
 }
 
-/** A hand run starts: shown again, until the next halt. */
-export function beginHandRun(): void {
+/** The fields the hand focused, and the inputmode each had: put back when the run ends. */
+const quieted = new Map<HTMLElement, string | null>();
+/* While the hand works, a field it focuses (the picker, a document, a card, a list) takes no on-screen keyboard: the
+   agent's typing must never open the person's keyboard on a phone. `inputmode="none"` is set as the focus arrives. */
+const quiet = (e: FocusEvent) => {
+  const el = e.target;
+  if (!(el instanceof HTMLElement) || !(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el.isContentEditable)) return;
+  if (!quieted.has(el)) quieted.set(el, el.getAttribute("inputmode"));
+  el.setAttribute("inputmode", "none");
+};
+let running = false;
+
+/** A hand run starts: shown again, until the next halt; and (unless `keys` is false, for a hand that types only inside
+    a frame) what it types into here raises no keyboard until `endHandRun`. */
+export function beginHandRun(keys = true): void {
   halted = false;
   stopped = false;
+  if (!keys) return;
+  if (!running) document.addEventListener("focusin", quiet, true);
+  running = true;
+}
+
+/** A hand run is over: the fields it typed in are let go (a phone's keyboard stays down) and get their inputmode back. */
+export function endHandRun(): void {
+  if (!running) return;
+  running = false;
+  document.removeEventListener("focusin", quiet, true);
+  const active = document.activeElement;
+  if (active instanceof HTMLElement && quieted.has(active) && window.matchMedia?.("(pointer: coarse)").matches) active.blur();
+  for (const [el, mode] of quieted) {
+    if (mode === null) el.removeAttribute("inputmode");
+    else el.setAttribute("inputmode", mode);
+  }
+  quieted.clear();
 }
 
 /** `stop`: the turn was stopped (do no more), rather than Visible work switched off (do the rest unseen). */

@@ -593,6 +593,24 @@ async function fillField(name: string, value: unknown): Promise<void> {
   throw new Skip(`the field "${name}" is not one that is typed or ticked`);
 }
 
+/* While the hand works, a field it focuses takes no on-screen keyboard (inputmode="none"): the agent's typing must never
+   open the person's keyboard on a phone. Let go, and put back, when the run ends. */
+const quieted = new Map<HTMLElement, string | null>();
+const quiet = (e: FocusEvent) => {
+  const el = e.target;
+  if (!(el instanceof HTMLElement) || !(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el.isContentEditable)) return;
+  if (!quieted.has(el)) quieted.set(el, el.getAttribute("inputmode"));
+  el.setAttribute("inputmode", "none");
+};
+function keysQuiet(on: boolean): void {
+  if (on) { document.addEventListener("focusin", quiet, true); return; }
+  document.removeEventListener("focusin", quiet, true);
+  const active = document.activeElement;
+  if (active instanceof HTMLElement && quieted.has(active) && matchMedia("(pointer: coarse)").matches) active.blur();
+  for (const [el, mode] of quieted) { if (mode === null) el.removeAttribute("inputmode"); else el.setAttribute("inputmode", mode); }
+  quieted.clear();
+}
+
 let busy = false;
 
 /** What an item is called in the answer: one page of an item on several says which. */
@@ -606,6 +624,7 @@ export async function runHand(id: string, job: HandJob, who: Who): Promise<void>
   busy = true;
   halted = false;
   stopped = false;
+  keysQuiet(true);
   const results: Result[] = [];
   showCursor(who);
   try {
@@ -657,6 +676,7 @@ export async function runHand(id: string, job: HandJob, who: Who): Promise<void>
   } catch (err) {
     reply(results, { error: String((err as Error)?.message ?? err) });
   } finally {
+    keysQuiet(false);
     busy = false;
     hideCursor();
   }

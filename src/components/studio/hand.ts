@@ -9,7 +9,7 @@
  * What it cannot do (a control that is not on screen, a step with no control) it leaves: the finished song goes in after,
  * so nothing is lost. Each step says whether it was done.
  */
-import { beginHandRun, handPause, handsStopped } from "../../lib/handHalt";
+import { beginHandRun, endHandRun, handPause, handsStopped } from "../../lib/handHalt";
 import { instrumentOf, pitchName, DRUMS, type Project } from "../../lib/studio/model";
 import type { StudioStep } from "../../lib/studio/handsteps";
 import { centreOf, pointerGo, pointerPlace, pointerRest, pointerTyping } from "../../lib/pointer";
@@ -567,5 +567,6 @@ export async function runStudioHand(steps: StudioStep[], env: HandEnv): Promise<
     pointerRest();
   }
   // What the hand made has the window's ids: the finished song takes them, so nothing open in the window changes under it.
+  endHandRun();
   return { results, ids: Object.fromEntries(ids) };
 }

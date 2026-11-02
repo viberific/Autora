@@ -10,6 +10,7 @@
  * Games a game it kept or a file for the game's resources (a picture, a sound, a font). The same engines the agent's
  * tools use do the work, so a file loaded here is in the window exactly as one the agent opened would be.
  */
+import { appOfFile } from "../src/lib/panacea/flows";
 import type { Express, Request, Response } from "express";
 import { getArtifact, readArtifact, saveArtifact, type Artifact } from "./artifacts";
 import { cadState, loadModel } from "./caddesk";
@@ -20,7 +21,7 @@ import { runVideoTool } from "./opencut";
 import { deskHooks, deskState } from "./pdfdesk";
 import { photoState, runPhotoTool } from "./photodesk";
 import { loadSong, studioState } from "./studio";
-import { loadIntoPanacea, panaceaState } from "./panacea";
+import { loadIntoPanacea, noteFlow, panaceaState } from "./panacea";
 import { panaceaFileRoute, type PanaceaFileRoute, type PanaceaEngineName } from "./panacea-formats";
 import { normalizeCanvas } from "../src/lib/panacea/canvas";
 import { flushStore, readDoc } from "./store";
@@ -262,6 +263,9 @@ export function loadFileRoutes(app: Express, opts: FileLoadGuards): void {
     try {
       const out = await load(session, which, art);
       if (!out.ok) return res.status(400).json({ error: out.error ?? `${NAME[which]} could not open ${art.name}.` });
+      // Work from another app, opened here: the board draws the line between the two (src/lib/panacea/flows.ts).
+      const from = appOfFile(art.name);
+      if (from && from !== which) noteFlow(session, { from, to: which, what: art.name, artifact: art.id });
       return res.json({ ok: true, name: art.name, said: out.said });
     } catch (err) {
       return res.status(503).json({ error: err instanceof Error ? err.message : String(err) });

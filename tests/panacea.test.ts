@@ -769,6 +769,27 @@ await test("a document survives the canvas going to disk and back", async () => 
   assert.match(describeCanvas(back), /document "Minutes", \d+ words in \d+ blocks; Autora may write in it/);
 });
 
+// ---------------------------------------------------------------- flows --
+
+await test("work going between apps: which app a file and a tool are, a flow kept once, and the canvas keeps them", async () => {
+  const flowsLib = await import("../src/lib/panacea/flows");
+  assert.equal(flowsLib.appOfFile("robot.glb"), "cad");
+  assert.equal(flowsLib.appOfFile("hero.model.json"), "cad");
+  assert.equal(flowsLib.appOfFile("theme.mid"), "studio");
+  assert.equal(flowsLib.appOfFile("cover.png"), "photo");
+  assert.equal(flowsLib.appOfFile("report.docx"), "pages");
+  assert.equal(flowsLib.appOfFile("notes.txt"), null);
+  assert.equal(flowsLib.appOfTool("game_add_object", {}), "game");
+  assert.equal(flowsLib.appOfTool("office_edit", { file: "plan.xlsx" }), "sheets");
+  assert.equal(flowsLib.appOfTool("terminal", {}), null);
+  const one = flowsLib.addFlow([], { from: "cad", to: "game", what: "robot.glb", at: 1 });
+  const again = flowsLib.addFlow(one, { from: "cad", to: "game", what: "robot.glb", at: 2 });
+  assert.equal(again.length, 1, "the same file between the same apps is one flow");
+  assert.equal(again[0]!.at, 2);
+  const back = normalizeCanvas({ ...newCanvas(), flows: [...again, { from: "cad", to: "cad", what: "x", at: 0 }, { from: "nope", to: "game", what: "y", at: 0 }] })!;
+  assert.deepEqual(back.flows, again, "a flow from an app to itself, or from no app, is dropped");
+});
+
 // ------------------------------------------------------------- projects --
 
 await test("a project: phases with regions, the plan waits for approval, steps, decisions, links, and it survives disk", async () => {

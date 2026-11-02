@@ -75,6 +75,8 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
   navigationHost?: HTMLElement | null;
 }) {
   const phone = usePhone();
+  /** On a phone the work area is measured above the conversation already, and every pixel of it counts: fit tight. */
+  const fitOpts = useMemo(() => (phone ? { padding: 8, foot: 0 } : {}), [phone]);
   const root = useRef<HTMLDivElement>(null);
   const [view, setViewState] = useState<View>({ x: -80, y: -60, zoom: 1 });
   const viewRef = useRef(view);
@@ -113,8 +115,11 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
       const next = { ...before };
       let count = Object.keys(next).length;
       for (const id of ids) if (!next[id]) {
-        const width = phone ? Math.max(340, root.current?.clientWidth ?? 390) : 1056;
-        const height = phone ? Math.max(500, (root.current?.clientHeight ?? 740) - 40) : 740;
+        /* On a phone, the size of the screen there is for work (above the conversation, beside the jump buttons), so it
+           opens at its real size: fitted any bigger, the board zooms out and every control in it is too small to use. */
+        const room = phone && root.current ? workViewport(root.current) : null;
+        const width = phone ? Math.max(320, (room?.width ?? 390) - 16) : 1056;
+        const height = phone ? Math.max(320, (room?.height ?? 600) - 16) : 740;
         next[id] = { x: -(count % 3 + 1) * 1200, y: Math.floor(count / 3) * 920, w: width, h: height };
         count += 1;
       }
@@ -141,11 +146,11 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
     if (!el) return;
     const boxes = boxesOf();
     const room = workViewport(el);
-    const next = fitWorkView(boxes, { width: room.width, height: room.height });
+    const next = fitWorkView(boxes, { width: room.width, height: room.height }, fitOpts);
     if (!next) return;
     fitted.current = boxes.length > 0;
     setView(next);
-  }, [boxesOf, setView]);
+  }, [boxesOf, setView, fitOpts]);
   const focus = useCallback(() => {
     const el = root.current;
     const current = canvasRef.current;
@@ -153,9 +158,9 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
     if (!el || !surface) return;
     const boxes = boxesOf().filter((box) => box === surface || current.panels.some((panel) => panel.context === surface.id && panel.x === box.x && panel.y === box.y));
     const room = workViewport(el);
-    const next = fitWorkView([surface, ...boxes], { width: room.width, height: room.height });
+    const next = fitWorkView([surface, ...boxes], { width: room.width, height: room.height }, fitOpts);
     if (next) { interacted.current = true; setView(next); }
-  }, [boxesOf, setView]);
+  }, [boxesOf, setView, fitOpts]);
   const handsBusy = useCallback(() => {
     const el = root.current;
     const active = document.activeElement;
@@ -253,7 +258,7 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
             : canvasRef.current.surfaces.find((surface) => surface.id === canvasRef.current.focus);
           if (!freshTarget) return;
           const room = workViewport(currentRoot);
-          const next = fitWorkView([freshTarget], { width: room.width, height: room.height });
+          const next = fitWorkView([freshTarget], { width: room.width, height: room.height }, fitOpts);
           if (next) setView(next);
         }));
         return;
@@ -264,7 +269,7 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
       const camera = automatic ? jumpTo({ x: target.x, y: target.y, width: target.w, height: target.h },
         { width: room.width, height: room.height }, { x: -v.x * v.zoom, y: -v.y * v.zoom, zoom: v.zoom }) : null;
       const next = camera ? { x: -camera.x / camera.zoom, y: -camera.y / camera.zoom, zoom: camera.zoom }
-        : fitWorkView([target], { width: room.width, height: room.height });
+        : fitWorkView([target], { width: room.width, height: room.height }, fitOpts);
       if (next) { if (!automatic) interacted.current = true; setView(next); }
     },
     frame: (box, automatic = false) => {
@@ -273,7 +278,7 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
       if (!el) return;
       const room = workViewport(el);
       if (room.width <= 0 || room.height <= 0) return;
-      const next = fitWorkView([box], { width: room.width, height: room.height });
+      const next = fitWorkView([box], { width: room.width, height: room.height }, fitOpts);
       if (next) { if (!automatic) interacted.current = true; setView(next, true); }
     },
     zoomOut: () => {
@@ -555,7 +560,125 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
     return () => el.removeEventListener("paste", paste);
   }, [onFiles, onPaste, toWorld]);
 
+  // ----------------------------------------------- moving and sizing tiles --
+  /* Every tile on the board (an app's window, a photo, a table, a document, a board) moves by its title bar and is
+     sized by its corner, with a mouse or a finger; and its Maximise fills the screen there is, and gives it back. */
+
+  /** A drag that reports how far it has gone in the board's own units (so a zoomed-out board moves tiles as far as the finger). */
+  const gesture = useCallback((e: ReactPointerEvent<HTMLElement>, step: (dx: number, dy: number) => void, done: (dx: number, dy: number) => void) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    interacted.current = true;
+    hold(true);
+    const target = e.currentTarget;
+    target.setPointerCapture?.(e.pointerId);
+    const start = { x: e.clientX, y: e.clientY, zoom: viewRef.current.zoom };
+    const at = (ev: PointerEvent) => [(ev.clientX - start.x) / start.zoom, (ev.clientY - start.y) / start.zoom] as const;
+    const move = (ev: PointerEvent) => { const [dx, dy] = at(ev); step(dx, dy); };
+    const up = (ev: PointerEvent) => {
+      target.removeEventListener("pointermove", move);
+      target.removeEventListener("pointerup", up);
+      target.removeEventListener("pointercancel", up);
+      hold(false);
+      const [dx, dy] = at(ev);
+      done(dx, dy);
+    };
+    target.addEventListener("pointermove", move);
+    target.addEventListener("pointerup", up);
+    target.addEventListener("pointercancel", up);
+  }, [hold]);
+
+  const MIN_TILE = { w: 280, h: 180 };
+  /** A surface being moved or sized: drawn with the change, and written to the canvas (one undoable step) when let go. */
+  const [tileDrag, setTileDrag] = useState<{ id: string; dx: number; dy: number; dw: number; dh: number } | null>(null);
+  const surfaceGesture = (s: Surface, how: "move" | "size") => (e: ReactPointerEvent<HTMLElement>) => {
+    if ((e.target as HTMLElement).closest("button") && how === "move") return;
+    gesture(e, (dx, dy) => setTileDrag(how === "move" ? { id: s.id, dx, dy, dw: 0, dh: 0 } : { id: s.id, dx: 0, dy: 0, dw: Math.max(MIN_TILE.w - s.w, dx), dh: Math.max(MIN_TILE.h - s.h, dy) }),
+      (dx, dy) => {
+        setTileDrag(null);
+        if (Math.abs(dx) + Math.abs(dy) < 3) return;
+        maxed.current.delete(s.id);
+        edit((d) => {
+          const t = d.surfaces.find((x) => x.id === s.id);
+          if (!t) return;
+          if (how === "move") { t.x = snap(t.x + dx); t.y = snap(t.y + dy); }
+          else { t.w = snap(Math.max(MIN_TILE.w, t.w + dx)); t.h = snap(Math.max(MIN_TILE.h, t.h + dy)); }
+        }, `${how === "move" ? "Moved" : "Resized"} ${s.title}`);
+      });
+  };
+  const engineResize = (id: string) => (e: ReactPointerEvent<HTMLElement>) => {
+    const box = engineBoxesRef.current[id];
+    if (!box) return;
+    gesture(e, (dx, dy) => setEngineBoxes((before) => ({ ...before, [id]: { ...box, w: Math.max(320, box.w + dx), h: Math.max(240, box.h + dy) } })),
+      () => { maxed.current.delete(id); });
+  };
+
+  /** What each maximised tile was, to give it back. */
+  const maxed = useRef(new Map<string, WorkBox>());
+  /** Maximise: the tile takes the whole screen there is for work, at its real size, in the middle; again, and it is as it was. */
+  const maximize = (id: string, kind: "engine" | "surface") => {
+    const el = root.current;
+    if (!el) return;
+    const room = workViewport(el);
+    const was = maxed.current.get(id);
+    const now = kind === "engine" ? engineBoxesRef.current[id] : canvasRef.current.surfaces.find((s) => s.id === id);
+    if (!now) return;
+    const pad = phone ? 8 : 16;
+    const next = was ?? { x: now.x, y: now.y, w: Math.max(MIN_TILE.w, room.width - pad * 2), h: Math.max(MIN_TILE.h, room.height - pad * 2) };
+    if (was) maxed.current.delete(id);
+    else maxed.current.set(id, { x: now.x, y: now.y, w: now.w, h: now.h });
+    if (kind === "engine") setEngineBoxes((before) => ({ ...before, [id]: next }));
+    else edit((d) => { const t = d.surfaces.find((x) => x.id === id); if (t) { t.x = next.x; t.y = next.y; t.w = next.w; t.h = next.h; } }, was ? "Restored a window" : "Maximised a window");
+    interacted.current = true;
+    if (was) setView(fitWorkView([next], { width: room.width, height: room.height }, fitOpts) ?? viewRef.current, true);
+    else setView({ x: next.x - pad, y: next.y - pad, zoom: 1 }, true);
+  };
+  const [, rerender] = useState(0);
+  const isMaxed = (id: string) => maxed.current.has(id);
+
   const z = view.zoom;
+
+  // ------------------------------------------------- where the work went --
+  /* A line between two windows for each pair of apps work went between (lib/panacea/flows.ts): a 3D model into the game,
+     a picture into a document. An arrow halfway along points the way it went; beside it, what went (the latest, and how
+     many more). Drawn under the windows, from edge to edge. */
+  const flowLines = (() => {
+    const flows = canvas.flows ?? [];
+    if (!flows.length) return [];
+    const boxOf = (mode: string, artifact?: string, what?: string): WorkBox | null => {
+      if (mode === "panacea") {
+        const s = canvas.surfaces.find((x) => (artifact && x.artifact === artifact) || (what && x.name === what));
+        return s ? { x: s.x, y: s.y, w: s.w, h: s.h } : null;
+      }
+      const work = hosted.find((w) => w.mode === mode);
+      return work ? engineBoxes[work.id] ?? null : null;
+    };
+    const pairs = new Map<string, { a: WorkBox; b: WorkBox; what: string; more: number; key: string }>();
+    for (const f of flows) {
+      const a = boxOf(f.from, f.artifact, f.what);
+      const b = boxOf(f.to, f.artifact, f.what);
+      if (!a || !b) continue;
+      const key = `${f.from}>${f.to}`;
+      const had = pairs.get(key);
+      pairs.set(key, { a, b, what: f.what, more: had ? had.more + 1 : 0, key });
+    }
+    /** Where the line from a box's middle toward `p` leaves the box. */
+    const edge = (box: WorkBox, p: { x: number; y: number }) => {
+      const c = { x: box.x + box.w / 2, y: box.y + box.h / 2 };
+      const dx = p.x - c.x;
+      const dy = p.y - c.y;
+      const t = Math.min(dx ? (box.w / 2) / Math.abs(dx) : Infinity, dy ? (box.h / 2) / Math.abs(dy) : Infinity, 1);
+      return { x: c.x + dx * t, y: c.y + dy * t };
+    };
+    return [...pairs.values()].map(({ a, b, what, more, key }) => {
+      const ca = { x: a.x + a.w / 2, y: a.y + a.h / 2 };
+      const cb = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+      const p = edge(a, cb);
+      const q = edge(b, ca);
+      return { key, p, q, mid: { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 }, angle: Math.atan2(q.y - p.y, q.x - p.x) * 180 / Math.PI, label: more ? `${what} +${more}` : what };
+    });
+  })();
   const dot = GRID * 1.5 * z;
   const bg = {
     backgroundSize: `${dot}px ${dot}px`,
@@ -575,11 +698,25 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
       onDrop={onDrop}
       aria-label="The canvas: double-click for a panel, drop a photo or a table"
     >
-      <div className={`pa-world${glide ? " is-glide" : ""}`} style={{ transform: `translate(${-view.x * z}px, ${-view.y * z}px) scale(${z})` }}>
+      <div className={`pa-world${glide ? " is-glide" : ""}`} style={{ transform: `translate(${-view.x * z}px, ${-view.y * z}px) scale(${z})`, ["--pa-z" as string]: z }}>
+        {flowLines.length > 0 && (
+          <svg className="pa-flows" width="1" height="1" aria-hidden="true">
+            {flowLines.map((l) => (
+              <g key={l.key} className="pa-flow" data-flow={l.key}>
+                <line x1={l.p.x} y1={l.p.y} x2={l.q.x} y2={l.q.y} vectorEffect="non-scaling-stroke" />
+                {/* The arrow and the words stay the same size on screen however far out the board is. */}
+                <g transform={`translate(${l.mid.x} ${l.mid.y}) scale(${1 / z})`}>
+                  <path className="pa-flow-arrow" d="M -9 -7 L 9 0 L -9 7 Z" transform={`rotate(${l.angle})`} />
+                  <text className="pa-flow-label" y={-14} textAnchor="middle">{l.label}</text>
+                </g>
+              </g>
+            ))}
+          </svg>
+        )}
         {hosted.map((work) => {
           const box = engineBoxes[work.id];
           if (!box) return null;
-          return <section key={work.id} className={`pw-engine${enginePins.has(work.id) ? " is-pinned" : ""}`} data-engine={work.mode}
+          return <section key={work.id} className={`pw-engine${enginePins.has(work.id) ? " is-pinned" : ""}${isMaxed(work.id) ? " is-max" : ""}`} data-engine={work.mode}
             data-work={work.id} style={{ left: box.x, top: box.y, width: box.w, height: box.h }} aria-label={`${work.title} work surface`}
             onPointerDownCapture={(e) => { if (e.isTrusted) { interacted.current = true; onJumpWork?.(work.mode); } }}>
             <header className="pw-engine-head" onPointerDown={(e) => {
@@ -593,21 +730,25 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
               target.addEventListener("pointermove", move); target.addEventListener("pointerup", up); target.addEventListener("pointercancel", up);
             }}>
               <span>{workIcon(work.mode)}</span><b>{work.title}</b><span className="pw-engine-context">{WORKSPACE_MODES[work.mode].context}</span>
-              <button type="button" aria-label={`Jump to ${work.title}`} onClick={() => { handle.current?.jump(work.id); onJumpWork?.(work.mode); }}><IconMaximize size={14} /></button>
+              <button type="button" aria-label={isMaxed(work.id) ? `Restore ${work.title}` : `Maximise ${work.title}`} aria-pressed={isMaxed(work.id)}
+                onClick={() => { maximize(work.id, "engine"); rerender((n) => n + 1); onJumpWork?.(work.mode); }}><IconMaximize size={14} /></button>
               <button type="button" aria-pressed={enginePins.has(work.id)} aria-label={`Pin ${work.title} work`} onClick={() => setEnginePins((before) => {
                 const next = new Set(before); if (next.has(work.id)) next.delete(work.id); else next.add(work.id); return next;
               })}>Pin</button>
               {onCloseWork && work.mode !== "browser" && <button type="button" aria-label={`Close ${work.title} work`} onClick={() => onCloseWork(work.mode)}><IconX size={14} /></button>}
             </header>
             <div className="pw-engine-body">{work.content}</div>
+            <i className="pa-resize" role="presentation" title="Drag to resize" onPointerDown={engineResize(work.id)} />
           </section>;
         })}
-        {canvas.surfaces.map((s) => (
+        {canvas.surfaces.map((s) => {
+          const d = tileDrag?.id === s.id ? tileDrag : null;
+          return (
           <section
             key={s.id}
-            className={`pa-surface is-${s.kind}${canvas.focus === s.id ? " is-focus" : ""}`}
+            className={`pa-surface is-${s.kind}${canvas.focus === s.id ? " is-focus" : ""}${d ? " is-moving" : ""}${isMaxed(s.id) ? " is-max" : ""}`}
             data-surface={s.id}
-            style={{ left: s.x, top: s.y, width: s.w, height: s.h }}
+            style={{ left: s.x + (d?.dx ?? 0), top: s.y + (d?.dy ?? 0), width: s.w + (d?.dw ?? 0), height: s.h + (d?.dh ?? 0) }}
             onPointerDown={(e) => {
               if (!(e.target as HTMLElement).closest("button")) {
                 if (e.isTrusted) { interacted.current = true; onJumpWork?.("panacea"); }
@@ -616,16 +757,20 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
             }}
             aria-label={`${s.title}, ${KINDS[s.kind].noun}`}
           >
-            <header className="pa-surface-head">
+            <header className="pa-surface-head" onPointerDown={surfaceGesture(s, "move")}>
               <span className="pa-title">{s.title}</span>
               <span className="pa-surface-meta">{KINDS[s.kind].meta(s)}</span>
+              <button type="button" className="pa-surface-max" aria-label={isMaxed(s.id) ? `Restore ${s.title}` : `Maximise ${s.title}`} aria-pressed={isMaxed(s.id)}
+                onClick={() => { maximize(s.id, "surface"); rerender((n) => n + 1); }}><IconMaximize size={11} /></button>
               <button type="button" className="pa-surface-x" aria-label={`Remove ${s.title}`} onClick={() => onRemoveSurface(s)}><IconX size={11} /></button>
             </header>
             <div className="pa-surface-body">
               <SurfaceView surface={s} onSize={(px) => onSurfaceSize(s, px)} />
             </div>
+            <i className="pa-resize" role="presentation" title="Drag to resize" onPointerDown={surfaceGesture(s, "size")} />
           </section>
-        ))}
+          );
+        })}
         {canvas.panels.map((p) => (
           <PanelCard
             key={p.id}

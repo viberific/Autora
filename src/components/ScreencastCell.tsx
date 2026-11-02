@@ -37,7 +37,7 @@ const VIEWPORT = { w: 1280, h: 800 };
  */
 export function ScreencastCell({
   sessionId, source, url, shots, actions, live, followsFeed = false, ownsFeed = false, current = false,
-  driving: agentDriving = false, waitingOnYou = false, pinned = false, onStop, children,
+  driving: agentDriving = false, waitingOnYou = false, pinned = false, onBoard = false, onStop, children,
 }: {
   sessionId: string;
   source: "browser" | "desktop";
@@ -58,6 +58,8 @@ export function ScreencastCell({
   waitingOnYou?: boolean;
   /** In the pinned stage on a phone: enlarging is the shared full screen (lib/fullscreen.ts), which follow carries to the next tool. */
   pinned?: boolean;
+  /** A window on the Panacea board, not a card in the thread: a finger on the page scrolls the page (and never pans the board). */
+  onBoard?: boolean;
   onStop?: () => void;
   /** What the agent said while it worked this screen, shown in the card so
       the page stays put rather than being pushed up by each sentence. */
@@ -123,6 +125,8 @@ export function ScreencastCell({
   const pointer = useRef<{
     x: number; y: number; lastY: number; moved: boolean; type: string;
     drag: boolean; from: { x: number; y: number }; started: boolean; sentAt: number;
+    /** The finger's last place across, when it last moved, and how fast (page pixels a millisecond), for the glide. */
+    lastX?: number; lastT?: number; vx?: number; vy?: number;
   } | null>(null);
   const scrollAccum = useRef({ dx: 0, dy: 0, timer: 0 });
 
@@ -243,7 +247,8 @@ export function ScreencastCell({
     scrollAccum.current.dx += dx;
     scrollAccum.current.dy += dy;
     if (!scrollAccum.current.timer) {
-      scrollAccum.current.timer = window.setTimeout(flushScroll, 70);
+      // Often enough that the page follows the finger, not so often that the requests queue up behind it.
+      scrollAccum.current.timer = window.setTimeout(flushScroll, 35);
     }
   }, [flushScroll]);
 
@@ -264,7 +269,7 @@ export function ScreencastCell({
       scrolls the conversation instead -- otherwise a page in the middle of the
       thread is a wall you cannot scroll past -- and the expanded view is where
       you scroll the page itself. */
-  const dragScrollsPage = max;
+  const dragScrollsPage = max || onBoard;
 
   const refuse = () => {
     if (driving) setNudge({ text: "The agent is using the browser.", stop: !!onStop });
@@ -326,7 +331,32 @@ export function ScreencastCell({
     void send("drag", { phase: "move", x: at.x, y: at.y });
   };
 
+  /** A flick carries on after the finger lets go and slows to a stop, as a phone's own scrolling does. */
+  const gliding = useRef(0);
+  const glide = (vx: number, vy: number, since: number) => {
+    cancelAnimationFrame(gliding.current);
+    if (since > 80 || Math.hypot(vx, vy) < 0.3) return;
+    let last = performance.now();
+    const step = () => {
+      const now = performance.now();
+      const dt = now - last;
+      last = now;
+      const decay = Math.pow(0.995, dt);
+      vx *= decay;
+      vy *= decay;
+      if (Math.hypot(vx, vy) < 0.05) return;
+      queueScroll(vx * dt, vy * dt);
+      gliding.current = requestAnimationFrame(step);
+    };
+    gliding.current = requestAnimationFrame(step);
+  };
+  useEffect(() => () => cancelAnimationFrame(gliding.current), []);
+
   const onPointerDown = (e: React.PointerEvent) => {
+    // A new touch stops a glide still going.
+    cancelAnimationFrame(gliding.current);
+    // On the board the page takes the gesture whole: it is not the board's to pan.
+    if (onBoard && canUse) e.stopPropagation();
     // A touch is followed by emulated mouse events, and that mousedown lands
     // on the stage -- which is not focusable -- and blurs the keyboard sink
     // the tap just focused. Cancelling here suppresses them. Scrolling is
@@ -350,8 +380,17 @@ export function ScreencastCell({
       return;
     }
     if (p.type !== "mouse" && dragScrollsPage && p.moved) {
+      // Both ways, as a finger scrolls a page; and how fast, for the glide after it lets go.
       const scale = toPage(e.clientX, e.clientY)?.scale ?? 1;
-      queueScroll(0, (p.lastY - e.clientY) * scale);
+      const dx = ((p.lastX ?? p.x) - e.clientX) * scale;
+      const dy = (p.lastY - e.clientY) * scale;
+      queueScroll(dx, dy);
+      const now = performance.now();
+      const dt = Math.max(1, now - (p.lastT ?? now - 16));
+      p.vx = dx / dt;
+      p.vy = dy / dt;
+      p.lastT = now;
+      p.lastX = e.clientX;
       p.lastY = e.clientY;
     }
   };
@@ -364,6 +403,7 @@ export function ScreencastCell({
       void send("drag", { phase: "end", x: at.x, y: at.y });
       return;
     }
+    if (p.moved && p.type !== "mouse" && dragScrollsPage && canUse) glide(p.vx ?? 0, p.vy ?? 0, performance.now() - (p.lastT ?? 0));
     if (p.moved || e.button === 2) return;
     click(e.clientX, e.clientY, "left", p.type !== "mouse");
   };

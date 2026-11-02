@@ -229,4 +229,9 @@ releaseNotes: >-
   between the canvas and the apps instead of living inside each one.
   Switching the eye off mid-work hides it at once and finishes the work
   straight away, and Stop (the button or /stop) now always stops, even
-  while the agent is waiting on an app.
+  while the agent is waiting on an app. Its typing never opens your
+  keyboard on a phone. Every window on the board can now be moved, resized
+  and maximised (centred, filling the screen), and lines with arrows show
+  where work went between the apps, such as a 3D model into a game. On a
+  phone the web browser opens at a usable size, a swipe scrolls the page
+  (with momentum) rather than the board, and sideways swipes work too.

@@ -28,6 +28,7 @@ import {
   setValue, snap, uid, valueProblem, wordsOwner, PANEL_MAX_W, PANEL_MIN_W, type Canvas, type Panel, type Surface,
 } from "../src/lib/panacea/canvas";
 import { panaceaSteps, stepWords } from "../src/lib/panacea/handsteps";
+import { addFlow, type Flow } from "../src/lib/panacea/flows";
 import { addStep, createProject, decide, describeProject, linkPieces, phaseFor, setStepDone, stepById, type Project } from "../src/lib/panacea/project";
 import { addCard, applyBoardParam, boardListing, boardMarkdown, boardSvg, createBoard, editCard, editLink, linkCards, moveCard, removeCard, tidy, unlink, type BoardMode, type BoardState } from "../src/lib/panacea/board";
 import { createDoc, docStateOf, formatBlock, insertBlocks, listing, outlineOf, applyParam, deleteBlock, replaceBlockText, stateOf, toMarkdown, type DocMode } from "../src/lib/panacea/document";
@@ -348,6 +349,16 @@ async function command(session: string, name: string, args: Record<string, unkno
     const refuse = entry.reject;
     entry.reject = (err) => { clearInterval(again); refuse(err); };
   });
+}
+
+/** Work went from one app to another (src/lib/panacea/flows.ts): noted on the chat's canvas, for the line between them. */
+export function noteFlow(session: string, flow: Omit<Flow, "at">): void {
+  if (!validSession(session) || flow.from === flow.to) return;
+  const e = entryFor(session);
+  const next = structuredClone(e.canvas);
+  next.flows = addFlow(next.flows ?? [], { ...flow, at: Date.now() });
+  e.quiet = e.rev + 1;
+  commit(session, e, next, "agent");
 }
 
 /** With Visible work on and the window up, the change is done there by the agent's hand while this waits. */

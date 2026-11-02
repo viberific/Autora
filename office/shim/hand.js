@@ -473,12 +473,31 @@
 
   // ----------------------------------------------------------------- the edit --
 
+  /* While the hand works, a field it focuses takes no on-screen keyboard (inputmode="none"): the agent's typing must
+     never open the person's keyboard on a phone. Let go, and put back, when the run ends. */
+  const quieted = new Map();
+  const quiet = (e) => {
+    const el = e.target;
+    if (!(el instanceof HTMLElement) || !(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el.isContentEditable)) return;
+    if (!quieted.has(el)) quieted.set(el, el.getAttribute("inputmode"));
+    el.setAttribute("inputmode", "none");
+  };
+  function keysQuiet(on) {
+    if (on) { document.addEventListener("focusin", quiet, true); return; }
+    document.removeEventListener("focusin", quiet, true);
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && quieted.has(active) && matchMedia("(pointer: coarse)").matches) active.blur();
+    for (const [el, mode] of quieted) { if (mode === null) el.removeAttribute("inputmode"); else el.setAttribute("inputmode", mode); }
+    quieted.clear();
+  }
+
   let busy = false;
   async function run(id, steps, who) {
     if (busy) { void A.host("handed", { id, results: [], error: "the editor is already doing an edit" }).catch(() => undefined); return; }
     busy = true;
     halted = false;
     stopped = false;
+    keysQuiet(true);
     const results = [];
     const current = new Map();
     sheetNow = "";
@@ -501,6 +520,7 @@
       void A.host("handed", { id, results, error: String(err && err.message || err) }).catch(() => undefined);
     } finally {
       busy = false;
+      keysQuiet(false);
       hideCursor();
     }
   }

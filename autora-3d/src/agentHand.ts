@@ -130,6 +130,9 @@ const setValue = (input: HTMLInputElement, value: string) => {
 async function typeInto(input: HTMLInputElement | null, text: string, words?: string, enter = true): Promise<void> {
   if (!input) throw new Skip('a field was not on the screen');
   await press(input, words);
+  // The agent's typing must never open the person's on-screen keyboard: no keyboard for this field while it types.
+  const mode = input.getAttribute('inputmode');
+  input.setAttribute('inputmode', 'none');
   input.focus();
   await sleep(60);
   input.select();
@@ -145,6 +148,9 @@ async function typeInto(input: HTMLInputElement | null, text: string, words?: st
   await sleep(rand(120, 220));
   if (enter) input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
   await sleep(rand(180, 260));
+  if (document.activeElement === input && matchMedia('(pointer: coarse)').matches) input.blur();
+  if (mode === null) input.removeAttribute('inputmode');
+  else input.setAttribute('inputmode', mode);
 }
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);

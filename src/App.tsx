@@ -2820,6 +2820,7 @@ export function App() {
                   driving={driving}
                   waitingOnYou={browserHandedOver}
                   onStop={stopFromThread}
+                  onBoard
                 />
               </aside>
             )}

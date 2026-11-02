@@ -3,12 +3,13 @@ export type WorkBox = { x: number; y: number; w: number; h: number };
 type WorkViewport = { width: number; height: number };
 
 /** Fit world coordinates, never animated screen rectangles; hidden modes cannot establish a view. */
-export function fitWorkView(boxes: readonly WorkBox[], viewport: WorkViewport): WorkView | null {
+export function fitWorkView(boxes: readonly WorkBox[], viewport: WorkViewport, opts: { padding?: number; foot?: number } = {}): WorkView | null {
   if (viewport.width <= 40 || viewport.height <= 40) return null;
   if (!boxes.length) return { x: -viewport.width / 2, y: -viewport.height / 3, zoom: 1 };
   if (viewport.width <= 64 || viewport.height <= 140) return null;
   const bounds = unionBounds(boxes.map((box) => ({ x: box.x, y: box.y, width: box.w, height: box.h })));
-  const camera = fitAll(bounds ? [bounds] : [], { width: viewport.width, height: viewport.height - 76 });
+  // `foot`: room kept at the bottom for the entry strip; a viewport already measured above it (a phone's) keeps none.
+  const camera = fitAll(bounds ? [bounds] : [], { width: viewport.width, height: viewport.height - (opts.foot ?? 76) }, opts.padding ?? 32);
   return { x: -camera.x / camera.zoom, y: -camera.y / camera.zoom, zoom: camera.zoom };
 }
 

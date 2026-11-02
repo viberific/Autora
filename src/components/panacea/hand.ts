@@ -23,7 +23,7 @@ import { docViews } from "./docViews";
 import { centreOf, pointerGo, pointerPlace, pointerRest, pointerTyping } from "../../lib/pointer";
 import { typingDelays, type Point } from "../../lib/humanPath";
 import { isWorkVisible } from "../../lib/frameCoordinates";
-import { beginHandRun, handPause, handsHalted, handsStopped } from "../../lib/handHalt";
+import { beginHandRun, endHandRun, handPause, handsHalted, handsStopped } from "../../lib/handHalt";
 import type { BoardHandle } from "./Board";
 
 /** What the window puts in for the next thing picked: the server's id and place, and its own object when it is not a
@@ -808,6 +808,7 @@ export async function runPanaceaHand(steps: HandStep[], env: HandEnv): Promise<{
       setHandOffer(null);
     }
   }
+  endHandRun();
   if (openedPlan) {
     openedPlan = false;
     const strip = env.root.querySelector(".pa-proj.is-open");

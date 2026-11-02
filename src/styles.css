@@ -7842,6 +7842,26 @@ body.is-resizing iframe { pointer-events: none; }
 .pa-surface-x { display: grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: var(--r-xs); background: transparent; color: var(--text-3); cursor: pointer; opacity: 0; transition: opacity var(--dur-1) var(--ease); }
 .pa-surface:hover .pa-surface-x, .pa-surface-x:focus-visible { opacity: 1; }
 .pa-surface-x:hover { background: var(--s3); color: var(--text); }
+/* Moving and sizing tiles (Board.tsx): the title bar drags it, the corner sizes it, with a mouse or a finger; Maximise fills
+   the screen there is for work. The title bar and the corner take the gesture whole, so a finger never scrolls the page. */
+.pa-surface-head, .pw-engine-head { touch-action: none; cursor: grab; user-select: none; }
+.pa-surface.is-moving { transition: none; box-shadow: var(--shadow-lg); z-index: 3; }
+.pa-surface-max { display: grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: var(--r-xs); background: transparent; color: var(--text-3); cursor: pointer; }
+.pa-surface-max:hover, .pa-surface-max[aria-pressed="true"] { background: var(--s3); color: var(--text); }
+.pa-surface.is-max, .pw-engine.is-max { z-index: 4; }
+.pa-resize {
+  /* The same size on screen however far out the board is zoomed (--pa-z is the zoom). */
+  position: absolute; right: 0; bottom: 0; width: calc(22px / var(--pa-z, 1)); height: calc(22px / var(--pa-z, 1)); z-index: 2; cursor: nwse-resize; touch-action: none;
+  background: linear-gradient(135deg, transparent 50%, var(--border-strong) 50%, var(--border-strong) 58%, transparent 58%, transparent 70%, var(--border-strong) 70%, var(--border-strong) 78%, transparent 78%);
+  border-bottom-right-radius: var(--r-lg); opacity: 0.7;
+}
+.pa-resize:hover { opacity: 1; }
+/* Where work went between the apps (Board.tsx flowLines): a line between two windows, an arrow halfway, what went. */
+.pa-flows { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; z-index: 0; }
+.pa-flow line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 5; opacity: 0.75; }
+.pa-flow-arrow { fill: var(--accent); stroke: var(--bg); stroke-width: 1.5; }
+.pa-flow-label { fill: var(--text-2); font-size: var(--fs-xs); font-family: var(--sans); paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+@media (pointer: coarse) { .pa-resize { width: calc(32px / var(--pa-z, 1)); height: calc(32px / var(--pa-z, 1)); } .pa-surface-x { opacity: 1; } }
 .pa-surface-body { flex: 1; min-height: 0; display: flex; }
 .pa-image { position: relative; flex: 1; min-width: 0; display: grid; place-items: center; background: var(--sink); }
 .pa-image-frame { position: relative; display: grid; place-items: center; line-height: 0; }

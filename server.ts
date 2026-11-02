@@ -59,7 +59,7 @@ import { dayKey } from "./server/billing";
 import { refreshVendorMoney } from "./server/vendor-money";
 import { dropSession, fromDataUrl, getBlob, putBlob } from "./server/blobs";
 import { threeRuntime } from "./server/widgets";
-import { MAX_ARTIFACT_BYTES, saveArtifact } from "./server/artifacts";
+import { MAX_ARTIFACT_BYTES, getArtifact, saveArtifact } from "./server/artifacts";
 import { snapshot as snapshotFolder } from "./server/snapshots";
 import {
   } from "./server/extensions";
@@ -170,7 +170,8 @@ import { cadRoutes, cadState, dropCad, onCadChange, serveCad } from "./server/ca
 import { dropGame, gameRoutes, gameState, onGameChange, serveGame } from "./server/gamedesk";
 import { dropPhoto, onPhotoChange, photoRoutes, photoState, servePhoto } from "./server/photodesk";
 import { dropStudio, onStudioChange, studioRoutes, studioState, studioTurnNote, studioVisible } from "./server/studio";
-import { dropPanacea, onPanaceaChange, onPanaceaTouch, panaceaRoutes, panaceaState, panaceaSuggester, panaceaTurnNote, panaceaVisible } from "./server/panacea";
+import { appOfFile, appOfTool } from "./src/lib/panacea/flows";
+import { dropPanacea, noteFlow, onPanaceaChange, onPanaceaTouch, panaceaRoutes, panaceaState, panaceaSuggester, panaceaTurnNote, panaceaVisible } from "./server/panacea";
 import { joinProjects, windowOff } from "./server/tools";
 import { dropOfficeDesk, onOfficeChange, onOfficePush, onOfficeTouch, officeBriefing, officeData, officeRoutes, officeState, officeHooks, serveOfficeEditors } from "./server/officedesk";
 import { renderToPdf, webDir as officeWebDir } from "./server/officerender";
@@ -1566,6 +1567,36 @@ function untilStopped<T extends { ok: boolean; summary: string }>(sessionId: str
     signal.addEventListener("abort", stop, { once: true });
     call.then((v) => { signal.removeEventListener("abort", stop); resolve(v); }, (e) => { signal.removeEventListener("abort", stop); reject(e); });
   });
+}
+
+/**
+ * Work that went between apps in a tool call: a file of one app's (an artifact by id, or a path) read by another app's
+ * tool, noted on the chat's canvas so the board draws the line between the two windows (src/lib/panacea/flows.ts).
+ */
+const FILE_KEYS = /^(file|files|path|paths|src|source|sources|model|asset|assets|media|image|images|artifact|artifacts|from|input|inputs|audio|video|picture)$/i;
+function noteFlowsOf(sessionId: string, tool: string, args: Record<string, unknown> | undefined) {
+  const to = appOfTool(tool, args ?? {});
+  if (!to || !args) return;
+  const seen = new Set<string>();
+  const visit = (v: unknown, key: string, depth: number) => {
+    if (depth > 4) return;
+    if (typeof v === "string") {
+      for (const id of v.match(/file_[0-9a-f]{16}/g) ?? []) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const art = getArtifact(id);
+        const from = art ? appOfFile(art.name) : null;
+        if (art && from && from !== to) noteFlow(sessionId, { from, to, what: art.name, artifact: art.id });
+      }
+      if (FILE_KEYS.test(key) && !/file_[0-9a-f]{16}/.test(v)) {
+        const name = path.basename(v.trim());
+        const from = appOfFile(name);
+        if (from && from !== to && !seen.has(name)) { seen.add(name); noteFlow(sessionId, { from, to, what: name }); }
+      }
+    } else if (Array.isArray(v)) v.forEach((x) => visit(x, key, depth + 1));
+    else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) visit(x, k, depth + 1);
+  };
+  for (const [k, v] of Object.entries(args)) visit(v, k, 0);
 }
 
 /**
@@ -5822,6 +5853,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
           if (willWrite) await personEdits(null);
           const outcome = await untilStopped(session.id, runTool(spec, use.args, contextFor(span)));
           noteCall(spec.name, use.args);
+          if (outcome.ok) noteFlowsOf(session.id, spec.name, use.args);
           /* A command that failed because a path was not there: say what is near
              it, so the next call is right instead of another guess. */
           if (spec.name === "terminal" && !outcome.ok && !outcome.held) {

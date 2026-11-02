@@ -16,6 +16,8 @@ import type { BoardState } from "./board";
 import type { DocState } from "./document";
 import type { Table } from "./surfaces";
 import { describeProject, readProject, regionX, REGION_W, type Project } from "./project";
+import { readFlows, type Flow } from "./flows";
+import { WORKSPACE_MODES } from "../workspace";
 
 export type PanelState = "live" | "dim" | "ghost" | "draft";
 export type Who = "agent" | "person" | "rule";
@@ -87,6 +89,8 @@ export interface Canvas {
   gone: Panel[];
   /** The project the canvas is for, when it is one (project.ts): phases, steps, decisions, links. */
   project?: Project;
+  /** Where work went between the apps (flows.ts): drawn as arrowed lines between their windows. */
+  flows?: Flow[];
 }
 
 export const GRID = 16;
@@ -497,7 +501,8 @@ export function normalizeCanvas(raw: unknown): Canvas | null {
   const project = readProject(r.project);
   // A surface's phase is one the project has, or none.
   for (const s of surfaces) if (s.phase && !project?.phases.some((ph) => ph.id === s.phase)) delete s.phase;
-  return { version: 1, name: str(r.name, "Canvas", 80) || "Canvas", panels, surfaces, values, focus, gone, ...(project ? { project } : {}) };
+  const flows = readFlows(r.flows, Object.keys(WORKSPACE_MODES));
+  return { version: 1, name: str(r.name, "Canvas", 80) || "Canvas", panels, surfaces, values, focus, gone, ...(project ? { project } : {}), ...(flows.length ? { flows } : {}) };
 }
 
 // --------------------------------------------------------------- describing --
