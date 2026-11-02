@@ -204,10 +204,16 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Panacea fixes. Dialogs opened from a window on the board, such as Load, take
-  clicks again. With Visible work on, the agent's hand works in the Music window
-  whenever it is mostly on screen, and the board's bottom bar steps aside while
-  the hand works so it never covers a control. A phone on its side keeps the Send
-  button on screen. A memory rewrite waiting for your answer is shown open
-  instead of folded into the steps. Panels whose controls are not yet connected
-  to their app are no longer offered.
+  A job handed to Claude or Gemini now appears in the conversation as its own
+  bubble. The subscription CLIs signed in on this machine (Claude Code, and
+  Gemini through Antigravity) are callable as claude_cli and gemini_cli: Autora
+  says in one line who it is handing the work to and which folder, then the
+  vendor answers for itself, in its own name and mark, streamed into the
+  transcript as it arrives and ending with how long it took and which files it
+  edited. A delegate that fails, whether rate limited, signed out, timed out or
+  not installed, says which in its own bubble, and the job carries on another
+  way rather than depending on the CLI.
+  Nothing about a key or a sign-in is shown or kept: a delegate is started with
+  a trimmed environment, and everything it prints is redacted before it reaches
+  the transcript.
+  Everything else is unchanged.
