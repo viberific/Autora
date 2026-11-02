@@ -31,6 +31,7 @@ import { panaceaSteps, stepWords } from "../src/lib/panacea/handsteps";
 import { addFlow, type Flow } from "../src/lib/panacea/flows";
 import { treeLive } from "../src/lib/panacea/wiring";
 import { MUSIC_TRACK, isMusicBind, readMusic } from "../src/lib/panacea/apps/music";
+import { placeWindow, maximise as maximiseWindow, tidy as tidyBoxes, windowNamed, windowTitle, type WinBox } from "../src/lib/panacea/windows";
 import { MODEL_PART, isModelBind, readModel } from "../src/lib/panacea/apps/model";
 import { VIDEO_CLIP, isVideoBind, readVideo } from "../src/lib/panacea/apps/video";
 import { GAME_OBJECT, isGameBind, readGame } from "../src/lib/panacea/apps/game";
@@ -893,13 +894,51 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
         fade(c, panel.id);
         done.push(`put away ${panel.id} (the person can bring it back)`);
       }
+      // Surfaces and app windows: the same moves, sizes, maximising and raising a person does by hand.
+      for (const m of Array.isArray(args.surfaces) ? args.surfaces : []) {
+        const s = c.surfaces.find((x) => x.id === m?.id) ?? refuse(`There is no surface "${String(m?.id)}". Surfaces: ${c.surfaces.map((x) => x.id).join(", ") || "none"}.`);
+        const x = numberOr(m.x), y = numberOr(m.y), w = numberOr(m.w), h = numberOr(m.h);
+        if (x !== null) s.x = snap(x);
+        if (y !== null) s.y = snap(y);
+        if (w !== null) s.w = snap(Math.max(280, w));
+        if (h !== null) s.h = snap(Math.max(180, h));
+        done.push(`moved or sized ${s.id}`);
+      }
+      const wins: WinBox[] = c.windows ?? (c.windows = []);
+      for (const m of Array.isArray(args.windows) ? args.windows : []) {
+        const id = windowNamed(m?.window) ?? refuse(`There is no window "${String(m?.window)}": it is an app's name (Music, 3D, Video, Games, PDF, Images, Documents, Spreadsheets, Presentations, Web, Apps & code, Explainers).`);
+        const x = numberOr(m.x), y = numberOr(m.y), w = numberOr(m.w), h = numberOr(m.h);
+        const known = wins.find((v) => v.id === id);
+        if (!known && x === null && y === null) refuse(`The ${windowTitle(id)} window is not open on this canvas yet, so it has no place to change: open it first (or give x and y).`);
+        const act = typeof m.do === "string" ? m.do : "";
+        if (act && !["maximise", "restore", "front"].includes(act)) refuse("do is maximise, restore or front.");
+        if (act === "maximise" || act === "restore") {
+          const r = maximiseWindow(wins, id, c.room ?? { w: 1056, h: 740 }, 16, act === "maximise" ? "max" : "restore");
+          done.push(r ? `${r} the ${windowTitle(id)} window` : `the ${windowTitle(id)} window was not maximised`);
+          continue;
+        }
+        const moved = x !== null || y !== null || w !== null || h !== null;
+        if (!placeWindow(wins, id, { ...(x !== null ? { x: snap(x) } : {}), ...(y !== null ? { y: snap(y) } : {}), ...(w !== null ? { w: snap(w) } : {}), ...(h !== null ? { h: snap(h) } : {}) }, { front: moved || act === "front" })) refuse(`The canvas already has ${wins.length} windows.`);
+        // A window sized by hand is no longer "maximised": there is nothing to give back.
+        if (w !== null || h !== null) delete wins.find((v) => v.id === id)!.was;
+        done.push(moved ? `placed the ${windowTitle(id)} window` : `brought the ${windowTitle(id)} window to the front`);
+      }
+      if (args.tidy !== undefined && args.tidy !== false) {
+        const what = args.tidy === "windows" || args.tidy === "surfaces" ? args.tidy : "all";
+        const items = [...(what !== "surfaces" ? wins.map((w) => ({ id: w.id, x: w.x, y: w.y, w: w.w, h: w.h })) : []), ...(what !== "windows" ? c.surfaces.map((s) => ({ id: s.id, x: s.x, y: s.y, w: s.w, h: s.h })) : [])];
+        if (!items.length) refuse("Nothing to tidy: there are no windows or surfaces on the canvas.");
+        const spots = tidyBoxes(items, { width: Math.max(1600, (c.room?.w ?? 1056) * 2) });
+        for (const w of wins) { const at = spots.get(w.id); if (at && what !== "surfaces") { w.x = snap(at.x); w.y = snap(at.y); delete w.was; } }
+        for (const s of c.surfaces) { const at = spots.get(s.id); if (at && what !== "windows") { s.x = snap(at.x); s.y = snap(at.y); } }
+        done.push(`tidied the ${what === "all" ? "windows and surfaces" : what} into rows, none over another`);
+      }
       if (args.focus !== undefined) {
         const f = args.focus === null || args.focus === "" ? null : String(args.focus);
         if (f && !c.surfaces.some((s) => s.id === f)) refuse(`There is no surface "${f}".`);
         const r = refocus(c, f);
         done.push(`focus on ${f ?? "nothing"} (${r.dimmed} dimmed, ${r.gone} put away, ${r.back} back)`);
       }
-      if (!done.length) refuse("Nothing to do: pass move, remove, restore, accept, group, ungroup, titles, writes, focus or name.");
+      if (!done.length) refuse("Nothing to do: pass move, surfaces, windows, tidy, remove, restore, accept, group, ungroup, titles, writes, focus or name.");
       return { text: `${done.join("; ")}.`, preview: done[0]! };
     }
 
@@ -1544,7 +1583,7 @@ export function panaceaRoutes(app: Express, opts: {
     if (opts.off()) return res.status(403).json({ error: OFF });
     const e = entryFor(id);
     try {
-      const art = keepCopy({ session: id, title: e.canvas.name || chatTitle(id), fallback: "Canvas", ext: "panacea.json", data: Buffer.from(JSON.stringify(e.canvas, null, 2), "utf8"), mime: "application/json", note: "Saved from Panacea" });
+      const art = keepCopy({ session: id, title: e.canvas.name || chatTitle(id), fallback: "Canvas", ext: "panacea.json", data: Buffer.from(JSON.stringify(e.canvas, null, 2), "utf8"), mime: "application/json", note: "Saved from Panacea", app: "panacea" });
       res.json({ artifact: art.id, name: art.name });
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : String(err) });

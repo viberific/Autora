@@ -14,6 +14,7 @@
  * for a blank page -- so a file opened here is the same kind of file the agent
  * would have made, and one blank of each kind is kept once made.
  */
+import { appOfFile } from "../src/lib/panacea/flows";
 import { PDFDocument } from "@cantoo/pdf-lib";
 import type { Express, Request, Response } from "express";
 import { listArtifacts, saveArtifact } from "./artifacts";
@@ -87,6 +88,7 @@ async function openNewFile(session: string, kind: NewKind): Promise<Opened> {
   const data = await blankBytes(kind);
   const art = saveArtifact({
     origin: "agent",
+    ...(appOfFile(name) ? { app: appOfFile(name)! } : {}),
     name,
     data,
     mime: MIME[kind],

@@ -898,7 +898,7 @@ export function studioRoutes(app: Express, opts: {
       const named = typeof (e.project as { name?: unknown }).name === "string" ? String((e.project as { name?: unknown }).name).trim() : "";
       const art = keepCopy({
         session: id, title: named || chatTitle(id), fallback: "Song", ext: "song.json",
-        data: Buffer.from(JSON.stringify(e.project, null, 2), "utf8"), mime: "application/json", note: "Saved from Autora Music",
+        data: Buffer.from(JSON.stringify(e.project, null, 2), "utf8"), mime: "application/json", note: "Saved from Autora Music", app: "studio",
       });
       res.json({ artifact: art.id, name: art.name });
     } catch (err) {
@@ -969,7 +969,7 @@ export function studioRoutes(app: Express, opts: {
     if (!id) return;
     if (!Buffer.isBuffer(req.body) || req.body.byteLength < 44) return res.status(400).json({ error: "empty" });
     const raw = String(req.query.name ?? "song").replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "-").replace(/\.wav$/i, "").slice(0, 80);
-    const art = saveArtifact({ origin: "agent", name: `${raw || "song"}.wav`, data: req.body, mime: "audio/wav", session: id, note: "Bounced from Autora Music" });
+    const art = saveArtifact({ origin: "agent", name: `${raw || "song"}.wav`, data: req.body, mime: "audio/wav", session: id, note: "Bounced from Autora Music", app: "studio" });
     res.json({ artifact: art.id, name: art.name, size: art.size, mime: art.mime });
   });
 }

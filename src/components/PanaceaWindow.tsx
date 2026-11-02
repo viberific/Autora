@@ -74,7 +74,8 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
   nativeActions?: MutableRefObject<NativeWorkspaceActions | null>;
 }) {
   const phone = usePhone();
-  const doc = useCanvas(sessionId, nativeOpen);
+  // The canvas is read and kept whenever it has anything to keep: its own work, or the layout of the apps' windows on it.
+  const doc = useCanvas(sessionId, nativeOpen || hosted.length > 0);
   const { canvas, edit, quietly, live, saveNow, refresh } = doc;
   const base = `/api/panacea/${encodeURIComponent(sessionId)}`;
   const [recipes, setRecipes] = useState<Recipe[]>(() => BUILTINS.filter((r) => treeLive(r.tree)));
@@ -751,6 +752,8 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
           canvas={canvas}
           fresh={doc.fresh}
           edit={edit}
+          quiet={quietly}
+          loaded={doc.ready}
           hold={doc.hold}
           recipes={recipes}
           actions={actions}

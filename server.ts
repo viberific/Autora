@@ -170,7 +170,7 @@ import { cadRoutes, cadState, dropCad, onCadChange, serveCad } from "./server/ca
 import { dropGame, gameRoutes, gameState, onGameChange, serveGame } from "./server/gamedesk";
 import { dropPhoto, onPhotoChange, photoRoutes, photoState, servePhoto } from "./server/photodesk";
 import { dropStudio, onStudioChange, studioRoutes, studioState, studioTurnNote, studioVisible } from "./server/studio";
-import { appOfFile, appOfTool } from "./src/lib/panacea/flows";
+import { appOfArtifact, appOfFile, appOfTool } from "./src/lib/panacea/flows";
 import { dropPanacea, noteFlow, onPanaceaChange, onPanaceaTouch, panaceaRoutes, panaceaState, panaceaSuggester, panaceaTurnNote, panaceaVisible } from "./server/panacea";
 import { joinProjects, windowOff } from "./server/tools";
 import { dropOfficeDesk, onOfficeChange, onOfficePush, onOfficeTouch, officeBriefing, officeData, officeRoutes, officeState, officeHooks, serveOfficeEditors } from "./server/officedesk";
@@ -1585,7 +1585,7 @@ function noteFlowsOf(sessionId: string, tool: string, args: Record<string, unkno
         if (seen.has(id)) continue;
         seen.add(id);
         const art = getArtifact(id);
-        const from = art ? appOfFile(art.name) : null;
+        const from = art ? appOfArtifact(art) : null;
         if (art && from && from !== to) noteFlow(sessionId, { from, to, what: art.name, artifact: art.id });
       }
       if (FILE_KEYS.test(key) && !/file_[0-9a-f]{16}/.test(v)) {

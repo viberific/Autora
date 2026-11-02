@@ -204,11 +204,11 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Game panels now work. In Panacea, the Movement and Physics panels change the
-  movement behaviour of an object in your game in Autora Games, and the game
-  window shows it, and the other way round: run speed, jump, gravity and how
-  slippery. An Object list picks which one. The agent sets them with the same
-  effect. Level sketch, Enemies, Win & lose, Inventory, Dialogue and Power-ups
-  hold your own choices and words, with a button that has the agent build them.
-  Panels for things a game has no setting for, such as camera, health, score and
-  sound, are gone. Music, 3D and Video panels are unchanged.
+  Windows you can lay out. In Panacea, the apps' windows and surfaces keep where
+  you put them: a reload finds them where they were. A click raises one over the
+  rest, a Tidy button puts them in rows with none over another, and a maximised
+  window on a phone now stays clear of the history slider and the buttons. The
+  agent lays them out the same way (move, size, maximise, bring to front, tidy),
+  and with Visible work on you watch it drag and size them. A window's corner can
+  be dragged to size it again. A file now remembers which app made it, so the
+  lines between windows follow the work and not the file's name.

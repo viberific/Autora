@@ -495,6 +495,7 @@ export async function runCadTool(
       const data = r.encoding === "base64" ? Buffer.from(r.data ?? "", "base64") : Buffer.from(r.text ?? "", "utf8");
       const art = saveArtifact({
         origin: "agent",
+        app: "cad",
         name: exportName(exportArgs.name, format, "model"),
         data,
         mime: EXPORT_MIME[format] ?? "application/octet-stream",
@@ -659,12 +660,12 @@ export function cadRoutes(app: Express, opts: {
       const r = out.result as { data?: string };
       const art = keepCopy({
         session: id, title: chatTitle(id), fallback: "Model", ext: "glb",
-        data: Buffer.from(r.data ?? "", "base64"), mime: EXPORT_MIME.glb, note: "Saved from Autora 3D",
+        data: Buffer.from(r.data ?? "", "base64"), mime: EXPORT_MIME.glb, note: "Saved from Autora 3D", app: "cad",
       });
       // The model itself too, as JSON: a GLB opens in other programs, this is what Load takes back in.
       keepCopy({
         session: id, title: chatTitle(id), fallback: "Model", ext: "model.json",
-        data: Buffer.from(JSON.stringify(engine.toJSON(), null, 2), "utf8"), mime: "application/json", note: "Saved from Autora 3D (the model, to load again)",
+        data: Buffer.from(JSON.stringify(engine.toJSON(), null, 2), "utf8"), mime: "application/json", note: "Saved from Autora 3D (the model, to load again)", app: "cad",
       });
       res.json({ artifact: art.id, name: art.name });
     } catch (err) {

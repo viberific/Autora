@@ -22,6 +22,7 @@
  * ones say so.
  */
 
+import { appOfFile } from "../src/lib/panacea/flows";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -352,7 +353,7 @@ function deliver(ctx: OfficeContext, name: string, data: Buffer, mime: string, n
     throw new Problem(`The result is ${formatSize(data.byteLength)}, over the ${formatSize(MAX_ARTIFACT_BYTES)} an artifact may be. Nothing was saved.`);
   }
   const replaced = listArtifacts().some((a) => a.origin === "agent" && a.name === name);
-  const art = saveArtifact({ origin: "agent", name, data, mime, session: ctx.session, note });
+  const art = saveArtifact({ origin: "agent", name, data, mime, session: ctx.session, note, ...(appOfFile(name) ? { app: appOfFile(name)! } : {}) });
   ctx.showFile?.({ id: art.id, name: art.name, mime: art.mime, size: art.size });
   return { id: art.id, name: art.name, replaced, size: art.size };
 }

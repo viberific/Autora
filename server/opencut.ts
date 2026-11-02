@@ -491,7 +491,7 @@ export function opencutRoutes(app: Express, opts: OpencutOptions): void {
     }
     const art = saveArtifact({
       origin: "agent", name: String(req.query.name ?? "video.mp4"), data: req.body,
-      mime: String(req.query.mime ?? "video/mp4"), session, note: "Exported from Autora Video",
+      mime: String(req.query.mime ?? "video/mp4"), session, note: "Exported from Autora Video", app: "video",
     });
     res.json({ artifact: art.id, name: art.name, size: art.size, mime: art.mime });
   });

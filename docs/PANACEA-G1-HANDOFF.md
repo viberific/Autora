@@ -9,8 +9,8 @@ session can pick it up without the conversation that produced it.
 |---|---|---|
 | G0 Make it honest | **Done** (0.9.321, 0.9.322) | — |
 | G1 Engine panels drive the engines | **Done** (0.9.323 Music, 0.9.324 3D, 0.9.325 Video, 0.9.326 Game, with a phone test for all four) | — |
-| G2 Windows the agent can lay out | **Next** | see the plan; on a phone an app window opened by a panel covers the panels (see "Found on the way") |
-| G7 Verified where it runs | Not started | needs CI or the Docker image |
+| G2 Windows the agent can lay out | **Done (0.9.327)** | — |
+| G7 Verified where it runs | **Next** | needs CI or the Docker image |
 | G3 Full native surfaces (full spreadsheet first) | Not started | see the plan |
 | G5 Projects finished | Not started | see the plan |
 | G4 Visible work, complete | Not started | Games first |
@@ -72,12 +72,14 @@ agent's `panacea_set` and `panacea_place` values go to the song), `appValue` in 
 - Each engine: wired or deleted, read back from the engine, and set by hand in the engine's own window with Visible
   work on. Each one its own release.
 
-## Found on the way (for G2)
+## Found on the way (G1 and G2)
 
-- On a phone, the first move of a panel opens its app's window, and the window opens over the board where the panels are.
-  Since 0.9.326 a window opened by the person's own panel does not take the view (`quiet` in `WorkspaceSnapshot`), but it
-  still lands on top of the panels. `tests/ui-panacea-apps-phone.test.ts` therefore uses a fresh chat for each app. Laying
-  out windows so they do not cover the panels is G2.
+- On a phone, the first move of a panel opens its app's window and, since 0.9.326, does not take the view from the panel
+  (`quiet` in `WorkspaceSnapshot`). `tests/ui-panacea-apps-phone.test.ts` still uses a fresh chat for each app, because the
+  view follows an app window that opens. G2 (0.9.327) gives the person Tidy and a kept layout, and the agent
+  `panacea_arrange windows`, to put windows where they do not cover the panels.
+- A later CSS rule (a panel's right-edge grip) had turned the corner grip of every surface and app window into a thin strip
+  at its top right; it is scoped to panels now (`.pa-panel > .pa-resize`).
 - `tests/ui-video.test.ts` fails on one assertion (the title "added by hand" wording) when run with a real browser and
   the editor built; it was skipping before. Not from this work; look at it when Video is next touched.
 

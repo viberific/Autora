@@ -1186,7 +1186,7 @@ export function gameRoutes(app: Express, opts: { exists: (session: string) => bo
     try {
       const art = keepCopy({
         session: id, title: chatTitle(id), fallback: "Game", ext: "json",
-        data: Buffer.from(JSON.stringify(project, null, 2), "utf8"), mime: "application/json", note: "Saved from Autora Games (a GDevelop project)",
+        data: Buffer.from(JSON.stringify(project, null, 2), "utf8"), mime: "application/json", note: "Saved from Autora Games (a GDevelop project)", app: "game",
       });
       res.json({ artifact: art.id, name: art.name });
     } catch (err) {

@@ -559,6 +559,7 @@ export async function runPhotoTool(session: string, tool: string, args: Record<s
             const data = fs.readFileSync(path.join(folder(session), out));
             const art = saveArtifact({
               origin: "agent",
+              app: "photo",
               name: exportName(args.name, kind.ext, "photo"),
               data,
               mime: kind.mime,
@@ -695,7 +696,7 @@ export function photoRoutes(app: Express, opts: {
         first(r.slice(1), "Could not save it as a PNG");
         return fs.readFileSync(path.join(folder(id), out));
       });
-      const art = keepCopy({ session: id, title: chatTitle(id), fallback: "Picture", ext: "png", data, mime: "image/png", note: "Saved from Autora Photo" });
+      const art = keepCopy({ session: id, title: chatTitle(id), fallback: "Picture", ext: "png", data, mime: "image/png", note: "Saved from Autora Photo", app: "photo" });
       res.json({ artifact: art.id, name: art.name });
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : String(err) });

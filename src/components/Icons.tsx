@@ -424,6 +424,12 @@ export const IconMaximize = ({ size = 16, className }: Props) => (
   </svg>
 );
 
+export const IconTidy = ({ size = 16, className }: Props) => (
+  <svg {...base(size)} className={className}>
+    <rect x="4" y="4" width="7" height="7" rx="1.2" /><rect x="13" y="4" width="7" height="7" rx="1.2" /><rect x="4" y="13" width="7" height="7" rx="1.2" /><rect x="13" y="13" width="7" height="7" rx="1.2" />
+  </svg>
+);
+
 export const IconMinimize = ({ size = 16, className }: Props) => (
   <svg {...base(size)} className={className}>
     <path d="M19.5 9.5h-5v-5M4.5 14.5h5v5M14.5 9.5l6-6M9.5 14.5l-6 6" />

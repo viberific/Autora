@@ -169,6 +169,13 @@ await test("the Music manual says that with Visible work on the studio tools are
   }
 });
 
+await test("the Panacea manual teaches laying out the windows: the person's gestures and the agent's, kept with the canvas", () => {
+  const p = manualText("panacea");
+  for (const needle of ["Layout. The apps' windows", "Tidy in the board's", "panacea_arrange: `windows`", "`tidy`", "front first", "same gesture"]) {
+    assert.ok(p.includes(needle), `the Panacea manual lacks "${needle}"`);
+  }
+});
+
 await test("the Panacea manual teaches the canvas as it is: no toolbar, the library and atoms, ghosts, fading, the history", () => {
   const p = manualText("panacea");
   for (const needle of ["single workspace", "Capabilities", "share one camera", "no nested canvas", "right-side icons", "same dotted grid", "about twenty ready-made panels", "at most 8 controls in view", "Keep in library", "ghost", "Not now",

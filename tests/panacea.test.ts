@@ -792,6 +792,25 @@ await test("no panel is offered whose controls change nothing: the library, the 
 
 // ---------------------------------------------------------------- flows --
 
+await test("a file records the app that made it, and a picture the person dropped in is no app's work", async () => {
+  const flowsLib = await import("../src/lib/panacea/flows");
+  const { saveArtifact, getArtifact, keepCopy } = await import("../server/artifacts");
+  const made = saveArtifact({ origin: "agent", name: "robot.glb", data: Buffer.from("x"), session: "flowsession", app: "cad" });
+  assert.equal(getArtifact(made.id)!.app, "cad");
+  assert.equal(flowsLib.appOfArtifact(getArtifact(made.id)!), "cad");
+  const kept = keepCopy({ session: "flowsession", title: "Song", fallback: "Song", ext: "song.json", data: Buffer.from("{}"), note: "kept", app: "studio" });
+  assert.equal(getArtifact(kept.id)!.app, "studio");
+  const dropped = saveArtifact({ origin: "user", name: "cover.png", data: Buffer.from("y"), session: "flowsession", note: "Dropped on Panacea" });
+  assert.equal(getArtifact(dropped.id)!.app, undefined);
+  assert.equal(flowsLib.appOfFile("cover.png"), "photo", "by its name it would have been Photo's");
+  assert.equal(flowsLib.appOfArtifact(getArtifact(dropped.id)!), null, "but the person's own upload is not any app's work");
+  assert.equal(flowsLib.appOfArtifact({ name: "old.glb", origin: "agent" }), "cad", "a file made before apps were recorded falls back to its name");
+  assert.equal(flowsLib.appOfArtifact({ name: "x.png", origin: "agent", app: "nope" }), null, "an app the board does not have is none");
+  const again = saveArtifact({ origin: "agent", name: "robot.glb", data: Buffer.from("z"), session: "flowsession", app: "cad" });
+  assert.equal(again.id, made.id, "saving the same name again keeps the file, and its app");
+  assert.equal(getArtifact(again.id)!.app, "cad");
+});
+
 await test("work going between apps: which app a file and a tool are, a flow kept once, and the canvas keeps them", async () => {
   const flowsLib = await import("../src/lib/panacea/flows");
   assert.equal(flowsLib.appOfFile("robot.glb"), "cad");

@@ -146,7 +146,7 @@ first half: every bind in every built-in recipe must have something that acts on
 
 **Done (0.9.323 to 0.9.326).** Every panel left is one of two things: a control that changes the engine and shows what the engine says (all of Music's mixer, key, tempo and drums; 3D's position, size, material, bevel and repeat; Video's speed, audio, title, picture and project; Game's movement and physics), or the person's own marks and words with an Ask button that has the agent build them (chords, sections, shapes to add, markers, scenes, a level sketch, enemies, win and lose, inventory, dialogue, power-ups, export choices). Panels the engine has nothing for were deleted. The engines' windows are not yet laid out so as to leave the panels clear on a phone: that is G2.
 
-### G2. Windows the agent can lay out (gap C)
+### G2. Windows the agent can lay out (gap C) — done (0.9.327)
 
 - `panacea_arrange` gains `surfaces` and `windows`: move, resize, maximise, bring to front, tidy. These use the same
   gestures by hand.
@@ -155,6 +155,8 @@ first half: every bind in every built-in recipe must have something that acts on
 - Artifacts record the app that made them, so flows stop guessing from file type.
 
 **Done when** the agent can lay out the board as a person does, and a reload keeps every window where it was.
+
+**Done (0.9.327).** `src/lib/panacea/windows.ts` (a window's place, z, "was" when maximised; raise, maximise, tidy), kept in `Canvas.windows` with the page's `room`; `panacea_arrange` takes `windows`, `surfaces` and `tidy`; the board writes every drag, size, maximise and raise to the canvas and has a Tidy button; the hand does each by the same gesture; `workViewport` keeps a phone's maximised window clear of the bottom row; `Artifact.app` records the app that made a file and `appOfArtifact` replaces guessing from the name.
 
 ### G3. Full native surfaces (gap B)
 

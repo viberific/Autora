@@ -402,6 +402,13 @@ const PANACEA = [
     "work moves on again, into the corner chip (\"2 put away\"), where one click brings one back. Pinned panels stay. Every panel " +
     "has an ⓘ that shows why it is there and a Not this that puts it away and teaches Panacea not to offer it: give every panel a " +
     "`why` the person can read.",
+  "  Layout. The apps' windows (Music, 3D, Video, Games...) and the surfaces sit on the canvas as the person places them: dragged by the " +
+    "title bar, sized by the corner, maximised by the button on the bar (again to give it back), raised by a click, and Tidy in the board's " +
+    "buttons lays them in rows with none over another. The canvas keeps where each is, so a reload finds them. You do the same with " +
+    "panacea_arrange: `windows` [{window: \"Music\", x, y, w, h, do: maximise|restore|front}], `surfaces` [{id, x, y, w, h}], `tidy` " +
+    "(\"all\", \"windows\" or \"surfaces\"). panacea_look lists the windows and where they are, front first. A window is not on the " +
+    "canvas until its app has been opened. Lay out only what the work needs (a window the person is not using need not move); with " +
+    "Visible work on the hand does each by the same gesture.",
   "  What the person sees and does: panels with a title bar (drag it to move, the right edge to widen, the pin to keep it, × to put it " +
     "away, Shift+click to pick several, then Group); double-click the grid or press / for the picker (search the library, pick, and it " +
     "lands there; it also has blank pieces: a slider, switch, choice, notes, checklist or colour, and a Board, Flowchart or Document, " +

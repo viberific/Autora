@@ -731,6 +731,50 @@ function offerOf(id: string, name: string, about: string, w = 288): Recipe {
   return { id, name, domain: "general", about, tags: [], tree: { atom: "note", props: { text: name } }, w, origin: "builtin", uses: 0 };
 }
 
+/**
+ * An app's window or a surface laid out by hand: the title bar taken and dragged to where it goes, the corner dragged to
+ * its new size, the maximise button pressed, or the window clicked to bring it over the rest. The board's own gestures,
+ * so what the page keeps is what a person's hand would have kept (the window's place is written with the canvas).
+ */
+async function layoutStep(s: Extract<HandStep, { op: "win-move" | "win-size" | "win-max" | "win-front" }>, env: HandEnv): Promise<void> {
+  // Into view where the hand works: a title bar's end, or the corner it sizes by.
+  if (s.op === "win-size") {
+    // A little below the corner, so the corner is clear of the conversation's entry along the bottom.
+    await env.board.reveal(s.from.x + s.from.w - 12, s.from.y + s.from.h + 72).catch(() => undefined);
+    await sleep(500); // the view glides there
+  } else await env.board.reveal(s.from.x + 24, s.from.y + 12).catch(() => undefined);
+  const tile = "kind" in s && s.kind === "surface" ? `[data-surface="${CSS.escape(s.id)}"]` : `[data-work="${CSS.escape(s.id)}"]`;
+  const root = env.root.querySelector(tile);
+  if (!root) throw new Skip("not on screen");
+  const head = root.querySelector(":scope > .pw-engine-head, :scope > .pa-surface-head");
+  if (!head) throw new Skip("it has no title bar on screen");
+  if (s.op === "win-max") {
+    const label = root.classList.contains("is-max") ? `Restore ${s.title}` : `Maximise ${s.title}`;
+    await click(root.querySelector(`button[aria-label="${CSS.escape(label)}"], button[aria-label$="${CSS.escape(s.title)}"][aria-pressed]`));
+    return;
+  }
+  if (s.op === "win-front") {
+    const p = await into(head);
+    await pointerGo(p, true, head);
+    root.dispatchEvent(ptr("pointerdown", p));
+    root.dispatchEvent(ptr("pointerup", p));
+    await sleep(rand(120, 220));
+    return;
+  }
+  if (s.op === "win-move") {
+    const from = await into(head);
+    const r = head.getBoundingClientRect();
+    const dest = env.board.toScreen(s.x, s.y);
+    await drag(head, from, { x: dest.x + (from.x - r.left), y: dest.y + (from.y - r.top) });
+    return;
+  }
+  const handle = root.querySelector(":scope > .pa-resize");
+  if (!handle) throw new Skip("it has no corner to drag");
+  const from = await into(handle);
+  const z = env.board.zoom();
+  await drag(handle, from, { x: from.x + (s.w - s.from.w) * z, y: from.y + (s.h - s.from.h) * z });
+}
+
 export async function runPanaceaHand(steps: HandStep[], env: HandEnv): Promise<{ results: HandResult[] }> {
   beginHandRun();
   const results: HandResult[] = [];
@@ -805,6 +849,8 @@ export async function runPanaceaHand(steps: HandStep[], env: HandEnv): Promise<{
         const r = head.getBoundingClientRect();
         const dest = env.board.toScreen(s.x, s.y);
         await drag(head, from, { x: dest.x + (from.x - r.left), y: dest.y + (from.y - r.top) });
+      } else if (s.op === "win-move" || s.op === "win-size" || s.op === "win-max" || s.op === "win-front") {
+        await layoutStep(s, env);
       } else if (s.op === "remove") {
         if (s.from) await env.board.reveal(s.from.x, s.from.y + 12).catch(() => undefined);
         await click(env.root.querySelector(`[data-panel="${CSS.escape(s.id)}"] [data-act="close"]`));

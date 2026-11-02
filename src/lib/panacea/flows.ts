@@ -8,7 +8,7 @@
  *
  * Pure: plain JSON in and out, saved with the canvas.
  */
-import type { WorkspaceMode } from "../workspace";
+import { WORKSPACE_MODES, type WorkspaceMode } from "../workspace";
 
 export interface Flow {
   /** The app the work came from, and the one it went to (workspace modes). */
@@ -40,6 +40,16 @@ const BY_EXT: Array<[RegExp, WorkspaceMode]> = [
 export function appOfFile(name: string): WorkspaceMode | null {
   for (const [re, mode] of BY_EXT) if (re.test(name)) return mode;
   return null;
+}
+
+/**
+ * The app a kept file is the work of: the one that made it, as the file records. A file the person uploaded records none
+ * and is no app's work, so a picture they dropped in is not drawn as Photo's; a file made before apps were recorded falls
+ * back to what its name says.
+ */
+export function appOfArtifact(art: { name: string; origin?: string; app?: string }): WorkspaceMode | null {
+  if (art.app) return Object.hasOwn(WORKSPACE_MODES, art.app) ? art.app as WorkspaceMode : null;
+  return art.origin === "user" ? null : appOfFile(art.name);
 }
 
 const BY_TOOL: Array<[string, WorkspaceMode]> = [
