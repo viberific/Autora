@@ -114,10 +114,13 @@ acts on anything either. That is acceptable for a list and thin for "Week plan" 
 
 ## The plan
 
+**Status (2026-11-02):** G0 is done. G1 has started: Music is designed and partly written, but not wired in. Everything
+else is to come. How to pick up G1, with the code already written, is in `docs/PANACEA-G1-HANDOFF.md`.
+
 The rule for every step: **no control without an effect, and no effect without a control.** A new test enforces the
 first half: every bind in every built-in recipe must have something that acts on it, or the recipe is not offered.
 
-### G0. Make it honest (first, small)
+### G0. Make it honest (first, small) — done
 
 - **Stop dead panels being offered.** The rule, the picker and `panacea_place` skip any recipe whose binds nothing acts
   on, and the library says which. (A person's own saved recipes are untouched.)
@@ -126,7 +129,7 @@ first half: every bind in every built-in recipe must have something that acts on
 
 **Done when** no panel on the board is a placebo, and `npm run check` is green apart from the editor builds.
 
-### G1. Wire the engine panels to the engines (gap A)
+### G1. Wire the engine panels to the engines (gap A) — next (`docs/PANACEA-G1-HANDOFF.md`)
 
 - Each hosted engine gets an **adapter**: shared values in → the engine's own tools and state out, and the engine's
   state → values back, so a panel shows what the song or model really is. Music through the studio desk, Video through
@@ -229,9 +232,9 @@ Each fix found goes in with a test.
 | G4 | Large, in slices | One window at a time, each a release |
 | G6 | Largest | The whole-app milestones |
 
-## Questions for you
+## Decisions
 
-1. **G0:** hide the panels that do nothing now, until each is wired? Or keep them visible, marked "not connected yet"?
-2. **G3, tables:** should the native table become a full spreadsheet? Or stay a light data view that hands off to the
-   hosted Sheets for editing? The same question for the native image and Photo.
-3. **Order:** is G1 (engine panels) or G6 (whole apps) more important to you after G0?
+1. **G0:** panels that do nothing are hidden until each is wired (done).
+2. **G3, tables:** the native table becomes a full spreadsheet. A control is there when it is needed, gone when it is
+   not, and offered before it is asked for.
+3. **Order:** all of it, polished, with nothing broken, in the order above.
