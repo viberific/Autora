@@ -204,37 +204,10 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  On a phone, a swipe on the left half of the conversation sheet now only
-  opens and closes it and never scrolls the messages, even when the sheet is
-  already fully open or closed. A swipe on the right half only scrolls the
-  conversation and never resizes the sheet. Pop-up windows, such as the
-  notebook picker and the tools sheet opened from the message box, now ease
-  in when they open and ease out when they close instead of vanishing. On a
-  phone the canvas loses its top bar: the folder button in the message box is
-  the one place to add saved files, open one on the canvas or save the canvas.
-  The collapsed chat preview marks each line with the Autora mark or a person
-  icon instead of the letters A and Y. Tapping a reply's speaker while it is
-  being read now stops it rather than starting it over, and a thumbs up or
-  down lights only the reply you pressed it under, not every reply in the turn.
-  With Visible work on, everything the agent does in Panacea is done by its
-  cursor while you watch: panels summoned from the picker, every control set
-  by hand, documents typed, board cards written and linked, tables pasted and
-  files dropped, with the view following its work, on a phone too. The
-  picker also gains a blank Document. Panacea can now run a whole project:
-  a strip along the top shows its phases, the step being worked on and, when
-  opened, every step and decision; each phase has its own region of the
-  canvas, and moving to a phase glides the view there. Autora drafts the plan
-  and waits for you to approve it before moving past the first phase.
-  The agent's cursor is now one cursor for the whole board, travelling
-  between the canvas and the apps instead of living inside each one.
-  Switching the eye off mid-work hides it at once and finishes the work
-  straight away, and Stop (the button or /stop) now always stops, even
-  while the agent is waiting on an app. Its typing never opens your
-  keyboard on a phone. Every window on the board can now be moved, resized
-  and maximised (centred, filling the screen), and lines with arrows show
-  where work went between the apps, such as a 3D model into a game. On a
-  phone the web browser opens at a usable size, a swipe scrolls the page
-  (with momentum) rather than the board, and sideways swipes work too. Also: dialogs opened from a board window (such as Load) take clicks again;
-  the board's bottom bar steps aside while the agent's hand works; a phone on
-  its side keeps Send on screen; a memory rewrite waiting for your answer is
-  shown open; and panels not yet connected to their app are no longer offered.
+  Panacea fixes. Dialogs opened from a window on the board, such as Load, take
+  clicks again. With Visible work on, the agent's hand works in the Music window
+  whenever it is mostly on screen, and the board's bottom bar steps aside while
+  the hand works so it never covers a control. A phone on its side keeps the Send
+  button on screen. A memory rewrite waiting for your answer is shown open
+  instead of folded into the steps. Panels whose controls are not yet connected
+  to their app are no longer offered.
