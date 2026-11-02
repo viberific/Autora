@@ -22,7 +22,7 @@ const APP_VALUE = /^(doc|music|video|model|game|ui)\./;
 const WIRED: readonly string[] = [];
 
 /** Whether something acts on this bind. */
-export function bindWired(bind: string): boolean {
+function bindWired(bind: string): boolean {
   if (bind.startsWith("@") || !APP_VALUE.test(bind)) return true;
   return WIRED.some((w) => (w.endsWith(".") ? bind.startsWith(w) : bind === w));
 }

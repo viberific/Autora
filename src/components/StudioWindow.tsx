@@ -134,7 +134,7 @@ export function StudioWindow({ sessionId, phone }: { sessionId: string; phone: b
   // What the agent asks of this window: the things only a browser can do.
   useEffect(() => {
     const off = onStudioCommand((cmd) => {
-      if (cmd.name === "hand" && (!root.current || !isWorkVisible(root.current))) return;
+      if (cmd.name === "hand" && (!root.current || !isWorkVisible(root.current, { whole: true }))) return;
       void (async () => {
         const claim = (await fetch(`${base}/claim?id=${encodeURIComponent(cmd.id)}`, { method: "POST" }).then((r) => r.json()).catch(() => null)) as { won?: boolean } | null;
         if (!claim?.won) return;

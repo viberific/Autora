@@ -18,7 +18,8 @@ async function main() {
     await page.goto(`${app.base}/?session=${session}`);
     app.script.push({ tools: [{ name: "panacea_surface", args: { document: "# Work area", title: "Work area" } }] });
     app.script.push({ text: "Ready." });
-    await app.turn(session, "open my work");
+    // Visible work: the document and its panels are made by hand, at a person's pace.
+    await app.turn(session, "open my work", 90_000);
     const run = async (command: string) => {
       const before = await page.locator(".thread .steps").count();
       app.script.push({ tools: [{ name: "terminal", args: { command } }] });
@@ -26,8 +27,22 @@ async function main() {
       await app.turn(session, "run the command");
       await page.waitForFunction((count) => document.querySelectorAll(".thread .steps").length > count, before);
       const group = page.locator(".thread .steps").last();
+      // The reply lands under the steps and the thread follows it down: click once it has.
+      const replies = page.locator(".thread .msg.agent", { hasText: "Done." });
+      await page.waitForFunction(() => [...document.querySelectorAll(".thread .msg.agent")].some((m) => m.textContent?.includes("Done.")));
+      await replies.last().scrollIntoViewIfNeeded();
+      await page.waitForTimeout(400);
       assert.equal(await group.locator(".steps-top").getAttribute("aria-expanded"), "false", "completed/error work is contracted by default");
-      await group.locator(".steps-top").click();
+      // Clicked where it is, as a pointer does: Playwright's own scroll-into-view first sets the thread following its
+      // newest message again, which moves the header out from under the click.
+      // A phone's half sheet keeps the steps out of the way: the person opens the conversation to full to see them.
+      if ((page.viewportSize()?.width ?? 1000) < 680) {
+        await page.getByRole("slider", { name: "Conversation size", exact: true }).press("End");
+        await page.waitForFunction(() => !!document.querySelector(".conversation-flow.is-full:not([data-gliding])"));
+        await group.locator(".steps-top").scrollIntoViewIfNeeded();
+      }
+      const at = (await group.locator(".steps-top").boundingBox())!;
+      await page.mouse.click(at.x + at.width / 2, at.y + at.height / 2);
       const card = group.locator(".cell.term").last();
       await card.waitFor();
       return card;

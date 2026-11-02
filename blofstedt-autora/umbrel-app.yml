@@ -234,4 +234,7 @@ releaseNotes: >-
   and maximised (centred, filling the screen), and lines with arrows show
   where work went between the apps, such as a 3D model into a game. On a
   phone the web browser opens at a usable size, a swipe scrolls the page
-  (with momentum) rather than the board, and sideways swipes work too.
+  (with momentum) rather than the board, and sideways swipes work too. Also: dialogs opened from a board window (such as Load) take clicks again;
+  the board's bottom bar steps aside while the agent's hand works; a phone on
+  its side keeps Send on screen; a memory rewrite waiting for your answer is
+  shown open; and panels not yet connected to their app are no longer offered.

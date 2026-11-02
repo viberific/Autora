@@ -111,7 +111,7 @@ async function main() {
       assert.equal(await head.locator(".art-card", { hasText: "packing-list.txt" }).count(), 1);
 
       await head.getByRole("button", { name: "Rename the folder Trip" }).click();
-      const name = page.getByLabel("Folder name");
+      const name = page.getByLabel("Folder name", { exact: true });
       await name.fill("Summer trip");
       await name.press("Enter");
       await page.locator("h3", { hasText: /^Summer trip$/ }).waitFor({ timeout: 10_000 });

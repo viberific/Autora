@@ -8175,6 +8175,9 @@ body.is-resizing iframe { pointer-events: none; }
 .pa-empty p { margin: 0; font-size: var(--fs-md); line-height: 1.5; color: var(--text-3); }
 .pa-dock { position: absolute; left: 12px; right: 12px; bottom: 12px; display: flex; align-items: flex-end; gap: 10px; pointer-events: none; }
 .pa-dock > * { pointer-events: auto; }
+.pa-dock { transition: opacity var(--dur-2) var(--ease), transform var(--dur-2) var(--ease); }
+.hands-at-work .pa-dock { opacity: 0; transform: translateY(8px); }
+.hands-at-work .pa-dock, .hands-at-work .pa-dock > * { pointer-events: none; }
 .pa-ask { flex: 1; max-width: 520px; margin: 0 auto; display: flex; align-items: center; gap: 4px; padding: 4px 4px 4px 14px; background: var(--s1); border: 1px solid var(--border-strong); border-radius: var(--r-pill); box-shadow: var(--shadow); }
 .pa-ask:focus-within { border-color: var(--accent-line); box-shadow: var(--shadow), 0 0 0 3px rgba(var(--accent-rgb), 0.14); }
 .pa-ask input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text); font: var(--fs-base) var(--sans); outline: none; padding: 6px 0; }

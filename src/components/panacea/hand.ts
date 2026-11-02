@@ -152,7 +152,8 @@ const setNative = (el: HTMLInputElement | HTMLTextAreaElement, value: string) =>
 };
 
 /** Click into a field, clear it, and type a key at a time. */
-async function typeInto(input: HTMLInputElement | HTMLTextAreaElement | null, text: string): Promise<void> {
+/** Types `text` into a field by hand. `enough`: a search, where a person stops typing once what they want shows. */
+async function typeInto(input: HTMLInputElement | HTMLTextAreaElement | null, text: string, enough?: () => boolean): Promise<void> {
   if (!input) throw new Skip("the field is not on screen");
   await click(input);
   setNative(input, "");
@@ -167,6 +168,7 @@ async function typeInto(input: HTMLInputElement | HTMLTextAreaElement | null, te
       setNative(input, typed);
       if (typed.length === text.length) break;
       await sleep(delays[i] ?? 60);
+      if (enough && typed.length >= 3 && enough()) break;
     }
   } finally {
     pointerTyping(false);
@@ -765,10 +767,17 @@ export async function runPanaceaHand(steps: HandStep[], env: HandEnv): Promise<{
         grid.dispatchEvent(mouse("click", at, 2));
         grid.dispatchEvent(mouse("dblclick", at, 2));
         const input = await waitFor(() => env.root.querySelector<HTMLInputElement>(".pa-summon-q"), 1500);
-        await typeInto(input, s.name);
         // The library's entry when the page has it, the agent's own (handOffer.ts) otherwise.
-        const item = await waitFor(() => (s.recipe ? env.root.querySelector(`.pa-summon [data-recipe="${CSS.escape(s.recipe)}"]`) : null)
-          ?? (s.panel ? env.root.querySelector(`.pa-summon [data-recipe="${CSS.escape(offer)}"]`) : null), 2000);
+        const entry = () => (s.recipe ? env.root.querySelector(`.pa-summon [data-recipe="${CSS.escape(s.recipe)}"]`) : null)
+          ?? (s.panel ? env.root.querySelector(`.pa-summon [data-recipe="${CSS.escape(offer)}"]`) : null);
+        // As a person searches: a few letters, and the click as soon as the one wanted is near the top of the list.
+        const near = () => {
+          const it = entry();
+          const list = it?.parentElement ? [...it.parentElement.querySelectorAll("[data-recipe]")] : [];
+          return !!it && list.indexOf(it) >= 0 && list.indexOf(it) < 3;
+        };
+        await typeInto(input, s.name, near);
+        const item = await waitFor(entry, 2000);
         if (!item) throw new Skip("not in the picker");
         await click(item);
         const placed = await waitFor(() => env.root.querySelector(`[data-panel="${CSS.escape(s.id)}"]`), 2000);

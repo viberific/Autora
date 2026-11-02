@@ -51,7 +51,8 @@ async function main() {
         { name: "panacea_surface", args: { document: "# Project notes\n\nThe design stays yours.", title: "Project notes" } },
       ] });
       app.script.push({ text: "The notes are ready." });
-      await app.turn(session, "open my project notes");
+      // Visible work: the document and the three panels that come with it are made by hand, at a person's pace.
+      await app.turn(session, "open my project notes", 90_000);
       const thread = page.locator(".conversation-flow .thread");
       await thread.evaluate((node) => node.setAttribute("data-history-kept", "yes"));
       const todo = page.locator(".conversation-flow__todos .todo-dock");
@@ -108,7 +109,10 @@ async function main() {
       await page.keyboard.press("Escape");
       await capabilityDialog.waitFor({ state: "hidden" });
       assert.ok(await caps.evaluate((node) => document.activeElement === node), "Escape restores the capability trigger");
-      const load = workspace.locator(".pa-window > .pdf-bar").getByRole("button", { name: "Load", exact: true });
+      // A phone has no bar over the canvas: its Load is the composer's Artifacts sheet, which also opens a file there.
+      const load = phone
+        ? page.getByRole("button", { name: "Add a saved file or a project folder from Artifacts", exact: true })
+        : workspace.locator(".pa-window > .pdf-bar").getByRole("button", { name: "Load", exact: true });
       await load.click();
       const fileDialog = page.getByRole("dialog");
       await fileDialog.waitFor();

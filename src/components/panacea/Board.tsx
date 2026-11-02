@@ -354,6 +354,8 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
 
   const onGridDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.button !== 0 && e.button !== 1) return;
+    // A dialog a window opened is portalled to the body, but React still bubbles its presses here: they are not the grid's.
+    if (!e.currentTarget.contains(e.target as Node)) return;
     if ((e.target as HTMLElement).closest(".pa-panel, .pa-surface, .pa-summon, .pa-chrome, .pw-engine")) return;
     // A second finger is the pinch's, never a second pan.
     if (fingers.current.size > 1) return;

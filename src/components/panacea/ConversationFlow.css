@@ -738,3 +738,25 @@
     animation: none;
   }
 }
+
+/* A very short screen (a phone on its side, with the keyboard up): the collapse button goes beside the message box
+   instead of over it, so the box and its Send button fit in the height that is left. */
+@media (max-height: 300px) {
+  .conversation-flow.is-panel .conversation-flow__entry-area {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-end;
+  }
+  .conversation-flow.is-panel .conversation-flow__entry-area > * {
+    flex: 1 0 100%;
+  }
+  .conversation-flow.is-panel .conversation-flow__entry-area > .conversation-flow__entry {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .conversation-flow.is-panel .conversation-flow__entry-area > .conversation-flow__toggle {
+    flex: 0 0 auto;
+    order: 2;
+    margin: 0 0 4px 6px;
+  }
+}
