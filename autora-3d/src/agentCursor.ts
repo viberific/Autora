@@ -22,7 +22,37 @@ export interface Cue {
   tool: string;
 }
 
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+/* Halted (the person switched Visible work off, or stopped the turn: the page posts autora:halt): what is left of the
+   work is done with no pauses and no cursor. A new run (handGo after the halt is cleared) shows it again. */
+let halted = false;
+/** Pauses under way: a halt ends them at once, so a long one begun just before does not hold the rest back. */
+const pausing = new Set<() => void>();
+/** A pause in the hand's work: none once halted, and one under way ends when the halt comes. */
+export function handPause(ms: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const end = () => { clearTimeout(timer); pausing.delete(end); resolve(); };
+    const timer = setTimeout(end, halted ? 0 : ms);
+    pausing.add(end);
+  });
+}
+export function halt(): void {
+  halted = true;
+  for (const end of [...pausing]) end();
+  if (arrow) arrow.style.opacity = '0';
+  if (thought) thought.style.opacity = '0';
+}
+export function unhalt(): void {
+  halted = false;
+}
+/* The page draws the cursor (one cursor for the whole board, src/lib/pointer.ts there): this one goes unseen and only
+   says where it is, often enough for the page's to move smoothly. */
+let boardDraws = false;
+let told = 0;
+export function setBoardDraws(on: boolean): void {
+  boardDraws = on;
+  if (on && arrow) arrow.style.opacity = '0';
+}
+const sleep = handPause;
 const rand = (min: number, max: number) => min + Math.random() * (max - min);
 const gauss = (spread: number) => ((Math.random() + Math.random() + Math.random()) / 1.5 - 1) * spread;
 /** Minimum-jerk easing: the velocity profile of a reaching arm. */
@@ -161,6 +191,11 @@ export function setWho(next: Who | null) {
 function place(p: Point) {
   at = p;
   if (arrow) arrow.style.transform = `translate(${p.x}px, ${p.y}px)`;
+  const now = performance.now();
+  if (boardDraws && !halted && now - told > 30 && window.parent !== window) {
+    told = now;
+    window.parent.postMessage({ autora3d: 'cursor', x: p.x, y: p.y }, window.location.origin);
+  }
 }
 
 /** The ring that spreads where a press lands, and a pulse on the control that was pressed. */
@@ -180,9 +215,10 @@ function press(p: Point, control?: HTMLElement | null) {
 }
 
 async function goTo(to: Point, pressed: boolean, control?: HTMLElement | null) {
+  if (halted) { at = to; return; }
   ensureLayer();
   window.clearTimeout(hideTimer);
-  if (arrow) arrow.style.opacity = '1';
+  if (arrow) arrow.style.opacity = boardDraws ? '0' : '1';
   // Its first appearance is off to the side of where it is going, as a hand coming in from rest.
   const from = at ?? { x: Math.min(innerWidth - 12, Math.max(12, to.x + 90)), y: Math.max(12, to.y - 60) };
   place(from);
@@ -229,6 +265,8 @@ export interface Showing {
  * succession are shown one after the other and never overlap.
  */
 export function show(cue: Showing): Promise<void> {
+  // A new change to show: shown again after any halt.
+  halted = false;
   const run = async () => {
     let applied = false;
     try {

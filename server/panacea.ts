@@ -24,10 +24,13 @@ import express, { type Express, type Request, type Response } from "express";
 import { unzipSync, strFromU8 } from "fflate";
 import type { Value } from "../src/lib/panacea/atoms";
 import {
-  contextOf, describeCanvas, fade, MAX_PANELS, newCanvas, normalizeCanvas, refocus, removeSurface, restore,
+  contextOf, describeCanvas, enterPhase, fade, MAX_PANELS, newCanvas, normalizeCanvas, refocus, removeSurface, restore,
   setValue, snap, uid, valueProblem, wordsOwner, PANEL_MAX_W, PANEL_MIN_W, type Canvas, type Panel, type Surface,
 } from "../src/lib/panacea/canvas";
 import { panaceaSteps, stepWords } from "../src/lib/panacea/handsteps";
+import { addFlow, type Flow } from "../src/lib/panacea/flows";
+import { treeLive } from "../src/lib/panacea/wiring";
+import { addStep, createProject, decide, describeProject, linkPieces, phaseFor, setStepDone, stepById, type Project } from "../src/lib/panacea/project";
 import { addCard, applyBoardParam, boardListing, boardMarkdown, boardSvg, createBoard, editCard, editLink, linkCards, moveCard, removeCard, tidy, unlink, type BoardMode, type BoardState } from "../src/lib/panacea/board";
 import { createDoc, docStateOf, formatBlock, insertBlocks, listing, outlineOf, applyParam, deleteBlock, replaceBlockText, stateOf, toMarkdown, type DocMode } from "../src/lib/panacea/document";
 import { KINDS, type SurfaceKind } from "../src/lib/panacea/kinds";
@@ -88,11 +91,14 @@ interface Saved {
 const entries = new Map<string, Entry>();
 const listeners = new Set<(session: string) => void>();
 let pushed: (session: string, message: Record<string, unknown>) => void = () => undefined;
-let visible: () => boolean = () => false;
-/** Whether Visible work is on (server.ts says). */
-export function panaceaVisible(fn: () => boolean) {
+let visible: (session: string) => boolean = () => false;
+/** Whether Visible work is on and somebody has this chat on screen to watch it (server.ts says). */
+export function panaceaVisible(fn: (session: string) => boolean) {
   visible = fn;
 }
+
+/** How long a change waits for a window it has just opened to come up, so even the first one is done by hand. */
+const HAND_OPEN_WAIT_MS = 8_000;
 
 const validSession = (id: string) => /^[A-Za-z0-9_-]{1,80}$/.test(id);
 const savedName = (session: string) => `panacea-${session}`;
@@ -209,10 +215,11 @@ function saveProfile() {
   saveDoc(PROFILE, () => p);
 }
 
-/** Every recipe: the built-ins, with their use counts, and the ones learned since. */
+/** Every recipe that does what it shows: the built-ins, with their use counts, and the ones learned since; none with a
+    control nothing acts on (src/lib/panacea/wiring.ts). */
 function allRecipes(): Recipe[] {
   const p = profileNow();
-  return [...BUILTINS.map((r) => ({ ...r, uses: p.uses[`recipe:${r.id}`] ?? 0 })), ...learned()];
+  return [...BUILTINS.map((r) => ({ ...r, uses: p.uses[`recipe:${r.id}`] ?? 0 })), ...learned()].filter((r) => treeLive(r.tree));
 }
 
 const findRecipe = (id: string): Recipe | undefined => allRecipes().find((r) => r.id === id);
@@ -346,9 +353,23 @@ async function command(session: string, name: string, args: Record<string, unkno
   });
 }
 
+/** Work went from one app to another (src/lib/panacea/flows.ts): noted on the chat's canvas, for the line between them. */
+export function noteFlow(session: string, flow: Omit<Flow, "at">): void {
+  if (!validSession(session) || flow.from === flow.to) return;
+  const e = entryFor(session);
+  const next = structuredClone(e.canvas);
+  next.flows = addFlow(next.flows ?? [], { ...flow, at: Date.now() });
+  e.quiet = e.rev + 1;
+  commit(session, e, next, "agent");
+}
+
 /** With Visible work on and the window up, the change is done there by the agent's hand while this waits. */
 async function byHand(session: string, e: Entry, next: Canvas): Promise<string | null> {
-  if (!visible() || !e.open || !e.ready) return null;
+  if (!visible(session) || !e.open) return null;
+  /* The call has just opened the window (setOpen marks it not ready until the page has drawn it): wait for it, or
+     the first change of a chat -- usually the one the person is watching for -- appears instead of being done. */
+  for (let waited = 0; !e.ready && waited < HAND_OPEN_WAIT_MS; waited += 150) await sleep(150);
+  if (!e.ready) return null;
   const plan = panaceaSteps(e.canvas, next);
   if (!plan.steps.length) return null;
   type Reply = { results?: Array<{ i: number; ok: boolean; error?: string }> } | null;
@@ -454,6 +475,10 @@ async function suggestNow(session: string): Promise<void> {
 interface PanaceaHooks {
   cwd: string;
   showFile?: (file: { id: string; name: string; mime: string; size: number }) => void;
+  /** The turn was stopped: a change waiting on the window's hand is not made. */
+  cancelled?: () => boolean;
+  /** Called when the turn is stopped: the wait for the window's hand ends then. */
+  onCancel?: (stop: () => void) => void;
 }
 
 interface Outcome {
@@ -603,6 +628,81 @@ const boardWho = (b: BoardState) => (b.mode === "agent" ? "Autora may write card
 function edit(session: string, name: string, c: Canvas, args: Record<string, any>, hooks: PanaceaHooks): { text: string; preview: string } {
   const p = profileNow();
   switch (name) {
+    case "panacea_project": {
+      const ops: unknown[] = Array.isArray(args.ops) ? args.ops : [];
+      if (!ops.length) refuse("Pass `ops`: a list like [{\"op\": \"start\", \"title\": \"Yoga studio site\", \"phases\": [{\"label\": \"Plan\", \"steps\": [\"Pages and data\"]}, \"Design\", \"Build\", \"Check\", \"Ship\"], \"stack\": \"Plain HTML, CSS and JS\"}].");
+      if (ops.length > 40) refuse("At most 40 ops in one call.");
+      const done: string[] = [];
+      const need = (): Project => c.project ?? refuse("There is no project on this canvas yet: start one with {op: \"start\"}.");
+      const take = (r: Project | string, where: string): Project => (typeof r === "string" ? refuse(`${where}: ${r}`) : r);
+      ops.forEach((raw, i) => {
+        const op = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+        const kind = String(op.op ?? "");
+        const where = `op ${i + 1} (${kind || "?"})`;
+        switch (kind) {
+          case "start": {
+            if (c.project && op.replace !== true) refuse(`${where}: this canvas already has the project "${c.project.title}". Change it with the other ops, or pass replace: true if the person asked for a new one.`);
+            const phases = Array.isArray(op.phases) ? (op.phases as Array<string | { label: string; steps?: string[] }>) : undefined;
+            const made = take(createProject({ title: String(op.title ?? ""), phases, stack: typeof op.stack === "string" ? op.stack : undefined, by: "agent" }), where);
+            c.project = made;
+            // What is on the canvas already is the first phase's work.
+            for (const s of c.surfaces) s.phase ??= made.phase;
+            done.push(`started the project "${made.title}" with ${made.phases.map((x) => x.label).join(", ")}; the plan waits for the person's approval`);
+            break;
+          }
+          case "approve": {
+            const pr = need();
+            pr.approved = true;
+            done.push("marked the plan approved (only because the person said so)");
+            break;
+          }
+          case "phase": {
+            const pr = need();
+            const to = phaseFor(pr, op.to) ?? refuse(`${where}: there is no phase "${String(op.to)}". Phases: ${pr.phases.map((x) => `${x.id} (${x.label})`).join(", ")}.`);
+            if (!pr.approved && to.id !== pr.phases[0]!.id) refuse(`${where}: the person has not approved the plan, so the work stays in ${pr.phases[0]!.label}. Show them the plan and ask; they approve it in the project strip, or say so, and then you call {op: "approve"}.`);
+            if (enterPhase(c, to.id)) done.push(`moved to ${to.label}`);
+            break;
+          }
+          case "step": {
+            const pr = need();
+            const ph = op.phase === undefined ? pr.phases.find((x) => x.id === pr.phase)! : phaseFor(pr, op.phase) ?? refuse(`${where}: there is no phase "${String(op.phase)}".`);
+            c.project = take(addStep(pr, ph.id, String(op.text ?? ""), "agent"), where);
+            done.push(`added a step to ${ph.label}`);
+            break;
+          }
+          case "done":
+          case "undone": {
+            const pr = need();
+            const id = String(op.id ?? "");
+            if (!stepById(pr, id)) refuse(`${where}: there is no step "${id}".`);
+            c.project = take(setStepDone(pr, id, kind === "done"), where);
+            done.push(`${kind === "done" ? "ticked" : "unticked"} ${id}`);
+            break;
+          }
+          case "decide": {
+            c.project = take(decide(need(), String(op.text ?? ""), "agent"), where);
+            done.push("recorded a decision");
+            break;
+          }
+          case "link": {
+            c.project = take(linkPieces(need(), String(op.from ?? ""), String(op.to ?? ""), String(op.why ?? "")), where);
+            done.push(`linked ${String(op.from)} to ${String(op.to)}`);
+            break;
+          }
+          case "stack": {
+            const pr = need();
+            const stack = typeof op.stack === "string" ? op.stack.trim().slice(0, 80) : "";
+            if (!stack) refuse(`${where} needs \`stack\`: what the app is built with, in a few words.`);
+            pr.stack = stack;
+            done.push(`set the stack to ${stack}`);
+            break;
+          }
+          default:
+            refuse(`${where}: op is start, approve, phase, step, done, undone, decide, link or stack.`);
+        }
+      });
+      return { text: `${done.join("; ")}.\n${describeProject(c.project!)}`, preview: done[0] ?? "project" };
+    }
     case "panacea_place": {
       if (c.panels.length >= MAX_PANELS) refuse(`The canvas has ${MAX_PANELS} panels; put some away first (panacea_arrange remove).`);
       const why = typeof args.why === "string" && args.why.trim() ? args.why.trim() : refuse("Say `why` the panel is here, in a sentence to the person: it is shown under the panel's ⓘ.");
@@ -614,7 +714,9 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
       let placed: Panel | { error: string };
       if (args.parts !== undefined && (args.recipe !== undefined || args.tree !== undefined)) refuse("Give exactly one of `parts`, `recipe` or `tree`, not more than one.");
       if (typeof args.recipe === "string" && args.recipe) {
-        const recipe = findRecipe(args.recipe) ?? refuse(`There is no recipe "${args.recipe}". panacea_look with \`library\` finds them.`);
+        const recipe = findRecipe(args.recipe) ?? refuse(BUILTINS.some((r) => r.id === args.recipe)
+          ? `"${args.recipe}" is not connected to its app yet: its controls would change nothing, so it is not placed. Work in the app's own window, or compose a panel bound to what the canvas does act on.`
+          : `There is no recipe "${args.recipe}". panacea_look with \`library\` finds them.`);
         if (state === "ghost" && quieted(p, recipe.id)) refuse(`The person has waved "${recipe.name}" away more than once; do not offer it unasked.`);
         placed = placeRecipe(c, recipe, { near, state, why, by: "agent", side: preferredSide(p), title: typeof args.title === "string" ? args.title : undefined, ...(w ? { w: Math.min(PANEL_MAX_W, Math.max(PANEL_MIN_W, snap(w))) } : {}) });
       } else if (args.tree !== undefined || args.parts !== undefined) {
@@ -1070,11 +1172,15 @@ export async function runPanaceaTool(session: string, name: string, args: Record
       case "panacea_surface":
       case "panacea_doc":
       case "panacea_board":
-      case "panacea_bespoke": {
+      case "panacea_bespoke":
+      case "panacea_project": {
         const next = structuredClone(e.canvas);
         const done = edit(session, name, next, args, hooks);
         setOpen(session, true);
+        // Stop ends the wait for the window's hand at once (the page halts the hand itself: src/lib/handHalt.ts).
+        hooks.onCancel?.(() => rejectAll(session, "Stopped by the person."));
         const hand = await byHand(session, e, next);
+        if (hooks.cancelled?.()) return { ok: false, summary: "Stopped by the person before this was done: the canvas keeps what the hand had done so far, and nothing more." };
         if (hand) e.quiet = e.rev + 1;
         commit(session, e, next, "agent");
         return { ok: true, summary: `${done.text}${hand ? ` ${hand}` : ""}`, preview: done.preview };

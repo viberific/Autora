@@ -47,8 +47,9 @@ async function main() {
       await page.getByRole("button", { name: "Take control" }).first().click();
       for (let i = 0; i < 30 && !(await held()).includes("app"); i++) await sleep(100);
       assert.deepEqual(await held(), ["app"]);
-      await page.getByRole("button", { name: "Hand back" }).waitFor({ timeout: 5000 });
-      await page.getByRole("button", { name: "Hand back" }).click();
+      // The window's own button (the held strip's "Hand back to agent" says the same, from the top).
+      await page.getByRole("button", { name: "Hand back", exact: true }).waitFor({ timeout: 5000 });
+      await page.getByRole("button", { name: "Hand back", exact: true }).click();
       for (let i = 0; i < 30 && (await held()).length > 0; i++) await sleep(100);
       assert.deepEqual(await held(), []);
       await page.getByRole("button", { name: "Take control" }).first().waitFor({ timeout: 5000 });

@@ -1288,9 +1288,22 @@ export function useSpeech(): Speech {
       // has no say in whether the new one is speaking.
       if (stamp !== line.current.stamp()) return;
       inLine.current = Math.max(0, inLine.current - 1);
-      if (inLine.current === 0) setSpeaking(false);
+      if (inLine.current !== 0) return;
+      /* A streamed rendering is done when its last chunk is handed to the audio
+         thread, which can be well before it has been heard. Still speaking
+         until then: the speaker under the reply reads "speaking", so pressing
+         it again stops the voice rather than starting the reply over. */
+      void (async () => {
+        const gen = generation.current;
+        while (gen === generation.current && inLine.current === 0 && playing.current.size > 0 && output.current?.state === "running") {
+          const before = playhead.current;
+          await heardOut();
+          if (playhead.current === before && playing.current.size > 0) await new Promise<void>((r) => window.setTimeout(r, 120));
+        }
+        if (stamp === line.current.stamp() && inLine.current === 0) setSpeaking(false);
+      })();
     });
-  }, []);
+  }, [heardOut]);
 
   /** The browser's voice, in its turn on the line. */
   const sayBrowser = useCallback((text: string) => {

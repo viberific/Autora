@@ -151,7 +151,7 @@ await test("the Music manual says that with Visible work on the studio tools are
 await test("the Panacea manual teaches the canvas as it is: no toolbar, the library and atoms, ghosts, fading, the history", () => {
   const p = manualText("panacea");
   for (const needle of ["single workspace", "Capabilities", "share one camera", "no nested canvas", "right-side icons", "same dotted grid", "about twenty ready-made panels", "at most 8 controls in view", "Keep in library", "ghost", "Not now",
-    "Not this", "put away", "double-click the grid or press /", "Ask Autora", "Undo, Redo", "behind More", "denser panels", "Whose choices"]) {
+    "Not this", "put away", "double-click the grid or press /", "Ask Autora", "Undo, Redo", "behind More", "denser panels", "Whose choices", "Open on canvas"]) {
     assert.ok(p.includes(needle), `the Panacea manual lacks "${needle}"`);
   }
 });
@@ -192,9 +192,14 @@ await test("the Panacea manual distinguishes real flowcharts from idea boards", 
 
 await test("the Panacea manual says that with Visible work on its changes are done in the window by hand, and what has no control", () => {
   const p = manualText("panacea");
-  for (const needle of ["With Visible work on", "by your hand", "name typed in the picker", "dragging that slider", "dragged by its title bar", "finished canvas goes in", "With Visible work off"]) {
+  for (const needle of ["With Visible work on", "every Panacea call that changes the canvas is done there by your hand", "name typed in the picker",
+    "listed there as yours", "dragging a slider", "More opened", "dragged by its title bar", "a table pasted, a file dropped",
+    "a document's words typed in", "linked by dragging a dot", "finished canvas goes in", "With Visible work off", "a Board, Flowchart or Document",
+    "panacea_project", "project strip", "only then can you move past the first phase", "picker (Project)",
+    "moves by its title bar", "Maximise", "arrow halfway"]) {
     assert.ok(p.includes(needle), `the Panacea manual lacks "${needle}"`);
   }
+  assert.ok(!p.includes("not done by hand yet"), "the Panacea manual still says writing is not done by hand");
 });
 
 await test("the PDF manual says that with Visible work on pdf_edit is done in the window by hand, and what is not", () => {
@@ -257,7 +262,7 @@ await test("a tool finds its window's manual, and a tool with no window finds no
 
 await test("the overview every turn explains the layout and points at the manuals", async () => {
   const overview = windowsOverview();
-  for (const needle of ["Panacea is the main area", "slim strip along the foot of the workspace", "Open Panacea", "without a message", "Capabilities", "right-side icon dock", "stay mounted", "manual jump", "Follow", "tool_manual", "Shell commands", "Show all work", "Ask Autora bar", "docked beside it", "edge tab", "bottom sheet", "left half", "Canvas only", "TODO", "Retract conversation", "contracted by default", "compact preview", "pinch-zoom"]) {
+  for (const needle of ["Panacea is the main area", "slim strip along the foot of the workspace", "Open Panacea", "without a message", "Capabilities", "right-side icon dock", "stay mounted", "manual jump", "Follow", "tool_manual", "Shell commands", "Show all work", "Ask Autora bar", "docked beside it", "edge tab", "bottom sheet", "left half", "where a swipe never scrolls", "Canvas only", "TODO", "Retract conversation", "contracted by default", "compact preview", "pinch-zoom"]) {
     assert.ok(overview.includes(needle), `the overview lacks ${needle}`);
   }
   assert.doesNotMatch(overview, /x on its tab|Autora Terminal|Working on/);

@@ -240,7 +240,9 @@ export async function startApp(opts: { env?: Record<string, string>; port?: numb
   app.stop = async () => {
     await down();
     llm.close();
-    fs.rmSync(home, { recursive: true, force: true });
+    /* Under load the server (or a snapshot's git, still writing) can outlive the wait in down(): retry, and a temporary
+       folder left behind is not a test that failed. */
+    try { fs.rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }); } catch { /* left for the OS */ }
   };
   app.restart = async () => {
     await down();

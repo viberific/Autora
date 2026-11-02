@@ -76,7 +76,7 @@ async function main() {
     };
     let pointer = 0;
     const watch = setInterval(() => {
-      void page.locator(".app-pane[data-pane=video] .office-cursor-name").count().then((c) => { if (c) pointer++; }).catch(() => undefined);
+      void page.locator(".agent-pointer-layer.is-on").count().then((c) => { if (c) pointer++; }).catch(() => undefined); // the board's one cursor
     }, 120);
     const film = (tag: string) => {
       if (!shots) return { stop: async () => undefined };

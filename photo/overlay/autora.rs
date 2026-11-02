@@ -112,6 +112,19 @@ pub fn start(ctx: &egui::Context) {
         if !data.is_object() {
             return;
         }
+        // Visible work switched off, or the turn stopped: the rest of the edit is done at once, with no cursor.
+        if Reflect::get(&data, &"type".into()).ok().and_then(|v| v.as_string()).as_deref() == Some("autora:halt") {
+            let stop = Reflect::get(&data, &"stop".into()).ok().and_then(|v| v.as_bool()).unwrap_or(false);
+            HAND.with(|h| {
+                let mut h = h.borrow_mut();
+                h.halted = true;
+                if stop {
+                    h.stopping = true;
+                }
+            });
+            ctx.request_repaint();
+            return;
+        }
         let kind = Reflect::get(&data, &NS.into()).ok().and_then(|v| v.as_string());
         if kind.as_deref() == Some("hand") {
             if let Some(json) = Reflect::get(&data, &"json".into()).ok().and_then(|v| v.as_string()) {
@@ -953,6 +966,14 @@ struct Hand {
     ended: f64,
     told: f64,
     bend_side: f32,
+    /// The page draws the cursor (one for the whole board): this one is not painted, only said where it is.
+    board: bool,
+    /// Halted (the page posted autora:halt): no cursor, and the job's clock runs ahead so it finishes at once.
+    halted: bool,
+    /// How far the job's clock has run ahead of the real one since it was halted.
+    skew: f64,
+    /// The turn was stopped: the job ends after the command in hand, with no more begun.
+    stopping: bool,
 }
 
 thread_local! {
@@ -992,6 +1013,10 @@ fn hand_take(json: &str) {
     }
     HAND.with(|h| {
         let mut h = h.borrow_mut();
+        h.halted = false;
+        h.skew = 0.0;
+        h.stopping = false;
+        h.board = v.get("who").and_then(|w| w.get("board")).and_then(|x| x.as_bool()).unwrap_or(false);
         if let Some(who) = v.get("who") {
             h.name = who.get("name").and_then(|x| x.as_str()).unwrap_or("Autora").chars().take(24).collect();
             h.color = who.get("color").and_then(|x| x.as_str()).and_then(|c| egui::Color32::from_hex(c.trim()).ok());
@@ -1121,7 +1146,14 @@ fn hand_pump(app: &mut PhotocraftApp) {
         return;
     }
     ctx.request_repaint();
-    let now = now_ms();
+    // Halted, each frame moves the job's clock on: motions and pauses end at once, while a dialog still has frames to open.
+    let now = HAND.with(|h| {
+        let mut h = h.borrow_mut();
+        if h.halted {
+            h.skew += 400.0;
+        }
+        now_ms() + h.skew
+    });
     let k = per_css_px(&ctx);
     // The hand is taken out while it works, and put back after, so the app can be borrowed freely in between.
     let mut h = HAND.with(|h| std::mem::take(&mut *h.borrow_mut()));
@@ -1129,6 +1161,9 @@ fn hand_pump(app: &mut PhotocraftApp) {
         HAND.with(|x| *x.borrow_mut() = h);
         return;
     };
+    if h.stopping {
+        j.stop = true;
+    }
     let mut events: Vec<egui::Event> = Vec::new();
     let at = h.at.unwrap_or_else(|| ctx.content_rect().center());
     let mut pos = at;
@@ -1423,10 +1458,13 @@ fn hand_finish(app: &PhotocraftApp, j: &HandJob) {
 
 /// After the app ran: the agent's cursor over everything, in its colour and with its name, while it works and a moment after.
 fn hand_draw(ctx: &egui::Context) {
-    let (at, busy, ended, name, color) = HAND.with(|h| {
+    let (at, busy, ended, name, color, board, halted) = HAND.with(|h| {
         let h = h.borrow();
-        (h.at, h.job.is_some(), h.ended, h.name.clone(), h.color)
+        (h.at, h.job.is_some(), h.ended, h.name.clone(), h.color, h.board, h.halted)
     });
+    if halted {
+        return;
+    }
     let Some(at) = at else { return };
     let now = now_ms();
     if !busy && now - ended > 1500.0 {
@@ -1436,18 +1474,21 @@ fn hand_draw(ctx: &egui::Context) {
         ctx.request_repaint_after(Duration::from_millis(100));
     }
     let k = per_css_px(ctx);
-    let color = color.unwrap_or(egui::Color32::from_rgb(110, 91, 255));
-    let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Debug, egui::Id::new("autora-hand")));
-    let arrow: Vec<egui::Pos2> = [(0.0, 0.0), (0.0, 17.0), (4.6, 13.2), (7.6, 20.0), (10.2, 18.9), (7.3, 12.4), (12.6, 12.4)].iter().map(|(x, y)| at + egui::vec2(*x, *y) * k).collect();
-    painter.add(egui::Shape::convex_polygon(arrow, color, egui::Stroke::new(1.4 * k, egui::Color32::WHITE)));
-    let label = if name.is_empty() { "Autora".to_string() } else { name };
-    let galley = painter.layout_no_wrap(label, egui::FontId::proportional(11.0 * k), egui::Color32::WHITE);
-    let tag = egui::Rect::from_min_size(at + egui::vec2(14.0, 18.0) * k, galley.size() + egui::vec2(12.0, 6.0) * k);
-    painter.rect_filled(tag, 6.0 * k, color);
-    painter.galley(tag.min + egui::vec2(6.0, 3.0) * k, galley, egui::Color32::WHITE);
-    // Where it is, for the few words the page shows beside it; a few times a second is enough.
+    if !board {
+        let color = color.unwrap_or(egui::Color32::from_rgb(110, 91, 255));
+        let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Debug, egui::Id::new("autora-hand")));
+        let arrow: Vec<egui::Pos2> = [(0.0, 0.0), (0.0, 17.0), (4.6, 13.2), (7.6, 20.0), (10.2, 18.9), (7.3, 12.4), (12.6, 12.4)].iter().map(|(x, y)| at + egui::vec2(*x, *y) * k).collect();
+        painter.add(egui::Shape::convex_polygon(arrow, color, egui::Stroke::new(1.4 * k, egui::Color32::WHITE)));
+        let label = if name.is_empty() { "Autora".to_string() } else { name };
+        let galley = painter.layout_no_wrap(label, egui::FontId::proportional(11.0 * k), egui::Color32::WHITE);
+        let tag = egui::Rect::from_min_size(at + egui::vec2(14.0, 18.0) * k, galley.size() + egui::vec2(12.0, 6.0) * k);
+        painter.rect_filled(tag, 6.0 * k, color);
+        painter.galley(tag.min + egui::vec2(6.0, 3.0) * k, galley, egui::Color32::WHITE);
+    }
+    // Where it is: for the page's cursor when the page draws it (often), else for the few words beside it.
     let told = HAND.with(|h| h.borrow().told);
-    if busy && now - told > 80.0 {
+    let every = if board { 30.0 } else { 80.0 };
+    if busy && now - told > every {
         HAND.with(|h| h.borrow_mut().told = now);
         let msg = Object::new();
         let _ = Reflect::set(&msg, &NS.into(), &"cursor".into());

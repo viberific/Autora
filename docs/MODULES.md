@@ -577,7 +577,7 @@ Spectra's fetched renderer is most of what is on disk.
   3D, game, photo, app and browser engines run inside that shell alongside the native Canvas; their models, APIs, hand-work
   handlers and sandboxing are not replaced. `panacea/ConversationFlow.tsx` hosts the original Thread and composer docked beside the scene
   (a right-hand panel on desktop, width draggable and remembered via `panacea/chatLayout.ts`; a three-height bottom sheet on a
-  phone, moved by swipes on its left half only, the right half scrolling the list; while it moves it lies over a canvas held
+  phone, moved by swipes on its left half only, which never scroll (every move there is claimed from the first), the right half only scrolling the list; while it moves it lies over a canvas held
   at one size, `data-gliding`, so only the sheet is laid out per frame), never over it at rest. It keeps complete history mounted when retracted (edge tab on desktop, canvas-only on a phone) and
   attaches TODO above the entry. `lib/frameCoordinates.ts` subtracts the entry and rail only where they overlap the board.
   `src/lib/steps.ts` contracts all tool/output/file activity in chat and lifts nested browser questions/permissions out of folds;
@@ -588,7 +588,10 @@ Spectra's fetched renderer is most of what is on disk.
   and server names what else must learn of it; plan: `docs/PANACEA-ENGINE.md`), `surfaces.ts` (what the image and data each
   publish, tables: `tableFrom`, `filteredRows`, `aggregate`), `canvas.ts` (the document, `normalizeCanvas`, placement `placeFor` / `nearestFree`, `refocus` /
   `fade` / `restore`, values), `library.ts` (180 built-in recipes, `instantiate`, `searchLibrary`), `document.ts` (the document engine: ProseMirror schema, selection-driven parameters, `applyParam`, the agent's block-level hands; pure, runs on server and page; `tests/panacea-doc.test.ts`), `board.ts` (the board: cards, links, Autora's questions, who writes, tidy and the Markdown outline; pure; drawn by `components/panacea/BoardView.tsx`; `tests/panacea-board.test.ts`), `rules.ts` (starters and offers,
-  `addSurfaceTo`, `placeRecipe` / `placeComposed`), `profile.ts` (what is learned), `handsteps.ts` (Visible work's plan). One canvas
+  `addSurfaceTo`, `placeRecipe` / `placeComposed`), `profile.ts` (what is learned), `handsteps.ts` (Visible work's plan), `project.ts` (a project on the canvas:
+  phases each with a region `REGION_W` apart, steps, decisions, links, the stack; `canvas.ts` `phaseView` / `phaseBox` /
+  `enterPhase` place work in the current phase's region; the agent's `panacea_project`, the person's
+  `components/panacea/ProjectStrip.tsx`; plan: `docs/PANACEA-NEXT.md`). One canvas
   per chat lives in `panacea.ts` (`panacea-<session>.json`, removed with the chat; `forgetSession` calls `dropPanacea`); the library
   of learned recipes (`panacea-library.json`) and the profile (`panacea-profile.json`) are one per install. The wire is Music's:
   `PUT /doc` with the rev seen (409 when the agent changed it since), `panaceadesk` state and `panacea.command` over the socket
@@ -767,6 +770,9 @@ Spectra's fetched renderer is most of what is on disk.
   identifies the work the camera may follow; the phone falls back to `busiestSurface` for a live page. A manual icon jump stops Follow and
   holds the camera while other surfaces open. Jumping to work keeps every engine mounted in the same spatial scene;
   it never changes exclusive visibility. Typing, dragging and pins block automatic camera movement.
+- The agent's hand halting (`lib/handHalt.ts`): `haltHands(stop)` on Visible off (the rest done unseen) or Stop (no more
+  steps); every in-page hand's pauses are `handPause`, and frames get `autora:halt`. `pointerFollow` in `lib/pointer.ts` is
+  the board's one cursor following a frame's reported hand (docs/VISIBLE-WORK.md).
 - The agent's pointer outside the Office windows: `lib/pointer.ts` (a layer on the body: arc, rest, press ring, typed
   words beside it; it goes only where a real element or a frame-confirmed point is). Music points at the clips that
   lit up (`StudioWindow`). The PDF window plays the server's cues (`cueForItem`, with the page's size so a place on a
@@ -1041,7 +1047,7 @@ inside the editor (the hand, `hand_*` in `photo/overlay/autora.rs`), live while 
 played over a picture the server changed. Shell commands have no terminal window or cursor replay: their streamed
 output is a collapsible card in the conversation, whether Visible work is on or off.
 **Whose cursor**: `lib/cursorWho.ts` reads the chat's `agent.started` line and lays `--agent-accent(-rgb)` on the
-page, which every cursor style reads; the tag carries the agent's name and the polygon of its mark (`CursorTag`,
+page, which every cursor style reads; the tag carries the agent's name and the polygon of its mark (`lib/pointer.ts` on the board,
 `pointer.ts`); the browser's page pointer is told by `LiveBrowser`'s `who` hook (`cursorWhoFor` in `server.ts`), the
 3D frame by `{autora3d:"who"}`. All of it is off with the
 agent-cursor switch. Tests: `thought.test.ts`,

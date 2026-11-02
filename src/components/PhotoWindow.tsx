@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useFullscreen } from "../lib/fullscreen";
 import { onPhotoHand, onPhotoState, photoStateNow, usePhotoState, type PhotoHand } from "../lib/photodesk";
-import { clearCursor, reportCursor } from "../lib/cursorPos";
+import { clearCursor } from "../lib/cursorPos";
+import { pointerFollow } from "../lib/pointer";
 import { framePoint, isWorkVisible } from "../lib/frameCoordinates";
 import { getCursorWho, whoColors } from "../lib/cursorWho";
 import { IconImage, IconMaximize, IconMinimize } from "./Icons";
@@ -118,7 +119,8 @@ export function PhotoWindow({ sessionId, phone }: { sessionId: string; phone: bo
     }
     const answer = await new Promise<{ json: string; bytes: ArrayBuffer | null }>((resolve) => {
       handing.current.set(hand.id, (json, bytes) => resolve({ json, bytes }));
-      post({ autoraPhoto: "hand", json: JSON.stringify({ id: hand.id, commands: hand.commands, who: { name: getCursorWho().name, color: cursorColor() } }) });
+      // The board draws the cursor (one for the whole board): the editor only says where its hand is.
+      post({ autoraPhoto: "hand", json: JSON.stringify({ id: hand.id, commands: hand.commands, who: { name: getCursorWho().name, color: cursorColor(), board: true } }) });
     });
     handing.current.delete(hand.id);
     let said: { results?: unknown; error?: unknown } = {};
@@ -170,7 +172,7 @@ export function PhotoWindow({ sessionId, phone }: { sessionId: string; phone: bo
       } else if (msg.autoraPhoto === "cursor" && typeof msg.x === "number" && typeof msg.y === "number") {
         // The agent's cursor in the editor, for the few words beside it (AgentThought).
         const point = framePoint(frame.current, { x: msg.x, y: msg.y });
-        if (point) reportCursor(point.x, point.y);
+        if (point) pointerFollow(point);
       }
     };
     window.addEventListener("message", onMessage);

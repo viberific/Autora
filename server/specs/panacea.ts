@@ -103,7 +103,7 @@ export const panaceaSPECS: ToolSpec[] = [
     risky: true,
     description:
       "Put a panel on the canvas, beside what it works on and on the side the person puts panels. Either `recipe` (a library id: the library has about twenty " +
-      "ready-made panels for each kind of work, and what the person has used), `tree` (a panel you compose from atoms, with a `title`), or `parts` " +
+      "ready-made panels for each kind of work the canvas acts on, and what the person has used; never one whose controls change nothing), `tree` (a panel you compose from atoms, with a `title`), or `parts` " +
       "(nested reusable building blocks from the library). Choose exactly one. A parts root is either {recipe:\"photo.light\",advanced:true} or " +
       "{atom:\"stack\"|\"row\"|\"group\",props:{label:\"Essentials\",gap:8},children:[parts...]}; layouts can contain other layouts and recipe references. " +
       "There are at most 32 parts and 5 nesting levels, with the same expanded atom/control limits as a tree. It compiles into an ordinary panel, " +
@@ -170,6 +170,46 @@ export const panaceaSPECS: ToolSpec[] = [
         focus: { type: ["string", "null"] },
         name: { type: "string" },
       },
+    },
+  },
+  {
+    name: "panacea_project",
+    group: "files",
+    risky: true,
+    description:
+      "Run a whole project on the canvas: its phases (each with a region of the canvas, side by side), the steps in each, the phase being worked on, the " +
+      "decisions made and the links between pieces. The person sees it as the strip along the top of the canvas and can change all of it there. `ops`, in " +
+      "order, all or none: {op:\"start\", title, phases:[\"Plan\", {label:\"Build\", steps:[\"...\"]}, ...], stack} (phases default to Plan, Make, Check; " +
+      "for an app or a site use Plan, Design, Build, Check, Ship, and choose the stack yourself, saying it here for the person to see); {op:\"phase\", to} " +
+      "moves the work and the view to a phase (new surfaces land in its region; panels not about one surface come along); {op:\"step\", text, phase?}; " +
+      "{op:\"done\"|\"undone\", id}; {op:\"decide\", text} records a decision (the person's choices especially); {op:\"link\", from, to, why} joins two " +
+      "pieces by id (a card to a document, a surface to a file); {op:\"stack\", stack}. You draft the plan; the person approves it. Until they do, you " +
+      "cannot move past the first phase: show them the plan, and when they approve it in the strip or say so in the chat, {op:\"approve\"}. Tick a step " +
+      "when it is done, move phase when the work does. Returns the project as it is now.",
+    parameters: {
+      type: "object",
+      properties: {
+        ops: {
+          type: "array", maxItems: 40,
+          items: {
+            type: "object",
+            properties: {
+              op: { type: "string", enum: ["start", "approve", "phase", "step", "done", "undone", "decide", "link", "stack"] },
+              title: { type: "string" },
+              phases: { type: "array", items: { type: ["string", "object"] }, description: "Names, or {label, steps: [text]}." },
+              stack: { type: "string" },
+              replace: { type: "boolean", description: "start: replace the project there (only when the person asked for a new one)." },
+              to: { type: "string", description: "phase: the phase id or name; link: the piece it joins to." },
+              phase: { type: "string", description: "step: the phase to add it to (default: the one being worked on)." },
+              id: { type: "string", description: "done/undone: the step id." },
+              text: { type: "string" },
+              from: { type: "string" }, why: { type: "string" },
+            },
+            required: ["op"],
+          },
+        },
+      },
+      required: ["ops"],
     },
   },
   {

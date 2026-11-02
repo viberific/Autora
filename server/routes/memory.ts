@@ -11,7 +11,7 @@ import { tidyRecords } from "../mindrules";
 import { save, state } from "../state";
 import { MOODS } from "../threadlife";
 
-export function memoryRoutes(app: Express, deps: { mind: MemoryGraph }) {
+export function memoryRoutes(app: Express, deps: { mind: MemoryGraph; haltHands?: () => void }) {
   const { mind } = deps;
   // 8. Memory / Knowledge Web
   app.get("/api/memory", (req: Request, res: Response) => {
@@ -58,6 +58,8 @@ export function memoryRoutes(app: Express, deps: { mind: MemoryGraph }) {
     if (typeof req.body?.on === "boolean") {
       state.agentCursor = req.body.on;
       save();
+      // Switched off: any hand at work in any window stops showing at once (src/lib/handHalt.ts).
+      if (!req.body.on) deps.haltHands?.();
     }
     res.json({ on: state.agentCursor });
   });

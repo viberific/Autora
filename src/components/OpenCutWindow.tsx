@@ -7,11 +7,12 @@ import { SaveButton } from "./SaveButton";
 import { LoadButton } from "./LoadButton";
 import { useFullscreen } from "../lib/fullscreen";
 import { along, humanRoute, restMs, routeMs, typingDelays, type Point } from "../lib/humanPath";
-import { clearCursor, reportCursor } from "../lib/cursorPos";
+import { clearCursor } from "../lib/cursorPos";
+import { beginHandRun, handPause, handsHalted, handsStopped } from "../lib/handHalt";
+import { pointerFollow, pointerTyping } from "../lib/pointer";
 import { framePoint, isWorkVisible } from "../lib/frameCoordinates";
 import { onVideoCommand, useVideoState, type VideoCommand } from "../lib/opencut";
 import { IconMaximize, IconMinimize, IconVideo } from "./Icons";
-import { CursorTag } from "./CursorTag";
 
 /**
  * The video window: OpenCut's editor, beside the conversation.
@@ -53,7 +54,8 @@ function themeVars(): Record<string, string> {
   return out;
 }
 
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+/** A pause between the hand's acts: none once the hand is halted (lib/handHalt.ts). */
+const sleep = handPause;
 
 /** Commands that change nothing on the screen the person is looking at: they are answered without the cursor. */
 const SILENT = new Set([
@@ -125,7 +127,6 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
   // The agent's cursor, over the editor.
   const [cursor, setCursor] = useState<Point | null>(null);
   const [ring, setRing] = useState<Point | null>(null);
-  const [doing, setDoing] = useState<"" | "press" | "type">("");
   const [gone, setGone] = useState(false);
   const layer = useRef<HTMLDivElement>(null);
   const cursorAt = useRef<Point | null>(null);
@@ -281,6 +282,8 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
   // ----------------------------------------------------- the agent's hand --
 
   const tween = useCallback((ms: number, step: (p: number) => void) => new Promise<void>((resolve) => {
+    // Halted: straight to the end, nothing shown on the way.
+    if (handsHalted()) { step(1); resolve(); return; }
     const started = performance.now();
     const tick = () => {
       const p = Math.min(1, (performance.now() - started) / ms);
@@ -300,10 +303,7 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
     cursorAt.current = target;
     await sleep(restMs());
     setRing(target);
-    setDoing("press");
-    await sleep(160);
-    setDoing("");
-    await sleep(200);
+    await sleep(360);
     setRing(null);
   }, [tween]);
 
@@ -318,18 +318,21 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
 
   /** Words go in a few letters at a time, at a person's pace. */
   const typed = useCallback(async (text: string, at: (shown: string, first: boolean) => Promise<unknown>) => {
-    setDoing("type");
+    pointerTyping(true);
     const chars = Array.from(text);
     const gaps = typingDelays(text, 2400);
     const chunk = Math.max(1, Math.ceil(chars.length / 14));
     let last: unknown = null;
     for (let n = chunk; ; n += chunk) {
+      // Stopped: no more of it. Switched off: the rest at once.
+      if (handsStopped()) break;
+      if (handsHalted()) n = chars.length;
       const upto = Math.min(chars.length, n);
       last = await at(chars.slice(0, upto).join(""), n === chunk);
       if (upto >= chars.length) break;
       await sleep(gaps.slice(upto - chunk, upto).reduce((a, b) => a + b, 0) || 90);
     }
-    setDoing("");
+    pointerTyping(false);
     return last;
   }, []);
 
@@ -653,6 +656,8 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
 
   /** One command from the agent: pointed at, then done, then answered. */
   const play = useCallback(async (cmd: VideoCommand): Promise<unknown> => {
+    // Its typing happens in the editor's frame, which keeps its own keyboard down.
+    beginHandRun(false);
     let args = cmd.args;
     const name = cmd.name;
     const onScreen = !!frame.current && isWorkVisible(frame.current);
@@ -757,7 +762,8 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
   useEffect(() => {
     const r = layer.current?.getBoundingClientRect();
     const point = cursor && r && frame.current ? framePoint(frame.current, cursor) : null;
-    if (point) reportCursor(point.x, point.y);
+    // The board's one cursor goes there (lib/pointer.ts): this window draws only the press.
+    if (point) pointerFollow(point);
   }, [cursor]);
   useEffect(() => clearCursor, []);
 
@@ -805,15 +811,7 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
         {cursor && (
           <div ref={layer} className="office-cursor-layer" aria-hidden="true" data-office-cursor={gone ? "gone" : "on"}>
             {ring && <span className="office-click" style={{ left: ring.x - 14, top: ring.y - 14 }} />}
-            {/* Pops in where it starts and dissolves when it is done (.cursor-pop in styles.css), never a cut. */}
-            <div className={`office-cursor${doing ? ` is-${doing}` : ""}${gone ? " is-gone" : ""}`} style={{ transform: `translate(${cursor.x}px, ${cursor.y}px)` }}>
-              <span className="cursor-pop">
-                <svg width="16" height="20" viewBox="0 0 16 20" className="office-cursor-arrow" style={{ display: "block", filter: "drop-shadow(0 1px 2px rgba(0,0,0,.35))" }}>
-                  <path d="M1 1 L1 15 L5 11.5 L8 18 L10.5 17 L7.5 10.5 L13 10.5 Z" fill="#7c5cff" stroke="#fff" strokeWidth="1.2" strokeLinejoin="round" />
-                </svg>
-                <CursorTag />
-              </span>
-            </div>
+            {/* The arrow itself is the board's one cursor (lib/pointer.ts pointerFollow), which travels between windows. */}
           </div>
         )}
       </div>

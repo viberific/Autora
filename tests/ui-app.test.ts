@@ -52,10 +52,11 @@ async function main() {
 
     console.log("opening");
     await test("the app opens beside the conversation and fits inside its window", async () => {
-      const chat = await page.locator(".chat-view > .page").boundingBox();
+      // In Panacea the app is a window on the board, and the conversation is docked to its right.
+      const chat = await page.locator(".conversation-flow").first().boundingBox();
       const pane = await page.locator('.app-pane[data-pane="app"]').boundingBox();
-      assert.ok(chat && pane && pane.x >= chat.x + chat.width - 2, "to the right of the chat");
-      assert.ok(pane.width > 500, "a usable width");
+      assert.ok(chat && pane && pane.x + pane.width <= chat.x + 2, `beside the conversation, not under it (${JSON.stringify({ pane, chat })})`);
+      assert.ok(pane.width > 400, `a usable width (${Math.round(pane.width)})`);
       const canvas = await page.locator(".app-canvas").boundingBox();
       const area = await page.locator(".app-area").boundingBox();
       assert.ok(canvas!.x >= area!.x - 1 && canvas!.x + canvas!.width <= area!.x + area!.width + 1, "inside it, side to side");
@@ -140,6 +141,9 @@ async function main() {
       assert.equal((await info("a.cta")).styles.fontSize, "14px");
     });
     await test("text is retyped right on the page", async () => {
+      // The last test's popover is still open over the page: put it away first, as a person would, then pick the heading.
+      await page.keyboard.press("Escape");
+      await page.waitForSelector(".app-pop", { state: "detached", timeout: 3000 }).catch(() => undefined);
       const t = await onScreen("h1");
       await page.mouse.click(t.x, t.y);
       await page.waitForSelector(".app-pop");

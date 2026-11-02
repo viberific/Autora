@@ -1,0 +1,62 @@
+/* The project strip (ProjectStrip.tsx): a slim bar over the top of the canvas, opening into the plan. */
+.pa-proj {
+  /* Clear of the jump dock down the right edge on a desktop. */
+  position: absolute; top: 8px; left: 8px; right: 64px; z-index: 6;
+  background: color-mix(in srgb, var(--s1) 94%, transparent); border: 1px solid var(--border); border-radius: var(--r-md);
+  box-shadow: var(--shadow); backdrop-filter: blur(8px); font-size: var(--fs-sm); color: var(--text);
+  animation: rise var(--dur-2) var(--ease) both;
+}
+/* Opened, the plan is over everything else on the canvas, the jump dock included. */
+.pa-proj.is-open { z-index: 30; }
+.pa-proj-bar { display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 12px; min-width: 0; }
+.pa-proj-title { flex: 0 1 auto; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; }
+.pa-proj-phases { display: flex; gap: 4px; flex: 0 1 auto; overflow-x: auto; scrollbar-width: none; }
+.pa-proj-phases::-webkit-scrollbar { display: none; }
+.pa-proj-phase {
+  display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; padding: 4px 10px 4px 5px; border: 1px solid var(--border);
+  border-radius: var(--r-pill); background: var(--s2); color: var(--text-2); font: inherit; cursor: pointer;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+.pa-proj-phase:hover { color: var(--text); }
+.pa-proj-phase.is-on { background: var(--accent-soft); border-color: var(--accent-line); color: var(--text); }
+.pa-proj-n { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: var(--r-pill); background: var(--s3); font-size: var(--fs-2xs); }
+.pa-proj-phase.is-on .pa-proj-n { background: var(--accent); color: var(--on-accent); }
+.pa-proj-phase.is-done .pa-proj-n { background: rgba(var(--live-rgb), 0.2); color: var(--live); }
+.pa-proj-now { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; color: var(--text-2); }
+.pa-proj-now > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pa-proj-now.is-empty { color: var(--text-3); }
+.pa-proj-tick {
+  flex: 0 0 auto; width: 18px; height: 18px; border: 1.5px solid var(--border-strong); border-radius: var(--r-pill); background: transparent; cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
+}
+.pa-proj-tick:hover { border-color: var(--live); background: rgba(var(--live-rgb), 0.15); }
+.pa-proj-approve { flex: 0 0 auto; padding: 4px 10px; border: 0; border-radius: var(--r-pill); background: var(--accent); color: var(--on-accent); font: inherit; font-weight: 600; cursor: pointer; }
+.pa-proj-open { flex: 0 0 auto; display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-2); cursor: pointer; }
+.pa-proj-open svg { transform: rotate(90deg); transition: transform var(--dur-2) var(--ease); }
+.pa-proj.is-open .pa-proj-open svg { transform: rotate(-90deg); }
+.pa-proj-body { display: flex; gap: 16px; padding: 4px 12px 12px; max-height: min(52vh, 420px); overflow: auto; border-top: 1px solid var(--border); }
+.pa-proj-cols { display: flex; gap: 12px; flex: 1 1 auto; min-width: 0; overflow-x: auto; }
+.pa-proj-col { flex: 0 0 180px; padding-top: 8px; }
+.pa-proj-col h4, .pa-proj-decisions h4 { margin: 0 0 6px; font-size: var(--fs-xs); font-weight: 650; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; }
+.pa-proj-col.is-on h4 { color: var(--accent); }
+.pa-proj-col ul, .pa-proj-decisions ul { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.pa-proj-col label { display: flex; align-items: flex-start; gap: 6px; line-height: 1.35; cursor: pointer; }
+.pa-proj-col li.is-done label { color: var(--text-3); text-decoration: line-through; }
+.pa-proj-col input[type="checkbox"] { margin: 2px 0 0; accent-color: var(--accent); }
+.pa-proj-field { width: 100%; padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--s2); color: var(--text); font: inherit; }
+.pa-proj-decisions { flex: 0 0 220px; padding-top: 8px; }
+.pa-proj-decisions li { display: flex; justify-content: space-between; gap: 8px; line-height: 1.35; }
+.pa-proj-decisions em { font-style: normal; color: var(--text-3); font-size: var(--fs-2xs); }
+.pa-proj-decisions p { margin: 0 0 6px; color: var(--text-3); }
+.pa-proj-stack { margin-top: 8px !important; font-size: var(--fs-xs); }
+
+@media (max-width: 680px) {
+  .pa-proj { left: 6px; right: 6px; top: 6px; }
+  .pa-proj-bar { flex-wrap: wrap; row-gap: 6px; }
+  .pa-proj-title { max-width: 40%; }
+  .pa-proj-phases { order: 3; flex: 1 1 100%; }
+  .pa-proj-now { order: 4; flex: 1 1 100%; }
+  .pa-proj-body { flex-direction: column; }
+  .pa-proj-decisions { flex: 0 0 auto; }
+}
+@media (prefers-reduced-motion: reduce) { .pa-proj { animation: none; } }

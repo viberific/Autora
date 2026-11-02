@@ -5,7 +5,8 @@ import { useFullscreen } from "../lib/fullscreen";
 import { useCollab } from "../lib/collab";
 import { TakeControl } from "./TakeControl";
 import { onOfficeHand, onOfficePush, useOfficeWindow, type OfficeHand, type OfficeKind } from "../lib/officedesk";
-import { clearCursor, reportCursor } from "../lib/cursorPos";
+import { clearCursor } from "../lib/cursorPos";
+import { pointerFollow } from "../lib/pointer";
 import { framePoint, isWorkVisible } from "../lib/frameCoordinates";
 import { getCursorWho, whoColors } from "../lib/cursorWho";
 import { OfficePages } from "./OfficePages";
@@ -154,7 +155,7 @@ export function OfficeWindow({ sessionId, kind, phone }: { sessionId: string; ki
               // Where the hand's cursor is, for the few words beside it (AgentThought).
               const point = frame.current && Number.isFinite(payload.x) && Number.isFinite(payload.y)
                 ? framePoint(frame.current, { x: Number(payload.x), y: Number(payload.y) }) : null;
-              if (point) reportCursor(point.x, point.y);
+              if (point) pointerFollow(point);
               reply(true, {});
               break;
             }
@@ -230,7 +231,8 @@ export function OfficeWindow({ sessionId, kind, phone }: { sessionId: string; ki
     await new Promise((r) => setTimeout(r, 1200));
     const said = await new Promise<{ results?: unknown; error?: unknown }>((resolve) => {
       handing.current.set(hand.id, resolve);
-      post({ type: "autora:office-hand", id: hand.id, steps: hand.steps, who: { name: getCursorWho().name, color: cursorColor() } });
+      // The board draws the cursor (one for the whole board): the frame only says where its hand is.
+      post({ type: "autora:office-hand", id: hand.id, steps: hand.steps, who: { name: getCursorWho().name, color: cursorColor(), board: true } });
     });
     handing.current.delete(hand.id);
     clearCursor();

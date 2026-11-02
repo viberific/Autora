@@ -6,6 +6,7 @@
  * took. All of it is already in the log -- usage per call, a duration on every
  * result, the stops -- so this only reads it. Pure: events in, numbers out.
  */
+import { foldRating, turnRating } from "./rating";
 
 export interface TraceEvent {
   kind: string;
@@ -93,6 +94,8 @@ export function buildTrace(events: readonly TraceEvent[], recentTurns = 8): Trac
      disk carries seq; one handed in without it simply gets no per-tool
      attribution, which is why the field is optional. */
   const turnBySeq = new Map<number, TurnTrace>();
+  /** The ratings standing on each turn's replies (foldRating). */
+  const standing = new Map<number, Map<number, { up: boolean; reason?: string }>>();
   const toolsOfTurn = new Map<TurnTrace, Set<string>>();
   let used: Set<string> = new Set();
 
@@ -141,20 +144,20 @@ export function buildTrace(events: readonly TraceEvent[], recentTurns = 8): Trac
         t.slowestMs = Math.max(t.slowestMs, ms);
         break;
       }
-      /* The person's thumb, filed under the seq of the turn's prompt. Last
-         word wins: a second thumb replaces the first, and a clear leaves the
-         turn unrated -- counting a clear as a down-vote would poison the one
-         number this exists to give. */
-      case "turn.rating": {
-        const turn = turnBySeq.get(Number(p.turn));
-        if (!turn) break;
-        const reason = typeof p.reason === "string" && p.reason ? p.reason : undefined;
-        turn.rating = reason ? { up: p.up === true, reason } : { up: p.up === true };
-        break;
-      }
+      /* The person's thumb, on one reply of the turn (server/rating.ts). The
+         turn's rating is the most recent one still standing in it: a second
+         thumb replaces the first, and a clear leaves the reply unrated --
+         counting a clear as a down-vote would poison the one number this
+         exists to give. */
+      case "turn.rating":
       case "turn.rating.cleared": {
         const turn = turnBySeq.get(Number(p.turn));
-        if (turn) delete turn.rating;
+        if (!turn) break;
+        foldRating(standing, e.kind, p);
+        const rating = standing.get(Number(p.turn));
+        const now = rating && turnRating(rating);
+        if (now) turn.rating = now;
+        else delete turn.rating;
         break;
       }
       case "tools.enable":

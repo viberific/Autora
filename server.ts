@@ -59,7 +59,7 @@ import { dayKey } from "./server/billing";
 import { refreshVendorMoney } from "./server/vendor-money";
 import { dropSession, fromDataUrl, getBlob, putBlob } from "./server/blobs";
 import { threeRuntime } from "./server/widgets";
-import { MAX_ARTIFACT_BYTES, saveArtifact } from "./server/artifacts";
+import { MAX_ARTIFACT_BYTES, getArtifact, saveArtifact } from "./server/artifacts";
 import { snapshot as snapshotFolder } from "./server/snapshots";
 import {
   } from "./server/extensions";
@@ -170,7 +170,8 @@ import { cadRoutes, cadState, dropCad, onCadChange, serveCad } from "./server/ca
 import { dropGame, gameRoutes, gameState, onGameChange, serveGame } from "./server/gamedesk";
 import { dropPhoto, onPhotoChange, photoRoutes, photoState, servePhoto } from "./server/photodesk";
 import { dropStudio, onStudioChange, studioRoutes, studioState, studioTurnNote, studioVisible } from "./server/studio";
-import { dropPanacea, onPanaceaChange, onPanaceaTouch, panaceaRoutes, panaceaState, panaceaSuggester, panaceaTurnNote, panaceaVisible } from "./server/panacea";
+import { appOfFile, appOfTool } from "./src/lib/panacea/flows";
+import { dropPanacea, noteFlow, onPanaceaChange, onPanaceaTouch, panaceaRoutes, panaceaState, panaceaSuggester, panaceaTurnNote, panaceaVisible } from "./server/panacea";
 import { joinProjects, windowOff } from "./server/tools";
 import { dropOfficeDesk, onOfficeChange, onOfficePush, onOfficeTouch, officeBriefing, officeData, officeRoutes, officeState, officeHooks, serveOfficeEditors } from "./server/officedesk";
 import { renderToPdf, webDir as officeWebDir } from "./server/officerender";
@@ -1529,6 +1530,8 @@ const running = new Map<string, RunningTurn>();
  * for.
  */
 function stopTurn(sessionId: string, why: "person" | "superseded" = "person") {
+  // Whatever the agent's hand is doing in the page stops being shown at once (src/lib/handHalt.ts).
+  sendEphemeral(sessionId, { type: "hands.halt", stop: true });
   const turn = running.get(sessionId);
   if (!turn) return;
   turn.stopped = true;
@@ -1541,6 +1544,59 @@ function stopTurn(sessionId: string, why: "person" | "superseded" = "person") {
     }
   }
   turn.cancels.clear();
+}
+
+/**
+ * A tool call that gives way the moment the turn is stopped.
+ *
+ * Stop calls every cancel a running tool registered, but not every tool can
+ * register one: a window doing the agent's work by hand, a page that will not
+ * answer, a connected server mid-call. The loop used to sit in that await
+ * until the tool came back on its own, so Stop said it had stopped while the
+ * work carried on. Now the await ends at once with a stopped outcome; the tool
+ * is left to wind down (each has its own guard against acting after a stop).
+ * The outcome is `held`: a call the person stopped did not fail, so it is
+ * never refused as a repeat afterwards (server/failedcalls.ts).
+ */
+function untilStopped<T extends { ok: boolean; summary: string }>(sessionId: string, call: Promise<T>): Promise<T> {
+  const signal = running.get(sessionId)?.signal;
+  if (!signal) return call;
+  if (signal.aborted) { void call.catch(() => undefined); return Promise.resolve({ ok: false, held: true, summary: "Stopped by the person before this was done." } as unknown as T); }
+  return new Promise<T>((resolve, reject) => {
+    const stop = () => { void call.catch(() => undefined); resolve({ ok: false, held: true, summary: "Stopped by the person before this was done." } as unknown as T); };
+    signal.addEventListener("abort", stop, { once: true });
+    call.then((v) => { signal.removeEventListener("abort", stop); resolve(v); }, (e) => { signal.removeEventListener("abort", stop); reject(e); });
+  });
+}
+
+/**
+ * Work that went between apps in a tool call: a file of one app's (an artifact by id, or a path) read by another app's
+ * tool, noted on the chat's canvas so the board draws the line between the two windows (src/lib/panacea/flows.ts).
+ */
+const FILE_KEYS = /^(file|files|path|paths|src|source|sources|model|asset|assets|media|image|images|artifact|artifacts|from|input|inputs|audio|video|picture)$/i;
+function noteFlowsOf(sessionId: string, tool: string, args: Record<string, unknown> | undefined) {
+  const to = appOfTool(tool, args ?? {});
+  if (!to || !args) return;
+  const seen = new Set<string>();
+  const visit = (v: unknown, key: string, depth: number) => {
+    if (depth > 4) return;
+    if (typeof v === "string") {
+      for (const id of v.match(/file_[0-9a-f]{16}/g) ?? []) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const art = getArtifact(id);
+        const from = art ? appOfFile(art.name) : null;
+        if (art && from && from !== to) noteFlow(sessionId, { from, to, what: art.name, artifact: art.id });
+      }
+      if (FILE_KEYS.test(key) && !/file_[0-9a-f]{16}/.test(v)) {
+        const name = path.basename(v.trim());
+        const from = appOfFile(name);
+        if (from && from !== to && !seen.has(name)) { seen.add(name); noteFlow(sessionId, { from, to, what: name }); }
+      }
+    } else if (Array.isArray(v)) v.forEach((x) => visit(x, key, depth + 1));
+    else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) visit(x, k, depth + 1);
+  };
+  for (const [k, v] of Object.entries(args)) visit(v, k, 0);
 }
 
 /**
@@ -5795,8 +5851,9 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
           const willWrite = (spec.name === "terminal" && !readOnlyCommand(String(use.args?.command ?? ""))) || spec.name === "edit_file";
           // What the person changed before this runs is theirs, not this command's.
           if (willWrite) await personEdits(null);
-          const outcome = await runTool(spec, use.args, contextFor(span));
+          const outcome = await untilStopped(session.id, runTool(spec, use.args, contextFor(span)));
           noteCall(spec.name, use.args);
+          if (outcome.ok) noteFlowsOf(session.id, spec.name, use.args);
           /* A command that failed because a path was not there: say what is near
              it, so the next call is right instead of another guess. */
           if (spec.name === "terminal" && !outcome.ok && !outcome.held) {
@@ -5837,7 +5894,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
                tool: the model needs to read it and decide. Only a tool
                that could not run at all is an error. */
             if (outcome.held) {
-              emitEvent(session, "tool.error", "agent", { held: true, error: "Not done: the person is working on this." }, span);
+              emitEvent(session, "tool.error", "agent", { held: true, error: outcome.summary.startsWith("Stopped by the person") ? "Stopped." : "Not done: the person is working on this." }, span);
             } else if (outcome.exitCode !== undefined) {
               emitEvent(session, "tool.result", "agent", {
                 ok: false,
@@ -6361,7 +6418,7 @@ async function startServer() {
     push: (id: string, message: Record<string, unknown>) => sendEphemeral(id, message),
     loadFile: (id, artifact, options) => loadPanaceaFile(id, artifact, options, fileLoadGuards),
   });
-  panaceaVisible(() => state.agentCursor);
+  panaceaVisible((session) => state.agentCursor && watched(session));
 
   /* File -> Export PDF in the Office window: the server lays the document out (the same pages office_pdf
      makes), and the PDF opens in the PDF editor -- PDFs always go to our own. */
@@ -6892,7 +6949,7 @@ async function startServer() {
     res.json({ ok: true, approved, who });
   });
 
-  memoryRoutes(app, { mind });
+  memoryRoutes(app, { mind, haltHands: () => { for (const id of sessions.keys()) sendEphemeral(id, { type: "hands.halt" }); } });
   skillRoutes(app);
 
   const todaysLedger = () => {

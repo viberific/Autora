@@ -367,8 +367,8 @@ export type Derived = {
   /** The question the turn is waiting on, if it is waiting on one. */
   asking: Ask | null;
   tokens: { in: number; out: number; cached: number };
-  /** What the person said about each rated turn, by the seq of its own
-      `turn.user` event. Absent means unrated. */
+  /** What the person said about each rated reply, by the reply's own seq. A thumb from before replies had their
+      own (filed under the whole turn) is on the turn's last reply. Absent means unrated. */
   ratings: Map<number, { up: boolean; reason?: string }>;
   /** How full the model's context is, from the newest reading; null before
       the first model call. */
@@ -458,6 +458,8 @@ export function derive(events: AutoraEvent[]): Derived {
   const memoryById = new Map<string, MemoryMark>();
   /** turn seq -> what the person said about it. */
   const ratings = new Map<number, { up: boolean; reason?: string }>();
+  /** Thumbs on a whole turn (written before a thumb named its reply), by the turn's seq: placed on its last reply at the end. */
+  const turnRatings = new Map<number, { up: boolean; reason?: string }>();
   let openAgentTurn: TranscriptTurn | null = null;
   const approvals: Approval[] = [];
   const asks = new Map<string, Ask>();
@@ -567,16 +569,21 @@ export function derive(events: AutoraEvent[]): Derived {
          click said, not a history of clicks. */
       case Kind.TurnRating: {
         const turn = Number(e.payload.turn);
+        const reply = Number(e.payload.reply);
         if (Number.isInteger(turn) && turn > 0) {
           const reason = typeof e.payload.reason === "string" && e.payload.reason ? e.payload.reason : undefined;
-          ratings.set(turn, reason ? { up: e.payload.up === true, reason } : { up: e.payload.up === true });
+          const rating = reason ? { up: e.payload.up === true, reason } : { up: e.payload.up === true };
+          if (Number.isInteger(reply) && reply > 0) ratings.set(reply, rating);
+          else turnRatings.set(turn, rating);
         }
         break;
       }
 
       case Kind.TurnRatingCleared: {
         const turn = Number(e.payload.turn);
-        if (Number.isInteger(turn)) ratings.delete(turn);
+        const reply = Number(e.payload.reply);
+        if (Number.isInteger(reply) && reply > 0) ratings.delete(reply);
+        else if (Number.isInteger(turn)) turnRatings.delete(turn);
         break;
       }
 
@@ -1236,6 +1243,12 @@ export function derive(events: AutoraEvent[]): Derived {
     if (last?.kind === "screen") last.live = true;
     const box = runningBox(tail);
     if (box) box.live = true;
+  }
+
+  for (const b of buckets) {
+    const old = turnRatings.get(b.seq);
+    const last = b.replies[b.replies.length - 1];
+    if (old && last && !ratings.has(last.seq)) ratings.set(last.seq, old);
   }
 
   return {

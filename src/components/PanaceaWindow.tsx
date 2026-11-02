@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { Value } from "../lib/panacea/atoms";
-import { stateOf, toMarkdown, type DocMode, type DocState } from "../lib/panacea/document";
+import { createDoc, stateOf, toMarkdown, type DocMode, type DocState } from "../lib/panacea/document";
 import { boardMarkdown, createBoard, tidy, type BoardState } from "../lib/panacea/board";
-import { estimateHeight, fade, nearestFree, refocus, removeSurface, restore, setValue, surfaceParams, uid, valueAt, valueProblem, type Canvas, type Panel, type Surface } from "../lib/panacea/canvas";
+import { enterPhase, estimateHeight, fade, phaseBox, nearestFree, refocus, removeSurface, restore, setValue, surfaceParams, uid, valueAt, valueProblem, type Canvas, type Panel, type Surface } from "../lib/panacea/canvas";
 import { KINDS, type SurfaceKind } from "../lib/panacea/kinds";
 import type { Recipe } from "../lib/panacea/library";
 import { BUILTINS } from "../lib/panacea/library";
+import { treeLive } from "../lib/panacea/wiring";
 import { densityOf, newProfile, normalizeProfile, noteUse, preferredSide, quieted, usageKey, type Profile } from "../lib/panacea/profile";
 import { bindsOf, parseBind, type Node } from "../lib/panacea/recipe";
 import { addSurfaceTo, placeRecipe, type SurfaceInput } from "../lib/panacea/rules";
@@ -13,17 +14,20 @@ import { filteredRows, splitDelimited, tableCsv, tableFrom } from "../lib/panace
 import { onPanaceaCommand } from "../lib/panacea";
 import type { HandStep } from "../lib/panacea/handsteps";
 import { Board, type BoardHandle } from "./panacea/Board";
-import { BOARD_PIECE, FLOWCHART_PIECE } from "./panacea/Summon";
+import { BOARD_PIECE, DOC_PIECE, FLOWCHART_PIECE, PROJECT_PIECE } from "./panacea/Summon";
+import { ProjectStrip } from "./panacea/ProjectStrip";
+import { createProject, type Project } from "../lib/panacea/project";
 import { standaloneSvg } from "./panacea/Chart";
 import { PanaceaCtx, type PanaceaApi } from "./panacea/context";
 import { History } from "./panacea/History";
-import { runPanaceaHand } from "./panacea/hand";
+import { runPanaceaHand, type HandPending } from "./panacea/hand";
 import { autoSettings, renderFull } from "./panacea/imagegl";
 import type { PanelActions } from "./panacea/PanelCard";
 import { pictureOf } from "./panacea/Surfaces";
 import { useCanvas } from "./panacea/useCanvas";
 import { SaveButton, keptAs } from "./SaveButton";
-import { LoadButton } from "./LoadButton";
+import { LoadButton, type LoadResult } from "./LoadButton";
+import { PANACEA_LOADED, offerKeep } from "../lib/panaceaBridge";
 import { IconSparkle, IconX } from "./Icons";
 import { usePhone } from "../lib/stage";
 import type { HostedWork } from "../lib/workspaceScene";
@@ -65,7 +69,7 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
   const doc = useCanvas(sessionId, nativeOpen);
   const { canvas, edit, quietly, live, saveNow, refresh } = doc;
   const base = `/api/panacea/${encodeURIComponent(sessionId)}`;
-  const [recipes, setRecipes] = useState<Recipe[]>(BUILTINS);
+  const [recipes, setRecipes] = useState<Recipe[]>(() => BUILTINS.filter((r) => treeLive(r.tree)));
   const [profile, setProfile] = useState<Profile>(() => newProfile());
   const [displayProfile, setDisplayProfile] = useState<Profile>(() => newProfile());
   const [pointerBusy, setPointerBusy] = useState(false);
@@ -76,7 +80,7 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
   const [toast, setToast] = useState<string | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const board = useRef<BoardHandle | null>(null);
-  const pending = useRef<{ id: string; at: { x: number; y: number } } | null>(null);
+  const pending = useRef<HandPending | null>(null);
   const saveRef = useRef<HTMLSpanElement>(null);
   const touched = useRef(new Set<string>());
   const activityTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -362,8 +366,50 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
 
   // ------------------------------------------------------------- board --
 
+  /** The agent's hand added a surface the way a person would (picker, paste, drop): put in the server's own, as planned. */
+  const putPendingSurface = useCallback((): boolean => {
+    const made = pending.current?.surface;
+    if (!made) return false;
+    edit((d) => { if (!d.surfaces.some((s) => s.id === made.id)) d.surfaces.push(structuredClone(made)); }, `Added ${made.title}`);
+    return true;
+  }, [edit]);
+
   const pickRecipe = useCallback((r: Recipe, at: { x: number; y: number }) => {
     const forced = pending.current;
+    if ((r.id === BOARD_PIECE || r.id === FLOWCHART_PIECE || r.id === DOC_PIECE) && putPendingSurface()) return;
+    // A project: the agent's hand puts in the server's (pending), a person gets one in three phases, theirs to rename.
+    if (r.id === PROJECT_PIECE) {
+      const theirs = forced?.project;
+      const made = theirs ?? createProject({ title: live.current.name === "Canvas" ? "Project" : live.current.name, by: "person" });
+      if (typeof made === "string") { setProblem(made); return; }
+      edit((d) => {
+        if (d.project && !theirs) return;
+        d.project = structuredClone(made);
+        for (const s of d.surfaces) s.phase ??= made.phase;
+      }, "Started a project");
+      if (!theirs) void tell(`started a project, "${made.title}"`);
+      return;
+    }
+    // A document: a surface of its own, blank, where it can be seen whole.
+    if (r.id === DOC_PIECE) {
+      let err: string | null = null;
+      edit((d) => {
+        const made = addSurfaceTo(d, { kind: "doc", name: "Document.md", title: "Document", doc: createDoc("", "guide") }, find, { side: preferredSide(profile), quiet: (id) => quieted(profile, id), view: board.current?.viewRect() });
+        if ("error" in made) err = made.error;
+      }, "Added a document");
+      if (err) setProblem(err);
+      else void tell("added a document to write in");
+      return;
+    }
+    // The agent's hand picked what it made (handOffer.ts): put in the server's own panel, where it said.
+    if (forced?.panel) {
+      const made = forced.panel;
+      edit((d) => {
+        if (d.panels.some((p) => p.id === made.id)) return;
+        d.panels.push({ ...structuredClone(made), x: forced.at.x, y: forced.at.y });
+      }, `Summoned ${made.title}`);
+      return;
+    }
     // Not a panel: a board, a surface of its own, where it was asked for.
     if ((r.id === BOARD_PIECE || r.id === FLOWCHART_PIECE) && !forced) {
       let err: string | null = null;
@@ -394,7 +440,7 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
       else placed = p;
     }, `Summoned ${r.name}`);
     if (placed && !forced) void tell(`summoned "${r.name}"`, { kind: "use", recipe: r.id });
-  }, [edit, find, live, profile, tell]);
+  }, [edit, find, live, profile, tell, putPendingSurface]);
   const onPick = useCallback((recipe: Recipe, at: { x: number; y: number }) => {
     if (nativeOpen && doc.ready) { pickRecipe(recipe, at); return; }
     void (async () => {
@@ -444,6 +490,7 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
   }, [edit, find, profile, tell]);
 
   const onFiles = useCallback((files: File[], at: { x: number; y: number }) => {
+    if (putPendingSurface()) return;
     void (async () => {
       for (const [i, f] of files.slice(0, 4).entries()) {
         try {
@@ -485,7 +532,7 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
         }
       }
     })();
-  }, [base, addSurface, refresh, nativeOpen, onJump, sessionId]);
+  }, [base, addSurface, refresh, nativeOpen, onJump, sessionId, putPendingSurface]);
   const loaded = useCallback(async (result: { kind?: string; engine?: string }) => {
     if (result.kind === "engine") {
       const mode = workspaceMode(result.engine ?? "");
@@ -499,10 +546,11 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
   }, [refresh, onJump]);
 
   const onPaste = useCallback((text: string, at: { x: number; y: number }) => {
+    if (putPendingSurface()) return;
     const table = tableFrom(splitDelimited(text));
     if (!table) { setProblem("That paste is not a table: a header row and rows, separated by tabs or commas."); return; }
     addSurface({ kind: "data", name: "Pasted table", title: "Pasted table", table, at });
-  }, [addSurface]);
+  }, [addSurface, putPendingSurface]);
 
   const onRemoveSurface = useCallback((s: Surface) => {
     edit((d) => { removeSurface(d, s.id); }, `Removed ${s.title}`);
@@ -546,6 +594,11 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
             const el = root.current;
             if (!el || !board.current) throw new Error("The canvas is not on screen.");
             const steps = Array.isArray(cmd.args.steps) ? (cmd.args.steps as HandStep[]) : [];
+            /* The steps were planned from the canvas as the server has it: the agent's last change may not have reached
+               this page yet (two calls a moment apart), so take it, and let it draw, before the hand starts. */
+            await saveNow();
+            await refresh();
+            await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
             const out = await runPanaceaHand(steps, { root: el, board: board.current, pending });
             await saveNow();
             await reply(true, out);
@@ -577,7 +630,7 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
       off();
       void fetch(`${base}/ready`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ready: false }), keepalive: true }).catch(() => undefined);
     };
-  }, [base, live, saveNow, sessionId, nativeOpen]);
+  }, [base, live, saveNow, refresh, sessionId, nativeOpen]);
 
   // -------------------------------------------------------------- keys --
 
@@ -615,6 +668,40 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
     return keptAs(await fetch(`${base}/keep`, { method: "POST" }));
   }, [doc, base]);
 
+  // On a phone the bar is gone; the message box's folder sheet opens files here and saves the canvas (panaceaBridge).
+  useEffect(() => {
+    const onLoaded = (e: Event) => { void loaded((e as CustomEvent<LoadResult>).detail).catch((err: unknown) => setProblem(err instanceof Error ? err.message : String(err))); };
+    window.addEventListener(PANACEA_LOADED, onLoaded);
+    return () => window.removeEventListener(PANACEA_LOADED, onLoaded);
+  }, [loaded]);
+  useEffect(() => offerKeep(nativeOpen && doc.ready ? keep : null), [keep, nativeOpen, doc.ready]);
+
+  // ------------------------------------------------------------ project --
+
+  /** The person changed the plan in the strip: one undoable step. */
+  const changeProject = useCallback((next: Project, label: string) => {
+    edit((d) => { d.project = next; }, label);
+  }, [edit]);
+  /** A phase the person moved to: the work moves, and the view glides to its region. */
+  const movedByHand = useRef<string | null>(null);
+  const goPhase = useCallback((phase: string) => {
+    const label = live.current.project?.phases.find((p) => p.id === phase)?.label ?? phase;
+    movedByHand.current = phase;
+    edit((d) => { enterPhase(d, phase); }, `Moved to ${label}`);
+    requestAnimationFrame(() => { const box = phaseBox(live.current, phase); if (box) board.current?.frame(box); });
+  }, [edit, live]);
+  // The agent moved the phase: follow it there, unless the person is holding the view.
+  const phaseNow = canvas.project?.phase;
+  const phaseWas = useRef(phaseNow);
+  useEffect(() => {
+    if (phaseNow === phaseWas.current) return;
+    phaseWas.current = phaseNow;
+    if (!phaseNow) return;
+    if (movedByHand.current === phaseNow) { movedByHand.current = null; return; }
+    const box = phaseBox(live.current, phaseNow);
+    if (box) requestAnimationFrame(() => board.current?.frame(box, true));
+  }, [phaseNow, live]);
+
   const empty = !canvas.surfaces.length && !canvas.panels.length;
   const note = doc.notice ?? problem;
   const selectionGrouped = selected.size > 1 && (() => { const ids = [...selected]; const g = canvas.panels.find((p) => p.id === ids[0])?.group; return !!g && ids.every((id) => canvas.panels.find((p) => p.id === id)?.group === g); })();
@@ -626,7 +713,7 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
         onPointerDownCapture={() => setPointerBusy(true)}
         onFocusCapture={(e) => { if ((e.target as HTMLElement).closest("input,textarea,[contenteditable='true']")) setFieldBusy(true); }}
         onBlurCapture={(e) => { if (!(e.relatedTarget as HTMLElement | null)?.closest?.("input,textarea,[contenteditable='true']")) setFieldBusy(false); }}>
-        <div className="pdf-bar">
+        {!phone && <div className="pdf-bar">
           <span className="pdf-bar-ico" aria-hidden="true"><IconSparkle size={14} /></span>
           <span className="pdf-bar-app">Panacea</span>
           {nativeOpen && <input className="st-song-name" value={canvas.name} size={Math.max(4, canvas.name.length + 1)} maxLength={80} aria-label="Canvas name"
@@ -636,7 +723,7 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
           <div className="spacer" />
           <span ref={saveRef} className="st-save-btn"><LoadButton app="panacea" session={sessionId} phone={phone} onLoaded={loaded} disabled={!sessionId} />{nativeOpen &&
             <SaveButton onSave={keep} phone={phone} disabled={!doc.ready} label="Save native work" tooltip="Keep native panels and surfaces as .panacea.json. Engine files save on their own work cards." />}</span>
-        </div>
+        </div>}
         {note && (
           <div className="pdf-problem" role="status">
             {note}
@@ -668,7 +755,8 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
           onCloseWork={onCloseWork}
           navigationHost={navigationHost}
         >
-          {empty && doc.ready && (
+          {canvas.project && <ProjectStrip project={canvas.project} onChange={changeProject} onPhase={goPhase} />}
+          {empty && doc.ready && !canvas.project && (
             <div className="pa-empty pa-chrome">
               <h3>What do you want to do?</h3>
               <p>Use the centered Ask Autora bar, or drop a file here. Double-click anywhere for a piece of your own.</p>

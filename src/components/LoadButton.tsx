@@ -5,7 +5,28 @@ import { LOAD_WHAT, loadable, type LoadApp } from "../lib/loadable";
 import type { ArtifactInfo } from "../lib/notebooks";
 import { sure } from "../lib/sure";
 
-type LoadResult = { kind?: string; engine?: string; artifact?: string; name?: string; said?: string; error?: string; replaceRequired?: boolean };
+export type LoadResult = { kind?: string; engine?: string; artifact?: string; name?: string; said?: string; error?: string; replaceRequired?: boolean };
+
+/**
+ * Open a saved file in an app with no turn: the request Load makes, asking before it replaces open work. Null when
+ * the person chose to keep what is open; throws with the reason it was refused.
+ */
+export async function loadInto(app: LoadApp, session: string, file: ArtifactInfo): Promise<LoadResult | null> {
+  const request = (replace = false) => fetch(`/api/sessions/${encodeURIComponent(session)}/load`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ app, artifact: file.id, ...(replace ? { replace: true } : {}) }),
+  });
+  let res = await request();
+  let body = (await res.json().catch(() => ({}))) as LoadResult;
+  if (res.status === 409 && body.replaceRequired) {
+    if (!(await sure(`${body.error ?? "This replaces open work."} Save a copy first if you want to keep it.`, "Replace work"))) return null;
+    res = await request(true);
+    body = await res.json().catch(() => ({})) as LoadResult;
+  }
+  if (!res.ok) throw new Error(body.error ?? `Autora answered ${res.status}`);
+  return body;
+}
 
 /**
  * Load, beside Save in every tool window's bar: pick a saved file from Artifacts and it opens in this window, with no
@@ -38,21 +59,8 @@ export function LoadButton({ app, session, disabled, phone, label = "Load", onLo
     setState("loading");
     setSaid("");
     try {
-      const request = (replace = false) => fetch(`/api/sessions/${encodeURIComponent(session)}/load`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ app, artifact: file.id, ...(replace ? { replace: true } : {}) }),
-      });
-      let res = await request();
-      let body = (await res.json().catch(() => ({}))) as LoadResult;
-      if (res.status === 409 && body.replaceRequired) {
-        if (!(await sure(`${body.error ?? "This replaces open work."} Save a copy first if you want to keep it.`, "Replace work"))) {
-          setState("idle"); return;
-        }
-        res = await request(true);
-        body = await res.json().catch(() => ({})) as LoadResult;
-      }
-      if (!res.ok) throw new Error(body.error ?? `Autora answered ${res.status}`);
+      const body = await loadInto(app, session, file);
+      if (!body) { setState("idle"); return; }
       await onLoaded?.(body);
       setSaid(body.said ?? `${file.name} is open.`);
       setState("loaded");

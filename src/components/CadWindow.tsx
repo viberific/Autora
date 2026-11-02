@@ -3,7 +3,8 @@ import { useFullscreen } from "../lib/fullscreen";
 import { SaveButton, keptAs, settle } from "./SaveButton";
 import { LoadButton } from "./LoadButton";
 import { cadStateNow, onCadHand, onCadState, useCadState } from "../lib/caddesk";
-import { isWorkVisible } from "../lib/frameCoordinates";
+import { framePoint, isWorkVisible } from "../lib/frameCoordinates";
+import { pointerFollow } from "../lib/pointer";
 import { useAgentCursor } from "../lib/agentCursor";
 import { useCursorWho, whoColors, getCursorWho } from "../lib/cursorWho";
 import { IconCube, IconMaximize, IconMinimize } from "./Icons";
@@ -106,8 +107,14 @@ export function CadWindow({ sessionId, phone }: { sessionId: string; phone: bool
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (!frame.current || e.source !== frame.current.contentWindow || e.origin !== window.location.origin) return;
-      const msg = e.data as { autora3d?: string; doc?: unknown; id?: unknown; did?: unknown; skipped?: unknown } | null;
+      const msg = e.data as { autora3d?: string; doc?: unknown; id?: unknown; did?: unknown; skipped?: unknown; x?: unknown; y?: unknown } | null;
       if (!msg || typeof msg !== "object") return;
+      if (msg.autora3d === "cursor" && typeof msg.x === "number" && typeof msg.y === "number") {
+        // The board's one cursor follows the frame's hand (lib/pointer.ts), which draws none of its own.
+        const point = framePoint(frame.current, { x: msg.x, y: msg.y });
+        if (point) pointerFollow(point);
+        return;
+      }
       if (msg.autora3d === "handed" && typeof msg.id === "string") {
         handing.current.get(msg.id)?.({ did: msg.did, skipped: msg.skipped, doc: msg.doc });
         return;
@@ -116,6 +123,7 @@ export function CadWindow({ sessionId, phone }: { sessionId: string; phone: bool
         ready.current = true;
         post({ autora3d: "theme", vars: themeNow() });
         post({ autora3d: "who", who: whoNow() });
+        post({ autora3d: "board", on: true });
         void load();
       } else if (msg.autora3d === "changed" && msg.doc) {
         void save(msg.doc);

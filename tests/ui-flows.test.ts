@@ -237,7 +237,8 @@ async function main() {
       await p.goto(`${app.base}/?session=${s}`);
       const pill = p.locator(".mode-sel-pill");
       await pill.waitFor();
-      assert.match(await pill.innerText(), /Agent/);
+      // Beside the canvas the docked panel starts slim, so the pill may be its icon alone: its name is in its label.
+      assert.match(await pill.getAttribute("aria-label") ?? "", /Agent/);
       await pill.click();
       assert.equal(await p.locator(".mode-sel-opt").count(), 3);
       await p.locator(".mode-sel-opt.m-plan").click();

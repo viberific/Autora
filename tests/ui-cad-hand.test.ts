@@ -51,11 +51,10 @@ async function main() {
     };
     const bodies = async () => ((await app.api("GET", `/api/cad/${s}/doc`)).body.doc.bodies ?? []) as Body[];
     let pointer = 0;
+    // The board's one cursor (lib/pointer.ts), following the frame's hand: the frame draws none of its own.
     const watch = setInterval(() => {
-      void page.frames().find((f) => f.url().includes("/autora-3d/"))?.evaluate(() => {
-        const a = document.querySelector("svg path.a")?.closest("svg")?.parentElement;
-        return a ? getComputedStyle(a).opacity !== "0" : false;
-      }).then((on) => { if (on) pointer++; }).catch(() => undefined);
+      void page.evaluate(() => document.querySelector(".agent-pointer-layer")?.classList.contains("is-on") ?? false)
+        .then((on) => { if (on) pointer++; }).catch(() => undefined);
     }, 120);
 
     // The window opens with the first call and needs a moment to start; the first hand waits for it.

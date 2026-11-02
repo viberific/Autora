@@ -75,6 +75,9 @@ export function AppPreview({ sessionId, phone }: { sessionId: string; phone: boo
   const [drag, setDrag] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const [region, setRegion] = useState<Rect | null>(null);
   const [reviewOpen, setReviewOpen] = useState(!phone);
+  /* On a phone the review starts folded, so the running app has the window: `phone` can arrive after the first draw
+     (the layout is measured), so it is followed rather than read once. */
+  useEffect(() => { if (phone) setReviewOpen(false); }, [phone]);
   const [pinHover, setPinHover] = useState<string | null>(null);
   const [live, setLive] = useState<{ scroll: { x: number; y: number }; map: Record<string, Rect | null> } | null>(null);
   const [flash, setFlash] = useState<string | null>(null);

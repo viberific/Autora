@@ -28,6 +28,7 @@ const { KINDS } = await import("../src/lib/panacea/kinds");
 const { filteredRows, aggregate, splitDelimited, tableFrom, tableCsv } = await import("../src/lib/panacea/surfaces");
 const profileLib = await import("../src/lib/panacea/profile");
 const { panaceaSteps } = await import("../src/lib/panacea/handsteps");
+const projectLib = await import("../src/lib/panacea/project");
 const panacea = await import("../server/panacea");
 const { panaceaSPECS } = await import("../server/specs/panacea");
 const { windowOff, toolSettings } = await import("../server/tools");
@@ -294,6 +295,102 @@ await test("the hand's steps go from the canvas as it is to the canvas as the ca
   assert.equal(plan.skipped, 1, "grain has no control on screen");
 });
 
+await test("a new panel's blank opening values are not steps: there is nothing for a hand to press", () => {
+  const before = withSurfaces();
+  const after = structuredClone(before);
+  const placed = placeRecipe(after, find("general.budget")!, { why: "x", by: "agent" });
+  if ("error" in placed) throw new Error(placed.error);
+  const opened = structuredClone(after);
+  opened.values = { ...opened.values, budget: 0, currency: "", "budget.on": [] };
+  assert.deepEqual(panaceaSteps(before, opened).steps.map((s) => s.op), ["place"]);
+  /* A value the agent chose is still set by hand. */
+  opened.values.budget = 3000;
+  assert.deepEqual(panaceaSteps(before, opened).steps.map((s) => s.op).sort(), ["place", "set"]);
+});
+
+await test("every new panel is summoned by hand: one not from the library goes as the panel itself, for the picker to list", () => {
+  const before = newCanvas();
+  const after = structuredClone(before);
+  after.panels.push({ id: "pmade", title: "Mix", tree: { atom: "slider", bind: "mix", props: { label: "Mix" } }, x: 0, y: 0, w: 288, h: 0, state: "draft", context: "general", why: "x", by: "agent", at: 1 });
+  const place = panaceaSteps(before, after).steps[0]!;
+  assert.equal(place.op, "place");
+  assert.equal(place.op === "place" && place.recipe, undefined);
+  assert.equal(place.op === "place" && place.panel?.id, "pmade");
+});
+
+await test("a control under More is still set by hand, and a value read off a surface is never a step", () => {
+  const before = newCanvas();
+  before.panels.push({ id: "padv", title: "Adv", tree: { atom: "stack", children: [{ atom: "slider", bind: "b1", advanced: true, props: { label: "B" } }] }, x: 0, y: 0, w: 288, h: 0, state: "live", context: "general", why: "x", by: "agent", at: 1 });
+  const after = structuredClone(before);
+  after.values.b1 = 7;
+  assert.deepEqual(panaceaSteps(before, after).steps.map((st) => st.op), ["set"]);
+});
+
+await test("new surfaces are added as a person adds them, and a document's words are typed after", () => {
+  const before = newCanvas();
+  const after = structuredClone(before);
+  const doc = addSurfaceTo(after, { kind: "doc", name: "Plan.md", title: "Plan", doc: createDoc("# Plan\n\nFirst.\n\n- a\n- b", "agent") }, find);
+  if ("error" in doc) throw new Error(doc.error);
+  const brd = addSurfaceTo(after, { kind: "board", name: "Ideas", title: "Ideas", board: createBoard("agent") }, find);
+  if ("error" in brd) throw new Error(brd.error);
+  const tab = addSurfaceTo(after, { kind: "data", name: "t.csv", title: "T", table: tableFrom(splitDelimited("a,b\n1,2"))! }, find);
+  if ("error" in tab) throw new Error(tab.error);
+  after.panels = [];
+  const { steps } = panaceaSteps(before, after);
+  const surfaces = steps.filter((st) => st.op === "surface");
+  assert.deepEqual(surfaces.map((st) => st.op === "surface" && `${st.how}:${st.piece ?? ""}`), ["picker:blank.document", "picker:blank.board", "paste:"]);
+  // The document goes in empty, and its words are typed: one run of lines, each with its kind.
+  const typed = steps.find((st) => st.op === "doc-type");
+  assert.ok(typed && typed.op === "doc-type");
+  assert.deepEqual(typed.lines.map((l) => l.kind), ["h1", "p", "bullet", "bullet"]);
+  assert.equal(typed.after, null);
+  assert.ok(steps.indexOf(typed) > steps.findIndex((st) => st.op === "surface"), "typed after it is added");
+});
+
+await test("a document's edits by hand: a block rewritten, one deleted, one formatted, one typed after another", async () => {
+  const before = withSurfaces();
+  const d = addSurfaceTo(before, { kind: "doc", name: "D.md", title: "D", doc: createDoc("One.\n\nTwo.\n\nThree.", "agent") }, find);
+  if ("error" in d) throw new Error(d.error);
+  const sid = before.surfaces.at(-1)!.id;
+  const docLib = await import("../src/lib/panacea/document");
+  const ids = docLib.blocksOf(docLib.stateOf(before.surfaces.at(-1)!.doc!).doc).map((b) => b.id);
+  const after = structuredClone(before);
+  let state = docLib.stateOf(after.surfaces.at(-1)!.doc!);
+  state = docLib.replaceBlockText(state, ids[0]!, "Uno.") as typeof state;
+  state = docLib.deleteBlock(state, ids[1]!) as typeof state;
+  state = docLib.formatBlock(state, ids[2]!, "block", "h2") as typeof state;
+  state = docLib.insertBlocks(state, ids[2]!, "Four.") as typeof state;
+  after.surfaces.at(-1)!.doc = docLib.docStateOf(state, "agent");
+  const ops = panaceaSteps(before, after).steps.filter((st) => "surface" in st && st.surface === sid).map((st) => st.op);
+  assert.deepEqual(ops.sort(), ["doc-erase", "doc-format", "doc-retype", "doc-type"]);
+});
+
+await test("a board's edits by hand: cards made, rewritten, moved and taken away, links made and undone", async () => {
+  const boardLib = await import("../src/lib/panacea/board");
+  const before = newCanvas();
+  const made = addSurfaceTo(before, { kind: "board", name: "B", title: "B", board: createBoard("agent") }, find);
+  if ("error" in made) throw new Error(made.error);
+  const s = before.surfaces.at(-1)!;
+  let b = s.board!;
+  const a = boardLib.addCard(b, { text: "A", by: "agent" }); if (typeof a === "string") throw new Error(a); b = a.board;
+  const c = boardLib.addCard(b, { text: "C", by: "agent" }); if (typeof c === "string") throw new Error(c); b = c.board;
+  const l = boardLib.linkCards(b, a.card.id, c.card.id); if (typeof l === "string") throw new Error(l); b = l.board;
+  const e = boardLib.addCard(b, { text: "E", by: "agent" }); if (typeof e === "string") throw new Error(e); b = e.board;
+  s.board = b;
+  const after = structuredClone(before);
+  let n = after.surfaces.at(-1)!.board!;
+  n = boardLib.unlink(n, null, { from: a.card.id, to: c.card.id }) as typeof n;
+  n = boardLib.editCard(n, a.card.id, { text: "A2" }) as typeof n;
+  n = boardLib.moveCard(n, a.card.id, a.card.x + 100, a.card.y) as typeof n;
+  n = boardLib.removeCard(n, e.card.id) as typeof n;
+  const d = boardLib.addCard(n, { text: "D", by: "agent" }); if (typeof d === "string") throw new Error(d); n = d.board;
+  const l2 = boardLib.linkCards(n, a.card.id, d.card.id); if (typeof l2 === "string") throw new Error(l2); n = l2.board;
+  after.surfaces.at(-1)!.board = n;
+  const ops = panaceaSteps(before, after).steps.map((st) => st.op);
+  for (const op of ["unlink", "card-remove", "card", "card-text", "card-move", "link"]) assert.ok(ops.includes(op as never), `no ${op} step in ${ops.join(",")}`);
+  assert.ok(ops.indexOf("card") < ops.indexOf("link"), "the card is made before the link to it");
+});
+
 // --------------------------------------------------------------- the tools --
 
 const S = "panaceatest";
@@ -303,7 +400,7 @@ fs.writeFileSync(art, CSV);
 
 const app = express();
 const sent: Array<Record<string, unknown>> = [];
-panacea.panaceaRoutes(app, { exists: (id) => id === S || id === "panaceainc", incognito: (id) => id === "panaceainc", off: () => false, push: (_id, m) => { sent.push(m); } });
+panacea.panaceaRoutes(app, { exists: (id) => id === S || id === "panaceainc" || id === "panaceaproj", incognito: (id) => id === "panaceainc", off: () => false, push: (_id, m) => { sent.push(m); } });
 const server = app.listen(0);
 const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
 const call = async (method: string, url: string, body?: unknown, raw?: Buffer, type = "application/json"): Promise<{ status: number; body: any }> => {
@@ -312,7 +409,7 @@ const call = async (method: string, url: string, body?: unknown, raw?: Buffer, t
 };
 
 await test("the tools are a family of their own, read-only where they only look, and switch off with the window", () => {
-  assert.deepEqual(panaceaSPECS.map((s) => s.name), ["panacea_open", "panacea_look", "panacea_surface", "panacea_place", "panacea_set", "panacea_arrange", "panacea_bespoke", "panacea_doc", "panacea_board", "panacea_export"]);
+  assert.deepEqual(panaceaSPECS.map((s) => s.name), ["panacea_open", "panacea_look", "panacea_surface", "panacea_place", "panacea_set", "panacea_arrange", "panacea_project", "panacea_bespoke", "panacea_doc", "panacea_board", "panacea_export"]);
   assert.ok(loadedFamilies({ events: [], said: "open the panacea canvas", hasPdf: false, lazy: true }).has("panacea"));
   assert.equal(looksOnly("panacea_look", {}), true);
   assert.equal(looksOnly("panacea_open", {}), true);
@@ -670,6 +767,89 @@ await test("a document survives the canvas going to disk and back", async () => 
   assert.equal(again.doc!.mode, "agent");
   assert.equal(again.params.words, d.params.words);
   assert.match(describeCanvas(back), /document "Minutes", \d+ words in \d+ blocks; Autora may write in it/);
+});
+
+// --------------------------------------------------------------- wiring --
+
+await test("no panel is offered whose controls change nothing: the library, the agent and an old panel all say so", async () => {
+  const { treeLive, unwiredBinds } = await import("../src/lib/panacea/wiring");
+  // Everything the picker and the agent are offered: every control acts on something.
+  const offered = (await call("GET", "/api/panacea/library")).body.recipes as Array<{ id: string; tree: Node }>;
+  assert.ok(offered.length > 40, "the library still offers plenty");
+  for (const r of offered) assert.deepEqual(unwiredBinds(r.tree), [], `${r.id} offers a control nothing acts on`);
+  // A panel tied to an app that nothing connects yet is refused, with why.
+  const dead = BUILTINS.find((r) => !treeLive(r.tree));
+  if (dead) {
+    const refused = await run("panacea_place", { recipe: dead.id, why: "x" });
+    assert.equal(refused.ok, false);
+    assert.match(refused.summary, /not connected to its app yet/);
+    // One already on a canvas (from before) is said to be so.
+    const c = newCanvas();
+    c.panels.push({ id: "pold", title: dead.name, tree: dead.tree, x: 0, y: 0, w: 288, h: 0, state: "live", context: "general", why: "x", by: "agent", at: 1 });
+    assert.match(describeCanvas(c), /not connected to its app/);
+  }
+});
+
+// ---------------------------------------------------------------- flows --
+
+await test("work going between apps: which app a file and a tool are, a flow kept once, and the canvas keeps them", async () => {
+  const flowsLib = await import("../src/lib/panacea/flows");
+  assert.equal(flowsLib.appOfFile("robot.glb"), "cad");
+  assert.equal(flowsLib.appOfFile("hero.model.json"), "cad");
+  assert.equal(flowsLib.appOfFile("theme.mid"), "studio");
+  assert.equal(flowsLib.appOfFile("cover.png"), "photo");
+  assert.equal(flowsLib.appOfFile("report.docx"), "pages");
+  assert.equal(flowsLib.appOfFile("notes.txt"), null);
+  assert.equal(flowsLib.appOfTool("game_add_object", {}), "game");
+  assert.equal(flowsLib.appOfTool("office_edit", { file: "plan.xlsx" }), "sheets");
+  assert.equal(flowsLib.appOfTool("terminal", {}), null);
+  const one = flowsLib.addFlow([], { from: "cad", to: "game", what: "robot.glb", at: 1 });
+  const again = flowsLib.addFlow(one, { from: "cad", to: "game", what: "robot.glb", at: 2 });
+  assert.equal(again.length, 1, "the same file between the same apps is one flow");
+  assert.equal(again[0]!.at, 2);
+  const back = normalizeCanvas({ ...newCanvas(), flows: [...again, { from: "cad", to: "cad", what: "x", at: 0 }, { from: "nope", to: "game", what: "y", at: 0 }] })!;
+  assert.deepEqual(back.flows, again, "a flow from an app to itself, or from no app, is dropped");
+});
+
+// ------------------------------------------------------------- projects --
+
+await test("a project: phases with regions, the plan waits for approval, steps, decisions, links, and it survives disk", async () => {
+  const P = "panaceaproj";
+  const runP = (name: string, args: Record<string, unknown>) => panacea.runPanaceaTool(P, name, args, { cwd: dir });
+  const started = await runP("panacea_project", { ops: [{ op: "start", title: "Yoga site", phases: [{ label: "Plan", steps: ["Pages and data", "The feel"] }, "Design", "Build"], stack: "Plain HTML, CSS and JS" }] });
+  assert.ok(started.ok, started.summary);
+  assert.match(started.summary, /\[ \] \S+ Pages and data; \[ \] \S+ The feel/, "every step keeps its words");
+  assert.match(started.summary, /NOT yet approved/);
+  // Not past the first phase until the person approves.
+  const early = await runP("panacea_project", { ops: [{ op: "phase", to: "Design" }] });
+  assert.equal(early.ok, false);
+  assert.match(early.summary, /not approved the plan/);
+  assert.equal((await runP("panacea_project", { ops: [{ op: "start", title: "Another" }] })).ok, false, "one project unless replaced");
+  const moved = await runP("panacea_project", { ops: [{ op: "approve" }, { op: "phase", to: "design" }, { op: "step", text: "Pick the colours" }, { op: "decide", text: "Calm greens" }] });
+  assert.ok(moved.ok, moved.summary);
+  // New work lands in the region of the phase being worked on.
+  const doc = await runP("panacea_surface", { document: "Notes", title: "Notes", mode: "agent" });
+  assert.ok(doc.ok, doc.summary);
+  const canvas = normalizeCanvas(JSON.parse(JSON.stringify((await call("GET", `/api/panacea/${P}/doc`)).body.doc)))!;
+  const pr = canvas.project!;
+  assert.equal(pr.phase, "design");
+  assert.equal(pr.approved, true);
+  const notes = canvas.surfaces.find((x) => x.title === "Notes")!;
+  assert.equal(notes.phase, "design");
+  assert.ok(notes.x >= projectLib.REGION_W, `the design region starts at ${projectLib.REGION_W}, the notes are at ${notes.x}`);
+  const step = pr.phases.find((x) => x.id === "design")!.steps[0]!;
+  assert.equal(step.text, "Pick the colours");
+  const ticked = await runP("panacea_project", { ops: [{ op: "done", id: step.id }, { op: "link", from: notes.id, to: "index.html", why: "the copy" }] });
+  assert.ok(ticked.ok, ticked.summary);
+  assert.match(ticked.summary, /\[x\] .* Pick the colours/);
+  assert.match(ticked.summary, /Decisions: Calm greens/);
+  assert.match(describeCanvas(canvas), /Project "Yoga site" \(stack: Plain HTML, CSS and JS\)/);
+  assert.equal((await runP("panacea_project", { ops: [{ op: "done", id: "nope" }] })).ok, false);
+  // A broken project from disk is repaired, not trusted.
+  const repaired = normalizeCanvas({ ...JSON.parse(JSON.stringify(canvas)), project: { title: "X", phases: [{ label: "A" }], phase: "zzz", approved: "yes" } })!;
+  assert.equal(repaired.project!.phase, "a");
+  assert.equal(repaired.project!.approved, false);
+  assert.equal(repaired.surfaces.find((x) => x.id === notes.id)!.phase, undefined, "a phase the project no longer has is dropped");
 });
 
 server.close();

@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { haltHands } from "./lib/handHalt";
 import { SessionStream, mergeEvents, type StreamStatus } from "./lib/stream";
 import { derive, isRunning, type Cell, type Derived } from "./lib/derive";
 import { share } from "./lib/share";
@@ -81,9 +82,12 @@ const Triggers = lazyPage(() => import("./components/Triggers"), "Triggers");
 // Talk mode (and the 1,900-line speech code behind it) loads when it is turned on.
 const LiveChat = lazyPage(() => import("./components/LiveChat"), "LiveChat", false);
 import { LibraryPicker, type LibraryTab } from "./components/LibraryPicker";
+import { loadInto } from "./components/LoadButton";
+import { loadable } from "./lib/loadable";
+import { announceLoaded, canKeepCanvas, keepCanvas } from "./lib/panaceaBridge";
 import { ToolsSheet } from "./components/ToolsSheet";
 import { VisibleWork } from "./components/VisibleWork";
-import { OPEN_NOTEBOOK, type NotebookRef } from "./lib/notebooks";
+import { OPEN_NOTEBOOK, type ArtifactInfo, type NotebookRef } from "./lib/notebooks";
 import { MONEY_CHANGED } from "./lib/spend";
 import type { Bucket } from "./lib/memory";
 import {
@@ -119,7 +123,7 @@ import {
   splitSpeakable, useSpeech,
 } from "./lib/voice";
 import {
-  IconArrow, IconArrowUp, IconChevron, IconFile, IconFolder, IconMask, IconMenu, IconNotebook, IconPlus, IconStop,
+  IconArrow, IconArrowUp, IconChevron, IconFile, IconFolder, IconMask, IconMenu, IconNotebook, IconPlus, IconSave, IconStop,
   IconWrench,
   IconX,
 } from "./components/Icons";
@@ -523,6 +527,7 @@ export function App() {
       onStudioCommand: emitStudioCommand,
       onPanaceaDesk: setPanaceaState,
       onPanaceaCommand: emitPanaceaCommand,
+      onHandsHalt: (stop: boolean) => haltHands(stop),
       onSpectra: emitSpectraEvent,
       onVideoDesk: setVideoState,
       onVideoCommand: emitVideoCommand,
@@ -855,6 +860,8 @@ export function App() {
    * server at all is still reported here.
    */
   const stopTurn = useCallback(async () => {
+    // Nothing goes on being shown after Stop: the hand halts here at once, before the server has heard.
+    haltHands(true);
     streamRef.current?.interrupt();
     if (!sessionId) return;
     try {
@@ -1131,18 +1138,18 @@ export function App() {
      sends it back down the socket, so what is drawn here is the record rather
      than a guess that a reload would contradict. */
   const rateReply = useCallback(
-    async (turn: number, up: boolean | null, reason?: string) => {
+    async (turn: number, reply: number, up: boolean | null, reason?: string) => {
       if (!sessionId) return;
       await fetch(`/api/sessions/${sessionId}/rating`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ turn, up, reason }),
+        body: JSON.stringify({ turn, reply, up, reason }),
       }).catch(() => undefined);
     },
     [sessionId],
   );
   const ratingOf = useCallback(
-    (turn: number) => view.ratings.get(turn),
+    (reply: number) => view.ratings.get(reply),
     [view.ratings],
   );
 
@@ -1565,6 +1572,24 @@ export function App() {
   /* The app window takes the right of the chat on a wide screen, for a live
      session; on a phone it lives in the pinned view. */
   const phoneLayout = usePhone();
+  /* On a phone the canvas has no bar: the folder sheet also opens a saved file on it and saves it (lib/panaceaBridge). */
+  const canvasOpen = useMemo(() => ({
+    label: "Open on canvas",
+    fits: (file: ArtifactInfo) => loadable("panacea", file),
+    run: (file: ArtifactInfo) => {
+      setArtifactsOpen(false);
+      if (!sessionId) return;
+      loadInto("panacea", sessionId, file).then((result) => {
+        if (!result) return;
+        announceLoaded(result);
+        setNotice(result.said ?? `${file.name} is open.`);
+      }, (err: unknown) => setNotice(err instanceof Error ? err.message : String(err)));
+    },
+  }), [sessionId]);
+  const keepFromSheet = useCallback(() => {
+    setArtifactsOpen(false);
+    keepCanvas().then(setNotice, (err: unknown) => setNotice(err instanceof Error ? err.message : String(err)));
+  }, []);
   const preview = usePreviewState();
   const desk = useDeskState();
   const video = useVideoState();
@@ -2698,9 +2723,17 @@ export function App() {
                       {artifactsOpen && (
                         <LibraryPicker
                           tabs={ARTIFACT_TABS}
-                          title="Add from Artifacts"
+                          title={phoneLayout ? "Artifacts" : "Add from Artifacts"}
                           action="Add"
                           exclude={new Set(attached.map((f) => f.id))}
+                          open={phoneLayout ? canvasOpen : undefined}
+                          extra={phoneLayout && canKeepCanvas() ? (
+                            <button type="button" className="lib-row lib-keep" onClick={keepFromSheet}>
+                              <span className="lib-tick" aria-hidden="true" />
+                              <span className="lib-icon"><IconSave size={16} /></span>
+                              <span className="lib-main"><b>Save this canvas to Artifacts</b><em>Kept as a .panacea.json file</em></span>
+                            </button>
+                          ) : undefined}
                           onClose={closeArtifacts}
                           onPick={addFromArtifacts}
                         />
@@ -2787,6 +2820,7 @@ export function App() {
                   driving={driving}
                   waitingOnYou={browserHandedOver}
                   onStop={stopFromThread}
+                  onBoard
                 />
               </aside>
             )}

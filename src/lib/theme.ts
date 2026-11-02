@@ -203,8 +203,9 @@ export type ThemeColors = {
 };
 
 function readColors(): ThemeColors {
-  const css = getComputedStyle(document.documentElement);
-  const v = (name: string, fallback: string) => css.getPropertyValue(name).trim() || fallback;
+  // Rendered with no page (a server render in a test), every colour is its fallback.
+  const css = typeof document === "undefined" ? null : getComputedStyle(document.documentElement);
+  const v = (name: string, fallback: string) => css?.getPropertyValue(name).trim() || fallback;
   return {
     accent: v("--accent", "#6e5bff"),
     accent2: v("--accent-2", "#22d3ee"),

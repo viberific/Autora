@@ -52,6 +52,14 @@ rules, selection-driven panels and learned profile. This does **not** imply a co
 native replacements for every editor, or new adaptive controls for every engine selection. Each integrated engine
 still supplies its own live controls, model, save/export and history. See `docs/PANACEA-ENGINE.md` for that future work.
 
+**Windows on the board.** Every tile (an app's work card, a photo, a table, a document, a board) moves by its title bar and
+is sized by its bottom-right corner, with a mouse or a finger (`Board.tsx` `gesture`); a surface's new place and size are a
+step in the canvas history. Maximise lays the tile out to fill the visible work area at its real size and centres the view on
+it; pressed again it goes back. On a phone an app's card opens at the size of the visible work area, and fitting is tight, so
+its controls are a usable size. **Where work went** between apps (`lib/panacea/flows.ts`) is drawn as a dashed line between
+the two windows with an arrow halfway along: noted when a tool of one app reads another app's file (`noteFlowsOf` in
+`server.ts`) or a file is loaded into an app (`server/loadfile.ts`), and saved with the canvas.
+
 ## What it is made of
 
 - **Atoms** (`src/lib/panacea/atoms.ts`): the smallest pieces. Layout (stack, row, group, divider), display (label, note,
