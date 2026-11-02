@@ -14,6 +14,7 @@
  * Shared by the server and the page, so written without DOM or Node types.
  */
 import { MUSIC_TRACK } from "./apps/music";
+import { MATERIALS, MODEL_PART } from "./apps/model";
 import { INSTRUMENTS, NOTE_NAMES, SCALE_NAMES } from "../studio/model";
 import { MAX_DEPTH, type Value } from "./atoms";
 import { INTENTS, type RecipeNext, type RecipeWhen } from "./intent";
@@ -256,27 +257,19 @@ const VIDEO: Recipe[] = [
   r("video", "thumbnail", "Thumbnail", "the picture people click", "thumbnail cover poster", stack(tx("video.thumbtext", "Words"), col("video.thumbcolor", "Colour"), seg("video.thumbstyle", "Style", ["Bold", "Clean", "Photo"]))),
 ];
 
+// Every control here acts on the model in Autora 3D (src/lib/panacea/apps/model.ts), on the part picked in its Part list.
+// The modeller has no absolute rotation, light, camera, environment, render quality or printer path, so there are no
+// panels for them. Shapes and Export hold what the person picked for the agent to act on.
+const PART = () => sel(MODEL_PART, "Part", "parts");
 const THREE_D: Recipe[] = [
-  r("3d", "move", "Position", "where it sits", "position move transform translate", stack(sl("model.x", "X", { min: -500, max: 500, centre: true, unit: "mm" }), sl("model.y", "Y", { min: -500, max: 500, centre: true, unit: "mm" }), sl("model.z", "Z", { min: -500, max: 500, centre: true, unit: "mm" }))),
-  r("3d", "rotate", "Rotation", "turned about each axis", "rotate rotation orientation", row(kn("model.rx", "X", { min: -180, max: 180, unit: "°" }), kn("model.ry", "Y", { min: -180, max: 180, unit: "°" }), kn("model.rz", "Z", { min: -180, max: 180, unit: "°" }))),
-  r("3d", "scale", "Scale", "how big", "scale size resize", stack(sl("model.scale", "Scale", { min: 0.1, max: 10, step: 0.05 }), adv(sl("model.sx", "X", { min: 0.1, max: 10, step: 0.05 })), adv(sl("model.sy", "Y", { min: 0.1, max: 10, step: 0.05 })), adv(sl("model.sz", "Z", { min: 0.1, max: 10, step: 0.05 })))),
-  r("3d", "material", "Material", "colour, roughness and metal", "material colour roughness metal", stack(col("model.color", "Colour"), sl("model.rough", "Roughness", { min: 0, max: 100 }), sl("model.metal", "Metalness", { min: 0, max: 100 }))),
-  r("3d", "light", "Lighting", "the light on the scene", "light lighting sun lamp", stack(seg("model.ltype", "Light", ["Sun", "Studio", "Lamp"]), sl("model.lint", "Intensity", { min: 0, max: 200 }), col("model.lcolor", "Colour"))),
-  r("3d", "camera", "Camera", "the view and its lens", "camera view lens fov", stack(seg("model.view", "View", ["Perspective", "Top", "Front", "Side"]), sl("model.fov", "Field of view", { min: 15, max: 120, unit: "°" }))),
-  r("3d", "shapes", "Shapes", "add a basic shape", "shapes primitives add cube sphere", stack(seg("model.shape", "Shape", ["Box", "Sphere", "Cylinder", "Cone"]), ask("Add it", "Add the shape picked in the Shapes panel to the model."))),
-  r("3d", "modifier", "Modifier", "bevel, smooth or mirror", "modifier bevel subdivide mirror", stack(seg("model.mod", "Modifier", ["Bevel", "Smooth", "Mirror"]), st("model.level", "Level", { min: 0, max: 6 }))),
-  r("3d", "snap", "Snapping", "snap to a grid", "snap grid snapping align", stack(tg("model.snap", "Snap"), st("model.grid", "Grid", { min: 1, max: 100, unit: "mm" }))),
-  r("3d", "environment", "Environment", "the world around it", "environment hdri background sky", stack(sw("model.env", "World", [{ value: "studio", label: "Studio", color: "#9aa0a8" }, { value: "sunset", label: "Sunset", color: "#f0a050" }, { value: "night", label: "Night", color: "#1d2a48" }, { value: "forest", label: "Forest", color: "#3d7a4a" }]), sl("model.envamt", "Strength", { min: 0, max: 200 }))),
-  r("3d", "render", "Render", "quality and shadows", "render quality shadows", stack(seg("model.quality", "Quality", ["Draft", "Good", "Best"]), tg("model.shadows", "Shadows"))),
-  r("3d", "measure", "Measure", "the size of what is picked", "measure dimensions size", stack(stat("model.width", "Width", "mm"), stat("model.height", "Height", "mm"), ask("Measure it", "Measure the selected part and fill in the Measure panel."))),
-  r("3d", "boolean", "Combine", "join, cut or keep the overlap", "boolean union subtract intersect combine", stack(seg("model.bool", "How", ["Join", "Cut", "Overlap"]), ask("Do it", "Combine the selected parts as set in the Combine panel."))),
-  r("3d", "array", "Repeat", "copies in a row", "array repeat copies pattern", stack(st("model.count", "Copies", { min: 1, max: 50 }), sl("model.gap", "Spacing", { min: 0, max: 200, unit: "mm" }))),
-  r("3d", "export", "Export", "for printing or games", "export stl glb print", stack(seg("model.format", "Format", ["STL", "GLB"]), ask("Export", "Export the model in the format set in the Export panel."))),
-  r("3d", "symmetry", "Symmetry", "mirror the work across axes", "symmetry mirror axes", stack(chips("model.sym", "Mirror across", ["X", "Y", "Z"]))),
-  r("3d", "extrude", "Extrude", "pull a face out", "extrude push pull depth", stack(sl("model.depth", "Depth", { min: -100, max: 100, centre: true, unit: "mm" }))),
-  r("3d", "bevel", "Bevel", "round the edges", "bevel round edges fillet", stack(sl("model.bevel", "Width", { min: 0, max: 20, step: 0.5, unit: "mm" }), st("model.segments", "Segments", { min: 1, max: 12 }))),
-  r("3d", "parts", "Parts", "what the model is made of", "parts outliner objects list", stack(lst("model.parts", "Parts"))),
-  r("3d", "print", "Printing", "infill, quality and supports", "print printing infill supports", stack(sl("model.infill", "Infill", { min: 0, max: 100, unit: "%" }), seg("model.layer", "Quality", ["Draft", "Normal", "Fine"]), tg("model.supports", "Supports"))),
+  r("3d", "move", "Position", "where a part sits", "position move transform translate", stack(PART(), sl("model.x", "X", { min: -500, max: 500, centre: true, unit: "mm" }), sl("model.y", "Y", { min: -500, max: 500, centre: true, unit: "mm" }), sl("model.z", "Z (underside)", { min: -500, max: 500, centre: true, unit: "mm" }))),
+  r("3d", "size", "Size", "how big a part is", "scale size resize width depth height", stack(PART(), sl("model.width", "Width", { min: 1, max: 500, unit: "mm" }), sl("model.depth", "Depth", { min: 1, max: 500, unit: "mm" }), sl("model.height", "Height", { min: 1, max: 500, unit: "mm" }))),
+  r("3d", "material", "Material", "colour and finish", "material colour finish metal glass glossy", stack(PART(), col("model.color", "Colour"), seg("model.material", "Finish", [...MATERIALS]))),
+  r("3d", "bevel", "Bevel", "round or flatten the edges", "bevel round edges fillet chamfer", stack(PART(), sl("model.bevel", "Size", { min: 0, max: 20, step: 0.5, unit: "mm" }), seg("model.bevelstyle", "Style", ["round", "chamfer"]))),
+  r("3d", "array", "Repeat", "copies in a row", "array repeat copies pattern", stack(PART(), st("model.count", "Copies", { min: 1, max: 50 }), sl("model.gap", "Spacing", { min: 1, max: 200, unit: "mm" }), sl("model.dir", "Direction", { min: 0, max: 359, unit: "°" }))),
+  r("3d", "parts", "Parts", "pick a part, show or hide it", "parts outliner objects list visible hide", stack(PART(), tg("model.visible", "Shown"))),
+  r("3d", "shapes", "Shapes", "add a basic shape", "shapes primitives add cube cylinder", stack(sel("model.shape", "Shape", ["box", "roundedBox", "cylinder", "triangle", "wedge", "pentagon", "hexagon", "octagon", "star"]), ask("Add it", "Add the shape picked in the Shapes panel to the model (cad_shape_add)."))),
+  r("3d", "export", "Export", "for printing or games", "export stl glb print", stack(seg("model.format", "Format", ["STL", "GLB"]), ask("Export", "Export the model in the format set in the Export panel (cad_export)."))),
 ];
 
 const GAME: Recipe[] = [

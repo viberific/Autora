@@ -31,6 +31,8 @@ import { panaceaSteps, stepWords } from "../src/lib/panacea/handsteps";
 import { addFlow, type Flow } from "../src/lib/panacea/flows";
 import { treeLive } from "../src/lib/panacea/wiring";
 import { MUSIC_TRACK, isMusicBind, readMusic } from "../src/lib/panacea/apps/music";
+import { MODEL_PART, isModelBind, readModel } from "../src/lib/panacea/apps/model";
+import { cadModel, cadPanel } from "./caddesk";
 import { studioPanel, studioSong } from "./studio";
 import { addStep, createProject, decide, describeProject, linkPieces, phaseFor, setStepDone, stepById, type Project } from "../src/lib/panacea/project";
 import { addCard, applyBoardParam, boardListing, boardMarkdown, boardSvg, createBoard, editCard, editLink, linkCards, moveCard, removeCard, tidy, unlink, type BoardMode, type BoardState } from "../src/lib/panacea/board";
@@ -520,9 +522,34 @@ function setChecked(session: string, c: Canvas, key: string, v: unknown): string
 /** What the song says for a `music.*` value, for describing the canvas. */
 function songValues(session: string, canvas: Canvas): (bind: string) => Value | undefined {
   return (bind) => {
+    if (isModelBind(bind)) {
+      const model = cadModel(session);
+      return model ? readModel(model, bind, canvas.values[MODEL_PART]) : undefined;
+    }
     const song = studioSong(session);
     return song && isMusicBind(bind) ? readMusic(song.project, bind, canvas.values[MUSIC_TRACK], song.focus) : undefined;
   };
+}
+
+/**
+ * The `model.*` values in what the agent gave panacea_set or panacea_place are the 3D model's, not the canvas's: they
+ * are done here by the modeller's own tools (src/lib/panacea/apps/model.ts) and taken out of the rest, which the canvas
+ * keeps. The part they act on is `model.part` (given in the same call, else the canvas's).
+ */
+async function applyModelValues(session: string, c: Canvas, args: Record<string, any>): Promise<{ args: Record<string, any>; done: string[]; problems: string[] }> {
+  const given = args.values && typeof args.values === "object" ? Object.entries(args.values as Record<string, unknown>) : [];
+  const mine = given.filter(([k]) => isModelBind(k) && k !== MODEL_PART);
+  if (!mine.length) return { args, done: [], problems: [] };
+  const part = (args.values as Record<string, unknown>)[MODEL_PART] ?? c.values[MODEL_PART];
+  const done: string[] = [];
+  const problems: string[] = [];
+  for (const [k, v] of mine) {
+    const res = await cadPanel(session, k, v, part, "agent");
+    if (res.ok) done.push(`${k}=${JSON.stringify(v).slice(0, 40)} (${res.did})`);
+    else problems.push(`${k}: ${res.error}`);
+  }
+  const rest = Object.fromEntries(given.filter(([k]) => !mine.some(([m]) => m === k)));
+  return { args: { ...args, values: rest }, done, problems };
 }
 const trackFirst = (a: [string, unknown], b: [string, unknown]) => Number(b[0] === MUSIC_TRACK) - Number(a[0] === MUSIC_TRACK);
 
@@ -1199,8 +1226,14 @@ export async function runPanaceaTool(session: string, name: string, args: Record
       case "panacea_board":
       case "panacea_bespoke":
       case "panacea_project": {
+        // Values of the 3D model are done by the modeller first; the rest are the canvas's.
+        const modelled = name === "panacea_place" || name === "panacea_set" ? await applyModelValues(session, e.canvas, args) : { args, done: [] as string[], problems: [] as string[] };
+        const modelNote = `${modelled.done.length ? ` Set in the model: ${modelled.done.join(", ")}.` : ""}${modelled.problems.length ? ` Not set: ${modelled.problems.join("; ")}.` : ""}`;
+        if (name === "panacea_set" && !Object.keys(modelled.args.values ?? {}).length && (modelled.done.length || modelled.problems.length)) {
+          return modelled.done.length ? { ok: true, summary: `Done.${modelNote}`, preview: modelled.done[0]! } : { ok: false, summary: `Nothing set.${modelNote}` };
+        }
         const next = structuredClone(e.canvas);
-        const done = edit(session, name, next, args, hooks);
+        const done = edit(session, name, next, modelled.args, hooks);
         setOpen(session, true);
         // Stop ends the wait for the window's hand at once (the page halts the hand itself: src/lib/handHalt.ts).
         hooks.onCancel?.(() => rejectAll(session, "Stopped by the person."));
@@ -1208,7 +1241,7 @@ export async function runPanaceaTool(session: string, name: string, args: Record
         if (hooks.cancelled?.()) return { ok: false, summary: "Stopped by the person before this was done: the canvas keeps what the hand had done so far, and nothing more." };
         if (hand) e.quiet = e.rev + 1;
         commit(session, e, next, "agent");
-        return { ok: true, summary: `${done.text}${hand ? ` ${hand}` : ""}`, preview: done.preview };
+        return { ok: true, summary: `${done.text}${modelNote}${hand ? ` ${hand}` : ""}`, preview: done.preview };
       }
 
       case "panacea_export": {

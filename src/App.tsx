@@ -1703,7 +1703,7 @@ export function App() {
     { mode: "panacea", open: panacea.open, since: panacea.since, revision: panacea.by === "agent" ? panacea.rev : undefined },
     { mode: "pdf", open: desk.open, since: desk.since, revision: desk.rev },
     { mode: "video", open: video.open, since: video.since, revision: `${video.projectId ?? ""}:${video.name ?? ""}` },
-    { mode: "cad", open: cad.open, since: cad.since, revision: cad.by === "agent" ? cad.rev : undefined },
+    { mode: "cad", open: cad.open, since: cad.since, revision: cad.by === "agent" && cad.quiet !== cad.rev ? cad.rev : undefined },
     { mode: "game", open: game.open, since: game.since, revision: game.by === "agent" ? game.rev : undefined },
     { mode: "photo", open: photo.open, since: photo.since, revision: photo.by === "agent" ? photo.rev : undefined },
     { mode: "studio", open: studio.open, since: studio.since, revision: studio.by === "agent" && studio.quiet !== studio.rev ? studio.rev : undefined },

@@ -14,6 +14,8 @@ type CadState = {
   by?: "agent" | "person";
   /** Shapes in the model. */
   shapes?: number;
+  /** This revision came from a Panacea panel, which the window has already: it takes it without moving the camera. */
+  quiet?: number;
 };
 
 const CLOSED: CadState = { open: false };

@@ -8,7 +8,7 @@ session can pick it up without the conversation that produced it.
 | Step | Status | What remains |
 |---|---|---|
 | G0 Make it honest | **Done** (0.9.321, 0.9.322) | — |
-| G1 Engine panels drive the engines | **Music done (0.9.323)** | 3D, Video, Game, each its own release |
+| G1 Engine panels drive the engines | **Music (0.9.323) and 3D (0.9.324) done** | Video, Game, each its own release |
 | G2 Windows the agent can lay out | Not started | see the plan |
 | G7 Verified where it runs | Not started | needs CI or the Docker image |
 | G3 Full native surfaces (full spreadsheet first) | Not started | see the plan |
@@ -50,9 +50,12 @@ agent's `panacea_set` and `panacea_place` values go to the song), `appValue` in 
 
 ## After Music
 
-- **3D** (`caddesk`, `server/cad*.ts`): the same shape. `model.x/y/z`, `rx/ry/rz`, scale, colour, roughness, metalness
-  act on the selected part through the cad tools; camera and light through the scene. Reshape or delete what the
-  modeller cannot do (`3d.print` has no printer path: delete).
+- **3D: done (0.9.324)**, the same shape as Music: `src/lib/panacea/apps/model.ts` (pure: reads the model's bodies, and
+  turns a value into the modeller's own `shape_*` / `edge_bevel` / `repeat_set` calls on the part picked in the panel's
+  Part list), `cadPanel` / `cadModel` in `server/caddesk.ts`, `POST /api/cad/:session/panel`, `applyModelValues` in
+  `server/panacea.ts` (async, so it runs before the sync `edit`). The modeller has no absolute rotation, light, camera,
+  environment, render quality or printer path, so those panels are deleted. Tests: `tests/panacea-model.test.ts`,
+  `tests/ui-panacea-model.test.ts`. A browser test needs `npm --prefix autora-3d ci` and a build of it.
 - **Video** (OpenCut commands, `src/components/OpenCutWindow.tsx`): speed, volume, fades, title, aspect, grade, export.
 - **Game** (the GDevelop bridge): needs the game editor built to test; movement, physics, health, camera.
 - Each engine: wired or deleted, read back from the engine, and set by hand in the engine's own window with Visible

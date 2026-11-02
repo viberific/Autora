@@ -27,6 +27,8 @@ import { stateDir } from "./state";
 import { readDoc, saveDoc } from "./store";
 import { staticDir } from "./staticfiles";
 import { cadSPECS } from "./specs/cad";
+import { MODEL_PART, isModelBind, modelCommands, type ModelDoc } from "../src/lib/panacea/apps/model";
+import type { Value } from "../src/lib/panacea/atoms";
 
 /** What the bundle's `Engine` offers the server (the rest of its API is the tools). */
 interface CadEngine {
@@ -74,6 +76,8 @@ interface CadState {
   by?: "agent" | "person";
   /** Shapes in the model (the copies a repeat makes are not counted). */
   shapes?: number;
+  /** This revision came from a Panacea panel, which the window has already: it takes it without moving the camera. */
+  quiet?: number;
 }
 
 interface Entry {
@@ -85,6 +89,8 @@ interface Entry {
   shapes: number;
   /** What the agent is doing, for the window to show the cursor doing it: the tool, and a number that goes up per call. */
   cue: { seq: number; tool: string } | null;
+  /** The revision a Panacea panel made: the window takes it without lighting it up or moving the camera. */
+  quiet?: number;
   /** The agent's hand is at work in the window: what the window sends up meanwhile is its hand's steps, not the person's. */
   handing?: number;
 }
@@ -201,7 +207,7 @@ export function cadState(session: string): CadState {
   if (!validSession(session)) return { open: false };
   const entry = entryFor(session);
   if (!entry.open) return { open: false };
-  return { open: true, since: entry.since, rev: entry.rev, by: entry.by, shapes: entry.shapes };
+  return { open: true, since: entry.since, rev: entry.rev, by: entry.by, shapes: entry.shapes, ...(entry.quiet === entry.rev ? { quiet: entry.rev } : {}) };
 }
 
 /** Told after every change to a chat's window or model, so the page can be told. */
@@ -508,6 +514,39 @@ export async function runCadTool(
   }
 }
 
+/**
+ * A Panacea panel's `model.*` control moved (docs/PANACEA-GAPS.md, G1): the modeller's own tools make the part so, and the
+ * window shows it. Used by the page (`who` "person": taken without a flash) and by the agent (`panacea_set`). Refuses,
+ * with the reason, rather than half-doing it.
+ */
+export async function cadPanel(session: string, bind: string, value: unknown, part: unknown, who: "agent" | "person"): Promise<{ ok: true; did: string } | { ok: false; error: string }> {
+  if (!validSession(session)) return { ok: false, error: "Autora 3D needs a chat to work in." };
+  if (!isModelBind(bind) || bind === MODEL_PART) return { ok: false, error: `nothing in the model answers to ${bind}` };
+  try {
+    const engine = await engineOf(session);
+    const plan = modelCommands(engine.getDoc() as unknown as ModelDoc, bind, value as Value, part);
+    if ("error" in plan) return { ok: false, error: plan.error };
+    const entry = entryFor(session);
+    setOpen(session, true);
+    for (const c of plan.commands) {
+      // Each call is one change (one revision); the last is the one the window takes quietly.
+      entry.by = "agent";
+      if (who === "person") entry.quiet = entry.rev + 1;
+      const res = await engine.execute(c.tool, c.args);
+      if (!res.ok) return { ok: false, error: asAgentSees(res.error ?? "that did not work") };
+    }
+    return { ok: true, did: plan.did };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** The model as it is now if its engine is running (it is once anything has used it), for what the agent reads off the canvas. */
+export function cadModel(session: string): ModelDoc | null {
+  if (!validSession(session)) return null;
+  return (entries.get(session)?.engine?.getDoc() as unknown as ModelDoc | undefined) ?? null;
+}
+
 /** Which of the model's tools exist, for the capability briefing. */
 export function cadBriefing(on: boolean): string {
   if (!on) {
@@ -571,6 +610,17 @@ export function cadRoutes(app: Express, opts: {
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
+  });
+
+  /* A panel's 3D control moved (Panacea): the modeller makes it so, in one place for the person and the agent. */
+  app.post("/api/cad/:session/panel", express.json({ limit: "64kb" }), async (req, res) => {
+    const id = known(req, res);
+    if (!id) return;
+    if (opts.off()) return res.status(403).json({ error: "Autora 3D is switched off on the Tools page." });
+    const bind = typeof req.body?.bind === "string" ? req.body.bind : "";
+    const done = await cadPanel(id, bind, req.body?.value, req.body?.part, "person");
+    if (!done.ok) return res.status(400).json({ error: done.error });
+    res.json({ rev: entryFor(id).rev, did: done.did });
   });
 
   /* What the person did in the window. Taken as it is (the engine parses and settles it), so a stale or malformed

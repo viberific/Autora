@@ -134,6 +134,13 @@ await test("the Video manual says which edits are done in the window by hand wit
   }
 });
 
+await test("the 3D manual says Panacea's 3D panels drive the model, with a Part list", () => {
+  const cad = manualText("cad");
+  for (const needle of ["Panacea's 3D panels drive this same model", "Part list", "panacea_set", "no panels for rotation"]) {
+    assert.ok(cad.includes(needle), `the 3D manual lacks "${needle}"`);
+  }
+});
+
 await test("the 3D manual says every changing call is done in the window by hand with Visible work on, and what has no control", () => {
   const cad = manualText("cad");
   for (const needle of ["With Visible work on", "every call that changes the model is done there", "by your hand, live", "Shape tray", "with Draw", "Size & position", "Shift for each after the first", "dragging the ring", "Curved edge", "Undo and Redo in the top bar", "one command at a time", "Done by hand in the 3D window", "Not by hand", "cad_doc_set", "With Visible work off"]) {

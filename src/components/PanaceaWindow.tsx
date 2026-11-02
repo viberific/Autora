@@ -25,7 +25,8 @@ import { autoSettings, renderFull } from "./panacea/imagegl";
 import type { PanelActions } from "./panacea/PanelCard";
 import { pictureOf } from "./panacea/Surfaces";
 import { useCanvas } from "./panacea/useCanvas";
-import { isAppBind, useAppValues, wantsMusic } from "./panacea/useAppValues";
+import { isAppBind, useAppValues, wantedApps } from "./panacea/useAppValues";
+import { MODEL_PART, isModelBind } from "../lib/panacea/apps/model";
 import { MUSIC_TRACK } from "../lib/panacea/apps/music";
 import { SaveButton, keptAs } from "./SaveButton";
 import { LoadButton, type LoadResult } from "./LoadButton";
@@ -90,8 +91,8 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
   const waved = useRef(new Map<string, number>());
   const focusedKind = canvas.surfaces.find((surface) => surface.id === canvas.focus)?.kind;
   // The apps a panel drives (the song, for a Music panel): read off the app and changed there, not kept on the canvas.
-  const musicWanted = useMemo(() => wantsMusic(canvas.panels.map((p) => p.tree)), [canvas.panels]);
-  const apps = useAppValues(sessionId, musicWanted, setProblem);
+  const appsWanted = useMemo(() => wantedApps(canvas.panels.map((p) => p.tree)), [canvas.panels]);
+  const apps = useAppValues(sessionId, appsWanted, setProblem);
 
   // Learning may reveal controls or change density, but never midway through typing or dragging.
   useEffect(() => {
@@ -161,7 +162,7 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
     touched.current.add(panel.id);
     if (isAppBind(key)) {
       // An app's value: the app changes (useAppValues); the canvas only notes that the panel was used.
-      apps.write(key, v, live.current.values[MUSIC_TRACK]);
+      apps.write(key, v, live.current.values[isModelBind(key) ? MODEL_PART : MUSIC_TRACK]);
       quietly((d) => { const p = d.panels.find((x) => x.id === panel.id); if (p) p.touched = Date.now(); });
     } else edit((d) => {
       setValue(d, key, v);
@@ -323,7 +324,7 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
   const hold = doc.hold;
   const api: PanaceaApi = useMemo(() => ({
     canvas, profile: displayProfile, sessionId, set, act, ask, hold, expand, writeDoc, writeBoard, setMode,
-    value: (key: string) => apps.read(key, canvas.values[MUSIC_TRACK]) ?? valueAt(canvas, key),
+    value: (key: string) => apps.read(key, canvas.values[isModelBind(key) ? MODEL_PART : MUSIC_TRACK]) ?? valueAt(canvas, key),
     options: apps.options,
   }), [apps, canvas, displayProfile, sessionId, set, act, ask, hold, expand, writeDoc, writeBoard, setMode]);
 

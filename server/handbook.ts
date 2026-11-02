@@ -286,7 +286,12 @@ const CAD = [
     "cad_face_push / cad_edge_bevel change it; cad_shapes_join and cad_shapes_subtract combine shapes; cad_repeat_set makes arrays; " +
     "groups and a library hold reusable parts; cad_history_undo / redo step back; cad_batch does many in one call. Check a part " +
     "with cad_shape_measure (is it watertight) before cad_export, which gives STL for printing or GLB for games. The person pushes " +
-    "and pulls the same model by hand, so call cad_scene_get again before relying on what you saw. What to make and how it looks are " +
+    "and pulls the same model by hand, so call cad_scene_get again before relying on what you saw. Panacea's 3D panels drive this same " +
+    "model: Position, Size, Material, Bevel, Repeat and Parts act on one part, chosen in the panel's Part list (else the first part), " +
+    "by these same tools; Shapes and Export hold the person's pick for you to add or export. Nothing about the model is kept on the " +
+    "canvas, so panel, window and tools always agree: panacea_set with {\"model.width\": 60} resizes the part and opens this window, " +
+    "and panacea_look shows the model's values. There are no panels for rotation, light, camera, environment or printing: the " +
+    "modeller has none of them (cad_shape_turn turns about the vertical axis only). What to make and how it looks are " +
     "theirs; the geometry is yours. What the person sees (there is no bottom bar of text buttons and no menu in the top bar any more): a " +
     "slim top bar (undo, redo, what is selected), the model, and a round, coloured tool bar (down the right side on a desktop, along " +
     "the bottom on a phone) that shows only as many tools as fit: Shape, Draw, Move, Group, Repeat, Size & position and Delete on a phone, " +
