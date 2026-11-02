@@ -3931,7 +3931,8 @@ async function runToolUnredacted(
 
 export async function capabilityBriefing(): Promise<string> {
   const groups = await groupStates();
-  const lines: string[] = ["What you can actually do, right now, on this machine:"];
+  // Said once rather than under every group: it held for each, and repeating it cost the briefing hundreds of characters.
+  const lines: string[] = ["What you can actually do, right now, on this machine (the tools of an available group run straight away -- nothing waits on the person's approval):"];
 
   for (const group of groups) {
     const head = group.available
@@ -3942,7 +3943,6 @@ export async function capabilityBriefing(): Promise<string> {
     lines.push(`${head} ${group.detail}`);
     if (group.available) {
       lines.push(`  Tools: ${group.tools.join(", ")}.`);
-      lines.push("  These run straight away -- nothing waits on the person's approval.");
     }
   }
 

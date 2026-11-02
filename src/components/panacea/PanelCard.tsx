@@ -1,4 +1,5 @@
 import { memo, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { treeLive } from "../../lib/panacea/wiring";
 import { holdsWords, type Panel } from "../../lib/panacea/canvas";
 import { IconPin, IconX } from "../Icons";
 import { Atom } from "./Atoms";
@@ -99,7 +100,14 @@ export const PanelCard = memo(function PanelCard({ panel, selected, fresh, offse
           </span>
         </div>
       )}
-      <div className="pa-body" ref={(el) => el?.toggleAttribute("inert", ghost || dim)}>
+      {/* A panel from before its app was connected (lib/panacea/wiring.ts): said, rather than left to look like it works. */}
+      {!treeLive(panel.tree) && (
+        <div className="pa-offer is-top pa-unwired">
+          <span>Not connected to its app yet: these controls change nothing. Put it away, or use the app's own window.</span>
+          <span className="pa-offer-acts"><button type="button" className="pa-btn" data-act="close" onClick={() => actions.close(panel)}>Put away</button></span>
+        </div>
+      )}
+      <div className="pa-body" ref={(el) => el?.toggleAttribute("inert", ghost || dim || !treeLive(panel.tree))}>
         <Atom node={panel.tree} panel={panel} />
       </div>
       {draft && (

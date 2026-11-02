@@ -769,6 +769,27 @@ await test("a document survives the canvas going to disk and back", async () => 
   assert.match(describeCanvas(back), /document "Minutes", \d+ words in \d+ blocks; Autora may write in it/);
 });
 
+// --------------------------------------------------------------- wiring --
+
+await test("no panel is offered whose controls change nothing: the library, the agent and an old panel all say so", async () => {
+  const { treeLive, unwiredBinds } = await import("../src/lib/panacea/wiring");
+  // Everything the picker and the agent are offered: every control acts on something.
+  const offered = (await call("GET", "/api/panacea/library")).body.recipes as Array<{ id: string; tree: Node }>;
+  assert.ok(offered.length > 40, "the library still offers plenty");
+  for (const r of offered) assert.deepEqual(unwiredBinds(r.tree), [], `${r.id} offers a control nothing acts on`);
+  // A panel tied to an app that nothing connects yet is refused, with why.
+  const dead = BUILTINS.find((r) => !treeLive(r.tree));
+  if (dead) {
+    const refused = await run("panacea_place", { recipe: dead.id, why: "x" });
+    assert.equal(refused.ok, false);
+    assert.match(refused.summary, /not connected to its app yet/);
+    // One already on a canvas (from before) is said to be so.
+    const c = newCanvas();
+    c.panels.push({ id: "pold", title: dead.name, tree: dead.tree, x: 0, y: 0, w: 288, h: 0, state: "live", context: "general", why: "x", by: "agent", at: 1 });
+    assert.match(describeCanvas(c), /not connected to its app/);
+  }
+});
+
 // ---------------------------------------------------------------- flows --
 
 await test("work going between apps: which app a file and a tool are, a flow kept once, and the canvas keeps them", async () => {

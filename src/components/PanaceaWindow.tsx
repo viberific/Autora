@@ -6,6 +6,7 @@ import { enterPhase, estimateHeight, fade, phaseBox, nearestFree, refocus, remov
 import { KINDS, type SurfaceKind } from "../lib/panacea/kinds";
 import type { Recipe } from "../lib/panacea/library";
 import { BUILTINS } from "../lib/panacea/library";
+import { treeLive } from "../lib/panacea/wiring";
 import { densityOf, newProfile, normalizeProfile, noteUse, preferredSide, quieted, usageKey, type Profile } from "../lib/panacea/profile";
 import { bindsOf, parseBind, type Node } from "../lib/panacea/recipe";
 import { addSurfaceTo, placeRecipe, type SurfaceInput } from "../lib/panacea/rules";
@@ -68,7 +69,7 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
   const doc = useCanvas(sessionId, nativeOpen);
   const { canvas, edit, quietly, live, saveNow, refresh } = doc;
   const base = `/api/panacea/${encodeURIComponent(sessionId)}`;
-  const [recipes, setRecipes] = useState<Recipe[]>(BUILTINS);
+  const [recipes, setRecipes] = useState<Recipe[]>(() => BUILTINS.filter((r) => treeLive(r.tree)));
   const [profile, setProfile] = useState<Profile>(() => newProfile());
   const [displayProfile, setDisplayProfile] = useState<Profile>(() => newProfile());
   const [pointerBusy, setPointerBusy] = useState(false);

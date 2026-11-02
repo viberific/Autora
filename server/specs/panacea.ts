@@ -103,7 +103,7 @@ export const panaceaSPECS: ToolSpec[] = [
     risky: true,
     description:
       "Put a panel on the canvas, beside what it works on and on the side the person puts panels. Either `recipe` (a library id: the library has about twenty " +
-      "ready-made panels for each kind of work, and what the person has used), `tree` (a panel you compose from atoms, with a `title`), or `parts` " +
+      "ready-made panels for each kind of work the canvas acts on, and what the person has used; never one whose controls change nothing), `tree` (a panel you compose from atoms, with a `title`), or `parts` " +
       "(nested reusable building blocks from the library). Choose exactly one. A parts root is either {recipe:\"photo.light\",advanced:true} or " +
       "{atom:\"stack\"|\"row\"|\"group\",props:{label:\"Essentials\",gap:8},children:[parts...]}; layouts can contain other layouts and recipe references. " +
       "There are at most 32 parts and 5 nesting levels, with the same expanded atom/control limits as a tree. It compiles into an ordinary panel, " +

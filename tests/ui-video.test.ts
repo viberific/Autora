@@ -78,7 +78,7 @@ async function main() {
 
     const sawCursor: string[] = [];
     const watch = setInterval(() => {
-      void page.locator(".app-pane[data-pane=video] .office-cursor-name").count().then((n) => { if (n) sawCursor.push("seen"); }).catch(() => undefined);
+      void page.locator(".agent-pointer-layer.is-on").count().then((n) => { if (n) sawCursor.push("seen"); }).catch(() => undefined); // the board's one cursor
     }, 120);
 
     const said = () => app.seen.map((r) => JSON.stringify(r.messages.filter((m) => m.role === "tool"))).join("\n").replace(/\\"/g, '"').replace(/\\n/g, "\n");

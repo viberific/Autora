@@ -17,6 +17,7 @@ import type { DocState } from "./document";
 import type { Table } from "./surfaces";
 import { describeProject, readProject, regionX, REGION_W, type Project } from "./project";
 import { readFlows, type Flow } from "./flows";
+import { treeLive } from "./wiring";
 import { WORKSPACE_MODES } from "../workspace";
 
 export type PanelState = "live" | "dim" | "ghost" | "draft";
@@ -523,7 +524,7 @@ export function describeCanvas(canvas: Canvas, opts: { trees?: boolean } = {}): 
     lines.push(`- surface ${s.id}: ${KINDS[s.kind].describe(s)} at ${s.x},${s.y} ${s.w}x${s.h}. ${changed.length ? `Set: ${changed.join(", ")}.` : "Untouched."}`);
   }
   for (const p of canvas.panels) {
-    const flags = [p.state !== "live" ? p.state : "", p.pinned ? "pinned" : "", p.group ? `group ${p.group}` : "", p.by === "person" ? "placed by the person" : "", holdsWords(p.tree) ? (p.writes === "agent" ? "you may write in it" : "its words are the person's") : ""].filter(Boolean).join(", ");
+    const flags = [!treeLive(p.tree) ? "not connected to its app: its controls change nothing, put it away" : "", p.state !== "live" ? p.state : "", p.pinned ? "pinned" : "", p.group ? `group ${p.group}` : "", p.by === "person" ? "placed by the person" : "", holdsWords(p.tree) ? (p.writes === "agent" ? "you may write in it" : "its words are the person's") : ""].filter(Boolean).join(", ");
     lines.push(`- panel ${p.id} "${p.title}"${p.recipe ? ` (recipe ${p.recipe})` : ""} on ${p.context} at ${p.x},${p.y} w${p.w}${flags ? ` [${flags}]` : ""}${p.why ? ` -- why: ${p.why}` : ""}${opts.trees ? `\n    ${treeWords(p.tree)}` : ""}`);
   }
   const shared = Object.entries(canvas.values);

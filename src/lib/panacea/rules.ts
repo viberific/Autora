@@ -14,6 +14,10 @@
 import type { Value } from "./atoms";
 import { contextOf, estimateHeight, MAX_SURFACES, nearestFree, phaseView, placeFor, refocus, seedValues, snap, surfaceParams, uid, type Canvas, type Panel, type PanelState, type Side, type Surface, type Who } from "./canvas";
 import { BUILTINS, instantiate, type Recipe } from "./library";
+import { treeLive } from "./wiring";
+
+/** The built-ins that do what they show (wiring.ts): the only ones offered. */
+const LIVE = BUILTINS.filter((r) => treeLive(r.tree));
 import { rankRecipes } from "./adaptive";
 import type { Profile } from "./profile";
 import { checkTree, parseBind, type CheckContext, type Node } from "./recipe";
@@ -137,7 +141,7 @@ function placeStarters(canvas: Canvas, surface: Surface, find: (id: string) => R
  * The person (or the agent) set a value: is there a panel worth offering for what they are doing now? One suggestion at
  * most, never one already on the canvas or waved away twice.
  */
-export function suggestFor(canvas: Canvas, key: string, value: Value, quiet: (id: string) => boolean, profile?: Profile, list: Recipe[] = BUILTINS): (Offer & { near: string }) | null {
+export function suggestFor(canvas: Canvas, key: string, value: Value, quiet: (id: string) => boolean, profile?: Profile, list: Recipe[] = LIVE): (Offer & { near: string }) | null {
   const { surface, param } = parseBind(key);
   if (!surface) return null;
   const s = canvas.surfaces.find((x) => x.id === surface);

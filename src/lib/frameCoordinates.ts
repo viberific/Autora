@@ -33,7 +33,7 @@ export function isWorkVisible(element: Element): boolean {
   if (document.visibilityState !== "visible") return false;
   const rect = element.getBoundingClientRect();
   const board = element.closest(".pa-board");
-  if (!workRectVisible(rect, { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight })) return false;
+  if (!(element instanceof HTMLIFrameElement) && !workRectVisible(rect, { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight })) return false;
   if (!board) return true;
   /* Inside the board above the entry, and not under the work navigation. That navigation is a small box in a corner,
      so it hides only what it actually covers: workViewport's band (the whole height beside it) is for placing the
@@ -41,8 +41,19 @@ export function isWorkVisible(element: Element): boolean {
   const b = board.getBoundingClientRect();
   const entry = document.querySelector(".conversation-flow__entry-area")?.getBoundingClientRect();
   const bottom = entry && entry.height > 0 && entry.top < b.bottom && entry.bottom > b.top ? Math.min(b.bottom, entry.top - 8) : b.bottom;
-  if (!workRectVisible(rect, { left: b.left, top: b.top, width: b.width, height: Math.max(0, bottom - b.top) })) return false;
+  const room = { left: b.left, top: b.top, width: b.width, height: Math.max(0, bottom - b.top) };
   const nav = document.querySelector(".conversation-flow__work-navigation")?.getBoundingClientRect();
+  /* An editor's whole frame is "on screen" when most of it is, its middle clear of the jump buttons: a window a person
+     can see and work in, though an edge runs under the buttons or off the board. */
+  if (element instanceof HTMLIFrameElement) {
+    const w = Math.max(0, Math.min(rect.right, room.left + room.width) - Math.max(rect.left, room.left));
+    const h = Math.max(0, Math.min(rect.bottom, room.top + room.height) - Math.max(rect.top, room.top));
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const middleClear = !nav || nav.width === 0 || cx < nav.left || cx > nav.right || cy < nav.top || cy > nav.bottom;
+    return rect.width > 0 && rect.height > 0 && (w * h) / (rect.width * rect.height) >= 0.5 && middleClear;
+  }
+  if (!workRectVisible(rect, room)) return false;
   return !nav || nav.width === 0 || rect.right <= nav.left || rect.left >= nav.right || rect.bottom <= nav.top || rect.top >= nav.bottom;
 }
 

@@ -718,7 +718,9 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
           if (!box) return null;
           return <section key={work.id} className={`pw-engine${enginePins.has(work.id) ? " is-pinned" : ""}${isMaxed(work.id) ? " is-max" : ""}`} data-engine={work.mode}
             data-work={work.id} style={{ left: box.x, top: box.y, width: box.w, height: box.h }} aria-label={`${work.title} work surface`}
-            onPointerDownCapture={(e) => { if (e.isTrusted) { interacted.current = true; onJumpWork?.(work.mode); } }}>
+            /* Working in a window is not holding the view (only panning, zooming or dragging is): Follow still brings the
+               agent's next window into view after the person has pressed a button in this one. */
+            onPointerDownCapture={(e) => { if (e.isTrusted) onJumpWork?.(work.mode); }}>
             <header className="pw-engine-head" onPointerDown={(e) => {
               if (e.button !== 0 || (e.target as HTMLElement).closest("button") || enginePins.has(work.id)) return;
               e.preventDefault(); e.stopPropagation(); interacted.current = true; hold(true);
@@ -751,7 +753,7 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
             style={{ left: s.x + (d?.dx ?? 0), top: s.y + (d?.dy ?? 0), width: s.w + (d?.dw ?? 0), height: s.h + (d?.dh ?? 0) }}
             onPointerDown={(e) => {
               if (!(e.target as HTMLElement).closest("button")) {
-                if (e.isTrusted) { interacted.current = true; onJumpWork?.("panacea"); }
+                if (e.isTrusted) onJumpWork?.("panacea");
                 if (canvas.focus !== s.id) onFocus(s.id);
               }
             }}

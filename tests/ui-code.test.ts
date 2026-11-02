@@ -44,6 +44,8 @@ async function main() {
       if (off) await ctx.addInitScript(() => localStorage.setItem("autora.agentCursor", "off"));
       const page = await ctx.newPage();
       await page.goto(`${app.base}/?session=${s}`);
+      // A turn's steps are folded by default (the conversation's contracted activity): open them, as a person would.
+      await page.locator(".steps-top").first().click({ timeout: 5000 }).catch(() => undefined);
       return { ctx, page };
     };
     const code = (page: import("playwright-core").Page) => page.locator(".cell.diff .diff-code");

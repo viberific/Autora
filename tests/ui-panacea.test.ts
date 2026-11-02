@@ -130,7 +130,8 @@ async function main() {
       await page.mouse.dblclick(box.x + 120, box.y + box.height - 220);
       await page.waitForSelector(".pa-summon-q");
       await page.fill(".pa-summon-q", "slider");
-      await page.keyboard.press("Enter");
+      // The blank slider by name: what ranks first for "slider" depends on what earlier tests used, so Enter was a coin toss.
+      await page.click('.pa-summon [data-recipe="blank.slider"]');
       await page.waitForSelector('.pa-panel [data-atom="slider"][data-bind="value"]');
       const track = page.locator('.pa-panel [data-bind="value"] .pa-track');
       const tb = (await track.boundingBox())!;

@@ -29,6 +29,7 @@ import {
 } from "../src/lib/panacea/canvas";
 import { panaceaSteps, stepWords } from "../src/lib/panacea/handsteps";
 import { addFlow, type Flow } from "../src/lib/panacea/flows";
+import { treeLive } from "../src/lib/panacea/wiring";
 import { addStep, createProject, decide, describeProject, linkPieces, phaseFor, setStepDone, stepById, type Project } from "../src/lib/panacea/project";
 import { addCard, applyBoardParam, boardListing, boardMarkdown, boardSvg, createBoard, editCard, editLink, linkCards, moveCard, removeCard, tidy, unlink, type BoardMode, type BoardState } from "../src/lib/panacea/board";
 import { createDoc, docStateOf, formatBlock, insertBlocks, listing, outlineOf, applyParam, deleteBlock, replaceBlockText, stateOf, toMarkdown, type DocMode } from "../src/lib/panacea/document";
@@ -214,10 +215,11 @@ function saveProfile() {
   saveDoc(PROFILE, () => p);
 }
 
-/** Every recipe: the built-ins, with their use counts, and the ones learned since. */
+/** Every recipe that does what it shows: the built-ins, with their use counts, and the ones learned since; none with a
+    control nothing acts on (src/lib/panacea/wiring.ts). */
 function allRecipes(): Recipe[] {
   const p = profileNow();
-  return [...BUILTINS.map((r) => ({ ...r, uses: p.uses[`recipe:${r.id}`] ?? 0 })), ...learned()];
+  return [...BUILTINS.map((r) => ({ ...r, uses: p.uses[`recipe:${r.id}`] ?? 0 })), ...learned()].filter((r) => treeLive(r.tree));
 }
 
 const findRecipe = (id: string): Recipe | undefined => allRecipes().find((r) => r.id === id);
@@ -712,7 +714,9 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
       let placed: Panel | { error: string };
       if (args.parts !== undefined && (args.recipe !== undefined || args.tree !== undefined)) refuse("Give exactly one of `parts`, `recipe` or `tree`, not more than one.");
       if (typeof args.recipe === "string" && args.recipe) {
-        const recipe = findRecipe(args.recipe) ?? refuse(`There is no recipe "${args.recipe}". panacea_look with \`library\` finds them.`);
+        const recipe = findRecipe(args.recipe) ?? refuse(BUILTINS.some((r) => r.id === args.recipe)
+          ? `"${args.recipe}" is not connected to its app yet: its controls would change nothing, so it is not placed. Work in the app's own window, or compose a panel bound to what the canvas does act on.`
+          : `There is no recipe "${args.recipe}". panacea_look with \`library\` finds them.`);
         if (state === "ghost" && quieted(p, recipe.id)) refuse(`The person has waved "${recipe.name}" away more than once; do not offer it unasked.`);
         placed = placeRecipe(c, recipe, { near, state, why, by: "agent", side: preferredSide(p), title: typeof args.title === "string" ? args.title : undefined, ...(w ? { w: Math.min(PANEL_MAX_W, Math.max(PANEL_MIN_W, snap(w))) } : {}) });
       } else if (args.tree !== undefined || args.parts !== undefined) {

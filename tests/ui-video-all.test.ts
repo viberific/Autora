@@ -59,7 +59,7 @@ async function main() {
     await page.waitForSelector(".composer", { timeout: 20_000 });
     let cursors = 0;
     const watch = setInterval(() => {
-      void page.locator(".app-pane[data-pane=video] .office-cursor-name").count().then((n) => { cursors += n; }).catch(() => undefined);
+      void page.locator(".agent-pointer-layer.is-on").count().then((n) => { cursors += n; }).catch(() => undefined); // the board's one cursor
     }, 100);
 
     const results: string[] = [];
