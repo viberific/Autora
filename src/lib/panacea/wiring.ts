@@ -10,6 +10,9 @@
  *
  * Pure: shared by the server and the page.
  */
+import { MODEL_WIRED } from "./apps/model";
+import { GAME_WIRED } from "./apps/game";
+import { VIDEO_WIRED } from "./apps/video";
 import type { Node } from "./recipe";
 
 /** Values named for an app: live only when an adapter acts on them. */
@@ -19,7 +22,7 @@ const APP_VALUE = /^(doc|music|video|model|game|ui)\./;
  * The app values an adapter acts on, exactly or by a prefix ending in "." (the adapters fill this in as each app is
  * connected: docs/PANACEA-GAPS.md, G1).
  */
-const WIRED: readonly string[] = [];
+const WIRED: readonly string[] = ["music.", ...MODEL_WIRED, ...VIDEO_WIRED, ...GAME_WIRED];
 
 /** Whether something acts on this bind. */
 function bindWired(bind: string): boolean {

@@ -114,8 +114,11 @@ acts on anything either. That is acceptable for a list and thin for "Week plan" 
 
 ## The plan
 
-**Status (2026-11-02):** G0 is done. G1 has started: Music is designed and partly written, but not wired in. Everything
-else is to come. How to pick up G1, with the code already written, is in `docs/PANACEA-G1-HANDOFF.md`.
+**Status (2026-11-02):** G0 is done. G1: Music is wired (`src/lib/panacea/apps/music.ts`, `studioPanel` in
+`server/studio.ts`, `POST /api/studio/:session/panel`) and so is 3D (`src/lib/panacea/apps/model.ts`, `cadPanel` in
+`server/caddesk.ts`, `POST /api/cad/:session/panel`) and Video (`src/lib/panacea/apps/video.ts`, `videoPanel` in
+`server/opencut.ts`) and Game (`src/lib/panacea/apps/game.ts`, `gamePanel` in `server/gamedesk.ts`): **G1 is done**. How the
+Music one was built, to repeat for the others, is in `docs/PANACEA-G1-HANDOFF.md`.
 
 The rule for every step: **no control without an effect, and no effect without a control.** A new test enforces the
 first half: every bind in every built-in recipe must have something that acts on it, or the recipe is not offered.
@@ -129,7 +132,7 @@ first half: every bind in every built-in recipe must have something that acts on
 
 **Done when** no panel on the board is a placebo, and `npm run check` is green apart from the editor builds.
 
-### G1. Wire the engine panels to the engines (gap A) — next (`docs/PANACEA-G1-HANDOFF.md`)
+### G1. Wire the engine panels to the engines (gap A) — done (`docs/PANACEA-G1-HANDOFF.md`)
 
 - Each hosted engine gets an **adapter**: shared values in → the engine's own tools and state out, and the engine's
   state → values back, so a panel shows what the song or model really is. Music through the studio desk, Video through
@@ -141,7 +144,9 @@ first half: every bind in every built-in recipe must have something that acts on
 
 **Done when** every Music, Video, 3D and Game panel changes its engine, and reads back from it, on a phone and a desktop.
 
-### G2. Windows the agent can lay out (gap C)
+**Done (release 0.9.325).** Every panel left is one of two things: a control that changes the engine and shows what the engine says (all of Music's mixer, key, tempo and drums; 3D's position, size, material, bevel and repeat; Video's speed, audio, title, picture and project; Game's movement and physics), or the person's own marks and words with an Ask button that has the agent build them (chords, sections, shapes to add, markers, scenes, a level sketch, enemies, win and lose, inventory, dialogue, power-ups, export choices). Panels the engine has nothing for were deleted. The engines' windows are not yet laid out so as to leave the panels clear on a phone: that is G2.
+
+### G2. Windows the agent can lay out (gap C) — done
 
 - `panacea_arrange` gains `surfaces` and `windows`: move, resize, maximise, bring to front, tidy. These use the same
   gestures by hand.
@@ -150,6 +155,8 @@ first half: every bind in every built-in recipe must have something that acts on
 - Artifacts record the app that made them, so flows stop guessing from file type.
 
 **Done when** the agent can lay out the board as a person does, and a reload keeps every window where it was.
+
+**Done (release 0.9.325).** `src/lib/panacea/windows.ts` (a window's place, z, "was" when maximised; raise, maximise, tidy), kept in `Canvas.windows` with the page's `room`; `panacea_arrange` takes `windows`, `surfaces` and `tidy`; the board writes every drag, size, maximise and raise to the canvas and has a Tidy button; the hand does each by the same gesture; `workViewport` keeps a phone's maximised window clear of the bottom row; `Artifact.app` records the app that made a file and `appOfArtifact` replaces guessing from the name.
 
 ### G3. Full native surfaces (gap B)
 

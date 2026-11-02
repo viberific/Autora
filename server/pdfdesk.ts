@@ -226,7 +226,7 @@ async function rewriteNow(session: string, cwd: string) {
     const keep = desk.working ? getArtifact(desk.working) : null;
     const art = saveArtifact({
       origin: "agent", name: keep?.name ?? desk.outName, data, mime: "application/pdf", session,
-      note: "Edited in the PDF window",
+      note: "Edited in the PDF window", app: "pdf",
     });
     desk.working = art.id;
     desk.problem = skipped.length ? `Left out of the file: ${skipped.slice(0, 3).join("; ")}` : null;

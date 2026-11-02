@@ -204,20 +204,14 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  A job handed to Claude or Gemini now streams into the conversation as its own
-  bubble, word by word, instead of arriving whole at the end: Gemini streams
-  natively through Antigravity, and Claude Code streams the same way once it is
-  signed in. The subscription CLIs signed in on this machine (Claude Code, and
-  Gemini through Antigravity) are callable as claude_cli and gemini_cli: Autora
-  says in one line who it is handing the work to and which folder, then the
-  vendor answers for itself, in its own name and mark, streamed into the
-  transcript as it arrives and ending with how long it took and which files it
-  edited. A delegate that fails, whether rate limited, signed out, timed out or
-  not installed, says which in its own bubble, and the job carries on another
-  way rather than depending on the CLI. A read-only delegate whose answer needed
-  a tool it was not allowed to run now reports that, instead of answering
-  nothing.
-  Nothing about a key or a sign-in is shown or kept: a delegate is started with
-  a trimmed environment, and everything it prints is redacted before it reaches
-  the transcript.
-  Everything else is unchanged.
+  Panacea's panels for the apps now work, and its windows can be laid out. The
+  Music, 3D, Video and Game panels change the song, the model, the film and the
+  game themselves, the app's window shows it, and a change made in the app shows
+  on the panel; a Track, Part, Clip or Object list picks what they act on, and the
+  agent sets them with the same effect. Panels for things an app has no way to do
+  are gone, and the rest hold your own choices and words for the agent to build.
+  The apps' windows and surfaces keep where you put them through a reload, a
+  click raises one, a Tidy button puts them in rows, a maximised window on a phone
+  stays clear of the buttons, and the agent lays them out the same way (watch it
+  drag and size them with Visible work on). A file now remembers which app made
+  it, so the lines between windows follow the work.

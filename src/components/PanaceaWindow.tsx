@@ -25,6 +25,11 @@ import { autoSettings, renderFull } from "./panacea/imagegl";
 import type { PanelActions } from "./panacea/PanelCard";
 import { pictureOf } from "./panacea/Surfaces";
 import { useCanvas } from "./panacea/useCanvas";
+import { isAppBind, useAppValues, wantedApps } from "./panacea/useAppValues";
+import { MODEL_PART, isModelBind } from "../lib/panacea/apps/model";
+import { GAME_OBJECT, isGameBind } from "../lib/panacea/apps/game";
+import { VIDEO_CLIP, isVideoBind } from "../lib/panacea/apps/video";
+import { MUSIC_TRACK } from "../lib/panacea/apps/music";
 import { SaveButton, keptAs } from "./SaveButton";
 import { LoadButton, type LoadResult } from "./LoadButton";
 import { PANACEA_LOADED, offerKeep } from "../lib/panaceaBridge";
@@ -54,6 +59,9 @@ const show = (v: Value | undefined) => {
  * widen, pin and group; they fade when the work moves on and come back with a click; suggestions arrive as ghosts to
  * take or wave away. The canvas lives on the server (server/panacea.ts), where the agent's panacea_* tools work on it.
  */
+/** The canvas value that says which track, part or clip a control acts on. */
+const pickOf = (bind: string) => (isModelBind(bind) ? MODEL_PART : isVideoBind(bind) ? VIDEO_CLIP : isGameBind(bind) ? GAME_OBJECT : MUSIC_TRACK);
+
 export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene, followTarget, onJump, onCloseWork, navigationHost, nativeActions }: {
   sessionId: string;
   hosted?: readonly HostedWork[];
@@ -66,7 +74,8 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
   nativeActions?: MutableRefObject<NativeWorkspaceActions | null>;
 }) {
   const phone = usePhone();
-  const doc = useCanvas(sessionId, nativeOpen);
+  // The canvas is read and kept whenever it has anything to keep: its own work, or the layout of the apps' windows on it.
+  const doc = useCanvas(sessionId, nativeOpen || hosted.length > 0);
   const { canvas, edit, quietly, live, saveNow, refresh } = doc;
   const base = `/api/panacea/${encodeURIComponent(sessionId)}`;
   const [recipes, setRecipes] = useState<Recipe[]>(() => BUILTINS.filter((r) => treeLive(r.tree)));
@@ -87,6 +96,9 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
   /** Recipes waved away lately, and when: not offered again for a while, whatever the profile says. */
   const waved = useRef(new Map<string, number>());
   const focusedKind = canvas.surfaces.find((surface) => surface.id === canvas.focus)?.kind;
+  // The apps a panel drives (the song, for a Music panel): read off the app and changed there, not kept on the canvas.
+  const appsWanted = useMemo(() => wantedApps(canvas.panels.map((p) => p.tree)), [canvas.panels]);
+  const apps = useAppValues(sessionId, appsWanted, setProblem);
 
   // Learning may reveal controls or change density, but never midway through typing or dragging.
   useEffect(() => {
@@ -154,7 +166,11 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
     if (bad) { setProblem(`That value does not fit: ${bad}.`); return; }
     const first = !panel.touched && !touched.current.has(panel.id);
     touched.current.add(panel.id);
-    edit((d) => {
+    if (isAppBind(key)) {
+      // An app's value: the app changes (useAppValues); the canvas only notes that the panel was used.
+      apps.write(key, v, live.current.values[pickOf(key)]);
+      quietly((d) => { const p = d.panels.find((x) => x.id === panel.id); if (p) p.touched = Date.now(); });
+    } else edit((d) => {
       setValue(d, key, v);
       const p = d.panels.find((x) => x.id === panel.id);
       if (p) p.touched = Date.now();
@@ -177,9 +193,10 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
       timers.delete(key);
       const { surface } = parseBind(key);
       const where = surface ? live.current.surfaces.find((s) => s.id === surface)?.title : null;
-      void tell(`set ${label.replace(/ .*$/, "") || key} to ${show(valueAt(live.current, key))}${where ? ` on ${where}` : ""} (panel "${panel.title}")`, { bind: key, value: valueAt(live.current, key) });
+      const now = isAppBind(key) ? v : valueAt(live.current, key);
+      void tell(`set ${label.replace(/ .*$/, "") || key} to ${show(now)}${where ? ` on ${where}` : ""} (panel "${panel.title}")`, { bind: key, value: now });
     }, 650));
-  }, [base, edit, live, quietly, tell]);
+  }, [apps, base, edit, live, quietly, tell]);
 
   const act = useCallback((bind: string) => {
     const { surface, param } = parseBind(bind);
@@ -313,8 +330,9 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
   const hold = doc.hold;
   const api: PanaceaApi = useMemo(() => ({
     canvas, profile: displayProfile, sessionId, set, act, ask, hold, expand, writeDoc, writeBoard, setMode,
-    value: (key: string) => valueAt(canvas, key),
-  }), [canvas, displayProfile, sessionId, set, act, ask, hold, expand, writeDoc, writeBoard, setMode]);
+    value: (key: string) => apps.read(key, canvas.values[pickOf(key)]) ?? valueAt(canvas, key),
+    options: apps.options,
+  }), [apps, canvas, displayProfile, sessionId, set, act, ask, hold, expand, writeDoc, writeBoard, setMode]);
 
   // ------------------------------------------------------- panel actions --
 
@@ -734,6 +752,8 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
           canvas={canvas}
           fresh={doc.fresh}
           edit={edit}
+          quiet={quietly}
+          loaded={doc.ready}
           hold={doc.hold}
           recipes={recipes}
           actions={actions}

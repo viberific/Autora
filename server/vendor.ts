@@ -35,9 +35,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { redactSecrets } from "./state";
 
-export type VendorId = "claude" | "gemini";
+type VendorId = "claude" | "gemini";
 
-export interface Vendor {
+interface Vendor {
   id: VendorId;
   /** The vendor's own name, as the person would say it. */
   name: string;
@@ -71,7 +71,7 @@ export const VENDORS: Record<VendorId, Vendor> = {
   },
 };
 
-export function vendorPath(id: VendorId): string {
+function vendorPath(id: VendorId): string {
   const set = (process.env[VENDORS[id].env] ?? "").trim();
   return set || VENDORS[id].file;
 }
@@ -95,14 +95,14 @@ export function vendorReady(id: VendorId): { ok: boolean; path: string; detail: 
 
 /* ------------------------------------------------------------- the lines -- */
 
-export type VendorLine =
+type VendorLine =
   | { type: "delta"; text: string }
   | { type: "status"; text: string }
   | { type: "result"; text: string; files: string[]; usage: Record<string, number> | null }
   | { type: "error"; message: string; reason: string };
 
 const REASONS = ["rate_limit", "auth", "timeout", "not_installed", "other"] as const;
-export type FailureReason = (typeof REASONS)[number];
+type FailureReason = (typeof REASONS)[number];
 
 function str(v: unknown): string {
   return typeof v === "string" ? v : "";
@@ -206,7 +206,7 @@ export function redact(text: string): string {
 
 /* -------------------------------------------------------------- the run --- */
 
-export interface VendorRunOptions {
+interface VendorRunOptions {
   id: VendorId;
   /** What to ask it. */
   prompt: string;
@@ -228,7 +228,7 @@ export interface VendorRunOptions {
   onStatus?: (text: string) => void;
 }
 
-export interface VendorRunResult {
+interface VendorRunResult {
   ok: boolean;
   /** Everything it said, redacted. */
   text: string;
@@ -251,7 +251,7 @@ const FLUSH_CHARS = 700;
 /** How the prompt reaches the wrapper: on stdin (`-`), or as the last word
     after `--`. Wrappers differ, and one that has not been taught stdin says
     so and exits 2 before it does anything -- see runVendor. */
-export type PromptForm = "stdin" | "argv";
+type PromptForm = "stdin" | "argv";
 
 /** The command line a wrapper is called with: options, then the prompt.
  *
@@ -335,7 +335,7 @@ export function vendorEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.Process
 /** A wrapper's exit code and last words, turned into one actionable sentence. */
 /** One sentence per failure, because each sends the person to a different
     place: a sign-in, a wait, an install, a shorter ask. */
-export function sentenceFor(reason: FailureReason, said = ""): string {
+function sentenceFor(reason: FailureReason, said = ""): string {
   const also = said ? ` It said: ${clip(said)}` : "";
   switch (reason) {
     case "rate_limit": return `It hit its rate limit or quota.${also}`;
@@ -416,11 +416,6 @@ export async function runVendor(opts: VendorRunOptions): Promise<VendorRunResult
 export function refusedOption(message: string): string | null {
   const found = /unknown (?:option|argument):?\s*(\S+)/i.exec(message);
   return found ? found[1].replace(/[.,;:]$/, "") : null;
-}
-
-/** Was this a wrapper refusing the bare `-`, rather than one of its options? */
-export function stdinRefused(message: string): boolean {
-  return refusedOption(message) === "-";
 }
 
 async function runAttempt(opts: VendorRunOptions, form: PromptForm, jsonl = true): Promise<VendorRunResult> {

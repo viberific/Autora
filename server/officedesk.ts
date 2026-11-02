@@ -630,7 +630,7 @@ function writeArtifact(session: DeskKey) {
     const keep = desk.working ? getArtifact(desk.working) : null;
     const art = saveArtifact({
       origin: "agent", name: keep?.name ?? desk.outName, data: desk.data, mime: MIME[desk.kind], session: sessionOf(session),
-      note: `Edited in the ${THING[desk.kind]} window`,
+      note: `Edited in the ${THING[desk.kind]} window`, app: desk.kind === "docx" ? "pages" : desk.kind === "xlsx" ? "sheets" : "slides",
     });
     desk.working = art.id;
     desk.problem = null;

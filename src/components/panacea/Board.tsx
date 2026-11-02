@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { GRID, PANEL_MAX_W, PANEL_MIN_W, snap, type Canvas, type Panel, type Surface } from "../../lib/panacea/canvas";
+import { maximise as maximiseWindow, placeWindow, raise as raiseWindow, tidy as tidyBoxes } from "../../lib/panacea/windows";
 import { KINDS } from "../../lib/panacea/kinds";
 import type { Recipe } from "../../lib/panacea/library";
-import { IconCode, IconCube, IconFile, IconGame, IconGlobe, IconImage, IconMusic, IconSparkle, IconTable, IconVideo, IconX, IconMaximize } from "../Icons";
+import { IconCode, IconCube, IconFile, IconGame, IconGlobe, IconImage, IconMusic, IconSparkle, IconTable, IconVideo, IconX, IconMaximize, IconTidy } from "../Icons";
 import { PanelCard, type PanelActions } from "./PanelCard";
 import { SurfaceView } from "./Surfaces";
 import { Summon } from "./Summon";
-import type { Editor } from "./useCanvas";
+import type { Edit, Editor } from "./useCanvas";
 import { fitWorkView, revealWorkView, type WorkBox } from "../../lib/workspaceViewport";
 import type { HostedWork } from "../../lib/workspaceScene";
 import { WORKSPACE_MODES, type WorkspaceMode } from "../../lib/workspace";
@@ -47,11 +48,15 @@ const MAX_ZOOM = 2;
  * double-click or press / to summon a panel, Shift+drag to pick several, drop a file or paste a table to add a surface.
  * Panels move by their title bars and widen by their right edge, and land on the grid.
  */
-export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, setSelected, onPick, onFocus, onFiles, onPaste, onRemoveSurface, onSurfaceSize, onMoved, handle, children,
+export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes, actions, selected, setSelected, onPick, onFocus, onFiles, onPaste, onRemoveSurface, onSurfaceSize, onMoved, handle, children,
   hosted = [], ready = true, scene, followTarget, onJumpWork, onCloseWork, navigationHost }: {
   canvas: Canvas;
   fresh: ReadonlySet<string>;
   edit: Editor;
+  /** A change that is not a step to undo (a window raised, the room measured, a window's first place). */
+  quiet?: (fn: Edit) => void;
+  /** The canvas has been read: a window's first place is not written over the one it kept. */
+  loaded?: boolean;
   hold: (on: boolean) => void;
   recipes: Recipe[];
   actions: Omit<PanelActions, "grab" | "widen">;
@@ -108,16 +113,35 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
   const previousFollow = useRef<WorkspaceMode | null>(null);
   const hostedKey = hosted.map((work) => work.id).join("|");
   useEffect(() => { engineBoxesRef.current = engineBoxes; hostedRef.current = hosted; }, [engineBoxes, hosted]);
+  /* Where each app window is comes from the canvas (it is kept with it, and the agent lays it out by `panacea_arrange`).
+     The page keeps a working copy so a drag is smooth, and takes the canvas's whenever that changes. A window the canvas
+     has no place for yet gets a first one, written quietly (it is not a step to undo). */
+  const winsKey = JSON.stringify(canvas.windows ?? []);
+  useEffect(() => {
+    const saved = canvas.windows ?? [];
+    setEngineBoxes((before) => {
+      let next = before;
+      for (const w of saved) {
+        const now = before[w.id];
+        if (!now || now.x !== w.x || now.y !== w.y || now.w !== w.w || now.h !== w.h) next = { ...next, [w.id]: { x: w.x, y: w.y, w: w.w, h: w.h } };
+      }
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `winsKey` stands for the windows' content
+  }, [winsKey]);
   useEffect(() => {
     if (!ready) return;
+    const saved = canvas.windows ?? [];
     const ids = hostedKey.split("|").filter(Boolean);
     setEngineBoxes((before) => {
       const next = { ...before };
       let count = Object.keys(next).length;
       for (const id of ids) if (!next[id]) {
+        const kept = saved.find((w) => w.id === id);
+        if (kept) { next[id] = { x: kept.x, y: kept.y, w: kept.w, h: kept.h }; continue; }
         /* On a phone, the size of the screen there is for work (above the conversation, beside the jump buttons), so it
            opens at its real size: fitted any bigger, the board zooms out and every control in it is too small to use. */
-        const room = phone && root.current ? workViewport(root.current) : null;
+        const room = phone && root.current ? workViewport(root.current, { clearDock: true }) : null;
         const width = phone ? Math.max(320, (room?.width ?? 390) - 16) : 1056;
         // Never shorter than an app needs to show itself under its own bars (the app preview's phone screen is tall).
         const height = phone ? Math.max(560, (room?.height ?? 600) - 16) : 740;
@@ -126,7 +150,33 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
       }
       return ids.some((id) => !before[id]) ? next : before;
     });
-  }, [hostedKey, phone, ready]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `winsKey` stands for the windows' content
+  }, [hostedKey, phone, ready, winsKey]);
+  // Once the canvas is read, a window it has no place for gets the one the page gave it, written quietly (not a step to undo).
+  useEffect(() => {
+    if (!ready || !loaded || !quiet) return;
+    const saved = new Set((canvas.windows ?? []).map((w) => w.id));
+    const missing = hostedKey.split("|").filter((id) => id && !saved.has(id) && engineBoxes[id]);
+    if (!missing.length) return;
+    quiet((d) => { const wins = d.windows ?? (d.windows = []); for (const id of missing) if (!wins.some((w) => w.id === id)) placeWindow(wins, id, engineBoxes[id]!); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `winsKey` stands for the windows' content
+  }, [hostedKey, ready, loaded, quiet, engineBoxes, winsKey]);
+  // The room there is for work, for the agent's "maximise": written when it changes, not as a step.
+  const room = useRef<{ w: number; h: number } | null>(null);
+  useEffect(() => {
+    if (!quiet || !loaded || !root.current) return;
+    const el = root.current;
+    const measure = () => {
+      const r = workViewport(el, { clearDock: phone });
+      const w = Math.round(r.width), h = Math.round(r.height);
+      if (w < 200 || h < 200 || (room.current && Math.abs(room.current.w - w) < 24 && Math.abs(room.current.h - h) < 24)) return;
+      room.current = { w, h };
+      quiet((d) => { d.room = { w, h }; });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [quiet, loaded, phone]);
   useEffect(() => { canvasRef.current = canvas; }, [canvas]);
   const boxesOf = useCallback((): WorkBox[] => {
     const current = canvasRef.current;
@@ -622,8 +672,40 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
   const engineResize = (id: string) => (e: ReactPointerEvent<HTMLElement>) => {
     const box = engineBoxesRef.current[id];
     if (!box) return;
+    raiseIt(id);
     gesture(e, (dx, dy) => setEngineBoxes((before) => ({ ...before, [id]: { ...box, w: Math.max(320, box.w + dx), h: Math.max(240, box.h + dy) } })),
-      () => { maxed.current.delete(id); });
+      (dx, dy) => {
+        if (Math.abs(dx) + Math.abs(dy) < 3) return;
+        const w = Math.max(320, box.w + dx), h = Math.max(240, box.h + dy);
+        edit((d) => { const wins = d.windows ?? (d.windows = []); const t = placeWindow(wins, id, { w, h }, { front: true }); if (t) delete t.was; }, `Resized ${windowName(id)}`);
+      });
+  };
+  const windowName = (id: string) => hostedRef.current.find((w) => w.id === id)?.title ?? "a window";
+  /** A window raised over the rest (not a step to undo). */
+  const raiseIt = (id: string) => { if (quiet && raiseWindow(structuredClone(canvasRef.current.windows ?? []), id)) quiet((d) => { raiseWindow(d.windows ?? [], id); }); };
+  /** Tidy: windows and surfaces in rows, none over another, as the agent's `tidy` does (one step to undo). */
+  const tidyUp = () => {
+    const c = canvasRef.current;
+    const items = [
+      ...hostedRef.current.flatMap((w) => engineBoxesRef.current[w.id] ? [{ id: w.id, ...engineBoxesRef.current[w.id]! }] : []),
+      ...c.surfaces.map((x) => ({ id: x.id, x: x.x, y: x.y, w: x.w, h: x.h })),
+    ];
+    if (!items.length) return;
+    const room = root.current ? workViewport(root.current, { clearDock: phone }) : { width: 1056, height: 740 };
+    const spots = tidyBoxes(items, { width: Math.max(1600, room.width * 2) });
+    interacted.current = true;
+    edit((d) => {
+      const wins = d.windows ?? (d.windows = []);
+      for (const w of hostedRef.current) {
+        const at = spots.get(w.id), box = engineBoxesRef.current[w.id];
+        if (at && box) { const t = placeWindow(wins, w.id, { x: snap(at.x), y: snap(at.y), w: box.w, h: box.h }); if (t) delete t.was; }
+      }
+      for (const x of d.surfaces) { const at = spots.get(x.id); if (at) { x.x = snap(at.x); x.y = snap(at.y); } }
+    }, "Tidied the layout");
+    maxed.current.clear();
+    rerender((n) => n + 1);
+    const boxes = [...spots].map(([id, at]) => { const it = items.find((i) => i.id === id)!; return { x: at.x, y: at.y, w: it.w, h: it.h }; });
+    setView(fitWorkView(boxes, { width: room.width, height: room.height }, fitOpts) ?? viewRef.current, true);
   };
 
   /** What each maximised tile was, to give it back. */
@@ -632,22 +714,43 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
   const maximize = (id: string, kind: "engine" | "surface") => {
     const el = root.current;
     if (!el) return;
-    const room = workViewport(el);
-    const was = maxed.current.get(id);
-    const now = kind === "engine" ? engineBoxesRef.current[id] : canvasRef.current.surfaces.find((s) => s.id === id);
-    if (!now) return;
+    const room = workViewport(el, { clearDock: phone });
     const pad = phone ? 8 : 16;
+    if (kind === "engine") {
+      // A window's "was" is kept with the canvas, so a reload (or the agent) can give it back.
+      const was = canvasRef.current.windows?.find((w) => w.id === id)?.was;
+      const now = engineBoxesRef.current[id];
+      if (!now) return;
+      const base = canvasRef.current.windows?.some((w) => w.id === id) ? null : { id, ...now };
+      let result: "maximised" | "restored" | null = null;
+      edit((d) => {
+        const wins = d.windows ?? (d.windows = []);
+        if (base && !wins.some((w) => w.id === id)) placeWindow(wins, id, base);
+        result = maximiseWindow(wins, id, { w: room.width, h: room.height }, pad);
+      }, was ? "Restored a window" : "Maximised a window");
+      interacted.current = true;
+      const win = (maxedPreview(id, was, now, room, pad));
+      if (was) setView(fitWorkView([win], { width: room.width, height: room.height }, fitOpts) ?? viewRef.current, true);
+      else setView({ x: win.x - pad, y: win.y - pad, zoom: 1 }, true);
+      void result;
+      return;
+    }
+    const was = maxed.current.get(id);
+    const now = canvasRef.current.surfaces.find((s) => s.id === id);
+    if (!now) return;
     const next = was ?? { x: now.x, y: now.y, w: Math.max(MIN_TILE.w, room.width - pad * 2), h: Math.max(MIN_TILE.h, room.height - pad * 2) };
     if (was) maxed.current.delete(id);
     else maxed.current.set(id, { x: now.x, y: now.y, w: now.w, h: now.h });
-    if (kind === "engine") setEngineBoxes((before) => ({ ...before, [id]: next }));
-    else edit((d) => { const t = d.surfaces.find((x) => x.id === id); if (t) { t.x = next.x; t.y = next.y; t.w = next.w; t.h = next.h; } }, was ? "Restored a window" : "Maximised a window");
+    edit((d) => { const t = d.surfaces.find((x) => x.id === id); if (t) { t.x = next.x; t.y = next.y; t.w = next.w; t.h = next.h; } }, was ? "Restored a window" : "Maximised a window");
     interacted.current = true;
     if (was) setView(fitWorkView([next], { width: room.width, height: room.height }, fitOpts) ?? viewRef.current, true);
     else setView({ x: next.x - pad, y: next.y - pad, zoom: 1 }, true);
   };
+  /** What a window's box is after maximising (or restoring), to put the view on. */
+  const maxedPreview = (id: string, was: WorkBox | undefined, now: WorkBox, room: { width: number; height: number }, pad: number): WorkBox =>
+    was ?? { x: now.x, y: now.y, w: Math.max(320, room.width - pad * 2), h: Math.max(240, room.height - pad * 2) };
   const [, rerender] = useState(0);
-  const isMaxed = (id: string) => maxed.current.has(id);
+  const isMaxed = (id: string) => maxed.current.has(id) || Boolean(canvas.windows?.find((w) => w.id === id)?.was);
 
   const z = view.zoom;
 
@@ -725,22 +828,29 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
             ))}
           </svg>
         )}
-        {hosted.map((work) => {
+        <div className="pa-wins">{hosted.map((work) => {
           const box = engineBoxes[work.id];
           if (!box) return null;
+          const z = canvas.windows?.find((w) => w.id === work.id)?.z ?? 0;
           return <section key={work.id} className={`pw-engine${enginePins.has(work.id) ? " is-pinned" : ""}${isMaxed(work.id) ? " is-max" : ""}`} data-engine={work.mode}
-            data-work={work.id} style={{ left: box.x, top: box.y, width: box.w, height: box.h }} aria-label={`${work.title} work surface`}
+            data-work={work.id} style={{ left: box.x, top: box.y, width: box.w, height: box.h, zIndex: z + 1, ...(phone ? { maxWidth: "calc(100vw - 16px)" } : {}) }} aria-label={`${work.title} work surface`}
             /* Working in a window is not holding the view (only panning, zooming or dragging is): Follow still brings the
                agent's next window into view after the person has pressed a button in this one. */
-            onPointerDownCapture={(e) => { if (e.isTrusted) onJumpWork?.(work.mode); }}>
+            onPointerDownCapture={(e) => { if (e.isTrusted) { onJumpWork?.(work.mode); raiseIt(work.id); } }}>
             <header className="pw-engine-head" onPointerDown={(e) => {
               if (e.button !== 0 || (e.target as HTMLElement).closest("button") || enginePins.has(work.id)) return;
               e.preventDefault(); e.stopPropagation(); interacted.current = true; hold(true);
+              raiseIt(work.id); // taken by its title bar, by a hand or a finger: it comes over the rest
               const target = e.currentTarget; target.setPointerCapture(e.pointerId);
               const start = { x: e.clientX, y: e.clientY, zoom: viewRef.current.zoom };
               const move = (event: PointerEvent) => setEngineBoxes((before) => ({ ...before,
                 [work.id]: { ...box, x: box.x + (event.clientX - start.x) / start.zoom, y: box.y + (event.clientY - start.y) / start.zoom } }));
-              const up = () => { target.removeEventListener("pointermove", move); target.removeEventListener("pointerup", up); target.removeEventListener("pointercancel", up); hold(false); };
+              const up = (event: PointerEvent) => {
+                target.removeEventListener("pointermove", move); target.removeEventListener("pointerup", up); target.removeEventListener("pointercancel", up); hold(false);
+                const dx = (event.clientX - start.x) / start.zoom, dy = (event.clientY - start.y) / start.zoom;
+                if (Math.abs(dx) + Math.abs(dy) < 3) return;
+                edit((d) => { placeWindow(d.windows ?? (d.windows = []), work.id, { x: box.x + dx, y: box.y + dy, w: box.w, h: box.h }, { front: true }); }, `Moved ${work.title}`);
+              };
               target.addEventListener("pointermove", move); target.addEventListener("pointerup", up); target.addEventListener("pointercancel", up);
             }}>
               <span>{workIcon(work.mode)}</span><b>{work.title}</b><span className="pw-engine-context">{WORKSPACE_MODES[work.mode].context}</span>
@@ -754,7 +864,7 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
             <div className="pw-engine-body">{work.content}</div>
             <i className="pa-resize" role="presentation" title="Drag to resize" onPointerDown={engineResize(work.id)} />
           </section>;
-        })}
+        })}</div>
         {canvas.surfaces.map((s) => {
           const d = tileDrag?.id === s.id ? tileDrag : null;
           return (
@@ -819,6 +929,7 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
           onClick={() => { handle.current?.jump(work.id); onJumpWork?.(work.mode); }}>{workIcon(work.mode)}</button>)}
         <button type="button" aria-label="Zoom out" title="Zoom out" onClick={() => { handle.current?.zoomOut(); onJumpWork?.(followTarget ?? "panacea"); }}>−</button>
         <button type="button" aria-label="Show all work" title="Show all work" onClick={() => { interacted.current = true; fit(); onJumpWork?.(followTarget ?? "panacea"); }}><IconMaximize size={16} /></button>
+        <button type="button" aria-label="Tidy the layout" title="Tidy: windows and surfaces in rows, none over another" onClick={() => { tidyUp(); onJumpWork?.(followTarget ?? "panacea"); }}><IconTidy size={16} /></button>
         </nav>;
         return navigationHost ? createPortal(dock, navigationHost) : dock;
       })()}

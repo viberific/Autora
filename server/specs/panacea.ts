@@ -151,7 +151,9 @@ export const panaceaSPECS: ToolSpec[] = [
     group: "files",
     risky: true,
     description:
-      "Arrange the canvas. `move`: [{id, x, y, w}]; `remove`: panel ids to put away (they fade into the corner, where the person can bring them back; pinned " +
+      "Arrange the canvas. `move`: [{id, x, y, w}]; `surfaces`: [{id, x, y, w, h}] moves and sizes a surface; `windows`: [{window, x, y, w, h, do}] moves and sizes an app's window " +
+      "(window is its name: Music, 3D, Video, Games, PDF, Images, Documents...; do is maximise, restore or front, to fill the screen there is for work, give it back, or bring it over the rest; " +
+      "the person does the same by hand, and it is kept with the canvas); `tidy`: \"all\", \"windows\" or \"surfaces\" lays them out in rows, none over another (the canvas lists the windows and where they are); `remove`: panel ids to put away (they fade into the corner, where the person can bring them back; pinned " +
       "panels stay); `restore`: bring faded panels back; `accept`: take ghosts; `group` / `ungroup`: panels that move together; `titles`: {id: title}; `writes`: {id: \"agent\"} to fill a panel's text and list fields yourself (only when they asked, or for " +
       "productivity work; say so), {id: \"person\"} to give them back; `focus`: " +
       "the surface the work is on (the old work's panels dim, and go when the work moves on again); `name`: the canvas's name. Keep the canvas to what is in use: " +
@@ -160,6 +162,9 @@ export const panaceaSPECS: ToolSpec[] = [
       type: "object",
       properties: {
         move: { type: "array", items: { type: "object" }, description: "[{id, x, y, w}]" },
+        surfaces: { type: "array", items: { type: "object" }, description: "[{id, x, y, w, h}]: move and size surfaces." },
+        windows: { type: "array", items: { type: "object" }, description: "[{window, x, y, w, h, do}]: window is an app's name; do is maximise, restore or front." },
+        tidy: { type: ["string", "boolean"], description: "all, windows or surfaces: lay them out in rows, none over another." },
         remove: { type: "array", items: { type: "string" } },
         restore: { type: "array", items: { type: "string" } },
         accept: { type: "array", items: { type: "string" } },

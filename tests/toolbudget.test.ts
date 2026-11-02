@@ -44,7 +44,12 @@ const SCHEMA_BUDGET_CHARS = 52_000;
 // on this box at 23,857 -- it installs every window (office, PDF, video, video game, 3D, photo), so the briefing carries
 // each one's line here and not there. That is the trap this comment is for: a ceiling that only the fuller machine reaches
 // fails after the push, not before it. Set against CI's number, with room for one more window.
-const BRIEFING_BUDGET_CHARS = 28_000;
+// Raised again, to 29_000 (2026-11-02): CI measured 29,755 on main, over 28,000 on every push since the vendor hand-off and the
+// Panacea windows' guides, and this check had been failing there rather than on any one change. Duplicated wording in the
+// guides (know-it-before-you-do-it, the organization, the to-do list, Saving and files, the layout, Games, Video, the office
+// suite) was trimmed first: 29,755 became about 28,800 on CI's machine (the Office, Spectra and Photo builds are what make it
+// larger than a machine without them). Set against that, with little room, so the next addition is caught.
+const BRIEFING_BUDGET_CHARS = 29_000;
 
 console.log("tool budget");
 

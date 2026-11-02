@@ -20,6 +20,8 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { MUSIC_TRACK, isMusicBind, writeMusic } from "../src/lib/panacea/apps/music";
+import type { Value } from "../src/lib/panacea/atoms";
 import express, { type Express, type Request, type Response } from "express";
 import {
   addNotes, barBeat, BASS_STYLES, bassNotes, CHORD_STYLES, chordLabel, chordNotes, clamp, copyClip, describeProject, detectChord,
@@ -48,6 +50,8 @@ interface StudioState {
   name?: string;
   bpm?: number;
   tracks?: number;
+  /** This revision came from a Panacea panel or the agent's hand, which the window has already: it takes it without lighting it up. */
+  quiet?: number;
 }
 
 interface Focus {
@@ -145,6 +149,31 @@ function commit(session: string, e: Entry, next: Project, who: "agent" | "person
   e.by = who;
   persist(session, e);
   changed(session);
+}
+
+/**
+ * A Panacea panel's `music.*` control moved (docs/PANACEA-GAPS.md, G1): the song changes, the Music window appears and
+ * takes it. Used by the page (`who` "person": the window loads it without lighting it up, and the Follow camera does
+ * not jump) and by the agent (`panacea_set`). Refuses, with the reason, rather than half-doing it.
+ */
+export function studioPanel(session: string, bind: string, value: unknown, track: unknown, who: "agent" | "person"): { ok: true; did: string } | { ok: false; error: string } {
+  if (!validSession(session)) return { ok: false, error: "Autora Music needs a chat to work in." };
+  if (!isMusicBind(bind) || bind === MUSIC_TRACK) return { ok: false, error: `nothing in the song answers to ${bind}` };
+  const e = entryFor(session);
+  const next = structuredClone(e.project);
+  const done = writeMusic(next, bind, value as Value, track, e.focus.trackId);
+  if ("error" in done) return { ok: false, error: done.error };
+  setOpen(session, true);
+  if (who === "person") e.quiet = e.rev + 1;
+  commit(session, e, next, "agent");
+  return { ok: true, did: done.did };
+}
+
+/** The song as it is now, for what the agent reads off the canvas. */
+export function studioSong(session: string): { project: Project; focus: string | null } | null {
+  if (!validSession(session)) return null;
+  const e = entryFor(session);
+  return { project: e.project, focus: e.focus.trackId };
 }
 
 /** The person loads a song they kept (a `.song.json`): it becomes the chat's song, in its window. */
@@ -846,6 +875,17 @@ export function studioRoutes(app: Express, opts: {
     res.json({ rev: e.rev });
   });
 
+  /* A panel's music control moved (Panacea): the song takes it, in one place for the person and the agent. */
+  app.post("/api/studio/:session/panel", express.json({ limit: "64kb" }), (req, res) => {
+    const id = known(req, res);
+    if (!id) return;
+    if (opts.off()) return res.status(403).json({ error: "Autora Music is switched off on the Tools page." });
+    const bind = typeof req.body?.bind === "string" ? req.body.bind : "";
+    const done = studioPanel(id, bind, req.body?.value, req.body?.track, "person");
+    if (!done.ok) return res.status(400).json({ error: done.error });
+    res.json({ rev: entryFor(id).rev, did: done.did });
+  });
+
   /* The person pressed Save: the song as it is now, kept in Artifacts as an Autora Music song file, named after the song.
      (Export makes the WAV.) The agent is not asked and not woken. */
   app.post("/api/studio/:session/keep", (req, res) => {
@@ -858,7 +898,7 @@ export function studioRoutes(app: Express, opts: {
       const named = typeof (e.project as { name?: unknown }).name === "string" ? String((e.project as { name?: unknown }).name).trim() : "";
       const art = keepCopy({
         session: id, title: named || chatTitle(id), fallback: "Song", ext: "song.json",
-        data: Buffer.from(JSON.stringify(e.project, null, 2), "utf8"), mime: "application/json", note: "Saved from Autora Music",
+        data: Buffer.from(JSON.stringify(e.project, null, 2), "utf8"), mime: "application/json", note: "Saved from Autora Music", app: "studio",
       });
       res.json({ artifact: art.id, name: art.name });
     } catch (err) {
@@ -929,7 +969,7 @@ export function studioRoutes(app: Express, opts: {
     if (!id) return;
     if (!Buffer.isBuffer(req.body) || req.body.byteLength < 44) return res.status(400).json({ error: "empty" });
     const raw = String(req.query.name ?? "song").replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "-").replace(/\.wav$/i, "").slice(0, 80);
-    const art = saveArtifact({ origin: "agent", name: `${raw || "song"}.wav`, data: req.body, mime: "audio/wav", session: id, note: "Bounced from Autora Music" });
+    const art = saveArtifact({ origin: "agent", name: `${raw || "song"}.wav`, data: req.body, mime: "audio/wav", session: id, note: "Bounced from Autora Music", app: "studio" });
     res.json({ artifact: art.id, name: art.name, size: art.size, mime: art.mime });
   });
 }

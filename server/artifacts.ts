@@ -37,6 +37,9 @@ export interface Artifact {
   folder?: string;
   /** A line about what it is: the prompt behind an image, say. */
   note?: string;
+  /** The app on the board that made it (`cad`, `studio`, `pdf`...), when one did: what the lines between windows follow
+      (src/lib/panacea/flows.ts), instead of guessing from the file's name. A file the person uploaded has none. */
+  app?: string;
 }
 
 /** Big enough for a scanned PDF or a phone photo, small enough that one
@@ -143,6 +146,8 @@ export function saveArtifact(input: {
   mime?: string;
   session?: string;
   note?: string;
+  /** The app on the board that made it. */
+  app?: string;
   /** The person's Save in a window: a copy kept that the next Save of the
       same name in the same folder replaces, whoever made the one there. */
   keep?: boolean;
@@ -160,6 +165,7 @@ export function saveArtifact(input: {
     ts: Date.now(),
     ...(input.session ? { session: input.session } : {}),
     ...(input.note ? { note: input.note.slice(0, 500) } : {}),
+    ...(input.app && /^[a-z]{2,12}$/.test(input.app) ? { app: input.app } : {}),
   };
   const list = load();
   // Saving the same name again from the agent rewrites that file instead of
@@ -176,6 +182,7 @@ export function saveArtifact(input: {
     const prev = list[at];
     const next: Artifact = { ...prev, origin: artifact.origin, mime: artifact.mime, size: artifact.size, ts: artifact.ts };
     if (artifact.session) next.session = artifact.session;
+    if (artifact.app) next.app = artifact.app;
     // A note describes the file as it was; one that came with this save
     // replaces it, and a save without one does not leave the old behind.
     if (artifact.note) next.note = artifact.note; else delete next.note;
@@ -242,10 +249,10 @@ export function formatSize(bytes: number): string {
  * The person pressed Save in a window: what is there now, kept in Artifacts in
  * this chat's folder, named after the chat. Each Save replaces the last one.
  */
-export function keepCopy(input: { session: string; title: string | null; fallback: string; ext: string; data: Buffer; mime?: string; note: string }): Artifact {
+export function keepCopy(input: { session: string; title: string | null; fallback: string; ext: string; data: Buffer; mime?: string; note: string; app?: string }): Artifact {
   const base = cleanName(input.title ?? "", input.fallback).replace(/\.[a-z0-9]{1,5}$/i, "").slice(0, 80) || input.fallback;
   return saveArtifact({
     origin: "user", name: `${base}.${input.ext}`, data: input.data, mime: input.mime,
-    session: input.session, note: input.note, keep: true,
+    session: input.session, note: input.note, keep: true, ...(input.app ? { app: input.app } : {}),
   });
 }

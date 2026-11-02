@@ -16,6 +16,7 @@ import { createBoard, type BoardState } from "./board";
 import { blockShapes, createDoc, paramsAtBlock, stateOf, type DocState } from "./document";
 import { KINDS } from "./kinds";
 import type { Project } from "./project";
+import { windowTitle } from "./windows";
 
 /** Nothing set: zero, empty words, nothing chosen, off. */
 const blank = (v: Value): boolean => v === 0 || v === "" || v === false || v === null || (Array.isArray(v) && v.length === 0);
@@ -28,6 +29,12 @@ export type HandStep =
   /** `from`: where the hand takes it (its title bar; for a put-away, its ×), to bring into view first. */
   | { op: "move"; id: string; x: number; y: number; from?: { x: number; y: number } }
   | { op: "remove"; id: string; from?: { x: number; y: number } }
+  /** An app's window or a surface laid out as a person does: its title bar dragged, its corner dragged, its maximise button
+      pressed (again to give it back), or a click on it to bring it over the rest. `from` is where it was, to bring into view. */
+  | { op: "win-move"; id: string; kind: "window" | "surface"; x: number; y: number; from: { x: number; y: number } }
+  | { op: "win-size"; id: string; kind: "window" | "surface"; w: number; h: number; from: { x: number; y: number; w: number; h: number } }
+  | { op: "win-max"; id: string; kind: "window" | "surface"; title: string; from: { x: number; y: number } }
+  | { op: "win-front"; id: string; from: { x: number; y: number } }
   /** A new surface, the way a person adds one: a board, flowchart or document from the picker, a table pasted, a file
       dropped. `surface` is what the window puts in (a document or board still empty: its words come in the steps after). */
   | { op: "surface"; id: string; how: "picker" | "paste" | "drop"; piece?: string; name: string; x: number; y: number; surface: Surface; text?: string }
@@ -225,6 +232,7 @@ export function panaceaSteps(before: Canvas, after: Canvas): { steps: HandStep[]
       steps.push({ op: "place", id: p.id, ...(p.state === "live" && p.recipe ? { recipe: p.recipe } : {}), name: p.title, x: p.x, y: p.y, panel: p });
     } else if (old.x !== p.x || old.y !== p.y) steps.push({ op: "move", id: p.id, x: p.x, y: p.y, from: { x: old.x, y: old.y } });
   }
+  steps.push(...layoutSteps(before, after));
   // Values: every surface parameter and shared value that changed, by its control where one is on screen.
   const changed: Array<{ key: string; value: Value }> = [];
   for (const s of after.surfaces) {
@@ -251,6 +259,27 @@ export function panaceaSteps(before: Canvas, after: Canvas): { steps: HandStep[]
   return { steps, skipped };
 }
 
+/** The windows and surfaces moved, sized, maximised or raised, as the gestures that do each. */
+function layoutSteps(before: Canvas, after: Canvas): HandStep[] {
+  const steps: HandStep[] = [];
+  for (const w of after.windows ?? []) {
+    const old = before.windows?.find((x) => x.id === w.id);
+    if (!old) continue;
+    const title = windowTitle(w.id);
+    if (!!old.was !== !!w.was) { steps.push({ op: "win-max", id: w.id, kind: "window", title, from: { x: old.x, y: old.y } }); continue; }
+    if (old.x !== w.x || old.y !== w.y) steps.push({ op: "win-move", id: w.id, kind: "window", x: w.x, y: w.y, from: { x: old.x, y: old.y } });
+    if (old.w !== w.w || old.h !== w.h) steps.push({ op: "win-size", id: w.id, kind: "window", w: w.w, h: w.h, from: { x: w.x, y: w.y, w: old.w, h: old.h } });
+    if (old.x === w.x && old.y === w.y && old.w === w.w && old.h === w.h && w.z > old.z) steps.push({ op: "win-front", id: w.id, from: { x: w.x, y: w.y } });
+  }
+  for (const s of after.surfaces) {
+    const old = before.surfaces.find((x) => x.id === s.id);
+    if (!old) continue;
+    if (old.x !== s.x || old.y !== s.y) steps.push({ op: "win-move", id: s.id, kind: "surface", x: s.x, y: s.y, from: { x: old.x, y: old.y } });
+    if (old.w !== s.w || old.h !== s.h) steps.push({ op: "win-size", id: s.id, kind: "surface", w: s.w, h: s.h, from: { x: s.x, y: s.y, w: old.w, h: old.h } });
+  }
+  return steps;
+}
+
 /** A step in a few words, for the agent's result. */
 export function stepWords(s: HandStep): string {
   switch (s.op) {
@@ -258,6 +287,10 @@ export function stepWords(s: HandStep): string {
     case "set": return `set ${s.key.replace(/^@[\w-]+\./, "")} to ${JSON.stringify(s.value).slice(0, 40)}`;
     case "move": return `moved ${s.id}`;
     case "remove": return `put away ${s.id}`;
+    case "win-move": return `moved ${s.kind === "window" ? windowTitle(s.id) : s.id}`;
+    case "win-size": return `sized ${s.kind === "window" ? windowTitle(s.id) : s.id}`;
+    case "win-max": return `pressed maximise on ${s.kind === "window" ? windowTitle(s.id) : s.id}`;
+    case "win-front": return `brought ${windowTitle(s.id)} to the front`;
     case "surface": return `added ${s.name} (${s.how === "picker" ? "from the picker" : s.how === "paste" ? "pasted" : "dropped"})`;
     case "unsurface": return `removed ${s.title}`;
     case "doc-type": return `typed ${s.lines.length} line${s.lines.length === 1 ? "" : "s"} into ${s.surface}`;

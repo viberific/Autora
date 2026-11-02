@@ -17,6 +17,7 @@ import type { DocState } from "./document";
 import type { Table } from "./surfaces";
 import { describeProject, readProject, regionX, REGION_W, type Project } from "./project";
 import { readFlows, type Flow } from "./flows";
+import { describeWindows, readWindows, type WinBox } from "./windows";
 import { treeLive } from "./wiring";
 import { WORKSPACE_MODES } from "../workspace";
 
@@ -92,6 +93,10 @@ export interface Canvas {
   project?: Project;
   /** Where work went between the apps (flows.ts): drawn as arrowed lines between their windows. */
   flows?: Flow[];
+  /** Where the apps' windows are, how big and in front of which (windows.ts): kept with the canvas, so a reload keeps the layout. */
+  windows?: WinBox[];
+  /** The room there is for work on the page that has the canvas open (what maximising fills), as the page last measured it. */
+  room?: { w: number; h: number };
 }
 
 export const GRID = 16;
@@ -503,7 +508,10 @@ export function normalizeCanvas(raw: unknown): Canvas | null {
   // A surface's phase is one the project has, or none.
   for (const s of surfaces) if (s.phase && !project?.phases.some((ph) => ph.id === s.phase)) delete s.phase;
   const flows = readFlows(r.flows, Object.keys(WORKSPACE_MODES));
-  return { version: 1, name: str(r.name, "Canvas", 80) || "Canvas", panels, surfaces, values, focus, gone, ...(project ? { project } : {}), ...(flows.length ? { flows } : {}) };
+  const windows = readWindows(r.windows);
+  const roomRaw = r.room as { w?: unknown; h?: unknown } | undefined;
+  const room = roomRaw && typeof roomRaw.w === "number" && typeof roomRaw.h === "number" && roomRaw.w >= 200 && roomRaw.h >= 200 && roomRaw.w <= 8000 && roomRaw.h <= 8000 ? { w: Math.round(roomRaw.w), h: Math.round(roomRaw.h) } : null;
+  return { version: 1, name: str(r.name, "Canvas", 80) || "Canvas", panels, surfaces, values, focus, gone, ...(project ? { project } : {}), ...(flows.length ? { flows } : {}), ...(windows.length ? { windows } : {}), ...(room ? { room } : {}) };
 }
 
 // --------------------------------------------------------------- describing --
@@ -515,7 +523,7 @@ const show = (v: Value | undefined): string => {
 };
 
 /** The canvas in words, for the agent: what is on it, what each panel is and is bound to, and every value that is not its default. */
-export function describeCanvas(canvas: Canvas, opts: { trees?: boolean } = {}): string {
+export function describeCanvas(canvas: Canvas, opts: { trees?: boolean; appValue?: (bind: string) => Value | undefined } = {}): string {
   const lines: string[] = [`Canvas "${canvas.name}": ${canvas.surfaces.length} surface${canvas.surfaces.length === 1 ? "" : "s"}, ${canvas.panels.length} panel${canvas.panels.length === 1 ? "" : "s"}${canvas.focus ? `; the person is working on ${canvas.focus}` : ""}.`];
   for (const s of canvas.surfaces) {
     const changed = paramsOf(s.kind, s.table)
@@ -527,9 +535,11 @@ export function describeCanvas(canvas: Canvas, opts: { trees?: boolean } = {}): 
     const flags = [!treeLive(p.tree) ? "not connected to its app: its controls change nothing, put it away" : "", p.state !== "live" ? p.state : "", p.pinned ? "pinned" : "", p.group ? `group ${p.group}` : "", p.by === "person" ? "placed by the person" : "", holdsWords(p.tree) ? (p.writes === "agent" ? "you may write in it" : "its words are the person's") : ""].filter(Boolean).join(", ");
     lines.push(`- panel ${p.id} "${p.title}"${p.recipe ? ` (recipe ${p.recipe})` : ""} on ${p.context} at ${p.x},${p.y} w${p.w}${flags ? ` [${flags}]` : ""}${p.why ? ` -- why: ${p.why}` : ""}${opts.trees ? `\n    ${treeWords(p.tree)}` : ""}`);
   }
-  const shared = Object.entries(canvas.values);
+  // A value that lives in an app (the song's tempo) is read off the app, so what the agent is told is what the person sees.
+  const shared = Object.entries(canvas.values).map(([k, v]) => [k, opts.appValue?.(k) ?? v] as const);
   if (shared.length) lines.push(`Shared values: ${shared.slice(0, 40).map(([k, v]) => `${k}=${show(v)}`).join(", ")}.`);
   if (canvas.gone.length) lines.push(`Faded lately (the person can bring back): ${canvas.gone.map((g) => `${g.id} "${g.title}"`).join(", ")}.`);
+  if (canvas.windows?.length) lines.push(describeWindows(canvas.windows));
   if (canvas.project) lines.push(describeProject(canvas.project));
   return lines.join("\n");
 }

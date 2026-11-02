@@ -15,6 +15,8 @@ type GameState = {
   /** The game's name, and how many scenes it has. */
   name?: string;
   scenes?: number;
+  /** This revision came from a Panacea panel, which the window has already: it takes it without moving the camera. */
+  quiet?: number;
 };
 
 const CLOSED: GameState = { open: false };

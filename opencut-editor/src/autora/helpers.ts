@@ -58,6 +58,13 @@ export function describe(element: TimelineElement) {
       .map(([property, channel]) => ({ property, keys: (channel?.keys ?? []).map((k) => ({ id: k.id, at: toSec(k.time) })) }));
     if (keyed.length) extra.keyframes = keyed;
   }
+  // The few properties Panacea's Video panels show (src/lib/panacea/apps/video.ts); the rest are video_catalog's to list.
+  if ("params" in element && element.params) {
+    const p = element.params as Record<string, unknown>;
+    const keep: Record<string, unknown> = {};
+    for (const key of ["opacity", "volume", "muted", "transform.scaleX", "transform.scaleY", "color"]) if (p[key] !== undefined) keep[key] = p[key];
+    if (Object.keys(keep).length) extra.params = keep;
+  }
   if ("retime" in element && element.retime) extra.speed = element.retime.rate;
   if ("hidden" in element && element.hidden) extra.hidden = true;
   if ("muted" in element && element.muted) extra.muted = true;

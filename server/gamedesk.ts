@@ -32,6 +32,8 @@ import { chatTitle } from "./folders";
 import { stateDir } from "./state";
 import { readDoc, saveDoc } from "./store";
 import { staticDir } from "./staticfiles";
+import { GAME_OBJECT, isGameBind, writeGame } from "../src/lib/panacea/apps/game";
+import type { Value } from "../src/lib/panacea/atoms";
 
 // ------------------------------------------------------------------ shapes --
 
@@ -92,6 +94,8 @@ interface GameState {
   by?: "agent" | "person";
   name?: string;
   scenes?: number;
+  /** This revision came from a Panacea panel, which the window has already: it takes it without moving the camera. */
+  quiet?: number;
 }
 
 interface Entry {
@@ -100,6 +104,8 @@ interface Entry {
   since: number;
   rev: number;
   by: "agent" | "person";
+  /** The revision a Panacea panel made: the window takes it without moving the camera. */
+  quiet?: number;
 }
 
 /** What is kept on disk for a chat: its game, and whether its window was open. */
@@ -190,7 +196,31 @@ export function gameState(session: string): GameState {
     by: entry.by,
     name: project?.properties?.name || "Your game",
     scenes: Array.isArray(project?.layouts) ? project.layouts.length : 0,
+    ...(entry.quiet === entry.rev ? { quiet: entry.rev } : {}),
   };
+}
+
+/**
+ * A Panacea panel's `game.*` control moved (docs/PANACEA-GAPS.md, G1): the game's movement behaviour is changed, and the
+ * window takes the new version. Used by the page (`who` "person": without moving the camera) and by the agent
+ * (`panacea_set`). Refuses, with the reason, rather than half-doing it.
+ */
+export function gamePanel(session: string, bind: string, value: unknown, object: unknown, who: "agent" | "person"): { ok: true; did: string } | { ok: false; error: string } {
+  if (!validSession(session)) return { ok: false, error: "Autora Games needs a chat to work in." };
+  if (!isGameBind(bind) || bind === GAME_OBJECT) return { ok: false, error: `nothing in the game answers to ${bind}` };
+  const next: Json = JSON.parse(JSON.stringify(projectOf(session)));
+  const done = writeGame(next, bind, value as Value, object);
+  if ("error" in done) return { ok: false, error: done.error };
+  const entry = entryFor(session);
+  setOpen(session, true);
+  if (who === "person") entry.quiet = entry.rev + 1;
+  commit(session, next, "agent");
+  return { ok: true, did: done.did };
+}
+
+/** The game as it is now if the chat has one, for what the agent reads off the canvas. */
+export function gameProject(session: string): Json | null {
+  return validSession(session) ? entries.get(session)?.project ?? null : null;
 }
 
 /** Told after every change to a chat's window or game, so the page can be told. */
@@ -1076,14 +1106,14 @@ export function gameBriefing(on: boolean): string {
   return (
     "- Autora Games (the game window, GDevelop's editor): available. Tools: game_open, game_look, game_edit, game_check, game_catalog, " +
     "game_template and game_import. The game is the project file GDevelop saves (JSON: scenes, objects, behaviors, instances, events, " +
-    "resources); you read and change it with game_look and game_edit (set, insert, remove, merge at a path such as " +
-    "layouts[Scene].objects[Player].behaviors), and the person sees it change in the editor beside the chat and can change anything " +
-    "by hand: call game_look again before relying on what you saw earlier. Never write an instruction from memory: search the engine's " +
-    "own list with game_catalog (it has the exact type and the parameter order), copy shapes from game_template, and run game_check " +
-    "before you say a game is done. The technical work (events, behaviors, physics, wiring, the settings that make it run) is yours: " +
-    "do it completely. The creative choices (the idea, the story, the characters, the world, the look, how it feels, the levels) are " +
-    "theirs: ask, suggest and explain, and let them choose; if they ask for an action or a property (\"make it slippery\", \"jump\"), " +
-    "make it and leave every setting where they can change it."
+    "resources); read and change it with game_look and game_edit (set, insert, remove, merge at a path such as " +
+    "layouts[Scene].objects[Player].behaviors). The person sees it change in the editor beside the chat and can change anything by " +
+    "hand: call game_look again before relying on what you saw. Never write an instruction from memory: search the engine's own list " +
+    "with game_catalog (exact type and parameter order), copy shapes from game_template, and run game_check before you say a game is " +
+    "done. The technical work (events, behaviors, physics, wiring, the settings that make it run) is yours: do it completely. The " +
+    "creative choices (the idea, the story, the characters, the world, the look, how it feels, the levels) are theirs: ask, suggest " +
+    "and explain, and let them choose; if they ask for an action or a property (\"make it slippery\", \"jump\"), make it and leave " +
+    "every setting where they can change it."
   );
 }
 
@@ -1118,6 +1148,17 @@ export function gameRoutes(app: Express, opts: { exists: (session: string) => bo
     res.json({ project: projectOf(id), rev: entryFor(id).rev });
   });
 
+  /* A panel's game control moved (Panacea): the game's behaviour changes, in one place for the person and the agent. */
+  app.post("/api/game/:session/panel", express.json({ limit: "64kb" }), (req, res) => {
+    const id = known(req, res);
+    if (!id) return;
+    if (opts.off()) return res.status(403).json({ error: "Autora Games is switched off on the Tools page." });
+    const bind = typeof req.body?.bind === "string" ? req.body.bind : "";
+    const done = gamePanel(id, bind, req.body?.value, req.body?.object, "person");
+    if (!done.ok) return res.status(400).json({ error: done.error });
+    res.json({ rev: entryFor(id).rev, did: done.did });
+  });
+
   /* What the person did in the editor. Refused when the game moved on since the editor took it (the agent changed it), and
      when it is not a game at all, so a stale or malformed save is never kept. */
   app.put("/api/game/:session/project", bigJson, (req, res) => {
@@ -1145,7 +1186,7 @@ export function gameRoutes(app: Express, opts: { exists: (session: string) => bo
     try {
       const art = keepCopy({
         session: id, title: chatTitle(id), fallback: "Game", ext: "json",
-        data: Buffer.from(JSON.stringify(project, null, 2), "utf8"), mime: "application/json", note: "Saved from Autora Games (a GDevelop project)",
+        data: Buffer.from(JSON.stringify(project, null, 2), "utf8"), mime: "application/json", note: "Saved from Autora Games (a GDevelop project)", app: "game",
       });
       res.json({ artifact: art.id, name: art.name });
     } catch (err) {

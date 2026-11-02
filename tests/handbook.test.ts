@@ -127,10 +127,24 @@ await test("the shell manual teaches collapsible conversation runs, not an inter
   assert.doesNotMatch(t, /Typed into the shell|their Terminal tab|live pseudo-terminal/);
 });
 
+await test("the Video manual says Panacea's Video panels drive the project, with a Clip list", () => {
+  const video = manualText("video");
+  for (const needle of ["Panacea's Video panels drive this same project", "Clip list", "panacea_set", "no panels for colour grade"]) {
+    assert.ok(video.includes(needle), `the Video manual lacks "${needle}"`);
+  }
+});
+
 await test("the Video manual says which edits are done in the window by hand with Visible work on", () => {
   const v = manualText("video");
   for (const needle of ["With Visible work on", "by your hand, live", "the ruler clicked at the cut", "Delete pressed", "dragged along the timeline", "Default text", "With Visible work off"]) {
     assert.ok(v.includes(needle), `the Video manual lacks "${needle}"`);
+  }
+});
+
+await test("the 3D manual says Panacea's 3D panels drive the model, with a Part list", () => {
+  const cad = manualText("cad");
+  for (const needle of ["Panacea's 3D panels drive this same model", "Part list", "panacea_set", "no panels for rotation"]) {
+    assert.ok(cad.includes(needle), `the 3D manual lacks "${needle}"`);
   }
 });
 
@@ -141,10 +155,24 @@ await test("the 3D manual says every changing call is done in the window by hand
   }
 });
 
+await test("the Music manual says Panacea's Music panels drive the song, with a Track list for a track's controls", () => {
+  const music = manualText("studio");
+  for (const needle of ["Panacea's Music panels drive this same song", "Track list", "panacea_set", "Drum pattern", "no panels for envelope"]) {
+    assert.ok(music.includes(needle), `the Music manual lacks "${needle}"`);
+  }
+});
+
 await test("the Music manual says that with Visible work on the studio tools are done in the window by hand", () => {
   const music = manualText("studio");
   for (const needle of ["With Visible work on", "by your hand, live", "Song tray", "Add track", "piano roll", "drum grid", "finished song goes in", "With Visible work off"]) {
     assert.ok(music.includes(needle), `the Music manual lacks "${needle}"`);
+  }
+});
+
+await test("the Panacea manual teaches laying out the windows: the person's gestures and the agent's, kept with the canvas", () => {
+  const p = manualText("panacea");
+  for (const needle of ["Layout. The apps' windows", "Tidy in the board's", "panacea_arrange: `windows`", "`tidy`", "front first", "same gesture"]) {
+    assert.ok(p.includes(needle), `the Panacea manual lacks "${needle}"`);
   }
 });
 
@@ -231,6 +259,13 @@ await test("the Music manual says an instrument is chosen in the track's menu an
   }
 });
 
+await test("the Games manual says Panacea's Game panels drive the game, with an Object list", () => {
+  const game = manualText("game");
+  for (const needle of ["Panacea's Game panels drive this same game", "Object list", "panacea_set", "no panels for camera"]) {
+    assert.ok(game.includes(needle), `the Games manual lacks "${needle}"`);
+  }
+});
+
 await test("the Games manual says Visible work is not here yet, and that no cursor is played over the game", () => {
   const game = manualText("game");
   assert.ok(game.includes("coming soon") && game.includes("no cursor is played"));
@@ -262,7 +297,7 @@ await test("a tool finds its window's manual, and a tool with no window finds no
 
 await test("the overview every turn explains the layout and points at the manuals", async () => {
   const overview = windowsOverview();
-  for (const needle of ["Panacea is the main area", "slim strip along the foot of the workspace", "Open Panacea", "without a message", "Capabilities", "right-side icon dock", "stay mounted", "manual jump", "Follow", "tool_manual", "Shell commands", "Show all work", "Ask Autora bar", "docked beside it", "edge tab", "bottom sheet", "left half", "where a swipe never scrolls", "Canvas only", "TODO", "Retract conversation", "contracted by default", "compact preview", "pinch-zoom"]) {
+  for (const needle of ["Panacea is the main area", "slim strip along the foot of the workspace", "Open Panacea", "without a message", "Capabilities", "right-side icon dock", "stay mounted", "manual jump", "Follow", "tool_manual", "Shell commands", "Show all work", "Ask Autora bar", "docked beside it", "edge tab", "bottom sheet", "left half", "Canvas only", "TODO", "Retract conversation", "contracted by default"]) {
     assert.ok(overview.includes(needle), `the overview lacks ${needle}`);
   }
   assert.doesNotMatch(overview, /x on its tab|Autora Terminal|Working on/);

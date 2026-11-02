@@ -30,6 +30,15 @@ import {
 import { panaceaSteps, stepWords } from "../src/lib/panacea/handsteps";
 import { addFlow, type Flow } from "../src/lib/panacea/flows";
 import { treeLive } from "../src/lib/panacea/wiring";
+import { MUSIC_TRACK, isMusicBind, readMusic } from "../src/lib/panacea/apps/music";
+import { placeWindow, maximise as maximiseWindow, tidy as tidyBoxes, windowNamed, windowTitle, type WinBox } from "../src/lib/panacea/windows";
+import { MODEL_PART, isModelBind, readModel } from "../src/lib/panacea/apps/model";
+import { VIDEO_CLIP, isVideoBind, readVideo } from "../src/lib/panacea/apps/video";
+import { GAME_OBJECT, isGameBind, readGame } from "../src/lib/panacea/apps/game";
+import { cadModel, cadPanel } from "./caddesk";
+import { gamePanel, gameProject } from "./gamedesk";
+import { videoPanel, videoSnapshot } from "./opencut";
+import { studioPanel, studioSong } from "./studio";
 import { addStep, createProject, decide, describeProject, linkPieces, phaseFor, setStepDone, stepById, type Project } from "../src/lib/panacea/project";
 import { addCard, applyBoardParam, boardListing, boardMarkdown, boardSvg, createBoard, editCard, editLink, linkCards, moveCard, removeCard, tidy, unlink, type BoardMode, type BoardState } from "../src/lib/panacea/board";
 import { createDoc, docStateOf, formatBlock, insertBlocks, listing, outlineOf, applyParam, deleteBlock, replaceBlockText, stateOf, toMarkdown, type DocMode } from "../src/lib/panacea/document";
@@ -277,7 +286,7 @@ export function panaceaTurnNote(session: string): string | null {
   const recent = e.acts.filter((a) => Date.now() - a.at < 15 * 60_000).slice(-10).map((a) => a.text);
   const learnedWords = profileWords(profileNow());
   return [
-    `The Panacea window is open. ${describeCanvas(e.canvas)}`,
+    `The Panacea window is open. ${describeCanvas(e.canvas, { appValue: songValues(session, e.canvas) })}`,
     recent.length ? `What the person did on it lately: ${recent.join("; ")}.` : "",
     learnedWords ?? "",
     "panacea_look shows the panels' trees and the library; the person changes it by hand too, so look before relying on an earlier look.",
@@ -443,7 +452,7 @@ async function suggestNow(session: string): Promise<void> {
   const candidates = [...new Map([...searchLibrary(pool, recent.join(" "), domain, 10), ...searchLibrary(pool, "", domain, 8)].map((r) => [r.id, r])).values()].slice(0, 14);
   if (!candidates.length) return;
   const prompt = [
-    describeCanvas(e.canvas),
+    describeCanvas(e.canvas, { appValue: songValues(session, e.canvas) }),
     `What they did in the last two minutes: ${recent.join("; ")}.`,
     profileWords(p) ?? "",
     `Candidates:\n${candidates.map((r) => `- ${r.id}: ${r.name}, ${r.about}`).join("\n")}`,
@@ -479,7 +488,14 @@ interface PanaceaHooks {
   cancelled?: () => boolean;
   /** Called when the turn is stopped: the wait for the window's hand ends then. */
   onCancel?: (stop: () => void) => void;
+  /** Whether an app's window is switched off on the Tools page (by one of its tool names): its panels do nothing then. */
+  windowOff?: (tool: string) => boolean;
 }
+
+/** The tool whose switch turns each app's window off. */
+const APP_SWITCH = { music: "studio_look", model: "cad_scene_get", video: "video_look", game: "game_look" } as const;
+const APP_NAME = { music: "Autora Music", model: "Autora 3D", video: "Autora Video", game: "Autora Games" } as const;
+const offWords = (app: keyof typeof APP_SWITCH) => `${APP_NAME[app]} is switched off on the Tools page`;
 
 interface Outcome {
   ok: boolean;
@@ -499,6 +515,70 @@ function agentProblem(c: Canvas, key: string, v: unknown): string | null {
   }
   return valueProblem(c, key, v);
 }
+
+/**
+ * Sets a value the agent was given leave to set: on the canvas, or, for a song value (`music.bpm`), in the song itself,
+ * where the Music window shows it (src/lib/panacea/apps/music.ts). Returns the problem, if any. The track a track's
+ * controls act on is the canvas's own, so it is set first.
+ */
+function setChecked(session: string, c: Canvas, key: string, v: unknown, hooks: PanaceaHooks): string | null {
+  const bad = agentProblem(c, key, v);
+  if (bad) return bad;
+  if (isMusicBind(key) && key !== MUSIC_TRACK) {
+    if (hooks.windowOff?.(APP_SWITCH.music)) return offWords("music");
+    const done = studioPanel(session, key, v, c.values[MUSIC_TRACK], "agent");
+    return done.ok ? null : done.error;
+  }
+  setValue(c, key, v as Value);
+  return null;
+}
+/** What the song says for a `music.*` value, for describing the canvas. */
+function songValues(session: string, canvas: Canvas): (bind: string) => Value | undefined {
+  return (bind) => {
+    if (isGameBind(bind)) {
+      const game = gameProject(session);
+      return game ? readGame(game, bind, canvas.values[GAME_OBJECT]) : undefined;
+    }
+    if (isVideoBind(bind)) {
+      const project = videoSnapshot(session);
+      return project ? readVideo(project, bind, canvas.values[VIDEO_CLIP]) : undefined;
+    }
+    if (isModelBind(bind)) {
+      const model = cadModel(session);
+      return model ? readModel(model, bind, canvas.values[MODEL_PART]) : undefined;
+    }
+    const song = studioSong(session);
+    return song && isMusicBind(bind) ? readMusic(song.project, bind, canvas.values[MUSIC_TRACK], song.focus) : undefined;
+  };
+}
+
+/**
+ * The `model.*`, `video.*` and `game.*` values in what the agent gave panacea_set or panacea_place are the 3D model's, the video
+ * project's and the game's, not the canvas's: they are done here by those apps' own tools (src/lib/panacea/apps/) and taken out of the
+ * rest, which the canvas keeps. The part or clip they act on is `model.part` / `video.clip` (given in the same call, else
+ * the canvas's).
+ */
+async function applyAppValues(session: string, c: Canvas, args: Record<string, any>, hooks: PanaceaHooks): Promise<{ args: Record<string, any>; done: string[]; problems: string[] }> {
+  const given = args.values && typeof args.values === "object" ? Object.entries(args.values as Record<string, unknown>) : [];
+  const appOf = (k: string): "model" | "video" | "game" | null => (isModelBind(k) && k !== MODEL_PART ? "model" : isVideoBind(k) && k !== VIDEO_CLIP ? "video" : isGameBind(k) && k !== GAME_OBJECT ? "game" : null);
+  const mine = given.filter(([k]) => appOf(k));
+  if (!mine.length) return { args, done: [], problems: [] };
+  const values = args.values as Record<string, unknown>;
+  const done: string[] = [];
+  const problems: string[] = [];
+  for (const [k, v] of mine) {
+    const app = appOf(k)!;
+    if (hooks.windowOff?.(APP_SWITCH[app])) { problems.push(`${k}: ${offWords(app)}`); continue; }
+    const res = app === "model" ? await cadPanel(session, k, v, values[MODEL_PART] ?? c.values[MODEL_PART], "agent")
+      : app === "game" ? gamePanel(session, k, v, values[GAME_OBJECT] ?? c.values[GAME_OBJECT], "agent")
+      : await videoPanel(session, k, v, values[VIDEO_CLIP] ?? c.values[VIDEO_CLIP]);
+    if (res.ok) done.push(`${k}=${JSON.stringify(v).slice(0, 40)} (${res.did})`);
+    else problems.push(`${k}: ${res.error}`);
+  }
+  const rest = Object.fromEntries(given.filter(([k]) => !mine.some(([m]) => m === k)));
+  return { args: { ...args, values: rest }, done, problems };
+}
+const trackFirst = (a: [string, unknown], b: [string, unknown]) => Number(b[0] === MUSIC_TRACK) - Number(a[0] === MUSIC_TRACK);
 
 /** The pixel size of a PNG, JPEG, GIF or WebP from its first bytes; null when it cannot tell. */
 function imageSize(data: Buffer): { w: number; h: number } | null {
@@ -742,11 +822,10 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
       if (args.writes === "agent") panel.writes = "agent";
       // Values it opens with: checked like any other.
       const problems: string[] = [];
-      for (const [k, v] of Object.entries(values)) {
+      for (const [k, v] of Object.entries(values).sort(trackFirst)) {
         const key = k.replace(/^@(image|data)\./, (_, kind: string) => `@${panel.context !== "general" ? panel.context : c.surfaces.find((s) => s.kind === kind)?.id ?? kind}.`);
-        const bad = agentProblem(c, key, v);
+        const bad = setChecked(session, c, key, v, hooks);
         if (bad) problems.push(`${k}: ${bad}`);
-        else setValue(c, key, v);
       }
       return {
         text: `Placed ${state === "ghost" ? "a ghost (the person takes it with a click, or it drifts away)" : "panel"} ${panel.id} "${panel.title}" at ${panel.x},${panel.y} on ${panel.context}.${problems.length ? ` Values not set: ${problems.join("; ")}.` : ""}\n${treeWords(panel.tree)}`,
@@ -759,10 +838,10 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
       if (!given.length) refuse("Pass `values`: {\"@img1.exposure\": 0.4, \"budget\": 1200}.");
       const done: string[] = [];
       const problems: string[] = [];
-      for (const [k, v] of given.slice(0, 40)) {
-        const bad = agentProblem(c, k, v);
+      for (const [k, v] of given.slice(0, 40).sort(trackFirst)) {
+        const bad = setChecked(session, c, k, v, hooks);
         if (bad) problems.push(`${k}: ${bad}`);
-        else { setValue(c, k, v as Value); done.push(`${k}=${JSON.stringify(v).slice(0, 40)}`); }
+        else done.push(`${k}=${JSON.stringify(v).slice(0, 40)}`);
       }
       if (!done.length) refuse(`Nothing set. ${problems.join("; ")}`);
       return { text: `Set ${done.join(", ")}.${problems.length ? ` Not set: ${problems.join("; ")}.` : ""}`, preview: done[0]! };
@@ -815,13 +894,51 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
         fade(c, panel.id);
         done.push(`put away ${panel.id} (the person can bring it back)`);
       }
+      // Surfaces and app windows: the same moves, sizes, maximising and raising a person does by hand.
+      for (const m of Array.isArray(args.surfaces) ? args.surfaces : []) {
+        const s = c.surfaces.find((x) => x.id === m?.id) ?? refuse(`There is no surface "${String(m?.id)}". Surfaces: ${c.surfaces.map((x) => x.id).join(", ") || "none"}.`);
+        const x = numberOr(m.x), y = numberOr(m.y), w = numberOr(m.w), h = numberOr(m.h);
+        if (x !== null) s.x = snap(x);
+        if (y !== null) s.y = snap(y);
+        if (w !== null) s.w = snap(Math.max(280, w));
+        if (h !== null) s.h = snap(Math.max(180, h));
+        done.push(`moved or sized ${s.id}`);
+      }
+      const wins: WinBox[] = c.windows ?? (c.windows = []);
+      for (const m of Array.isArray(args.windows) ? args.windows : []) {
+        const id = windowNamed(m?.window) ?? refuse(`There is no window "${String(m?.window)}": it is an app's name (Music, 3D, Video, Games, PDF, Images, Documents, Spreadsheets, Presentations, Web, Apps & code, Explainers).`);
+        const x = numberOr(m.x), y = numberOr(m.y), w = numberOr(m.w), h = numberOr(m.h);
+        const known = wins.find((v) => v.id === id);
+        if (!known && x === null && y === null) refuse(`The ${windowTitle(id)} window is not open on this canvas yet, so it has no place to change: open it first (or give x and y).`);
+        const act = typeof m.do === "string" ? m.do : "";
+        if (act && !["maximise", "restore", "front"].includes(act)) refuse("do is maximise, restore or front.");
+        if (act === "maximise" || act === "restore") {
+          const r = maximiseWindow(wins, id, c.room ?? { w: 1056, h: 740 }, 16, act === "maximise" ? "max" : "restore");
+          done.push(r ? `${r} the ${windowTitle(id)} window` : `the ${windowTitle(id)} window was not maximised`);
+          continue;
+        }
+        const moved = x !== null || y !== null || w !== null || h !== null;
+        if (!placeWindow(wins, id, { ...(x !== null ? { x: snap(x) } : {}), ...(y !== null ? { y: snap(y) } : {}), ...(w !== null ? { w: snap(w) } : {}), ...(h !== null ? { h: snap(h) } : {}) }, { front: moved || act === "front" })) refuse(`The canvas already has ${wins.length} windows.`);
+        // A window sized by hand is no longer "maximised": there is nothing to give back.
+        if (w !== null || h !== null) delete wins.find((v) => v.id === id)!.was;
+        done.push(moved ? `placed the ${windowTitle(id)} window` : `brought the ${windowTitle(id)} window to the front`);
+      }
+      if (args.tidy !== undefined && args.tidy !== false) {
+        const what = args.tidy === "windows" || args.tidy === "surfaces" ? args.tidy : "all";
+        const items = [...(what !== "surfaces" ? wins.map((w) => ({ id: w.id, x: w.x, y: w.y, w: w.w, h: w.h })) : []), ...(what !== "windows" ? c.surfaces.map((s) => ({ id: s.id, x: s.x, y: s.y, w: s.w, h: s.h })) : [])];
+        if (!items.length) refuse("Nothing to tidy: there are no windows or surfaces on the canvas.");
+        const spots = tidyBoxes(items, { width: Math.max(1600, (c.room?.w ?? 1056) * 2) });
+        for (const w of wins) { const at = spots.get(w.id); if (at && what !== "surfaces") { w.x = snap(at.x); w.y = snap(at.y); delete w.was; } }
+        for (const s of c.surfaces) { const at = spots.get(s.id); if (at && what !== "windows") { s.x = snap(at.x); s.y = snap(at.y); } }
+        done.push(`tidied the ${what === "all" ? "windows and surfaces" : what} into rows, none over another`);
+      }
       if (args.focus !== undefined) {
         const f = args.focus === null || args.focus === "" ? null : String(args.focus);
         if (f && !c.surfaces.some((s) => s.id === f)) refuse(`There is no surface "${f}".`);
         const r = refocus(c, f);
         done.push(`focus on ${f ?? "nothing"} (${r.dimmed} dimmed, ${r.gone} put away, ${r.back} back)`);
       }
-      if (!done.length) refuse("Nothing to do: pass move, remove, restore, accept, group, ungroup, titles, writes, focus or name.");
+      if (!done.length) refuse("Nothing to do: pass move, surfaces, windows, tidy, remove, restore, accept, group, ungroup, titles, writes, focus or name.");
       return { text: `${done.join("; ")}.`, preview: done[0]! };
     }
 
@@ -1113,7 +1230,7 @@ export async function runPanaceaTool(session: string, name: string, args: Record
           commit(session, e, { ...newCanvas(args.new.trim().slice(0, 80)) }, "agent");
         }
         setOpen(session, true);
-        return { ok: true, summary: `${describeCanvas(e.canvas)}\nLibrary (place with panacea_place recipe; panacea_look library:"words" to search and see trees):\n${libraryIndex(allRecipes().filter((r) => r.origin === "builtin" || r.uses > 0), e.canvas.surfaces.length ? null : "general").slice(0, 3000)}`, preview: e.canvas.name };
+        return { ok: true, summary: `${describeCanvas(e.canvas, { appValue: songValues(session, e.canvas) })}\nLibrary (place with panacea_place recipe; panacea_look library:"words" to search and see trees):\n${libraryIndex(allRecipes().filter((r) => r.origin === "builtin" || r.uses > 0), e.canvas.surfaces.length ? null : "general").slice(0, 3000)}`, preview: e.canvas.name };
       }
 
       case "panacea_look": {
@@ -1161,7 +1278,7 @@ export async function runPanaceaTool(session: string, name: string, args: Record
         const recent = e.acts.slice(-12).map((a) => a.text);
         return {
           ok: true,
-          summary: [describeCanvas(e.canvas, { trees: args.trees !== false }), recent.length ? `What the person did lately: ${recent.join("; ")}.` : "", profileWords(profileNow()) ?? ""].filter(Boolean).join("\n"),
+          summary: [describeCanvas(e.canvas, { trees: args.trees !== false, appValue: songValues(session, e.canvas) }), recent.length ? `What the person did lately: ${recent.join("; ")}.` : "", profileWords(profileNow()) ?? ""].filter(Boolean).join("\n"),
           preview: e.canvas.name,
         };
       }
@@ -1174,8 +1291,14 @@ export async function runPanaceaTool(session: string, name: string, args: Record
       case "panacea_board":
       case "panacea_bespoke":
       case "panacea_project": {
+        // Values of the 3D model and the video project are done by those apps first; the rest are the canvas's.
+        const modelled = name === "panacea_place" || name === "panacea_set" ? await applyAppValues(session, e.canvas, args, hooks) : { args, done: [] as string[], problems: [] as string[] };
+        const modelNote = `${modelled.done.length ? ` Set in the app: ${modelled.done.join(", ")}.` : ""}${modelled.problems.length ? ` Not set: ${modelled.problems.join("; ")}.` : ""}`;
+        if (name === "panacea_set" && !Object.keys(modelled.args.values ?? {}).length && (modelled.done.length || modelled.problems.length)) {
+          return modelled.done.length ? { ok: true, summary: `Done.${modelNote}`, preview: modelled.done[0]! } : { ok: false, summary: `Nothing set.${modelNote}` };
+        }
         const next = structuredClone(e.canvas);
-        const done = edit(session, name, next, args, hooks);
+        const done = edit(session, name, next, modelled.args, hooks);
         setOpen(session, true);
         // Stop ends the wait for the window's hand at once (the page halts the hand itself: src/lib/handHalt.ts).
         hooks.onCancel?.(() => rejectAll(session, "Stopped by the person."));
@@ -1183,7 +1306,7 @@ export async function runPanaceaTool(session: string, name: string, args: Record
         if (hooks.cancelled?.()) return { ok: false, summary: "Stopped by the person before this was done: the canvas keeps what the hand had done so far, and nothing more." };
         if (hand) e.quiet = e.rev + 1;
         commit(session, e, next, "agent");
-        return { ok: true, summary: `${done.text}${hand ? ` ${hand}` : ""}`, preview: done.preview };
+        return { ok: true, summary: `${done.text}${modelNote}${hand ? ` ${hand}` : ""}`, preview: done.preview };
       }
 
       case "panacea_export": {
@@ -1460,7 +1583,7 @@ export function panaceaRoutes(app: Express, opts: {
     if (opts.off()) return res.status(403).json({ error: OFF });
     const e = entryFor(id);
     try {
-      const art = keepCopy({ session: id, title: e.canvas.name || chatTitle(id), fallback: "Canvas", ext: "panacea.json", data: Buffer.from(JSON.stringify(e.canvas, null, 2), "utf8"), mime: "application/json", note: "Saved from Panacea" });
+      const art = keepCopy({ session: id, title: e.canvas.name || chatTitle(id), fallback: "Canvas", ext: "panacea.json", data: Buffer.from(JSON.stringify(e.canvas, null, 2), "utf8"), mime: "application/json", note: "Saved from Panacea", app: "panacea" });
       res.json({ artifact: art.id, name: art.name });
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : String(err) });

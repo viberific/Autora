@@ -33,6 +33,7 @@ function optionsOf(api: PanaceaApi, node: Node, panel: Panel): Option[] {
   const raw = node.props?.options;
   if (Array.isArray(raw)) return raw as Option[];
   const data = api.canvas.surfaces.find((s) => s.kind === "data" && (s.id === panel.context || bindsOf(node).some((b) => parseBind(b).surface === s.id))) ?? api.canvas.surfaces.find((s) => s.kind === "data");
+  if (raw === "tracks" || raw === "parts" || raw === "clips" || raw === "objects") return api.options(raw);
   if (raw === "looks") return Object.entries(LOOKS).map(([value, l]) => ({ value, label: l.label, color: l.swatch }));
   if (raw === "palette") {
     const img = api.canvas.surfaces.find((s) => s.kind === "image" && s.id === panel.context) ?? api.canvas.surfaces.find((s) => s.kind === "image");

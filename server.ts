@@ -170,7 +170,7 @@ import { cadRoutes, cadState, dropCad, onCadChange, serveCad } from "./server/ca
 import { dropGame, gameRoutes, gameState, onGameChange, serveGame } from "./server/gamedesk";
 import { dropPhoto, onPhotoChange, photoRoutes, photoState, servePhoto } from "./server/photodesk";
 import { dropStudio, onStudioChange, studioRoutes, studioState, studioTurnNote, studioVisible } from "./server/studio";
-import { appOfFile, appOfTool } from "./src/lib/panacea/flows";
+import { appOfArtifact, appOfFile, appOfTool } from "./src/lib/panacea/flows";
 import { dropPanacea, noteFlow, onPanaceaChange, onPanaceaTouch, panaceaRoutes, panaceaState, panaceaSuggester, panaceaTurnNote, panaceaVisible } from "./server/panacea";
 import { joinProjects, windowOff } from "./server/tools";
 import { dropOfficeDesk, onOfficeChange, onOfficePush, onOfficeTouch, officeBriefing, officeData, officeRoutes, officeState, officeHooks, serveOfficeEditors } from "./server/officedesk";
@@ -1586,7 +1586,7 @@ function noteFlowsOf(sessionId: string, tool: string, args: Record<string, unkno
         if (seen.has(id)) continue;
         seen.add(id);
         const art = getArtifact(id);
-        const from = art ? appOfFile(art.name) : null;
+        const from = art ? appOfArtifact(art) : null;
         if (art && from && from !== to) noteFlow(sessionId, { from, to, what: art.name, artifact: art.id });
       }
       if (FILE_KEYS.test(key) && !/file_[0-9a-f]{16}/.test(v)) {
@@ -6423,7 +6423,7 @@ async function startServer() {
   };
   spectraRoutes(app, spectraOpts);
   /* The video window's editor (server/opencut.ts): OpenCut's, keeping its projects here. */
-  opencutRoutes(app, { exists: (id: string) => sessions.has(id), push: (id: string, message: Record<string, unknown>) => sendEphemeral(id, message) });
+  opencutRoutes(app, { exists: (id: string) => sessions.has(id), off: () => windowOff("video_look"), push: (id: string, message: Record<string, unknown>) => sendEphemeral(id, message) });
   officeRoutes(app, { exists: (id: string) => sessions.has(id) });
   // The Terminal window: a shell the person and the agent share.
   // Autora 3D: the 3D window's model, and opening and putting it away.

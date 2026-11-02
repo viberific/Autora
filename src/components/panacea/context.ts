@@ -9,8 +9,10 @@ import type { Profile } from "../../lib/panacea/profile";
 export interface PanaceaApi {
   canvas: Canvas;
   profile: Profile;
-  /** The value at a bind, or undefined. */
+  /** The value at a bind, or undefined. An app's value (`music.bpm`) is read off that app (src/lib/panacea/apps/). */
   value: (key: string) => Value | undefined;
+  /** Choices a control offers that come from an app: `tracks` (the song's tracks). */
+  options: (source: string) => Array<{ value: string; label: string; color?: string }>;
   /** The person set a value with a control on `panel`. `label` names the step in the history. */
   set: (key: string, value: Value, panel: Panel, label: string) => void;
   /** A surface's action (reset, auto, export, clear). */
