@@ -55,7 +55,9 @@ async function main() {
       await page.mouse.up();
       assert.ok((await width(".rail-slot")) <= 520);
       await page.locator(".pane-handle.is-rail").dblclick();
-      const back = await width(".rail-slot");
+      // The menu slides back (a short transition on its width): read it once it has stopped moving.
+      let back = await width(".rail-slot");
+      for (let i = 0; i < 20; i++) { await sleep(60); const now = await width(".rail-slot"); if (now === back) break; back = now; }
       // 0.9.289: the reset width is no longer a constant. The menu is put back as the WHOLE menu -- wide enough for its
       // words, measured from the labels themselves -- so the old 150-180 expectation asserted a number the app stopped
       // using when it began measuring what the words need (R13). What matters is that it comes back as words and not as

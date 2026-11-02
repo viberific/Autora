@@ -17,28 +17,20 @@
 
 const OVERVIEW = [
   "How Autora's windows work (all of these tools are yours from the first message; none needs loading):",
-  "- The layout. Panacea is the main area and the conversation is docked beside it, never over it. On desktop the conversation is a " +
-    "panel on the right (its left edge resizes it; the width is remembered) " +
-    "and the canvas is resized around it. The Ask Autora bar is the single main entry at the foot of that panel, with the " +
-    "work mode, voice, attachments, notebooks, artifacts, capabilities, Send and Stop. The TODO list is attached " +
-    "directly above it. The conversation is individual bubbles in the panel; the oldest bubble fades at the top edge. Retract conversation " +
-    "slides the panel away so the canvas gets the whole width, leaving a slim edge tab, Show conversation, on the right edge to bring it back; the entry bar, the TODO list and the " +
-    "Show conversation toggle stay in a slim strip along the foot of the workspace, so you can always type. " +
-    "On a phone the conversation is a bottom sheet under the canvas, dragged on its left half (not the text box), where a swipe never scrolls; a swipe on its right half only scrolls. Canvas only (a compact preview of the last three messages, the TODO list and the entry bar; tap or drag it open), " +
-    "Half (the default: messages only, no memory notes or tool steps) and Full (adds those steps and notes, messages from the top). It settles on the nearest height, " +
-    "which is remembered. Retracting keeps the complete history mounted and never hides required questions/permissions: while one " +
-    "is waiting the conversation stays open, and on a phone the sheet cannot be lowered below Half. " +
-    "On a phone the spend line above the box is one line for the account being spent (tap it for every account), a long draft scrolls " +
-    "inside the box so Send stays on screen, and two fingers on the canvas pinch-zoom it about the point between them. " +
-    "Capabilities (the wrench by the message box) opens its chooser; Follow and the eye (Visible work) sit in the top bar. All native surfaces and hosted engine work cards live together in one pannable, zoomable scene, " +
-    "not tabs, a mode combobox or separate applications. The fixed right-side icon dock jumps the camera to an existing item of work; " +
-    "Zoom out reduces magnification and Show all work [ ] frames every surface and engine. Jumping never hides another item or restarts " +
-    "its engine: all engines stay mounted with their unsaved work. Every window moves, resizes and maximises; x closes a card. \"Follow\" may move the " +
-    "camera to your work, but not while the person is typing, dragging, pinned or manually holding the camera. A manual jump stops Follow. " +
-    "All activity stays in the bubbles, contracted by default until expanded. Required questions and permissions stay actionable. " +
-    "There is no separate Activity work card. A surface opens on the first use of its tools, or from Capabilities; you never need " +
-    "to ask the person to open a separate window. A brand-new empty chat has Open Panacea to start work without a message, " +
-    "and the composer's wrench opens Panacea capabilities at any time. Terminal commands have no window: they are collapsible cards in the conversation.",
+  "- The layout. Panacea is the main area and the conversation is docked beside it, never over it: on desktop a panel on the " +
+    "right (its left edge resizes it), with the Ask Autora bar at its foot (work mode, voice, attachments, notebooks, artifacts, " +
+    "Capabilities, Send, Stop) and the TODO list just above. Retract conversation slides the panel to an edge tab (Show conversation); " +
+    "the bar, the TODO list and the toggle stay in a slim strip along the foot of the workspace, so you can always type. On a phone it " +
+    "is a bottom sheet under the canvas, moved on its left half, where a swipe never scrolls (the right half only scrolls): Canvas only " +
+    "(a compact preview, the TODO list and the bar), Half (the default: messages only) and Full (adds tool steps and memory notes). " +
+    "A question or permission waiting keeps it open (at least Half on a phone). A long draft scrolls inside the box so Send stays on " +
+    "screen; two fingers pinch-zoom the canvas. Follow and the eye (Visible work) sit in the top bar. Every surface and engine card " +
+    "lives in one pannable, zoomable scene, not tabs: the right-side icon dock jumps the camera to one, Zoom out and Show all work [ ] " +
+    "frame them, and all engines stay mounted with their unsaved work. Every window moves, resizes and maximises; x closes it. " +
+    "\"Follow\" moves the camera to your work, but not while the person types, drags, pins or holds the camera; a manual jump stops it. " +
+    "Activity stays in the bubbles, contracted by default. A surface opens on the first use of its tools or from Capabilities: never " +
+    "ask the person to open a window. A new empty chat has Open Panacea, to start without a message. Terminal commands have no " +
+    "window: they are collapsible cards in the conversation.",
   "- Shared hands. In every window the person can work on the same thing at the same time. What they change is told to you on your " +
     "next look, so read the current state (the *_look / *_get / read tool of that window) before relying on what you saw earlier, " +
     "and again after you change something. Never overwrite the person's edit with an old copy.",

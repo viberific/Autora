@@ -968,7 +968,9 @@ const WorkingLine = memo(function WorkingLine({ tail, doing, elapsedMs, steps, p
  * folded turn is still a turn you can watch.
  */
 const StepGroup = memo(function StepGroup({ steps, unfolded = false, ...cell }: { steps: Cell[]; unfolded?: boolean } & CellContext) {
-  const [open, setOpen] = useState(unfolded);
+  // A memory rewrite waiting on the person's yes or no is a question, and a question is never folded away.
+  const asking = steps.some((s) => s.kind === "learned" && s.items.some((i) => i.action === "proposed" && i.status !== "confirmed"));
+  const [open, setOpen] = useState(unfolded || asking);
   const running = cell.open && steps.some((s) => stepStatus(s) === "running");
   // Marked running in a turn that is over: it never reported back. Saying
   // "running" forever would be a lie.

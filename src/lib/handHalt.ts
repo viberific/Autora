@@ -40,6 +40,9 @@ export function beginHandRun(keys = true): void {
   halted = false;
   stopped = false;
   if (!keys) return;
+  /* The board's own dock (history, ask, what was put away) steps aside while the hand works in the page, so it never
+     sits over the control the hand is reaching for; it is back when the run ends (styles.css, .hands-at-work). */
+  document.documentElement.classList.add("hands-at-work");
   if (!running) document.addEventListener("focusin", quiet, true);
   running = true;
 }
@@ -48,6 +51,7 @@ export function beginHandRun(keys = true): void {
 export function endHandRun(): void {
   if (!running) return;
   running = false;
+  document.documentElement.classList.remove("hands-at-work");
   document.removeEventListener("focusin", quiet, true);
   const active = document.activeElement;
   if (active instanceof HTMLElement && quieted.has(active) && window.matchMedia?.("(pointer: coarse)").matches) active.blur();

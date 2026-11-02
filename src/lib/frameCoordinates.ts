@@ -29,11 +29,13 @@ export function workRectVisible(
     rect.top + rect.height <= viewport.top + viewport.height + 1;
 }
 
-export function isWorkVisible(element: Element): boolean {
+export function isWorkVisible(element: Element, opts: { whole?: boolean } = {}): boolean {
   if (document.visibilityState !== "visible") return false;
   const rect = element.getBoundingClientRect();
   const board = element.closest(".pa-board");
-  if (!(element instanceof HTMLIFrameElement) && !workRectVisible(rect, { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight })) return false;
+  /* A whole window (an editor's frame, or an in-page window such as Music's) is judged as a window, not as a control. */
+  const whole = opts.whole ?? element instanceof HTMLIFrameElement;
+  if (!whole && !workRectVisible(rect, { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight })) return false;
   if (!board) return true;
   /* Inside the board above the entry, and not under the work navigation. That navigation is a small box in a corner,
      so it hides only what it actually covers: workViewport's band (the whole height beside it) is for placing the
@@ -45,7 +47,7 @@ export function isWorkVisible(element: Element): boolean {
   const nav = document.querySelector(".conversation-flow__work-navigation")?.getBoundingClientRect();
   /* An editor's whole frame is "on screen" when most of it is, its middle clear of the jump buttons: a window a person
      can see and work in, though an edge runs under the buttons or off the board. */
-  if (element instanceof HTMLIFrameElement) {
+  if (whole) {
     const w = Math.max(0, Math.min(rect.right, room.left + room.width) - Math.max(rect.left, room.left));
     const h = Math.max(0, Math.min(rect.bottom, room.top + room.height) - Math.max(rect.top, room.top));
     const cx = rect.left + rect.width / 2;
