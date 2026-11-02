@@ -1,18 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Value } from "../../lib/panacea/atoms";
 import { MODEL_PART, isModelBind, modelOptions, readModel, type ModelDoc } from "../../lib/panacea/apps/model";
+import { VIDEO_CLIP, isVideoBind, readVideo, videoOptions, type VideoState } from "../../lib/panacea/apps/video";
 import { MUSIC_TRACK, isMusicBind, musicOptions, readMusic, writeMusic } from "../../lib/panacea/apps/music";
 import type { Node } from "../../lib/panacea/recipe";
 import { useCadState } from "../../lib/caddesk";
+import { useVideoState } from "../../lib/opencut";
 import { useStudioState } from "../../lib/studio";
 import { normalizeProject, type Project } from "../../lib/studio/model";
 
 /** A value that lives in an app, not on the canvas (the track or part picked for a panel is the canvas's). */
-export const isAppBind = (bind: string) => (isMusicBind(bind) && bind !== MUSIC_TRACK) || (isModelBind(bind) && bind !== MODEL_PART);
+export const isAppBind = (bind: string) => (isMusicBind(bind) && bind !== MUSIC_TRACK) || (isModelBind(bind) && bind !== MODEL_PART) || (isVideoBind(bind) && bind !== VIDEO_CLIP);
 
 /** The apps a panel can drive: for now the song in Autora Music and the model in Autora 3D. */
-type AppName = "music" | "model";
-const appOf = (bind: string): AppName | null => (isMusicBind(bind) ? "music" : isModelBind(bind) ? "model" : null);
+type AppName = "music" | "model" | "video";
+const appOf = (bind: string): AppName | null => (isMusicBind(bind) ? "music" : isModelBind(bind) ? "model" : isVideoBind(bind) ? "video" : null);
 
 /** Which apps have a control on one of their values in these trees (only then is an app's state fetched). */
 export function wantedApps(trees: Node[]): Set<AppName> {
@@ -32,12 +34,15 @@ export function useAppValues(sessionId: string, wanted: Set<AppName>, onProblem:
   const id = encodeURIComponent(sessionId);
   const wantMusic = wanted.has("music");
   const wantModel = wanted.has("model");
+  const wantVideo = wanted.has("video");
   const [song, setSong] = useState<{ doc: Project; focus: string | null } | null>(null);
   const [model, setModel] = useState<ModelDoc | null>(null);
   /** What a model control was just set to, shown until the model is fetched again (the modeller works out the rest). */
+  const [video, setVideo] = useState<VideoState | null>(null);
   const [shown, setShown] = useState<Record<string, Value>>({});
   const studio = useStudioState();
   const cad = useCadState();
+  const videoWin = useVideoState();
   const queue = useRef(new Map<string, { value: Value; pick: unknown }>());
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const busy = useRef(0);
@@ -57,9 +62,23 @@ export function useAppValues(sessionId: string, wanted: Set<AppName>, onProblem:
     if (body?.doc && Array.isArray(body.doc.bodies) && idle()) { setModel(body.doc); setShown({}); }
   }, [id]);
 
+  const loadVideo = useCallback(async () => {
+    if (!idle()) return;
+    const body = (await fetch(`/api/opencut/${id}/project`).then((r) => (r.ok ? r.json() : null)).catch(() => null)) as { state?: VideoState | null } | null;
+    if (idle()) { setVideo(body?.state && Array.isArray(body.state.tracks) ? body.state : null); setShown((s) => Object.fromEntries(Object.entries(s).filter(([k]) => !isVideoBind(k)))); }
+  }, [id]);
+
   // Again whenever the song or the model moves on (the window, the agent, another tab).
   useEffect(() => { if (wantMusic) void loadSong(); }, [wantMusic, loadSong, studio.rev, studio.open]);
   useEffect(() => { if (wantModel) void loadModel(); }, [wantModel, loadModel, cad.rev, cad.open]);
+
+  // The editor says nothing when a clip changes, so a Video panel asks again while its window is open.
+  useEffect(() => {
+    if (!wantVideo || !videoWin.open) { setVideo(null); return; }
+    void loadVideo();
+    const tick = setInterval(() => void loadVideo(), 2000);
+    return () => clearInterval(tick);
+  }, [wantVideo, videoWin.open, videoWin.projectId, loadVideo]);
 
   const flush = useCallback(async () => {
     timer.current = null;
@@ -69,18 +88,18 @@ export function useAppValues(sessionId: string, wanted: Set<AppName>, onProblem:
     try {
       for (const [bind, { value, pick }] of sends) {
         const app = appOf(bind);
-        const url = app === "model" ? `/api/cad/${id}/panel` : `/api/studio/${id}/panel`;
-        const body = JSON.stringify(app === "model" ? { bind, value, part: pick } : { bind, value, track: pick });
+        const url = app === "model" ? `/api/cad/${id}/panel` : app === "video" ? `/api/opencut/${id}/panel` : `/api/studio/${id}/panel`;
+        const body = JSON.stringify(app === "model" ? { bind, value, part: pick } : app === "video" ? { bind, value, clip: pick } : { bind, value, track: pick });
         const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body }).catch(() => null);
         const said = (await res?.json().catch(() => null)) as { error?: string } | null;
-        const name = app === "model" ? "Autora 3D" : "Autora Music";
+        const name = app === "model" ? "Autora 3D" : app === "video" ? "Autora Video" : "Autora Music";
         if (!res?.ok) onProblem(said?.error ? `${name} did not take that: ${said.error}.` : `Could not reach ${name}. Try again.`);
       }
     } finally {
       busy.current--;
-      if (idle()) { void loadSong(); void loadModel(); }
+      if (idle()) { void loadSong(); void loadModel(); void loadVideo(); }
     }
-  }, [id, loadSong, loadModel, onProblem]);
+  }, [id, loadSong, loadModel, loadVideo, onProblem]);
 
   /** A control moved: shown now, sent once the drag settles a little (the latest value of each control wins). */
   const write = useCallback((bind: string, value: Value, pick: unknown) => {
@@ -100,11 +119,12 @@ export function useAppValues(sessionId: string, wanted: Set<AppName>, onProblem:
   /** The value a control shows: off the app for an app value, else undefined (the caller reads the canvas). */
   const read = useCallback((bind: string, picked: unknown): Value | undefined => {
     if (isMusicBind(bind)) return song ? readMusic(song.doc, bind, picked, song.focus) : undefined;
+    if (isVideoBind(bind)) return bind in shown ? shown[bind] : video ? readVideo(video, bind, picked) : undefined;
     if (isModelBind(bind)) return bind in shown ? shown[bind] : model ? readModel(model, bind, picked) : undefined;
     return undefined;
-  }, [song, model, shown]);
+  }, [song, model, video, shown]);
 
-  const options = useCallback((source: string) => (source === "tracks" && song ? musicOptions(song.doc) : source === "parts" && model ? modelOptions(model) : []), [song, model]);
+  const options = useCallback((source: string) => (source === "tracks" && song ? musicOptions(song.doc) : source === "parts" && model ? modelOptions(model) : source === "clips" && video ? videoOptions(video) : []), [song, model, video]);
 
   return useMemo(() => ({ read, write, options }), [read, write, options]);
 }

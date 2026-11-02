@@ -27,6 +27,7 @@ import { pictureOf } from "./panacea/Surfaces";
 import { useCanvas } from "./panacea/useCanvas";
 import { isAppBind, useAppValues, wantedApps } from "./panacea/useAppValues";
 import { MODEL_PART, isModelBind } from "../lib/panacea/apps/model";
+import { VIDEO_CLIP, isVideoBind } from "../lib/panacea/apps/video";
 import { MUSIC_TRACK } from "../lib/panacea/apps/music";
 import { SaveButton, keptAs } from "./SaveButton";
 import { LoadButton, type LoadResult } from "./LoadButton";
@@ -57,6 +58,9 @@ const show = (v: Value | undefined) => {
  * widen, pin and group; they fade when the work moves on and come back with a click; suggestions arrive as ghosts to
  * take or wave away. The canvas lives on the server (server/panacea.ts), where the agent's panacea_* tools work on it.
  */
+/** The canvas value that says which track, part or clip a control acts on. */
+const pickOf = (bind: string) => (isModelBind(bind) ? MODEL_PART : isVideoBind(bind) ? VIDEO_CLIP : MUSIC_TRACK);
+
 export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene, followTarget, onJump, onCloseWork, navigationHost, nativeActions }: {
   sessionId: string;
   hosted?: readonly HostedWork[];
@@ -162,7 +166,7 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
     touched.current.add(panel.id);
     if (isAppBind(key)) {
       // An app's value: the app changes (useAppValues); the canvas only notes that the panel was used.
-      apps.write(key, v, live.current.values[isModelBind(key) ? MODEL_PART : MUSIC_TRACK]);
+      apps.write(key, v, live.current.values[pickOf(key)]);
       quietly((d) => { const p = d.panels.find((x) => x.id === panel.id); if (p) p.touched = Date.now(); });
     } else edit((d) => {
       setValue(d, key, v);
@@ -324,7 +328,7 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
   const hold = doc.hold;
   const api: PanaceaApi = useMemo(() => ({
     canvas, profile: displayProfile, sessionId, set, act, ask, hold, expand, writeDoc, writeBoard, setMode,
-    value: (key: string) => apps.read(key, canvas.values[isModelBind(key) ? MODEL_PART : MUSIC_TRACK]) ?? valueAt(canvas, key),
+    value: (key: string) => apps.read(key, canvas.values[pickOf(key)]) ?? valueAt(canvas, key),
     options: apps.options,
   }), [apps, canvas, displayProfile, sessionId, set, act, ask, hold, expand, writeDoc, writeBoard, setMode]);
 

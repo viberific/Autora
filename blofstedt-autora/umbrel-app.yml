@@ -204,9 +204,10 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  3D panels now work. In Panacea, the Position, Size, Material, Bevel, Repeat and
-  Parts panels change the model in Autora 3D itself, and the 3D window shows it,
-  and the other way round. A Part list picks which part they act on. The agent
-  sets them with the same effect. Panels for things the modeller has no way to
-  do, such as rotation, light, camera and printing, are gone. Music panels from
-  the last release are unchanged.
+  Video panels now work. In Panacea, the Speed, Audio, Title, Picture and Project
+  panels change the clip or film in Autora Video itself, and the Video window
+  shows it, and the other way round. A Clip list picks which clip they act on.
+  The agent sets them with the same effect. Export, Markers and Scenes hold your
+  choices for the agent to act on. Panels for things the editor has no way to
+  do, such as colour grade, transitions, stabilising and captions, are gone.
+  Music and 3D panels from the last releases are unchanged.

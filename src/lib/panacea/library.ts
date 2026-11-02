@@ -15,6 +15,7 @@
  */
 import { MUSIC_TRACK } from "./apps/music";
 import { MATERIALS, MODEL_PART } from "./apps/model";
+import { VIDEO_CLIP } from "./apps/video";
 import { INSTRUMENTS, NOTE_NAMES, SCALE_NAMES } from "../studio/model";
 import { MAX_DEPTH, type Value } from "./atoms";
 import { INTENTS, type RecipeNext, type RecipeWhen } from "./intent";
@@ -234,27 +235,20 @@ const MUSIC: Recipe[] = [
   r("music", "export", "Export", "bounce the song to a WAV file", "export bounce wav", stack(ask("Bounce it", "Bounce the song to a WAV file (studio_export)."))),
 ];
 
+// Every control here acts on the project in Autora Video (src/lib/panacea/apps/video.ts), on the clip picked in its Clip
+// list. The editor has no colour grade, transition, stabiliser, caption engine, ducking, fades or looks, so there are no
+// panels for them. Export, Markers and Scenes hold the person's choices and words for the agent to act on.
+const CLIP = () => sel(VIDEO_CLIP, "Clip", "clips");
 const VIDEO: Recipe[] = [
-  r("video", "timeline", "Timeline", "clips on video, audio and title tracks", "timeline edit clips tracks", stack(lanes("video.clips", "Timeline", ["Video", "Audio", "Titles"], 120, "s")), 560),
-  r("video", "trim", "Trim", "in and out points", "trim cut in out", stack(rg("video.trim", "In / out", { min: 0, max: 120, step: 0.1, unit: "s" }))),
-  r("video", "speed", "Speed", "faster, slower or backwards", "speed slow motion reverse", stack(sl("video.speed", "Speed", { min: 0.25, max: 4, step: 0.05, unit: "×" }), tg("video.reverse", "Reverse"))),
-  r("video", "transition", "Transition", "how one clip becomes the next", "transition fade dissolve wipe", stack(seg("video.trans", "Type", ["Cut", "Fade", "Dissolve", "Wipe"]), sl("video.transdur", "Length", { min: 0, max: 3, step: 0.1, unit: "s" }))),
-  r("video", "grade", "Colour grade", "exposure, contrast and colour", "grade colour color correction", grp("Grade", sl("video.exposure", "Exposure", { min: -2, max: 2, step: 0.05, centre: true }), sl("video.contrast", "Contrast", { min: -100, max: 100, centre: true }), sl("video.sat", "Saturation", { min: -100, max: 100, centre: true }), sl("video.temp", "Temperature", { min: -100, max: 100, centre: true }))),
-  r("video", "audio", "Audio", "level, fades and ducking", "audio volume fade ducking", stack(sl("video.vol", "Volume", { min: 0, max: 100 }), row(tg("video.fadein", "Fade in"), tg("video.fadeout", "Fade out")), adv(sl("video.duck", "Duck under voice", { min: 0, max: 100 })))),
-  r("video", "title", "Title", "words on screen", "title text caption lower third", stack(tx("video.title", "Text"), row(col("video.titlecolor", "Colour"), seg("video.titlepos", "Where", ["Top", "Middle", "Bottom"])))),
-  r("video", "frame", "Frame", "aspect, zoom and position", "frame crop aspect zoom pan", stack(seg("video.aspect", "Aspect", ["16:9", "9:16", "1:1", "4:5"]), sl("video.zoom", "Zoom", { min: 1, max: 3, step: 0.05 }), adv(xy("video.pan", "Position", "Left-right", "Up-down")))),
-  r("video", "stabilise", "Stabilise", "smooth a shaky shot", "stabilise stabilize shake smooth", stack(tg("video.stab", "Stabilise"), sl("video.stabamt", "Strength", { min: 0, max: 100 }))),
-  r("video", "captions", "Captions", "words of what is said", "captions subtitles transcript", stack(tg("video.captions", "Captions"), seg("video.capstyle", "Style", ["Plain", "Boxed", "Bold"]), seg("video.cappos", "Where", ["Bottom", "Top"]))),
-  r("video", "export", "Export", "resolution, format and frame rate", "export render resolution mp4", stack(seg("video.res", "Resolution", ["720p", "1080p", "4K"]), seg("video.fmt", "Format", ["MP4", "WebM"]), st("video.fps", "Frame rate", { min: 12, max: 60, unit: "fps" }))),
-  r("video", "markers", "Markers", "moments to come back to", "markers notes moments", stack(lst("video.markers", "Markers", "0:12 the jump"))),
-  r("video", "scenes", "Scenes", "the scenes in order", "scenes storyboard shots sequence", stack(lst("video.scenes", "Scenes", "Add a scene"))),
-  r("video", "pip", "Picture in picture", "a second shot in a corner", "picture in picture overlay inset", stack(xy("video.pip", "Where", "Left-right", "Up-down"), sl("video.pipsize", "Size", { min: 10, max: 60, unit: "%" }))),
-  r("video", "keyframes", "Keyframes", "moments a setting changes", "keyframes animation motion", stack(lanes("video.keys", "Keyframes", ["Zoom", "Opacity"], 120, "s")), 520),
-  r("video", "lut", "Looks", "a look for the whole film", "lut look grade style", stack(sw("video.lut", "Look", [{ value: "none", label: "None", color: "#8a8f99" }, { value: "teal", label: "Teal & orange", color: "#2f9c95" }, { value: "film", label: "Film", color: "#c9a27a" }, { value: "mono", label: "Mono", color: "#5d5d5d" }, { value: "warm", label: "Warm", color: "#e8a15a" }]))),
-  r("video", "mix", "Audio mix", "music, voice and effects", "mix music voice sfx levels", stack(sl("video.music", "Music", { min: 0, max: 100 }), sl("video.voice", "Voice", { min: 0, max: 100 }), sl("video.sfx", "Effects", { min: 0, max: 100 }))),
-  r("video", "playback", "Playback", "loop and preview quality", "playback preview loop quality", stack(tg("video.loop", "Loop"), seg("video.preview", "Preview", ["Fast", "Full"]))),
+  r("video", "speed", "Speed", "faster or slower", "speed slow motion fast", stack(CLIP(), sl("video.speed", "Speed", { min: 0.25, max: 4, step: 0.05, unit: "×" }))),
+  r("video", "audio", "Audio", "a clip's level and mute", "audio volume mute sound level", stack(CLIP(), sl("video.vol", "Volume", { min: -60, max: 20, step: 1, centre: true, unit: "dB" }), tg("video.mute", "Mute"))),
+  r("video", "title", "Title", "the words and colour of a title", "title text caption lower third colour", stack(CLIP(), tx("video.title", "Text"), col("video.titlecolor", "Colour"))),
+  r("video", "frame", "Picture", "zoom and see-through of a clip", "frame zoom scale opacity transparent fade picture", stack(CLIP(), sl("video.zoom", "Zoom", { min: 0.25, max: 3, step: 0.05 }), sl("video.opacity", "Opacity", { min: 0, max: 100, unit: "%" }))),
+  r("video", "project", "Project", "aspect and frame rate of the film", "aspect ratio frame rate fps canvas size vertical square", stack(seg("video.aspect", "Aspect", ["16:9", "9:16", "1:1", "4:5"]), st("video.fps", "Frame rate", { min: 12, max: 60, unit: "fps" }))),
+  r("video", "export", "Export", "resolution and format of the file", "export render resolution mp4 webm", stack(seg("video.res", "Resolution", ["720p", "1080p", "4K"]), seg("video.fmt", "Format", ["MP4", "WebM"]), ask("Export it", "Export the video in the format and resolution set in the Export panel (video_export; maxHeight 720, 1080 or 2160)."))),
+  r("video", "markers", "Markers", "moments to come back to", "markers notes moments bookmarks", stack(lst("video.markers", "Markers", "0:12 the jump"), ask("Mark them", "Put a bookmark on the timeline at each moment in the Markers panel (video_project bookmark_set, with the note). Use exactly the times I wrote."))),
+  r("video", "scenes", "Scenes", "the scenes in order", "scenes storyboard shots sequence", stack(lst("video.scenes", "Scenes", "Add a scene"), ask("Make them", "Make a scene for each name in the Scenes panel, in that order (video_project scene_create). Do not put clips in them unless I ask."))),
   r("video", "broll", "B-roll ideas", "ask for shots to cut in", "b-roll ideas shots cutaway", row(ask("Suggest b-roll", "Suggest b-roll shots that would fit this edit."), ask("Where to cut", "Where would cuts help the pacing?"))),
-  r("video", "thumbnail", "Thumbnail", "the picture people click", "thumbnail cover poster", stack(tx("video.thumbtext", "Words"), col("video.thumbcolor", "Colour"), seg("video.thumbstyle", "Style", ["Bold", "Clean", "Photo"]))),
 ];
 
 // Every control here acts on the model in Autora 3D (src/lib/panacea/apps/model.ts), on the part picked in its Part list.

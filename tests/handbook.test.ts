@@ -127,6 +127,13 @@ await test("the shell manual teaches collapsible conversation runs, not an inter
   assert.doesNotMatch(t, /Typed into the shell|their Terminal tab|live pseudo-terminal/);
 });
 
+await test("the Video manual says Panacea's Video panels drive the project, with a Clip list", () => {
+  const video = manualText("video");
+  for (const needle of ["Panacea's Video panels drive this same project", "Clip list", "panacea_set", "no panels for colour grade"]) {
+    assert.ok(video.includes(needle), `the Video manual lacks "${needle}"`);
+  }
+});
+
 await test("the Video manual says which edits are done in the window by hand with Visible work on", () => {
   const v = manualText("video");
   for (const needle of ["With Visible work on", "by your hand, live", "the ruler clicked at the cut", "Delete pressed", "dragged along the timeline", "Default text", "With Visible work off"]) {

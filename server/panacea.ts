@@ -32,7 +32,9 @@ import { addFlow, type Flow } from "../src/lib/panacea/flows";
 import { treeLive } from "../src/lib/panacea/wiring";
 import { MUSIC_TRACK, isMusicBind, readMusic } from "../src/lib/panacea/apps/music";
 import { MODEL_PART, isModelBind, readModel } from "../src/lib/panacea/apps/model";
+import { VIDEO_CLIP, isVideoBind, readVideo } from "../src/lib/panacea/apps/video";
 import { cadModel, cadPanel } from "./caddesk";
+import { videoPanel, videoSnapshot } from "./opencut";
 import { studioPanel, studioSong } from "./studio";
 import { addStep, createProject, decide, describeProject, linkPieces, phaseFor, setStepDone, stepById, type Project } from "../src/lib/panacea/project";
 import { addCard, applyBoardParam, boardListing, boardMarkdown, boardSvg, createBoard, editCard, editLink, linkCards, moveCard, removeCard, tidy, unlink, type BoardMode, type BoardState } from "../src/lib/panacea/board";
@@ -483,7 +485,13 @@ interface PanaceaHooks {
   cancelled?: () => boolean;
   /** Called when the turn is stopped: the wait for the window's hand ends then. */
   onCancel?: (stop: () => void) => void;
+  /** Whether an app's window is switched off on the Tools page (by one of its tool names): its panels do nothing then. */
+  windowOff?: (tool: string) => boolean;
 }
+
+/** The tool whose switch turns each app's window off. */
+const APP_SWITCH = { music: "studio_look", model: "cad_scene_get", video: "video_look" } as const;
+const offWords = (app: keyof typeof APP_SWITCH) => `${app === "music" ? "Autora Music" : app === "model" ? "Autora 3D" : "Autora Video"} is switched off on the Tools page`;
 
 interface Outcome {
   ok: boolean;
@@ -509,10 +517,11 @@ function agentProblem(c: Canvas, key: string, v: unknown): string | null {
  * where the Music window shows it (src/lib/panacea/apps/music.ts). Returns the problem, if any. The track a track's
  * controls act on is the canvas's own, so it is set first.
  */
-function setChecked(session: string, c: Canvas, key: string, v: unknown): string | null {
+function setChecked(session: string, c: Canvas, key: string, v: unknown, hooks: PanaceaHooks): string | null {
   const bad = agentProblem(c, key, v);
   if (bad) return bad;
   if (isMusicBind(key) && key !== MUSIC_TRACK) {
+    if (hooks.windowOff?.(APP_SWITCH.music)) return offWords("music");
     const done = studioPanel(session, key, v, c.values[MUSIC_TRACK], "agent");
     return done.ok ? null : done.error;
   }
@@ -522,6 +531,10 @@ function setChecked(session: string, c: Canvas, key: string, v: unknown): string
 /** What the song says for a `music.*` value, for describing the canvas. */
 function songValues(session: string, canvas: Canvas): (bind: string) => Value | undefined {
   return (bind) => {
+    if (isVideoBind(bind)) {
+      const project = videoSnapshot(session);
+      return project ? readVideo(project, bind, canvas.values[VIDEO_CLIP]) : undefined;
+    }
     if (isModelBind(bind)) {
       const model = cadModel(session);
       return model ? readModel(model, bind, canvas.values[MODEL_PART]) : undefined;
@@ -532,19 +545,23 @@ function songValues(session: string, canvas: Canvas): (bind: string) => Value | 
 }
 
 /**
- * The `model.*` values in what the agent gave panacea_set or panacea_place are the 3D model's, not the canvas's: they
- * are done here by the modeller's own tools (src/lib/panacea/apps/model.ts) and taken out of the rest, which the canvas
- * keeps. The part they act on is `model.part` (given in the same call, else the canvas's).
+ * The `model.*` and `video.*` values in what the agent gave panacea_set or panacea_place are the 3D model's and the video
+ * project's, not the canvas's: they are done here by those apps' own tools (src/lib/panacea/apps/) and taken out of the
+ * rest, which the canvas keeps. The part or clip they act on is `model.part` / `video.clip` (given in the same call, else
+ * the canvas's).
  */
-async function applyModelValues(session: string, c: Canvas, args: Record<string, any>): Promise<{ args: Record<string, any>; done: string[]; problems: string[] }> {
+async function applyAppValues(session: string, c: Canvas, args: Record<string, any>, hooks: PanaceaHooks): Promise<{ args: Record<string, any>; done: string[]; problems: string[] }> {
   const given = args.values && typeof args.values === "object" ? Object.entries(args.values as Record<string, unknown>) : [];
-  const mine = given.filter(([k]) => isModelBind(k) && k !== MODEL_PART);
+  const appOf = (k: string): "model" | "video" | null => (isModelBind(k) && k !== MODEL_PART ? "model" : isVideoBind(k) && k !== VIDEO_CLIP ? "video" : null);
+  const mine = given.filter(([k]) => appOf(k));
   if (!mine.length) return { args, done: [], problems: [] };
-  const part = (args.values as Record<string, unknown>)[MODEL_PART] ?? c.values[MODEL_PART];
+  const values = args.values as Record<string, unknown>;
   const done: string[] = [];
   const problems: string[] = [];
   for (const [k, v] of mine) {
-    const res = await cadPanel(session, k, v, part, "agent");
+    const app = appOf(k)!;
+    if (hooks.windowOff?.(APP_SWITCH[app])) { problems.push(`${k}: ${offWords(app)}`); continue; }
+    const res = app === "model" ? await cadPanel(session, k, v, values[MODEL_PART] ?? c.values[MODEL_PART], "agent") : await videoPanel(session, k, v, values[VIDEO_CLIP] ?? c.values[VIDEO_CLIP]);
     if (res.ok) done.push(`${k}=${JSON.stringify(v).slice(0, 40)} (${res.did})`);
     else problems.push(`${k}: ${res.error}`);
   }
@@ -797,7 +814,7 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
       const problems: string[] = [];
       for (const [k, v] of Object.entries(values).sort(trackFirst)) {
         const key = k.replace(/^@(image|data)\./, (_, kind: string) => `@${panel.context !== "general" ? panel.context : c.surfaces.find((s) => s.kind === kind)?.id ?? kind}.`);
-        const bad = setChecked(session, c, key, v);
+        const bad = setChecked(session, c, key, v, hooks);
         if (bad) problems.push(`${k}: ${bad}`);
       }
       return {
@@ -812,7 +829,7 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
       const done: string[] = [];
       const problems: string[] = [];
       for (const [k, v] of given.slice(0, 40).sort(trackFirst)) {
-        const bad = setChecked(session, c, k, v);
+        const bad = setChecked(session, c, k, v, hooks);
         if (bad) problems.push(`${k}: ${bad}`);
         else done.push(`${k}=${JSON.stringify(v).slice(0, 40)}`);
       }
@@ -1226,9 +1243,9 @@ export async function runPanaceaTool(session: string, name: string, args: Record
       case "panacea_board":
       case "panacea_bespoke":
       case "panacea_project": {
-        // Values of the 3D model are done by the modeller first; the rest are the canvas's.
-        const modelled = name === "panacea_place" || name === "panacea_set" ? await applyModelValues(session, e.canvas, args) : { args, done: [] as string[], problems: [] as string[] };
-        const modelNote = `${modelled.done.length ? ` Set in the model: ${modelled.done.join(", ")}.` : ""}${modelled.problems.length ? ` Not set: ${modelled.problems.join("; ")}.` : ""}`;
+        // Values of the 3D model and the video project are done by those apps first; the rest are the canvas's.
+        const modelled = name === "panacea_place" || name === "panacea_set" ? await applyAppValues(session, e.canvas, args, hooks) : { args, done: [] as string[], problems: [] as string[] };
+        const modelNote = `${modelled.done.length ? ` Set in the app: ${modelled.done.join(", ")}.` : ""}${modelled.problems.length ? ` Not set: ${modelled.problems.join("; ")}.` : ""}`;
         if (name === "panacea_set" && !Object.keys(modelled.args.values ?? {}).length && (modelled.done.length || modelled.problems.length)) {
           return modelled.done.length ? { ok: true, summary: `Done.${modelNote}`, preview: modelled.done[0]! } : { ok: false, summary: `Nothing set.${modelNote}` };
         }

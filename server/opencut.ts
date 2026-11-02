@@ -27,6 +27,8 @@ import path from "node:path";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import { artifactPath, getArtifact, MAX_ARTIFACT_BYTES, saveArtifact } from "./artifacts";
 import type { ChatImage } from "./llm";
+import { VIDEO_CLIP, isVideoBind, videoCommands, type VideoState } from "../src/lib/panacea/apps/video";
+import type { Value } from "../src/lib/panacea/atoms";
 import { stateDir } from "./state";
 import { staticDir } from "./staticfiles";
 
@@ -230,8 +232,14 @@ const isReady = (w: Win) => w.readyAt > 0 && Date.now() - w.readyAt < READY_FOR_
 /** How long a command waits for an editor to come up: a first start on a small machine fetches and compiles a lot. */
 const START_MS = 90_000;
 
+/** The project as the editor last said it, for what the agent reads off a canvas without waking the editor. */
+const lastSnapshot = new Map<string, VideoState>();
+const isSnapshot = (v: unknown): v is VideoState => !!v && typeof v === "object" && Array.isArray((v as VideoState).tracks) && !!(v as VideoState).canvas;
+export const videoSnapshot = (session: string): VideoState | null => lastSnapshot.get(session) ?? null;
+
 /** Ask the open editor to do something, and wait for what it says. */
-export async function command(session: string, name: string, args: Record<string, unknown> = {}, timeoutMs = 60_000): Promise<unknown> {
+export async function command(session: string, name: string, args: Record<string, unknown> = {}, timeoutMs = 60_000, opts: { open?: boolean } = {}): Promise<unknown> {
+  if (opts.open === false && !(win(session).open && isReady(win(session)))) throw new Error("The video window is not open.");
   setOpen(session, true);
   const w = win(session);
   // The frame loads after the window opens: give it time to say it is up, unless it has said why it cannot.
@@ -261,7 +269,7 @@ export async function command(session: string, name: string, args: Record<string
       else send();
     }, 1500);
     const settle = entry.resolve;
-    entry.resolve = (v) => { clearInterval(again); settle(v); };
+    entry.resolve = (v) => { clearInterval(again); if (isSnapshot(v)) lastSnapshot.set(session, v); settle(v); };
     const refuse = entry.reject;
     entry.reject = (e) => { clearInterval(again); refuse(e); };
   });
@@ -280,11 +288,37 @@ const MIME: Record<string, string> = {
 
 type OpencutOptions = {
   exists: (session: string) => boolean;
+  /** Autora Video is switched off on the Tools page. */
+  off?: () => boolean;
   push: (session: string, message: Record<string, unknown>) => void;
 };
 
 export function opencutRoutes(app: Express, opts: OpencutOptions): void {
   pushed = opts.push;
+
+  /* What a Video panel shows: the project as the open editor has it. Reads only, and never wakes or opens the window:
+     with it shut there is nothing to show (null). */
+  app.get("/api/opencut/:session/project", async (req, res) => {
+    const id = String(req.params.session);
+    if (!/^[A-Za-z0-9_-]{1,80}$/.test(id) || !opts.exists(id)) return res.status(404).json({ error: "No such session." });
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      res.json({ state: (await command(id, "state", {}, 15_000, { open: false })) as VideoState });
+    } catch {
+      res.json({ state: null });
+    }
+  });
+
+  /* A panel's video control moved (Panacea): the editor makes it so, in one place for the person and the agent. */
+  app.post("/api/opencut/:session/panel", express.json({ limit: "64kb" }), async (req, res) => {
+    const id = String(req.params.session);
+    if (!/^[A-Za-z0-9_-]{1,80}$/.test(id) || !opts.exists(id)) return res.status(404).json({ error: "No such session." });
+    if (opts.off?.()) return res.status(403).json({ error: "Autora Video is switched off on the Tools page." });
+    const bind = typeof req.body?.bind === "string" ? req.body.bind : "";
+    const done = await videoPanel(id, bind, req.body?.value, req.body?.clip);
+    if (!done.ok) return res.status(400).json({ error: done.error });
+    res.json({ did: done.did });
+  });
 
   const text = express.text({ type: () => true, limit: MAX_JSON });
   const raw = express.raw({ type: () => true, limit: MAX_ARTIFACT_BYTES });
@@ -511,6 +545,7 @@ export function serveOpencut(app: Express, dist: string): void {
 
 /** The chat was deleted: nothing of the window is kept for it. */
 export function dropOpencut(session: string): void {
+  lastSnapshot.delete(session);
   rejectAll(session, "The chat was closed.");
   loadWins();
   if (wins.delete(session)) saveWins();
@@ -518,6 +553,25 @@ export function dropOpencut(session: string): void {
 }
 
 /** What the agent is told at the start of a turn when a video is open. */
+/**
+ * A Panacea panel's `video.*` control moved (docs/PANACEA-GAPS.md, G1): the editor's own commands make the clip or the
+ * project so, and its window shows it. Used by the page and by the agent (`panacea_set`). Refuses, with the reason,
+ * rather than half-doing it.
+ */
+export async function videoPanel(session: string, bind: string, value: unknown, clip: unknown): Promise<{ ok: true; did: string } | { ok: false; error: string }> {
+  if (!/^[A-Za-z0-9_-]{1,80}$/.test(session)) return { ok: false, error: "Autora Video needs a chat to work in." };
+  if (!isVideoBind(bind) || bind === VIDEO_CLIP) return { ok: false, error: `nothing in the project answers to ${bind}` };
+  try {
+    const snap = (await command(session, "state")) as VideoState;
+    const plan = videoCommands(snap, bind, value as Value, clip);
+    if ("error" in plan) return { ok: false, error: plan.error };
+    for (const c of plan.commands) await command(session, c.name, c.args);
+    return { ok: true, did: plan.did };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 export function videoBriefing(session: string): string | null {
   const w = wins.get(session);
   if (!w?.open) return null;

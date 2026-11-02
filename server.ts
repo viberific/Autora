@@ -6366,7 +6366,7 @@ async function startServer() {
   };
   spectraRoutes(app, spectraOpts);
   /* The video window's editor (server/opencut.ts): OpenCut's, keeping its projects here. */
-  opencutRoutes(app, { exists: (id: string) => sessions.has(id), push: (id: string, message: Record<string, unknown>) => sendEphemeral(id, message) });
+  opencutRoutes(app, { exists: (id: string) => sessions.has(id), off: () => windowOff("video_look"), push: (id: string, message: Record<string, unknown>) => sendEphemeral(id, message) });
   officeRoutes(app, { exists: (id: string) => sessions.has(id) });
   // The Terminal window: a shell the person and the agent share.
   // Autora 3D: the 3D window's model, and opening and putting it away.

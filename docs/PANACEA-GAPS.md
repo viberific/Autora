@@ -116,7 +116,8 @@ acts on anything either. That is acceptable for a list and thin for "Week plan" 
 
 **Status (2026-11-02):** G0 is done. G1: Music is wired (0.9.323: `src/lib/panacea/apps/music.ts`, `studioPanel` in
 `server/studio.ts`, `POST /api/studio/:session/panel`) and so is 3D (0.9.324: `src/lib/panacea/apps/model.ts`, `cadPanel` in
-`server/caddesk.ts`, `POST /api/cad/:session/panel`). Video and Game are next, each its own release. How the
+`server/caddesk.ts`, `POST /api/cad/:session/panel`) and Video (0.9.325: `src/lib/panacea/apps/video.ts`, `videoPanel` in
+`server/opencut.ts`). Game is next. How the
 Music one was built, to repeat for the others, is in `docs/PANACEA-G1-HANDOFF.md`.
 
 The rule for every step: **no control without an effect, and no effect without a control.** A new test enforces the
@@ -131,7 +132,7 @@ first half: every bind in every built-in recipe must have something that acts on
 
 **Done when** no panel on the board is a placebo, and `npm run check` is green apart from the editor builds.
 
-### G1. Wire the engine panels to the engines (gap A) — Music and 3D done; Video and Game next (`docs/PANACEA-G1-HANDOFF.md`)
+### G1. Wire the engine panels to the engines (gap A) — Music, 3D and Video done; Game next (`docs/PANACEA-G1-HANDOFF.md`)
 
 - Each hosted engine gets an **adapter**: shared values in → the engine's own tools and state out, and the engine's
   state → values back, so a panel shows what the song or model really is. Music through the studio desk, Video through

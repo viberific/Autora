@@ -190,6 +190,13 @@ const VIDEO = [
     "exactly. Each is a person's step of undo. Every other action (effects, masks, keyframes, speed, tracks, scenes, the project's " +
     "settings, a clip's other properties) is done by the editor directly, with your cursor pointing at where it lands. With " +
     "Visible work off everything is done directly, at speed.",
+  "  Panacea's Video panels drive this same project: Speed, Audio, Title and Picture act on one clip, chosen in the panel's Clip list " +
+    "(else the first clip they suit: a title for Title, the film's picture for Picture), and Project sets the aspect and frame rate, " +
+    "all by the editor's own commands. Export, Markers and Scenes hold the person's choices and words for you to act on with " +
+    "video_export, bookmark_set and scene_create. Nothing about the project is kept on the canvas, so panel, window and tools always agree: " +
+    "panacea_set with {\"video.speed\": 2} changes the clip and opens this window, and panacea_look shows the project's values as of the " +
+    "last time you read it. There are no panels for colour grade, transitions, stabilising, captions, ducking, fades or looks, because " +
+    "the editor has none of them.",
   "  Saving. The project is saved as you go; the window's top bar (Autora Video, the project's name) also has Save, which writes the project now. Projects are the person's across chats, so Save keeps nothing in Artifacts; the video file comes from Export.",
 ].join("\n");
 

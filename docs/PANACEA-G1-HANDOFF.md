@@ -8,7 +8,7 @@ session can pick it up without the conversation that produced it.
 | Step | Status | What remains |
 |---|---|---|
 | G0 Make it honest | **Done** (0.9.321, 0.9.322) | — |
-| G1 Engine panels drive the engines | **Music (0.9.323) and 3D (0.9.324) done** | Video, Game, each its own release |
+| G1 Engine panels drive the engines | **Music (0.9.323), 3D (0.9.324) and Video (0.9.325) done** | Game |
 | G2 Windows the agent can lay out | Not started | see the plan |
 | G7 Verified where it runs | Not started | needs CI or the Docker image |
 | G3 Full native surfaces (full spreadsheet first) | Not started | see the plan |
@@ -56,7 +56,13 @@ agent's `panacea_set` and `panacea_place` values go to the song), `appValue` in 
   `server/panacea.ts` (async, so it runs before the sync `edit`). The modeller has no absolute rotation, light, camera,
   environment, render quality or printer path, so those panels are deleted. Tests: `tests/panacea-model.test.ts`,
   `tests/ui-panacea-model.test.ts`. A browser test needs `npm --prefix autora-3d ci` and a build of it.
-- **Video** (OpenCut commands, `src/components/OpenCutWindow.tsx`): speed, volume, fades, title, aspect, grade, export.
+- **Video: done (0.9.325)**: `src/lib/panacea/apps/video.ts` (pure: reads the editor's `state`, turns a value into its
+  `retime` / `set_params` / `settings` commands on the clip picked in the Clip list), `videoPanel` and `GET
+  /api/opencut/:session/project` (a read that never opens the window) in `server/opencut.ts`, polling by the page every
+  2 s while the window is open (the editor says nothing when a clip changes), and `applyAppValues` in `server/panacea.ts`.
+  OpenCut's own `state` gained `params` (opencut-editor/src/autora/helpers.ts). The editor has only a blur effect: no
+  grade, transitions, stabiliser, captions, fades or looks, so those panels are deleted. Tests: `tests/panacea-video.test.ts`,
+  `tests/ui-panacea-video.test.ts` (needs `npm --prefix opencut-editor ci` and a build).
 - **Game** (the GDevelop bridge): needs the game editor built to test; movement, physics, health, camera.
 - Each engine: wired or deleted, read back from the engine, and set by hand in the engine's own window with Visible
   work on. Each one its own release.
