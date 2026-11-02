@@ -15,6 +15,7 @@ import { KINDS, findParam, isKind, paramsOf, type SurfaceKind } from "./kinds";
 import type { BoardState } from "./board";
 import type { DocState } from "./document";
 import type { Table } from "./surfaces";
+import { describeProject, readProject, regionX, REGION_W, type Project } from "./project";
 
 export type PanelState = "live" | "dim" | "ghost" | "draft";
 export type Who = "agent" | "person" | "rule";
@@ -69,6 +70,8 @@ export interface Surface {
   doc?: DocState;
   /** A board's cards, links and who writes them (`params` are read off it, as a document's are). */
   board?: BoardState;
+  /** The project phase it belongs to (project.ts): its region on the canvas. */
+  phase?: string;
 }
 
 export interface Canvas {
@@ -82,6 +85,8 @@ export interface Canvas {
   focus: string | null;
   /** Panels that faded away lately, newest last: one click brings one back. */
   gone: Panel[];
+  /** The project the canvas is for, when it is one (project.ts): phases, steps, decisions, links. */
+  project?: Project;
 }
 
 export const GRID = 16;
@@ -283,6 +288,55 @@ export function placeFor(canvas: Canvas, w: number, h: number, near?: string | n
   return { x: snap(cx), y: snap(cy) };
 }
 
+/** Where new work goes on a project's canvas: the region of the phase being worked on (a box to place in), or none. */
+export function phaseView(canvas: Canvas): Box | undefined {
+  const p = canvas.project;
+  if (!p) return undefined;
+  const x = regionX(p, p.phase);
+  // Around the work already in the region, or its top-left when it has none yet.
+  const here = canvas.surfaces.filter((s) => s.phase === p.phase);
+  if (here.length) {
+    const minX = Math.min(...here.map((s) => s.x));
+    const minY = Math.min(...here.map((s) => s.y));
+    return { x: Math.max(x, minX - 400), y: minY - 400, w: REGION_W - 800, h: 3200 };
+  }
+  return { x, y: 0, w: REGION_W - 800, h: 2400 };
+}
+
+/** The region a phase's work is in, as a box to show: its surfaces and their panels, or the empty region. */
+export function phaseBox(canvas: Canvas, phase: string): Box | null {
+  const p = canvas.project;
+  if (!p) return null;
+  const surfaces = canvas.surfaces.filter((s) => s.phase === phase);
+  const ids = new Set(surfaces.map((s) => s.id));
+  const boxes: Box[] = [...surfaces, ...canvas.panels.filter((x) => ids.has(x.context) && x.state !== "ghost").map((x) => ({ x: x.x, y: x.y, w: x.w, h: x.h || 240 }))];
+  if (!boxes.length) return { x: regionX(p, phase), y: 0, w: 1200, h: 800 };
+  const x0 = Math.min(...boxes.map((b) => b.x));
+  const y0 = Math.min(...boxes.map((b) => b.y));
+  return { x: x0, y: y0, w: Math.max(...boxes.map((b) => b.x + b.w)) - x0, h: Math.max(...boxes.map((b) => b.y + (b.h || 240))) - y0 };
+}
+
+/**
+ * Move the canvas to another phase: the project's phase changes, and the panels that are not about one piece of work
+ * (context "general") come along, beside the work there, unless the person pinned or touched them.
+ */
+export function enterPhase(canvas: Canvas, phase: string): boolean {
+  const p = canvas.project;
+  if (!p || !p.phases.some((x) => x.id === phase) || p.phase === phase) return false;
+  p.phase = phase;
+  const view = phaseView(canvas);
+  for (const panel of canvas.panels) {
+    if (panel.context !== "general" || panel.pinned || panel.touched || panel.state === "ghost") continue;
+    const others = { ...canvas, panels: canvas.panels.filter((x) => x.id !== panel.id) };
+    const at = placeFor(others, panel.w, panel.h || 240, null, "right", view);
+    panel.x = at.x;
+    panel.y = at.y;
+  }
+  const first = canvas.surfaces.find((s) => s.phase === phase);
+  canvas.focus = first ? first.id : canvas.focus;
+  return true;
+}
+
 /** The free spot for a box nearest to a point (its middle there if that is free), snapped to the grid. */
 export function nearestFree(canvas: Canvas, w: number, h: number, at: { x: number; y: number }): { x: number; y: number } {
   const boxes = taken(canvas);
@@ -416,6 +470,7 @@ function readSurface(raw: unknown, ids: Set<string>): Surface | null {
     ...(extra.doc ? { doc: extra.doc } : {}),
     ...(extra.board ? { board: extra.board } : {}),
     ...(px && px.w > 0 ? { px } : {}),
+    ...(typeof r.phase === "string" && /^[a-z0-9-]{1,40}$/.test(r.phase) ? { phase: r.phase } : {}),
   };
   KINDS[kind].settle?.(surface);
   return surface;
@@ -439,7 +494,10 @@ export function normalizeCanvas(raw: unknown): Canvas | null {
     }
   }
   const focus = typeof r.focus === "string" && sids.has(r.focus) ? r.focus : null;
-  return { version: 1, name: str(r.name, "Canvas", 80) || "Canvas", panels, surfaces, values, focus, gone };
+  const project = readProject(r.project);
+  // A surface's phase is one the project has, or none.
+  for (const s of surfaces) if (s.phase && !project?.phases.some((ph) => ph.id === s.phase)) delete s.phase;
+  return { version: 1, name: str(r.name, "Canvas", 80) || "Canvas", panels, surfaces, values, focus, gone, ...(project ? { project } : {}) };
 }
 
 // --------------------------------------------------------------- describing --
@@ -466,5 +524,6 @@ export function describeCanvas(canvas: Canvas, opts: { trees?: boolean } = {}): 
   const shared = Object.entries(canvas.values);
   if (shared.length) lines.push(`Shared values: ${shared.slice(0, 40).map(([k, v]) => `${k}=${show(v)}`).join(", ")}.`);
   if (canvas.gone.length) lines.push(`Faded lately (the person can bring back): ${canvas.gone.map((g) => `${g.id} "${g.title}"`).join(", ")}.`);
+  if (canvas.project) lines.push(describeProject(canvas.project));
   return lines.join("\n");
 }

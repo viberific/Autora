@@ -194,7 +194,8 @@ await test("the Panacea manual says that with Visible work on its changes are do
   const p = manualText("panacea");
   for (const needle of ["With Visible work on", "every Panacea call that changes the canvas is done there by your hand", "name typed in the picker",
     "listed there as yours", "dragging a slider", "More opened", "dragged by its title bar", "a table pasted, a file dropped",
-    "a document's words typed in", "linked by dragging a dot", "finished canvas goes in", "With Visible work off", "a Board, Flowchart or Document"]) {
+    "a document's words typed in", "linked by dragging a dot", "finished canvas goes in", "With Visible work off", "a Board, Flowchart or Document",
+    "panacea_project", "project strip", "only then can you move past the first phase", "picker (Project)"]) {
     assert.ok(p.includes(needle), `the Panacea manual lacks "${needle}"`);
   }
   assert.ok(!p.includes("not done by hand yet"), "the Panacea manual still says writing is not done by hand");

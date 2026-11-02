@@ -34,6 +34,8 @@ export interface BoardHandle {
   fit: () => void;
   focus: () => void;
   jump: (id: string | null, automatic?: boolean) => void;
+  /** Glide to show a box of the canvas whole (a project phase's region); `automatic` gives way to a person holding the view. */
+  frame: (box: { x: number; y: number; w: number; h: number }, automatic?: boolean) => void;
   zoomOut: () => void;
 }
 
@@ -122,8 +124,14 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
   useEffect(() => { canvasRef.current = canvas; }, [canvas]);
   const boxesOf = useCallback((): WorkBox[] => {
     const current = canvasRef.current;
-    return [...current.surfaces, ...hostedRef.current.flatMap((work) => engineBoxesRef.current[work.id] ? [engineBoxesRef.current[work.id]] : []),
-      ...current.panels.filter((panel) => panel.state === "live" || panel.pinned).map((panel) => ({
+    // On a project's canvas, "all the work" is the phase being worked on: the other phases' regions are a tap away in the strip.
+    const phase = current.project?.phase;
+    const surfaces = phase ? current.surfaces.filter((s) => s.phase === phase) : current.surfaces;
+    const here = new Set(surfaces.map((s) => s.id));
+    const panels = phase ? current.panels.filter((panel) => here.has(panel.context) || panel.context === "general") : current.panels;
+    const engines = phase && surfaces.length ? [] : hostedRef.current.flatMap((work) => engineBoxesRef.current[work.id] ? [engineBoxesRef.current[work.id]] : []);
+    return [...surfaces, ...engines,
+      ...panels.filter((panel) => panel.state === "live" || panel.pinned).map((panel) => ({
       x: panel.x, y: panel.y, w: panel.w,
       h: root.current?.querySelector<HTMLElement>(`[data-panel="${CSS.escape(panel.id)}"]`)?.offsetHeight || panel.h || 240,
     }))];
@@ -258,6 +266,15 @@ export function Board({ canvas, fresh, edit, hold, recipes, actions, selected, s
       const next = camera ? { x: -camera.x / camera.zoom, y: -camera.y / camera.zoom, zoom: camera.zoom }
         : fitWorkView([target], { width: room.width, height: room.height });
       if (next) { if (!automatic) interacted.current = true; setView(next); }
+    },
+    frame: (box, automatic = false) => {
+      if (automatic && (interacted.current || handsBusy() || enginePins.size > 0 || canvasRef.current.panels.some((panel) => panel.pinned))) return;
+      const el = root.current;
+      if (!el) return;
+      const room = workViewport(el);
+      if (room.width <= 0 || room.height <= 0) return;
+      const next = fitWorkView([box], { width: room.width, height: room.height });
+      if (next) { if (!automatic) interacted.current = true; setView(next, true); }
     },
     zoomOut: () => {
       const el = root.current;

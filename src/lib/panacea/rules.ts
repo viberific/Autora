@@ -12,7 +12,7 @@
  * thing happens either way. Pure.
  */
 import type { Value } from "./atoms";
-import { contextOf, estimateHeight, MAX_SURFACES, nearestFree, placeFor, refocus, seedValues, snap, surfaceParams, uid, type Canvas, type Panel, type PanelState, type Side, type Surface, type Who } from "./canvas";
+import { contextOf, estimateHeight, MAX_SURFACES, nearestFree, phaseView, placeFor, refocus, seedValues, snap, surfaceParams, uid, type Canvas, type Panel, type PanelState, type Side, type Surface, type Who } from "./canvas";
 import { BUILTINS, instantiate, type Recipe } from "./library";
 import { rankRecipes } from "./adaptive";
 import type { Profile } from "./profile";
@@ -171,7 +171,11 @@ export function addSurfaceTo(canvas: Canvas, input: SurfaceInput, find: (id: str
   const h = snap(size.h);
   // Room for the panels that come with it, to its right.
   // Where it was dropped if that is free, else the free spot nearest it; with room for its panels to the right.
-  const spot = input.at ? nearestFree(canvas, w + 336, h, { x: input.at.x + 168, y: input.at.y }) : placeFor(canvas, w + 352, h, null, "right");
+  // On a project's canvas, in the region of the phase being worked on.
+  // Beside what is in focus only when that is in the same phase: another phase's work is in another region.
+  const focused = canvas.surfaces.find((s) => s.id === canvas.focus);
+  const room = canvas.project && focused?.phase !== canvas.project.phase ? { ...canvas, focus: null } : canvas;
+  const spot = input.at ? nearestFree(canvas, w + 336, h, { x: input.at.x + 168, y: input.at.y }) : placeFor(room, w + 352, h, null, "right", phaseView(canvas));
   const at = { x: spot.x, y: spot.y };
   const surface: Surface = {
     id: uid(def.prefix),
@@ -185,6 +189,7 @@ export function addSurfaceTo(canvas: Canvas, input: SurfaceInput, find: (id: str
     ...(input.doc ? { doc: input.doc } : {}),
     ...(input.board ? { board: input.board } : {}),
     ...(input.px ? { px: input.px } : {}),
+    ...(canvas.project ? { phase: canvas.project.phase } : {}),
   };
   def.settle?.(surface);
   canvas.surfaces.push(surface);

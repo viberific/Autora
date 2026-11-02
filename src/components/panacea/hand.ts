@@ -14,6 +14,7 @@ import type { LaneItem, Value } from "../../lib/panacea/atoms";
 import type { Recipe } from "../../lib/panacea/library";
 import type { HandStep } from "../../lib/panacea/handsteps";
 import type { Panel, Surface } from "../../lib/panacea/canvas";
+import type { Project } from "../../lib/panacea/project";
 import { OFFER_PREFIX, setHandOffer } from "./handOffer";
 import { TextSelection } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
@@ -26,7 +27,7 @@ import type { BoardHandle } from "./Board";
 
 /** What the window puts in for the next thing picked: the server's id and place, and its own object when it is not a
     library panel (a composed or bespoke panel, an offer, a new surface), so what lands is what the call made. */
-export type HandPending = { id: string; at: { x: number; y: number }; panel?: Panel; surface?: Surface };
+export type HandPending = { id: string; at: { x: number; y: number }; panel?: Panel; surface?: Surface; project?: Project };
 
 type HandEnv = {
   root: HTMLElement;
@@ -642,6 +643,77 @@ async function surfaceStep(s: Extract<HandStep, { op: "surface" }>, env: HandEnv
   await sleep(250);
 }
 
+// --------------------------------------------------------------- projects --
+
+/** Whether this run opened the project's plan, to close it again when the run is over (as it found it). */
+let openedPlan = false;
+
+/** The project strip's plan, opened if it is not. */
+async function openPlan(env: HandEnv): Promise<Element> {
+  const strip = env.root.querySelector(".pa-proj");
+  if (!strip) throw new Skip("the project strip is not on screen");
+  if (!strip.classList.contains("is-open")) {
+    openedPlan = true;
+    await click(strip.querySelector('[data-act="project-open"]'));
+    await waitFor(() => strip.querySelector(".pa-proj-body"), 1000);
+  }
+  return strip;
+}
+
+async function projectStep(s: Extract<HandStep, { op: "project" | "approve" | "phase" | "step-add" | "step-tick" | "decide" }>, env: HandEnv): Promise<void> {
+  switch (s.op) {
+    case "project": {
+      // Started from the picker, as a person starts one: the window puts in the server's project (`pending`).
+      const at = env.board.toScreen(env.board.viewRect().x + 120, env.board.viewRect().y + 120);
+      const grid = env.board.grid();
+      if (!grid) throw new Skip("the canvas is not on screen");
+      env.pending.current = { id: "project", at: { x: 0, y: 0 }, project: s.project };
+      await pointerGo(at, true);
+      grid.dispatchEvent(mouse("dblclick", at, 2));
+      const input = await waitFor(() => env.root.querySelector<HTMLInputElement>(".pa-summon-q"), 1500);
+      await typeInto(input, "Project");
+      const item = await waitFor(() => env.root.querySelector('.pa-summon [data-recipe="blank.project"]'), 2000);
+      if (!item) throw new Skip("not in the picker");
+      await click(item);
+      if (!await waitFor(() => env.root.querySelector(".pa-proj"), 2000)) throw new Skip("the strip did not appear");
+      return;
+    }
+    case "approve":
+      await click(env.root.querySelector('.pa-proj [data-act="approve"]'));
+      return;
+    case "phase":
+      await click(env.root.querySelector(`.pa-proj [data-phase="${CSS.escape(s.phase)}"]`));
+      await sleep(520);
+      return;
+    case "step-add": {
+      const strip = await openPlan(env);
+      const input = strip.querySelector<HTMLInputElement>(`[data-phase-add="${CSS.escape(s.phase)}"]`);
+      await typeInto(input, s.text);
+      await press("Enter", input);
+      return;
+    }
+    case "step-tick": {
+      // The tick in the bar when it is the step being worked on, else its box in the opened plan; found by its words,
+      // since a step the hand typed has the window's id, not the server's.
+      const tick = env.root.querySelector(`.pa-proj [data-step-tick="${CSS.escape(s.step)}"]`);
+      if (tick && s.done) { await click(tick); return; }
+      const strip = await openPlan(env);
+      const row = strip.querySelector(`[data-step="${CSS.escape(s.step)}"]`)
+        ?? [...strip.querySelectorAll("[data-step]")].find((li) => li.textContent?.trim() === s.text) ?? null;
+      const box = row?.querySelector("input[type=checkbox]") ?? null;
+      if ((box as HTMLInputElement | null)?.checked !== s.done) await click(box);
+      return;
+    }
+    case "decide": {
+      const strip = await openPlan(env);
+      const input = strip.querySelector<HTMLInputElement>(".pa-proj-decide");
+      await typeInto(input, s.text);
+      await press("Enter", input);
+      return;
+    }
+  }
+}
+
 /** The picker's entry for something of the agent's that is not in the library (handOffer.ts). */
 function offerOf(id: string, name: string, about: string, w = 288): Recipe {
   return { id, name, domain: "general", about, tags: [], tree: { atom: "note", props: { text: name } }, w, origin: "builtin", uses: 0 };
@@ -657,6 +729,7 @@ export async function runPanaceaHand(steps: HandStep[], env: HandEnv): Promise<{
     const s = steps[i]!;
     try {
       if (s.op === "surface") await surfaceStep(s, env);
+      else if (s.op === "project" || s.op === "approve" || s.op === "phase" || s.op === "step-add" || s.op === "step-tick" || s.op === "decide") await projectStep(s, env);
       else if (s.op === "unsurface") {
         if (s.from) await env.board.reveal(s.from.x, s.from.y + 12).catch(() => undefined);
         await click(env.root.querySelector(`[data-surface="${CSS.escape(s.id)}"] .pa-surface-x`));
@@ -721,6 +794,11 @@ export async function runPanaceaHand(steps: HandStep[], env: HandEnv): Promise<{
       env.pending.current = null;
       setHandOffer(null);
     }
+  }
+  if (openedPlan) {
+    openedPlan = false;
+    const strip = env.root.querySelector(".pa-proj.is-open");
+    if (strip) await click(strip.querySelector('[data-act="project-open"]')).catch(() => undefined);
   }
   pointerRest();
   return { results };

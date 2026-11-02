@@ -427,6 +427,15 @@ const PANACEA = [
     "or it is productivity work (a packing list, minutes, a to-do), switch it with panacea_arrange writes: {\"<panel>\": \"agent\"} " +
     "(or place it with writes: \"agent\") and say you did. Anything no other window was made for (a brainstorm, a map of ideas, a " +
     "planner) belongs on this canvas: place a recipe if one fits, or compose the panel from atoms.",
+  "  Projects. A whole piece of work (an app, a site, a launch, a report with its data) is a project on the canvas: panacea_project " +
+    "starts it with its phases (for an app or a site: Plan, Design, Build, Check, Ship, and the stack you choose, said for the person " +
+    "to see), each phase a region of the canvas side by side. The person sees the project strip along the top of the canvas: the " +
+    "phase pills, the step being worked on with its tick, and, opened, every phase's steps, a field to add one and the decisions. " +
+    "New surfaces land in the region of the phase being worked on; moving to a phase glides the view there, and panels not about one " +
+    "surface come along unless the person pinned or touched them. You draft the plan; the person approves it in the strip (Approve) " +
+    "or in the chat, and only then can you move past the first phase. Tick steps as they are done, record the person's choices as " +
+    "decisions, and link pieces that belong together. Who decides follows the piece: code, data and wiring are yours to do in full; " +
+    "the look, the words and the feel are theirs, and you suggest. The person can start a project themselves from the picker (Project).",
   "  With Visible work on and somebody watching, every Panacea call that changes the canvas is done there by your hand, live, while " +
     "the call waits, with the view moved and zoomed to where you work: every new panel summoned the way the person does it (the grid " +
     "double-clicked where it goes, its name typed in the picker, the result clicked; one you composed, a bespoke draft or an offer is " +

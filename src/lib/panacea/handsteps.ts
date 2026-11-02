@@ -15,6 +15,7 @@ import type { Node } from "./recipe";
 import { createBoard, type BoardState } from "./board";
 import { blockShapes, createDoc, paramsAtBlock, stateOf, type DocState } from "./document";
 import { KINDS } from "./kinds";
+import type { Project } from "./project";
 
 /** Nothing set: zero, empty words, nothing chosen, off. */
 const blank = (v: Value): boolean => v === 0 || v === "" || v === false || v === null || (Array.isArray(v) && v.length === 0);
@@ -43,7 +44,15 @@ export type HandStep =
   | { op: "card-move"; surface: string; card: string; x: number; y: number }
   | { op: "card-remove"; surface: string; card: string }
   | { op: "link"; surface: string; from: string; to: string }
-  | { op: "unlink"; surface: string; from: string; to: string; label: string };
+  | { op: "unlink"; surface: string; from: string; to: string; label: string }
+  /** A project, through its strip: started from the picker (the server's own project goes in), approved, a phase tapped,
+      steps typed into a phase and ticked, decisions typed. */
+  | { op: "project"; project: Project }
+  | { op: "approve" }
+  | { op: "phase"; phase: string; label: string }
+  | { op: "step-add"; phase: string; text: string }
+  | { op: "step-tick"; step: string; done: boolean; text: string }
+  | { op: "decide"; text: string };
 
 /** Enough for a whole call done by hand; past it (a call that rebuilds a canvas) the rest goes in at once, and says so. */
 const MAX_STEPS = 80;
@@ -117,6 +126,28 @@ function docSteps(id: string, before: DocState, after: DocState): HandStep[] {
   return steps;
 }
 
+/** A project from `before` to `after`, in the order a person would do it in the strip. */
+function projectSteps(before: Project | undefined, after: Project | undefined): { first: HandStep[]; last: HandStep[] } {
+  const first: HandStep[] = [];
+  const last: HandStep[] = [];
+  if (!after) return { first, last };
+  if (!before) { first.push({ op: "project", project: after }); return { first, last }; }
+  if (!before.approved && after.approved) first.push({ op: "approve" });
+  if (before.phase !== after.phase) first.push({ op: "phase", phase: after.phase, label: after.phases.find((p) => p.id === after.phase)?.label ?? after.phase });
+  const had = new Map(before.phases.flatMap((p) => p.steps.map((s) => [s.id, s] as const)));
+  for (const p of after.phases) {
+    for (const s of p.steps) {
+      const old = had.get(s.id);
+      if (!old) {
+        last.push({ op: "step-add", phase: p.id, text: s.text });
+        if (s.done) last.push({ op: "step-tick", step: s.id, done: true, text: s.text });
+      } else if (old.done !== s.done) last.push({ op: "step-tick", step: s.id, done: s.done, text: s.text });
+    }
+  }
+  for (const d of after.decisions.slice(before.decisions.length)) last.push({ op: "decide", text: d.text });
+  return { first, last };
+}
+
 /** A board from `before` to `after`: cards taken away, made, rewritten and moved, then the links. */
 function boardSteps(id: string, before: BoardState, after: BoardState): HandStep[] {
   const steps: HandStep[] = [];
@@ -171,6 +202,9 @@ export function panaceaSteps(before: Canvas, after: Canvas): { steps: HandStep[]
   const was = new Map(before.panels.map((p) => [p.id, p]));
   const now = new Map(after.panels.map((p) => [p.id, p]));
 
+  // The project first (a new one, its approval, the phase moved to), so new work lands in its region; its steps last.
+  const project = projectSteps(before.project, after.project);
+  steps.push(...project.first);
   // Put away what goes, first, so there is room for what comes.
   for (const p of before.panels) if (!now.has(p.id) && p.state !== "ghost") steps.push({ op: "remove", id: p.id, from: { x: p.x + p.w - 24, y: p.y } });
   const surfacesNow = new Set(after.surfaces.map((s) => s.id));
@@ -209,6 +243,7 @@ export function panaceaSteps(before: Canvas, after: Canvas): { steps: HandStep[]
     if (panel) steps.push({ op: "set", key: c.key, value: c.value, panel: panel.id, at: panel.at });
     else skipped++;
   }
+  steps.push(...project.last);
   if (steps.length > MAX_STEPS) {
     skipped += steps.length - MAX_STEPS;
     steps.length = MAX_STEPS;
@@ -235,5 +270,11 @@ export function stepWords(s: HandStep): string {
     case "card-remove": return `took away card ${s.card}`;
     case "link": return `linked ${s.from} to ${s.to}`;
     case "unlink": return `unlinked ${s.from} from ${s.to}`;
+    case "project": return `started the project "${s.project.title}" from the picker`;
+    case "approve": return "pressed Approve plan";
+    case "phase": return `moved to ${s.label}`;
+    case "step-add": return `added the step "${s.text.slice(0, 40)}"`;
+    case "step-tick": return `${s.done ? "ticked" : "unticked"} "${s.text.slice(0, 40)}"`;
+    case "decide": return `recorded "${s.text.slice(0, 40)}"`;
   }
 }

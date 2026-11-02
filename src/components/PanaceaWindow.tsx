@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent a
 import type { Value } from "../lib/panacea/atoms";
 import { createDoc, stateOf, toMarkdown, type DocMode, type DocState } from "../lib/panacea/document";
 import { boardMarkdown, createBoard, tidy, type BoardState } from "../lib/panacea/board";
-import { estimateHeight, fade, nearestFree, refocus, removeSurface, restore, setValue, surfaceParams, uid, valueAt, valueProblem, type Canvas, type Panel, type Surface } from "../lib/panacea/canvas";
+import { enterPhase, estimateHeight, fade, phaseBox, nearestFree, refocus, removeSurface, restore, setValue, surfaceParams, uid, valueAt, valueProblem, type Canvas, type Panel, type Surface } from "../lib/panacea/canvas";
 import { KINDS, type SurfaceKind } from "../lib/panacea/kinds";
 import type { Recipe } from "../lib/panacea/library";
 import { BUILTINS } from "../lib/panacea/library";
@@ -13,7 +13,9 @@ import { filteredRows, splitDelimited, tableCsv, tableFrom } from "../lib/panace
 import { onPanaceaCommand } from "../lib/panacea";
 import type { HandStep } from "../lib/panacea/handsteps";
 import { Board, type BoardHandle } from "./panacea/Board";
-import { BOARD_PIECE, DOC_PIECE, FLOWCHART_PIECE } from "./panacea/Summon";
+import { BOARD_PIECE, DOC_PIECE, FLOWCHART_PIECE, PROJECT_PIECE } from "./panacea/Summon";
+import { ProjectStrip } from "./panacea/ProjectStrip";
+import { createProject, type Project } from "../lib/panacea/project";
 import { standaloneSvg } from "./panacea/Chart";
 import { PanaceaCtx, type PanaceaApi } from "./panacea/context";
 import { History } from "./panacea/History";
@@ -374,6 +376,19 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
   const pickRecipe = useCallback((r: Recipe, at: { x: number; y: number }) => {
     const forced = pending.current;
     if ((r.id === BOARD_PIECE || r.id === FLOWCHART_PIECE || r.id === DOC_PIECE) && putPendingSurface()) return;
+    // A project: the agent's hand puts in the server's (pending), a person gets one in three phases, theirs to rename.
+    if (r.id === PROJECT_PIECE) {
+      const theirs = forced?.project;
+      const made = theirs ?? createProject({ title: live.current.name === "Canvas" ? "Project" : live.current.name, by: "person" });
+      if (typeof made === "string") { setProblem(made); return; }
+      edit((d) => {
+        if (d.project && !theirs) return;
+        d.project = structuredClone(made);
+        for (const s of d.surfaces) s.phase ??= made.phase;
+      }, "Started a project");
+      if (!theirs) void tell(`started a project, "${made.title}"`);
+      return;
+    }
     // A document: a surface of its own, blank, where it can be seen whole.
     if (r.id === DOC_PIECE) {
       let err: string | null = null;
@@ -660,6 +675,32 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
   }, [loaded]);
   useEffect(() => offerKeep(nativeOpen && doc.ready ? keep : null), [keep, nativeOpen, doc.ready]);
 
+  // ------------------------------------------------------------ project --
+
+  /** The person changed the plan in the strip: one undoable step. */
+  const changeProject = useCallback((next: Project, label: string) => {
+    edit((d) => { d.project = next; }, label);
+  }, [edit]);
+  /** A phase the person moved to: the work moves, and the view glides to its region. */
+  const movedByHand = useRef<string | null>(null);
+  const goPhase = useCallback((phase: string) => {
+    const label = live.current.project?.phases.find((p) => p.id === phase)?.label ?? phase;
+    movedByHand.current = phase;
+    edit((d) => { enterPhase(d, phase); }, `Moved to ${label}`);
+    requestAnimationFrame(() => { const box = phaseBox(live.current, phase); if (box) board.current?.frame(box); });
+  }, [edit, live]);
+  // The agent moved the phase: follow it there, unless the person is holding the view.
+  const phaseNow = canvas.project?.phase;
+  const phaseWas = useRef(phaseNow);
+  useEffect(() => {
+    if (phaseNow === phaseWas.current) return;
+    phaseWas.current = phaseNow;
+    if (!phaseNow) return;
+    if (movedByHand.current === phaseNow) { movedByHand.current = null; return; }
+    const box = phaseBox(live.current, phaseNow);
+    if (box) requestAnimationFrame(() => board.current?.frame(box, true));
+  }, [phaseNow, live]);
+
   const empty = !canvas.surfaces.length && !canvas.panels.length;
   const note = doc.notice ?? problem;
   const selectionGrouped = selected.size > 1 && (() => { const ids = [...selected]; const g = canvas.panels.find((p) => p.id === ids[0])?.group; return !!g && ids.every((id) => canvas.panels.find((p) => p.id === id)?.group === g); })();
@@ -713,7 +754,8 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
           onCloseWork={onCloseWork}
           navigationHost={navigationHost}
         >
-          {empty && doc.ready && (
+          {canvas.project && <ProjectStrip project={canvas.project} onChange={changeProject} onPhase={goPhase} />}
+          {empty && doc.ready && !canvas.project && (
             <div className="pa-empty pa-chrome">
               <h3>What do you want to do?</h3>
               <p>Use the centered Ask Autora bar, or drop a file here. Double-click anywhere for a piece of your own.</p>

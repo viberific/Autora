@@ -143,6 +143,14 @@ Every new kind ships with its planner diff and hand path, following this branch'
 files opened from the tree, code shown being written, the run card's Start pressed, design controls dragged, rows
 added. `docs/VISIBLE-WORK.md` gets a row for each kind as it lands.
 
+## Status
+
+- **N1 done** (0.9.321 branch): `src/lib/panacea/project.ts`, `panacea_project`, the project strip (`ProjectStrip.tsx`), phase regions
+  (new work lands in the current phase's region; changing phase glides the view there and brings panels not tied to a surface;
+  "Show all work" fits the current phase), approval enforced in the tool, the picker's Project, and every project change done
+  by hand with Visible work on. Not yet: the intent table replacing `rules.ts`'s per-kind cases (moved to N5), the project's
+  decisions in the project notebook.
+
 ## Milestones
 
 Each is done when it works on a phone and a desktop, is tested, and the agent's manual (`server/handbook.ts`) describes
@@ -175,14 +183,11 @@ N5 to N8 deepen it.
 - **Scope.** Each milestone ships on its own, and the old app window stays until the new surfaces match it, checked
   against a written list (the engine plan's M5).
 
-## Questions for you
+## Answers (2026-11-02)
 
-1. **Code with Visible work on:** should the agent's code be *typed* into the editor at a person's pace, like documents
-   now are, or should each change stream in live as a highlighted diff? Typing is truer to "watching someone at your
-   PC", but slow for big files. A streamed diff is faster and still live.
-2. **Ship:** is an export (a zip in Artifacts, or a folder to self-host on the Umbrel) enough for now, or should it
-   deploy to a hosting provider (which needs an account and a saved key)?
-3. **Default stack:** plain HTML/CSS/JS until something needs more, Vite + React from the start, or the agent's choice
-   per project?
-4. **The separate app window:** retire it once the `app` surface matches it (as the plan does for other windows), or
-   keep both?
+1. **Code with Visible work on streams in as live, highlighted diffs**: each change appears in the editor as it is made,
+   not typed a key at a time.
+2. **Ship exports for the Umbrel**: the built site as a zip in Artifacts and a folder ready to serve from the Umbrel. No
+   outside hosting provider.
+3. **The stack is the agent's choice per project**, said in the plan for the person to see and change.
+4. **The separate app window retires** once the `app` surface matches it, checked against a written list.

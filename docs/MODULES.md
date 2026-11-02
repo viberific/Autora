@@ -588,7 +588,10 @@ Spectra's fetched renderer is most of what is on disk.
   and server names what else must learn of it; plan: `docs/PANACEA-ENGINE.md`), `surfaces.ts` (what the image and data each
   publish, tables: `tableFrom`, `filteredRows`, `aggregate`), `canvas.ts` (the document, `normalizeCanvas`, placement `placeFor` / `nearestFree`, `refocus` /
   `fade` / `restore`, values), `library.ts` (180 built-in recipes, `instantiate`, `searchLibrary`), `document.ts` (the document engine: ProseMirror schema, selection-driven parameters, `applyParam`, the agent's block-level hands; pure, runs on server and page; `tests/panacea-doc.test.ts`), `board.ts` (the board: cards, links, Autora's questions, who writes, tidy and the Markdown outline; pure; drawn by `components/panacea/BoardView.tsx`; `tests/panacea-board.test.ts`), `rules.ts` (starters and offers,
-  `addSurfaceTo`, `placeRecipe` / `placeComposed`), `profile.ts` (what is learned), `handsteps.ts` (Visible work's plan). One canvas
+  `addSurfaceTo`, `placeRecipe` / `placeComposed`), `profile.ts` (what is learned), `handsteps.ts` (Visible work's plan), `project.ts` (a project on the canvas:
+  phases each with a region `REGION_W` apart, steps, decisions, links, the stack; `canvas.ts` `phaseView` / `phaseBox` /
+  `enterPhase` place work in the current phase's region; the agent's `panacea_project`, the person's
+  `components/panacea/ProjectStrip.tsx`; plan: `docs/PANACEA-NEXT.md`). One canvas
   per chat lives in `panacea.ts` (`panacea-<session>.json`, removed with the chat; `forgetSession` calls `dropPanacea`); the library
   of learned recipes (`panacea-library.json`) and the profile (`panacea-profile.json`) are one per install. The wire is Music's:
   `PUT /doc` with the rev seen (409 when the agent changed it since), `panaceadesk` state and `panacea.command` over the socket

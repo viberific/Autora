@@ -28,6 +28,7 @@ const { KINDS } = await import("../src/lib/panacea/kinds");
 const { filteredRows, aggregate, splitDelimited, tableFrom, tableCsv } = await import("../src/lib/panacea/surfaces");
 const profileLib = await import("../src/lib/panacea/profile");
 const { panaceaSteps } = await import("../src/lib/panacea/handsteps");
+const projectLib = await import("../src/lib/panacea/project");
 const panacea = await import("../server/panacea");
 const { panaceaSPECS } = await import("../server/specs/panacea");
 const { windowOff, toolSettings } = await import("../server/tools");
@@ -399,7 +400,7 @@ fs.writeFileSync(art, CSV);
 
 const app = express();
 const sent: Array<Record<string, unknown>> = [];
-panacea.panaceaRoutes(app, { exists: (id) => id === S || id === "panaceainc", incognito: (id) => id === "panaceainc", off: () => false, push: (_id, m) => { sent.push(m); } });
+panacea.panaceaRoutes(app, { exists: (id) => id === S || id === "panaceainc" || id === "panaceaproj", incognito: (id) => id === "panaceainc", off: () => false, push: (_id, m) => { sent.push(m); } });
 const server = app.listen(0);
 const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
 const call = async (method: string, url: string, body?: unknown, raw?: Buffer, type = "application/json"): Promise<{ status: number; body: any }> => {
@@ -408,7 +409,7 @@ const call = async (method: string, url: string, body?: unknown, raw?: Buffer, t
 };
 
 await test("the tools are a family of their own, read-only where they only look, and switch off with the window", () => {
-  assert.deepEqual(panaceaSPECS.map((s) => s.name), ["panacea_open", "panacea_look", "panacea_surface", "panacea_place", "panacea_set", "panacea_arrange", "panacea_bespoke", "panacea_doc", "panacea_board", "panacea_export"]);
+  assert.deepEqual(panaceaSPECS.map((s) => s.name), ["panacea_open", "panacea_look", "panacea_surface", "panacea_place", "panacea_set", "panacea_arrange", "panacea_project", "panacea_bespoke", "panacea_doc", "panacea_board", "panacea_export"]);
   assert.ok(loadedFamilies({ events: [], said: "open the panacea canvas", hasPdf: false, lazy: true }).has("panacea"));
   assert.equal(looksOnly("panacea_look", {}), true);
   assert.equal(looksOnly("panacea_open", {}), true);
@@ -766,6 +767,47 @@ await test("a document survives the canvas going to disk and back", async () => 
   assert.equal(again.doc!.mode, "agent");
   assert.equal(again.params.words, d.params.words);
   assert.match(describeCanvas(back), /document "Minutes", \d+ words in \d+ blocks; Autora may write in it/);
+});
+
+// ------------------------------------------------------------- projects --
+
+await test("a project: phases with regions, the plan waits for approval, steps, decisions, links, and it survives disk", async () => {
+  const P = "panaceaproj";
+  const runP = (name: string, args: Record<string, unknown>) => panacea.runPanaceaTool(P, name, args, { cwd: dir });
+  const started = await runP("panacea_project", { ops: [{ op: "start", title: "Yoga site", phases: [{ label: "Plan", steps: ["Pages and data", "The feel"] }, "Design", "Build"], stack: "Plain HTML, CSS and JS" }] });
+  assert.ok(started.ok, started.summary);
+  assert.match(started.summary, /\[ \] \S+ Pages and data; \[ \] \S+ The feel/, "every step keeps its words");
+  assert.match(started.summary, /NOT yet approved/);
+  // Not past the first phase until the person approves.
+  const early = await runP("panacea_project", { ops: [{ op: "phase", to: "Design" }] });
+  assert.equal(early.ok, false);
+  assert.match(early.summary, /not approved the plan/);
+  assert.equal((await runP("panacea_project", { ops: [{ op: "start", title: "Another" }] })).ok, false, "one project unless replaced");
+  const moved = await runP("panacea_project", { ops: [{ op: "approve" }, { op: "phase", to: "design" }, { op: "step", text: "Pick the colours" }, { op: "decide", text: "Calm greens" }] });
+  assert.ok(moved.ok, moved.summary);
+  // New work lands in the region of the phase being worked on.
+  const doc = await runP("panacea_surface", { document: "Notes", title: "Notes", mode: "agent" });
+  assert.ok(doc.ok, doc.summary);
+  const canvas = normalizeCanvas(JSON.parse(JSON.stringify((await call("GET", `/api/panacea/${P}/doc`)).body.doc)))!;
+  const pr = canvas.project!;
+  assert.equal(pr.phase, "design");
+  assert.equal(pr.approved, true);
+  const notes = canvas.surfaces.find((x) => x.title === "Notes")!;
+  assert.equal(notes.phase, "design");
+  assert.ok(notes.x >= projectLib.REGION_W, `the design region starts at ${projectLib.REGION_W}, the notes are at ${notes.x}`);
+  const step = pr.phases.find((x) => x.id === "design")!.steps[0]!;
+  assert.equal(step.text, "Pick the colours");
+  const ticked = await runP("panacea_project", { ops: [{ op: "done", id: step.id }, { op: "link", from: notes.id, to: "index.html", why: "the copy" }] });
+  assert.ok(ticked.ok, ticked.summary);
+  assert.match(ticked.summary, /\[x\] .* Pick the colours/);
+  assert.match(ticked.summary, /Decisions: Calm greens/);
+  assert.match(describeCanvas(canvas), /Project "Yoga site" \(stack: Plain HTML, CSS and JS\)/);
+  assert.equal((await runP("panacea_project", { ops: [{ op: "done", id: "nope" }] })).ok, false);
+  // A broken project from disk is repaired, not trusted.
+  const repaired = normalizeCanvas({ ...JSON.parse(JSON.stringify(canvas)), project: { title: "X", phases: [{ label: "A" }], phase: "zzz", approved: "yes" } })!;
+  assert.equal(repaired.project!.phase, "a");
+  assert.equal(repaired.project!.approved, false);
+  assert.equal(repaired.surfaces.find((x) => x.id === notes.id)!.phase, undefined, "a phase the project no longer has is dropped");
 });
 
 server.close();

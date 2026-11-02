@@ -24,10 +24,11 @@ import express, { type Express, type Request, type Response } from "express";
 import { unzipSync, strFromU8 } from "fflate";
 import type { Value } from "../src/lib/panacea/atoms";
 import {
-  contextOf, describeCanvas, fade, MAX_PANELS, newCanvas, normalizeCanvas, refocus, removeSurface, restore,
+  contextOf, describeCanvas, enterPhase, fade, MAX_PANELS, newCanvas, normalizeCanvas, refocus, removeSurface, restore,
   setValue, snap, uid, valueProblem, wordsOwner, PANEL_MAX_W, PANEL_MIN_W, type Canvas, type Panel, type Surface,
 } from "../src/lib/panacea/canvas";
 import { panaceaSteps, stepWords } from "../src/lib/panacea/handsteps";
+import { addStep, createProject, decide, describeProject, linkPieces, phaseFor, setStepDone, stepById, type Project } from "../src/lib/panacea/project";
 import { addCard, applyBoardParam, boardListing, boardMarkdown, boardSvg, createBoard, editCard, editLink, linkCards, moveCard, removeCard, tidy, unlink, type BoardMode, type BoardState } from "../src/lib/panacea/board";
 import { createDoc, docStateOf, formatBlock, insertBlocks, listing, outlineOf, applyParam, deleteBlock, replaceBlockText, stateOf, toMarkdown, type DocMode } from "../src/lib/panacea/document";
 import { KINDS, type SurfaceKind } from "../src/lib/panacea/kinds";
@@ -610,6 +611,81 @@ const boardWho = (b: BoardState) => (b.mode === "agent" ? "Autora may write card
 function edit(session: string, name: string, c: Canvas, args: Record<string, any>, hooks: PanaceaHooks): { text: string; preview: string } {
   const p = profileNow();
   switch (name) {
+    case "panacea_project": {
+      const ops: unknown[] = Array.isArray(args.ops) ? args.ops : [];
+      if (!ops.length) refuse("Pass `ops`: a list like [{\"op\": \"start\", \"title\": \"Yoga studio site\", \"phases\": [{\"label\": \"Plan\", \"steps\": [\"Pages and data\"]}, \"Design\", \"Build\", \"Check\", \"Ship\"], \"stack\": \"Plain HTML, CSS and JS\"}].");
+      if (ops.length > 40) refuse("At most 40 ops in one call.");
+      const done: string[] = [];
+      const need = (): Project => c.project ?? refuse("There is no project on this canvas yet: start one with {op: \"start\"}.");
+      const take = (r: Project | string, where: string): Project => (typeof r === "string" ? refuse(`${where}: ${r}`) : r);
+      ops.forEach((raw, i) => {
+        const op = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+        const kind = String(op.op ?? "");
+        const where = `op ${i + 1} (${kind || "?"})`;
+        switch (kind) {
+          case "start": {
+            if (c.project && op.replace !== true) refuse(`${where}: this canvas already has the project "${c.project.title}". Change it with the other ops, or pass replace: true if the person asked for a new one.`);
+            const phases = Array.isArray(op.phases) ? (op.phases as Array<string | { label: string; steps?: string[] }>) : undefined;
+            const made = take(createProject({ title: String(op.title ?? ""), phases, stack: typeof op.stack === "string" ? op.stack : undefined, by: "agent" }), where);
+            c.project = made;
+            // What is on the canvas already is the first phase's work.
+            for (const s of c.surfaces) s.phase ??= made.phase;
+            done.push(`started the project "${made.title}" with ${made.phases.map((x) => x.label).join(", ")}; the plan waits for the person's approval`);
+            break;
+          }
+          case "approve": {
+            const pr = need();
+            pr.approved = true;
+            done.push("marked the plan approved (only because the person said so)");
+            break;
+          }
+          case "phase": {
+            const pr = need();
+            const to = phaseFor(pr, op.to) ?? refuse(`${where}: there is no phase "${String(op.to)}". Phases: ${pr.phases.map((x) => `${x.id} (${x.label})`).join(", ")}.`);
+            if (!pr.approved && to.id !== pr.phases[0]!.id) refuse(`${where}: the person has not approved the plan, so the work stays in ${pr.phases[0]!.label}. Show them the plan and ask; they approve it in the project strip, or say so, and then you call {op: "approve"}.`);
+            if (enterPhase(c, to.id)) done.push(`moved to ${to.label}`);
+            break;
+          }
+          case "step": {
+            const pr = need();
+            const ph = op.phase === undefined ? pr.phases.find((x) => x.id === pr.phase)! : phaseFor(pr, op.phase) ?? refuse(`${where}: there is no phase "${String(op.phase)}".`);
+            c.project = take(addStep(pr, ph.id, String(op.text ?? ""), "agent"), where);
+            done.push(`added a step to ${ph.label}`);
+            break;
+          }
+          case "done":
+          case "undone": {
+            const pr = need();
+            const id = String(op.id ?? "");
+            if (!stepById(pr, id)) refuse(`${where}: there is no step "${id}".`);
+            c.project = take(setStepDone(pr, id, kind === "done"), where);
+            done.push(`${kind === "done" ? "ticked" : "unticked"} ${id}`);
+            break;
+          }
+          case "decide": {
+            c.project = take(decide(need(), String(op.text ?? ""), "agent"), where);
+            done.push("recorded a decision");
+            break;
+          }
+          case "link": {
+            c.project = take(linkPieces(need(), String(op.from ?? ""), String(op.to ?? ""), String(op.why ?? "")), where);
+            done.push(`linked ${String(op.from)} to ${String(op.to)}`);
+            break;
+          }
+          case "stack": {
+            const pr = need();
+            const stack = typeof op.stack === "string" ? op.stack.trim().slice(0, 80) : "";
+            if (!stack) refuse(`${where} needs \`stack\`: what the app is built with, in a few words.`);
+            pr.stack = stack;
+            done.push(`set the stack to ${stack}`);
+            break;
+          }
+          default:
+            refuse(`${where}: op is start, approve, phase, step, done, undone, decide, link or stack.`);
+        }
+      });
+      return { text: `${done.join("; ")}.\n${describeProject(c.project!)}`, preview: done[0] ?? "project" };
+    }
     case "panacea_place": {
       if (c.panels.length >= MAX_PANELS) refuse(`The canvas has ${MAX_PANELS} panels; put some away first (panacea_arrange remove).`);
       const why = typeof args.why === "string" && args.why.trim() ? args.why.trim() : refuse("Say `why` the panel is here, in a sentence to the person: it is shown under the panel's ⓘ.");
@@ -1077,7 +1153,8 @@ export async function runPanaceaTool(session: string, name: string, args: Record
       case "panacea_surface":
       case "panacea_doc":
       case "panacea_board":
-      case "panacea_bespoke": {
+      case "panacea_bespoke":
+      case "panacea_project": {
         const next = structuredClone(e.canvas);
         const done = edit(session, name, next, args, hooks);
         setOpen(session, true);

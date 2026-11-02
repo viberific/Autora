@@ -7,6 +7,7 @@ import { handOffer, OFFER_PREFIX } from "./handOffer";
 export const BOARD_PIECE = "blank.board";
 export const FLOWCHART_PIECE = "blank.flowchart";
 export const DOC_PIECE = "blank.document";
+export const PROJECT_PIECE = "blank.project";
 
 /** Pieces with nothing in them yet: a single control on a value of its own, for when the person just wants one; and a board. */
 function blankPieces(name: string): Recipe[] {
@@ -20,6 +21,7 @@ function blankPieces(name: string): Recipe[] {
     piece("checklist", "Checklist", "a list to tick", { atom: "list", bind: name, props: { label: "List" } }, 288),
     piece("colour", "Colour", "a colour", { atom: "color", bind: name, props: { label: "Colour" } }),
     { ...piece("board", "Board", "cards and links to think with: a brainstorm, a map of ideas", { atom: "note", props: { text: "A board" } }), id: BOARD_PIECE, tags: ["board", "brainstorm", "map", "cards", "ideas", "mind"] },
+    { ...piece("project", "Project", "a whole piece of work in phases, with steps and decisions, each phase its own region", { atom: "note", props: { text: "A project" } }), id: PROJECT_PIECE, tags: ["project", "plan", "phases", "steps", "app", "site", "launch"] },
     { ...piece("document", "Document", "a page to write on: headings, lists, quotes", { atom: "note", props: { text: "A document" } }), id: DOC_PIECE, tags: ["document", "doc", "write", "page", "notes", "text"] },
     { ...piece("flowchart", "Flowchart", "processes, decisions and directed paths", { atom: "note", props: { text: "A flowchart" } }), id: FLOWCHART_PIECE, tags: ["flowchart", "process", "decision", "diagram"] },
   ];
