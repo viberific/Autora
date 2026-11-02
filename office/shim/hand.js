@@ -19,9 +19,20 @@
   if (!A || !A.framed) return;
   const APP = /\/(docs|slides|sheets)\//.exec(location.pathname)?.[1] ?? "";
 
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  /* Halted (the person switched Visible work off, or stopped the turn: the page posts autora:halt): the rest of the
+     edit is done with no pauses and no cursor, as it would be with Visible work off. Each run starts unhalted. */
+  let halted = false;
+  // Stopped (the turn, not Visible work): no more steps are begun.
+  let stopped = false;
+  // Pauses under way end when the halt comes, so a long one begun just before does not hold the rest back.
+  const pausing = new Set();
+  const sleep = (ms) => new Promise((resolve) => {
+    const end = () => { clearTimeout(timer); pausing.delete(end); resolve(); };
+    const timer = setTimeout(end, halted ? 0 : ms);
+    pausing.add(end);
+  });
   const rand = (lo, hi) => lo + Math.random() * (hi - lo);
-  const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
+  const frame = () => new Promise((r) => (halted ? setTimeout(r, 0) : requestAnimationFrame(() => r())));
   const norm = (t) => String(t ?? "").replace(/\s+/g, " ").trim();
 
   // ---------------------------------------------------------------- the cursor --
@@ -29,6 +40,9 @@
   let cursor = null;
   let at = { x: innerWidth * 0.5, y: innerHeight * 0.4 };
   let told = 0;
+  /* The page draws the cursor (one for the whole board, src/lib/pointer.ts pointerFollow): this one is kept, unseen,
+     only to say where the hand is, and says it often enough for the page's to move smoothly. */
+  let boardDraws = false;
 
   function showCursor(who) {
     if (cursor) cursor.remove();
@@ -42,6 +56,8 @@
       `<path d="M1 1 L1 18 L5.6 14.2 L8.6 21 L11.2 19.9 L8.3 13.4 L13.6 13.4 Z" fill="${color}" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>` +
       `<span style="position:absolute;left:15px;top:19px;padding:2px 7px;border-radius:7px;background:${color};color:#fff;font:600 11px/1.3 system-ui,sans-serif;white-space:nowrap"></span>`;
     el.querySelector("span").textContent = String(who?.name || "Autora").slice(0, 24);
+    boardDraws = who?.board === true;
+    if (boardDraws) el.style.opacity = "0";
     document.body.appendChild(el);
     cursor = el;
     place(at.x, at.y);
@@ -55,7 +71,7 @@
     at = { x, y };
     if (cursor) cursor.style.transform = `translate(${x}px, ${y}px)`;
     const now = performance.now();
-    if (now - told > 70) {
+    if (now - told > (boardDraws ? 30 : 70) && !halted) {
       told = now;
       void A.host("hand-cursor", { x, y }).catch(() => undefined);
     }
@@ -461,12 +477,15 @@
   async function run(id, steps, who) {
     if (busy) { void A.host("handed", { id, results: [], error: "the editor is already doing an edit" }).catch(() => undefined); return; }
     busy = true;
+    halted = false;
+    stopped = false;
     const results = [];
     const current = new Map();
     sheetNow = "";
     showCursor(who);
     try {
       for (let i = 0; i < steps.length; i++) {
+        if (stopped) { results.push({ i, ok: false, error: "stopped" }); continue; }
         try {
           if (APP === "docs") await pagesStep(steps[i], current);
           else if (APP === "sheets") await sheetsStep(steps[i]);
@@ -489,6 +508,13 @@
   window.addEventListener("message", (event) => {
     if (event.source !== window.parent) return;
     const m = event.data;
+    if (m && typeof m === "object" && m.type === "autora:halt") {
+      halted = true;
+      if (m.stop === true) stopped = true;
+      for (const end of [...pausing]) end();
+      if (cursor) cursor.style.display = "none";
+      return;
+    }
     if (m && typeof m === "object" && m.type === "autora:office-save") {
       // The window's Save: the editor's own Ctrl+S, as if pressed where the person is typing.
       const at = document.activeElement && document.activeElement !== document.body ? document.activeElement : document.body;

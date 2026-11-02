@@ -31,6 +31,8 @@ type Handlers = {
   onPanaceaDesk?: (state: unknown) => void;
   /** Something only the canvas window can do: steps by the agent's hand, a picture rendered, a chart drawn. */
   onPanaceaCommand?: (cmd: { id: string; name: string; args: Record<string, unknown> }) => void;
+  /** The turn was stopped, or Visible work switched off elsewhere: the agent's hand stops showing (lib/handHalt.ts). */
+  onHandsHalt?: (stop: boolean) => void;
   onOfficeDesk?: (state: unknown) => void;
   onOfficePush?: (msg: unknown) => void;
   onOfficeHand?: (msg: unknown) => void;
@@ -206,6 +208,9 @@ export class SessionStream {
           if (typeof msg.id === "string" && typeof msg.name === "string") {
             this.handlers.onStudioCommand?.({ id: msg.id, name: msg.name, args: msg.args && typeof msg.args === "object" ? msg.args : {} });
           }
+          break;
+        case "hands.halt":
+          this.handlers.onHandsHalt?.(msg.stop === true);
           break;
         case "panaceadesk":
           this.handlers.onPanaceaDesk?.(msg.state);

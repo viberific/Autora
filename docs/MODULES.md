@@ -770,6 +770,9 @@ Spectra's fetched renderer is most of what is on disk.
   identifies the work the camera may follow; the phone falls back to `busiestSurface` for a live page. A manual icon jump stops Follow and
   holds the camera while other surfaces open. Jumping to work keeps every engine mounted in the same spatial scene;
   it never changes exclusive visibility. Typing, dragging and pins block automatic camera movement.
+- The agent's hand halting (`lib/handHalt.ts`): `haltHands(stop)` on Visible off (the rest done unseen) or Stop (no more
+  steps); every in-page hand's pauses are `handPause`, and frames get `autora:halt`. `pointerFollow` in `lib/pointer.ts` is
+  the board's one cursor following a frame's reported hand (docs/VISIBLE-WORK.md).
 - The agent's pointer outside the Office windows: `lib/pointer.ts` (a layer on the body: arc, rest, press ring, typed
   words beside it; it goes only where a real element or a frame-confirmed point is). Music points at the clips that
   lit up (`StudioWindow`). The PDF window plays the server's cues (`cueForItem`, with the page's size so a place on a
@@ -1044,7 +1047,7 @@ inside the editor (the hand, `hand_*` in `photo/overlay/autora.rs`), live while 
 played over a picture the server changed. Shell commands have no terminal window or cursor replay: their streamed
 output is a collapsible card in the conversation, whether Visible work is on or off.
 **Whose cursor**: `lib/cursorWho.ts` reads the chat's `agent.started` line and lays `--agent-accent(-rgb)` on the
-page, which every cursor style reads; the tag carries the agent's name and the polygon of its mark (`CursorTag`,
+page, which every cursor style reads; the tag carries the agent's name and the polygon of its mark (`lib/pointer.ts` on the board,
 `pointer.ts`); the browser's page pointer is told by `LiveBrowser`'s `who` hook (`cursorWhoFor` in `server.ts`), the
 3D frame by `{autora3d:"who"}`. All of it is off with the
 agent-cursor switch. Tests: `thought.test.ts`,

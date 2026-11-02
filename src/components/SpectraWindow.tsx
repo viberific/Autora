@@ -6,7 +6,8 @@ import { useCollab } from "../lib/collab";
 import { TakeControl } from "./TakeControl";
 import { onDeskHand, useDeskState, type DeskHand } from "../lib/pdfdesk";
 import { useBootWatch } from "../lib/bootWatch";
-import { clearCursor, reportCursor } from "../lib/cursorPos";
+import { clearCursor } from "../lib/cursorPos";
+import { pointerFollow } from "../lib/pointer";
 import { framePoint, isWorkVisible } from "../lib/frameCoordinates";
 import { getCursorWho, whoColors } from "../lib/cursorWho";
 import { onSpectraEvent } from "../lib/spectra";
@@ -84,7 +85,8 @@ export function SpectraWindow({ sessionId, phone }: { sessionId: string; phone: 
     if (!booted.current) { await reply({ results: [], saved: false, error: "the editor did not start" }); return; }
     const answer = await new Promise<{ results?: unknown; saved?: unknown; error?: unknown }>((resolve) => {
       handing.current.set(hand.id, resolve);
-      post({ type: "autora:spectra:hand", id: hand.id, job: hand.job, who: { name: getCursorWho().name, color: cursorColor() } });
+      // The board draws the cursor (one for the whole board): the frame only says where its hand is.
+      post({ type: "autora:spectra:hand", id: hand.id, job: hand.job, who: { name: getCursorWho().name, color: cursorColor(), board: true } });
     });
     handing.current.delete(hand.id);
     clearCursor();
@@ -159,7 +161,7 @@ export function SpectraWindow({ sessionId, phone }: { sessionId: string; phone: 
       } else if (msg.type === "autora:spectra:cursor" && typeof msg.x === "number" && typeof msg.y === "number") {
         // The agent's cursor in the editor, for the few words beside it (AgentThought).
         const point = framePoint(frame.current, { x: msg.x, y: msg.y });
-        if (point) reportCursor(point.x, point.y);
+        if (point) pointerFollow(point);
       } else if (msg.type === "autora:spectra:listen" && typeof msg.event === "string") {
         wanted.current.add(msg.event);
       } else if (msg.type === "autora:spectra:error" && typeof msg.message === "string") {

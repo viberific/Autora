@@ -16,14 +16,33 @@
  * (components/SpectraWindow.tsx).
  */
 
-type Who = { name?: string; color?: string };
+type Who = { name?: string; color?: string; board?: boolean };
 type Item = Record<string, unknown> & { type?: string; i: number };
 export type HandJob = { fields?: Record<string, unknown>; add?: Item[] };
 type Result = { kind: "field" | "add"; key: string | number; ok: boolean; skipped?: boolean; error?: string; what: string; page?: number };
 
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+/* Halted (the person switched Visible work off, or stopped the turn: the page posts autora:halt, host.ts calls haltHand):
+   the rest of the edit is done with no pauses and no cursor. Each run starts unhalted. */
+let halted = false;
+/** Stopped (the turn, not Visible work): no more steps are begun. */
+let stopped = false;
+/** Pauses under way: a halt ends them at once, so a long one begun just before does not hold the rest back. */
+const pausing = new Set<() => void>();
+export function haltHand(stop = false): void {
+  halted = true;
+  if (stop) stopped = true;
+  for (const end of [...pausing]) end();
+  if (cursor) cursor.style.display = "none";
+}
+const sleep = (ms: number) => new Promise<void>((resolve) => {
+  const end = () => { clearTimeout(timer); pausing.delete(end); resolve(); };
+  const timer = setTimeout(end, halted ? 0 : ms);
+  pausing.add(end);
+});
+/** A wait for the editor to catch up: real time, halted or not. */
+const tick = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const rand = (lo: number, hi: number) => lo + Math.random() * (hi - lo);
-const frame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
+const frame = () => new Promise<void>((r) => (halted ? setTimeout(r, 0) : requestAnimationFrame(() => r())));
 
 /** Not done by hand: the server does it on the file instead. */
 class Skip extends Error {}
@@ -33,6 +52,8 @@ class Skip extends Error {}
 let cursor: HTMLDivElement | null = null;
 let at = { x: innerWidth * 0.6, y: innerHeight * 0.4 };
 let told = 0;
+/** The page draws the cursor (one for the whole board): this one is unseen, and only says where the hand is, often. */
+let boardDraws = false;
 
 function showCursor(who: Who): void {
   cursor?.remove();
@@ -46,6 +67,8 @@ function showCursor(who: Who): void {
     `<path d="M1 1 L1 18 L5.6 14.2 L8.6 21 L11.2 19.9 L8.3 13.4 L13.6 13.4 Z" fill="${color}" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>` +
     `<span style="position:absolute;left:15px;top:19px;padding:2px 7px;border-radius:7px;background:${color};color:#fff;font:600 11px/1.3 system-ui,sans-serif;white-space:nowrap"></span>`;
   (el.querySelector("span") as HTMLSpanElement).textContent = (who.name || "Autora").slice(0, 24);
+  boardDraws = who.board === true;
+  if (boardDraws) el.style.opacity = "0";
   document.body.appendChild(el);
   cursor = el;
   place(at.x, at.y);
@@ -61,7 +84,7 @@ function place(x: number, y: number): void {
   at = { x, y };
   if (cursor) cursor.style.transform = `translate(${x}px, ${y}px)`;
   const now = performance.now();
-  if (now - told > 70 && window.parent !== window) {
+  if (now - told > (boardDraws ? 30 : 70) && window.parent !== window && !halted) {
     told = now;
     window.parent.postMessage({ type: "autora:spectra:cursor", x, y }, "*");
   }
@@ -166,7 +189,7 @@ async function waitFor<T>(find: () => T | null | undefined, ms = 2500): Promise<
     const got = find();
     if (got) return got;
     if (performance.now() > end) return null;
-    await sleep(60);
+    await tick(60);
   }
 }
 
@@ -581,6 +604,8 @@ export async function runHand(id: string, job: HandJob, who: Who): Promise<void>
     window.parent.postMessage({ type: "autora:spectra:handed", id, results, ...extra }, "*");
   if (busy) { reply([], { error: "the editor is already doing an edit" }); return; }
   busy = true;
+  halted = false;
+  stopped = false;
   const results: Result[] = [];
   showCursor(who);
   try {
@@ -588,6 +613,7 @@ export async function runHand(id: string, job: HandJob, who: Who): Promise<void>
     if (fields.length > 0) {
       try { await pickTool("forms"); } catch { /* each field says so below */ }
       for (const [name, value] of fields) {
+        if (stopped) { results.push({ kind: "field", key: name, ok: false, skipped: true, error: "stopped", what: `field ${name}` }); continue; }
         try {
           await fillField(name, value);
           results.push({ kind: "field", key: name, ok: true, what: `field ${name}` });
@@ -606,6 +632,7 @@ export async function runHand(id: string, job: HandJob, who: Who): Promise<void>
       }
     }
     for (const item of job.add ?? []) {
+      if (stopped) { results.push({ kind: "add", key: item.i, ok: false, skipped: true, error: "stopped", what: what(item) }); continue; }
       try {
         await addItem(item);
         results.push({ kind: "add", key: item.i, ok: true, what: what(item), ...(item.ofMany ? { page: Number(item.page) } : {}) });

@@ -1529,6 +1529,8 @@ const running = new Map<string, RunningTurn>();
  * for.
  */
 function stopTurn(sessionId: string, why: "person" | "superseded" = "person") {
+  // Whatever the agent's hand is doing in the page stops being shown at once (src/lib/handHalt.ts).
+  sendEphemeral(sessionId, { type: "hands.halt", stop: true });
   const turn = running.get(sessionId);
   if (!turn) return;
   turn.stopped = true;
@@ -1541,6 +1543,29 @@ function stopTurn(sessionId: string, why: "person" | "superseded" = "person") {
     }
   }
   turn.cancels.clear();
+}
+
+/**
+ * A tool call that gives way the moment the turn is stopped.
+ *
+ * Stop calls every cancel a running tool registered, but not every tool can
+ * register one: a window doing the agent's work by hand, a page that will not
+ * answer, a connected server mid-call. The loop used to sit in that await
+ * until the tool came back on its own, so Stop said it had stopped while the
+ * work carried on. Now the await ends at once with a stopped outcome; the tool
+ * is left to wind down (each has its own guard against acting after a stop).
+ * The outcome is `held`: a call the person stopped did not fail, so it is
+ * never refused as a repeat afterwards (server/failedcalls.ts).
+ */
+function untilStopped<T extends { ok: boolean; summary: string }>(sessionId: string, call: Promise<T>): Promise<T> {
+  const signal = running.get(sessionId)?.signal;
+  if (!signal) return call;
+  if (signal.aborted) { void call.catch(() => undefined); return Promise.resolve({ ok: false, held: true, summary: "Stopped by the person before this was done." } as unknown as T); }
+  return new Promise<T>((resolve, reject) => {
+    const stop = () => { void call.catch(() => undefined); resolve({ ok: false, held: true, summary: "Stopped by the person before this was done." } as unknown as T); };
+    signal.addEventListener("abort", stop, { once: true });
+    call.then((v) => { signal.removeEventListener("abort", stop); resolve(v); }, (e) => { signal.removeEventListener("abort", stop); reject(e); });
+  });
 }
 
 /**
@@ -5795,7 +5820,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
           const willWrite = (spec.name === "terminal" && !readOnlyCommand(String(use.args?.command ?? ""))) || spec.name === "edit_file";
           // What the person changed before this runs is theirs, not this command's.
           if (willWrite) await personEdits(null);
-          const outcome = await runTool(spec, use.args, contextFor(span));
+          const outcome = await untilStopped(session.id, runTool(spec, use.args, contextFor(span)));
           noteCall(spec.name, use.args);
           /* A command that failed because a path was not there: say what is near
              it, so the next call is right instead of another guess. */
@@ -5837,7 +5862,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
                tool: the model needs to read it and decide. Only a tool
                that could not run at all is an error. */
             if (outcome.held) {
-              emitEvent(session, "tool.error", "agent", { held: true, error: "Not done: the person is working on this." }, span);
+              emitEvent(session, "tool.error", "agent", { held: true, error: outcome.summary.startsWith("Stopped by the person") ? "Stopped." : "Not done: the person is working on this." }, span);
             } else if (outcome.exitCode !== undefined) {
               emitEvent(session, "tool.result", "agent", {
                 ok: false,
@@ -6892,7 +6917,7 @@ async function startServer() {
     res.json({ ok: true, approved, who });
   });
 
-  memoryRoutes(app, { mind });
+  memoryRoutes(app, { mind, haltHands: () => { for (const id of sessions.keys()) sendEphemeral(id, { type: "hands.halt" }); } });
   skillRoutes(app);
 
   const todaysLedger = () => {

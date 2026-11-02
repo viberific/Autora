@@ -23,6 +23,7 @@ import { docViews } from "./docViews";
 import { centreOf, pointerGo, pointerPlace, pointerRest, pointerTyping } from "../../lib/pointer";
 import { typingDelays, type Point } from "../../lib/humanPath";
 import { isWorkVisible } from "../../lib/frameCoordinates";
+import { beginHandRun, handPause, handsHalted, handsStopped } from "../../lib/handHalt";
 import type { BoardHandle } from "./Board";
 
 /** What the window puts in for the next thing picked: the server's id and place, and its own object when it is not a
@@ -38,7 +39,10 @@ type HandEnv = {
 type HandResult = { i: number; ok: boolean; error?: string };
 
 class Skip extends Error {}
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+/** A pause between the hand's acts: none once the hand is halted (lib/handHalt.ts). */
+const sleep = handPause;
+/** A wait for the page to catch up (something to appear): real time, halted or not. */
+const tick = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 
 async function waitFor<T>(fn: () => T | null | undefined | false, ms = 3000): Promise<T | null> {
@@ -47,7 +51,7 @@ async function waitFor<T>(fn: () => T | null | undefined | false, ms = 3000): Pr
     const v = fn();
     if (v) return v;
     if (Date.now() > end) return null;
-    await sleep(60);
+    await tick(60);
   }
 }
 
@@ -157,8 +161,11 @@ async function typeInto(input: HTMLInputElement | HTMLTextAreaElement | null, te
     const delays = typingDelays(text);
     let typed = "";
     for (let i = 0; i < text.length; i++) {
-      typed += text[i];
+      if (handsStopped()) break;
+      // Halted: the rest at once.
+      typed = handsHalted() ? text : typed + text[i];
       setNative(input, typed);
+      if (typed.length === text.length) break;
       await sleep(delays[i] ?? 60);
     }
   } finally {
@@ -418,10 +425,13 @@ async function typeDoc(v: EditorView, text: string): Promise<void> {
     const delays = paced(text);
     let owed = 0;
     for (let i = 0; i < text.length; i++) {
-      const ch = text[i]!;
+      if (handsStopped()) break;
+      // Halted: the rest goes in at once, through the same input (so `# ` still makes a heading at a line's start).
+      const ch = handsHalted() ? text.slice(i) : text[i]!;
       const { from, to } = v.state.selection;
       const plain = () => v.state.tr.insertText(ch, from, to);
       if (!v.someProp("handleTextInput", (f) => f(v, from, to, ch, plain))) v.dispatch(plain());
+      if (ch.length > 1) break;
       owed += delays[i] ?? 40;
       if (owed >= 16) {
         pointerPlace(caretPoint(v, v.state.selection.head));
@@ -720,6 +730,7 @@ function offerOf(id: string, name: string, about: string, w = 288): Recipe {
 }
 
 export async function runPanaceaHand(steps: HandStep[], env: HandEnv): Promise<{ results: HandResult[] }> {
+  beginHandRun();
   const results: HandResult[] = [];
   /** A card the hand made, by the server's id for it: the window gives it an id of its own. */
   const cards = new Map<string, string>();
@@ -727,6 +738,8 @@ export async function runPanaceaHand(steps: HandStep[], env: HandEnv): Promise<{
   const seen = new Set<string>();
   for (let i = 0; i < steps.length; i++) {
     const s = steps[i]!;
+    // Stopped: the steps not begun are not done.
+    if (handsStopped()) { results.push({ i, ok: false, error: "stopped" }); continue; }
     try {
       if (s.op === "surface") await surfaceStep(s, env);
       else if (s.op === "project" || s.op === "approve" || s.op === "phase" || s.op === "step-add" || s.op === "step-tick" || s.op === "decide") await projectStep(s, env);

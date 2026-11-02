@@ -16,6 +16,18 @@ The **Visible** switch (`VisibleWork.tsx`, Settings → Working together; one se
   never held up waiting for a window. A window that is open but whose editor is still starting takes the work and does it
   once the editor is up: someone is looking, so it is not done out of sight.
 
+**One cursor for the whole board.** The agent's cursor is the board's own (`lib/pointer.ts`), not one per window: each
+editor's frame (Office, PDF, Photo, 3D) and the Video window report where their hand is, and `pointerFollow` moves the
+board's pointer there, gliding from wherever it was, so it travels between the windows and the canvas as one hand. The
+frames draw no cursor of their own while the board does (`who.board`), and only their press rings.
+
+**Switching off or stopping, mid-work** (`lib/handHalt.ts`). Turning Visible off halts every hand at once: the cursor goes,
+pauses already under way end, and the rest of the call's work is done straight away with no cursor, as it would have been
+with Visible off. Stop halts it too, but the steps not yet begun are not done at all, and the turn ends without waiting for
+the tool (`untilStopped` in `server.ts`; the stopped call is `held`, so it is never refused afterwards as a failed repeat).
+The page halts its own hands (Panacea, Music, Video) and posts `{type: "autora:halt", stop}` into every frame, whose
+hands do the same; the server sends `hands.halt` too, so a switch or a stop on another device reaches this one.
+
 What is **not** acceptable with Visible on: a recording. Editing the file on the server and then playing a cursor
 animation over the window ("pointing at where the change landed", swapping in staged copies of the file while a cursor
 pretends to type) shows work that is already finished. That is how most windows began; each is being moved over, one at a

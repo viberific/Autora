@@ -10,6 +10,7 @@
 import { along, humanRoute, restMs, routeMs, type Point } from "./humanPath";
 import { clearCursor, reportCursor } from "./cursorPos";
 import { getCursorWho, glyphPoints, onCursorWho } from "./cursorWho";
+import { handsHalted, onHandsHalted } from "./handHalt";
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -46,8 +47,21 @@ function signed() {
 }
 onCursorWho(signed);
 
+/** Halted (Visible work switched off, or the turn stopped): the pointer goes at once, and anything in flight with it. */
+onHandsHalted(() => {
+  token++;
+  window.clearTimeout(hideTimer);
+  arrow?.classList.remove("is-typing");
+  if (layer?.classList.contains("is-on")) {
+    layer.classList.remove("is-on");
+    layer.classList.add("is-off");
+  }
+  clearCursor();
+});
+
 /** The pointer is typing (the tag shows a caret) while the agent's keys are being struck somewhere it cannot draw them. */
 export function pointerTyping(on: boolean) {
+  if (handsHalted()) return;
   ensure();
   arrow?.classList.toggle("is-typing", on);
 }
@@ -60,6 +74,7 @@ function place(p: Point) {
 
 /** Put the pointer at `p` at once, shown: for a hand that moves it itself, a frame at a time, while it drags. */
 export function pointerPlace(p: Point) {
+  if (handsHalted()) { at = p; return; }
   const host = ensure();
   window.clearTimeout(hideTimer);
   host.classList.remove("is-off");
@@ -90,6 +105,8 @@ function ring(p: Point, control?: Element | null) {
 
 /** Go to `to` and, when `press`, press there. Resolves when it has arrived (and pressed); a newer call cancels this one. */
 export async function pointerGo(to: Point, press = true, control?: Element | null): Promise<boolean> {
+  // Halted: the work goes on at once, and nothing is shown.
+  if (handsHalted()) { at = to; return true; }
   const mine = ++token;
   const host = ensure();
   window.clearTimeout(hideTimer);
@@ -132,7 +149,35 @@ export function pointerRest(after = 2200) {
       layer.classList.remove("is-on");
       layer.classList.add("is-off");
     }
-    at = null;
+    // Where it was is kept: the next move sets off from there, across the board, rather than appearing out of nowhere.
     clearCursor();
   }, after);
+}
+
+/**
+ * The cursor of an editor's frame (Office, PDF, Photo, Video, 3D), as the board's own pointer: there is one cursor for
+ * the whole board, and it travels between the windows rather than living inside one. Each frame reports where its hand
+ * is (mapped to the page), and stops drawing a cursor of its own; a report far from where the pointer is glides there
+ * the way a hand moves, nearer ones are followed as they come. With no report for a while it rests.
+ */
+let gliding = false;
+let latest: Point | null = null;
+export function pointerFollow(p: Point) {
+  if (handsHalted()) return;
+  const host = ensure();
+  window.clearTimeout(hideTimer);
+  const shown = host.classList.contains("is-on");
+  if (gliding) { latest = p; }
+  else if (shown && at && Math.hypot(p.x - at.x, p.y - at.y) <= 48) {
+    place(p);
+  } else {
+    gliding = true;
+    latest = null;
+    void pointerGo(p, false).finally(() => {
+      gliding = false;
+      if (latest && !handsHalted()) place(latest);
+      latest = null;
+    });
+  }
+  pointerRest(2600);
 }

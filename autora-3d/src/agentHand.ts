@@ -27,7 +27,7 @@ import { wallEnds } from './utils/outline';
 import { faceMeasure } from './utils/faces';
 import { groupChain, withGroupMates } from './utils/groups';
 import { bendHandle } from './utils/repeat';
-import { handAt, handGo, handRest } from './agentCursor';
+import { handAt, handGo, handPause, handRest, unhalt } from './agentCursor';
 
 type Point = { x: number; y: number };
 type M3 = { x: number; y: number; z: number };
@@ -51,7 +51,10 @@ export interface HandResult {
 }
 
 class Skip extends Error {}
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+/** A pause between the hand's acts: none once halted (agentCursor.ts). */
+const sleep = handPause;
+/** A wait for the app to catch up: real time, halted or not. */
+const tick = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 
 async function waitFor<T>(fn: () => T | null | undefined | false, ms = 2500): Promise<T | null> {
@@ -60,7 +63,7 @@ async function waitFor<T>(fn: () => T | null | undefined | false, ms = 2500): Pr
     const v = fn();
     if (v) return v;
     if (Date.now() > end) return null;
-    await sleep(50);
+    await tick(50);
   }
 }
 
@@ -812,6 +815,7 @@ const libraryRow = (cardEl: HTMLElement, name: string) =>
 
 /** One tool call, by hand. `goal` is the model as the call leaves it, from Autora; `need`, what of the model it names. */
 export async function runHand(name: string, args: Record<string, unknown>, api: HandApi, goal: Doc | null = null, need: string[] = []): Promise<HandResult> {
+  unhalt();
   const did: string[] = [];
   const skip: string[] = [];
   const goalBody = (id: string) => goal?.bodies.find((b) => b.id === id) ?? null;

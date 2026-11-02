@@ -462,6 +462,10 @@ async function suggestNow(session: string): Promise<void> {
 interface PanaceaHooks {
   cwd: string;
   showFile?: (file: { id: string; name: string; mime: string; size: number }) => void;
+  /** The turn was stopped: a change waiting on the window's hand is not made. */
+  cancelled?: () => boolean;
+  /** Called when the turn is stopped: the wait for the window's hand ends then. */
+  onCancel?: (stop: () => void) => void;
 }
 
 interface Outcome {
@@ -1158,7 +1162,10 @@ export async function runPanaceaTool(session: string, name: string, args: Record
         const next = structuredClone(e.canvas);
         const done = edit(session, name, next, args, hooks);
         setOpen(session, true);
+        // Stop ends the wait for the window's hand at once (the page halts the hand itself: src/lib/handHalt.ts).
+        hooks.onCancel?.(() => rejectAll(session, "Stopped by the person."));
         const hand = await byHand(session, e, next);
+        if (hooks.cancelled?.()) return { ok: false, summary: "Stopped by the person before this was done: the canvas keeps what the hand had done so far, and nothing more." };
         if (hand) e.quiet = e.rev + 1;
         commit(session, e, next, "agent");
         return { ok: true, summary: `${done.text}${hand ? ` ${hand}` : ""}`, preview: done.preview };

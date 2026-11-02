@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { haltHands } from "./handHalt";
 
 /**
  * Whether the agent's work is shown as it is done: the cursor in the PDF and
@@ -23,6 +24,8 @@ const listeners = new Set<() => void>();
 let asked = false;
 
 function set(next: boolean) {
+  // Switched off: the hand at work anywhere stops showing at once, and what is left of its work is done straight away.
+  if (on && !next) haltHands();
   on = next;
   try {
     localStorage.setItem(KEY, next ? "on" : "off");

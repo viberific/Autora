@@ -3679,7 +3679,7 @@ async function runToolUnredacted(
           const opened = await openPanaceaFile(args, ctx);
           if (opened) return opened;
         }
-        return await runPanaceaTool(ctx.session, spec.name, args, { cwd: terminalDir(), showFile: ctx.showFile });
+        return await runPanaceaTool(ctx.session, spec.name, args, { cwd: terminalDir(), showFile: ctx.showFile, cancelled: ctx.cancelled, onCancel: ctx.onCancel });
 
       // ---------------------------------------------------------- Office --
       case "office_guide":

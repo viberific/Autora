@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { haltHands } from "./lib/handHalt";
 import { SessionStream, mergeEvents, type StreamStatus } from "./lib/stream";
 import { derive, isRunning, type Cell, type Derived } from "./lib/derive";
 import { share } from "./lib/share";
@@ -526,6 +527,7 @@ export function App() {
       onStudioCommand: emitStudioCommand,
       onPanaceaDesk: setPanaceaState,
       onPanaceaCommand: emitPanaceaCommand,
+      onHandsHalt: (stop: boolean) => haltHands(stop),
       onSpectra: emitSpectraEvent,
       onVideoDesk: setVideoState,
       onVideoCommand: emitVideoCommand,
@@ -858,6 +860,8 @@ export function App() {
    * server at all is still reported here.
    */
   const stopTurn = useCallback(async () => {
+    // Nothing goes on being shown after Stop: the hand halts here at once, before the server has heard.
+    haltHands(true);
     streamRef.current?.interrupt();
     if (!sessionId) return;
     try {

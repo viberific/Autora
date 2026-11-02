@@ -9,6 +9,7 @@
  * What it cannot do (a control that is not on screen, a step with no control) it leaves: the finished song goes in after,
  * so nothing is lost. Each step says whether it was done.
  */
+import { beginHandRun, handPause, handsStopped } from "../../lib/handHalt";
 import { instrumentOf, pitchName, DRUMS, type Project } from "../../lib/studio/model";
 import type { StudioStep } from "../../lib/studio/handsteps";
 import { centreOf, pointerGo, pointerPlace, pointerRest, pointerTyping } from "../../lib/pointer";
@@ -24,7 +25,10 @@ type HandEnv = {
 type HandResult = { i: number; ok: boolean; error?: string };
 
 class Skip extends Error {}
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+/** A pause between the hand's acts: none once the hand is halted (lib/handHalt.ts). */
+const sleep = handPause;
+/** A wait for the page to catch up: real time, halted or not. */
+const tick = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 
 async function waitFor<T>(fn: () => T | null | undefined | false, ms = 3000): Promise<T | null> {
@@ -33,7 +37,7 @@ async function waitFor<T>(fn: () => T | null | undefined | false, ms = 3000): Pr
     const v = fn();
     if (v) return v;
     if (Date.now() > end) return null;
-    await sleep(60);
+    await tick(60);
   }
 }
 
@@ -182,6 +186,7 @@ async function slide(input: HTMLInputElement | null, value: number): Promise<voi
 
 /** Run one step. `ids` maps the finished song's ids to the window's, for what the hand itself made. */
 export async function runStudioHand(steps: StudioStep[], env: HandEnv): Promise<{ results: HandResult[]; ids: Record<string, string> }> {
+  beginHandRun();
   const { root } = env;
   const ids = new Map<string, string>();
   const id = (x: string) => ids.get(x) ?? x;
@@ -546,6 +551,8 @@ export async function runStudioHand(steps: StudioStep[], env: HandEnv): Promise<
   const results: HandResult[] = [];
   try {
     for (let i = 0; i < steps.length; i++) {
+      // Stopped: the steps not begun are not done.
+      if (handsStopped()) { results.push({ i, ok: false, error: "stopped" }); continue; }
       try {
         await one(steps[i]!);
         results.push({ i, ok: true });

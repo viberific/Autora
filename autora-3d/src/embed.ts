@@ -6,7 +6,7 @@
 import { runHand, type HandApi } from './agentHand';
 import { useEffect, useRef } from 'react';
 import { Doc, parseDoc } from './core/doc';
-import { setWho, show, type Cue, type Who } from './agentCursor';
+import { halt, setBoardDraws, setWho, show, type Cue, type Who } from './agentCursor';
 
 /**
  * Autora 3D inside Autora's window.
@@ -98,8 +98,10 @@ export function useAutoraEmbed(
     const origin = window.location.origin;
     const onMessage = (e: MessageEvent) => {
       if (e.source !== window.parent || e.origin !== origin) return;
-      const m = e.data as { autora3d?: string; doc?: unknown; vars?: unknown; cue?: unknown; who?: unknown } | null;
+      const m = e.data as { autora3d?: string; type?: string; on?: unknown; doc?: unknown; vars?: unknown; cue?: unknown; who?: unknown } | null;
       if (!m || typeof m !== 'object') return;
+      if (m.type === 'autora:halt') { halt(); return; }
+      if (m.autora3d === 'board') { setBoardDraws(m.on === true); return; }
       if (m.autora3d === 'load') {
         const next = parseDoc(m.doc);
         if (!next) return;
