@@ -30,6 +30,8 @@ import {
 import { panaceaSteps, stepWords } from "../src/lib/panacea/handsteps";
 import { addFlow, type Flow } from "../src/lib/panacea/flows";
 import { treeLive } from "../src/lib/panacea/wiring";
+import { MUSIC_TRACK, isMusicBind, readMusic } from "../src/lib/panacea/apps/music";
+import { studioPanel, studioSong } from "./studio";
 import { addStep, createProject, decide, describeProject, linkPieces, phaseFor, setStepDone, stepById, type Project } from "../src/lib/panacea/project";
 import { addCard, applyBoardParam, boardListing, boardMarkdown, boardSvg, createBoard, editCard, editLink, linkCards, moveCard, removeCard, tidy, unlink, type BoardMode, type BoardState } from "../src/lib/panacea/board";
 import { createDoc, docStateOf, formatBlock, insertBlocks, listing, outlineOf, applyParam, deleteBlock, replaceBlockText, stateOf, toMarkdown, type DocMode } from "../src/lib/panacea/document";
@@ -277,7 +279,7 @@ export function panaceaTurnNote(session: string): string | null {
   const recent = e.acts.filter((a) => Date.now() - a.at < 15 * 60_000).slice(-10).map((a) => a.text);
   const learnedWords = profileWords(profileNow());
   return [
-    `The Panacea window is open. ${describeCanvas(e.canvas)}`,
+    `The Panacea window is open. ${describeCanvas(e.canvas, { appValue: songValues(session, e.canvas) })}`,
     recent.length ? `What the person did on it lately: ${recent.join("; ")}.` : "",
     learnedWords ?? "",
     "panacea_look shows the panels' trees and the library; the person changes it by hand too, so look before relying on an earlier look.",
@@ -443,7 +445,7 @@ async function suggestNow(session: string): Promise<void> {
   const candidates = [...new Map([...searchLibrary(pool, recent.join(" "), domain, 10), ...searchLibrary(pool, "", domain, 8)].map((r) => [r.id, r])).values()].slice(0, 14);
   if (!candidates.length) return;
   const prompt = [
-    describeCanvas(e.canvas),
+    describeCanvas(e.canvas, { appValue: songValues(session, e.canvas) }),
     `What they did in the last two minutes: ${recent.join("; ")}.`,
     profileWords(p) ?? "",
     `Candidates:\n${candidates.map((r) => `- ${r.id}: ${r.name}, ${r.about}`).join("\n")}`,
@@ -499,6 +501,30 @@ function agentProblem(c: Canvas, key: string, v: unknown): string | null {
   }
   return valueProblem(c, key, v);
 }
+
+/**
+ * Sets a value the agent was given leave to set: on the canvas, or, for a song value (`music.bpm`), in the song itself,
+ * where the Music window shows it (src/lib/panacea/apps/music.ts). Returns the problem, if any. The track a track's
+ * controls act on is the canvas's own, so it is set first.
+ */
+function setChecked(session: string, c: Canvas, key: string, v: unknown): string | null {
+  const bad = agentProblem(c, key, v);
+  if (bad) return bad;
+  if (isMusicBind(key) && key !== MUSIC_TRACK) {
+    const done = studioPanel(session, key, v, c.values[MUSIC_TRACK], "agent");
+    return done.ok ? null : done.error;
+  }
+  setValue(c, key, v as Value);
+  return null;
+}
+/** What the song says for a `music.*` value, for describing the canvas. */
+function songValues(session: string, canvas: Canvas): (bind: string) => Value | undefined {
+  return (bind) => {
+    const song = studioSong(session);
+    return song && isMusicBind(bind) ? readMusic(song.project, bind, canvas.values[MUSIC_TRACK], song.focus) : undefined;
+  };
+}
+const trackFirst = (a: [string, unknown], b: [string, unknown]) => Number(b[0] === MUSIC_TRACK) - Number(a[0] === MUSIC_TRACK);
 
 /** The pixel size of a PNG, JPEG, GIF or WebP from its first bytes; null when it cannot tell. */
 function imageSize(data: Buffer): { w: number; h: number } | null {
@@ -742,11 +768,10 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
       if (args.writes === "agent") panel.writes = "agent";
       // Values it opens with: checked like any other.
       const problems: string[] = [];
-      for (const [k, v] of Object.entries(values)) {
+      for (const [k, v] of Object.entries(values).sort(trackFirst)) {
         const key = k.replace(/^@(image|data)\./, (_, kind: string) => `@${panel.context !== "general" ? panel.context : c.surfaces.find((s) => s.kind === kind)?.id ?? kind}.`);
-        const bad = agentProblem(c, key, v);
+        const bad = setChecked(session, c, key, v);
         if (bad) problems.push(`${k}: ${bad}`);
-        else setValue(c, key, v);
       }
       return {
         text: `Placed ${state === "ghost" ? "a ghost (the person takes it with a click, or it drifts away)" : "panel"} ${panel.id} "${panel.title}" at ${panel.x},${panel.y} on ${panel.context}.${problems.length ? ` Values not set: ${problems.join("; ")}.` : ""}\n${treeWords(panel.tree)}`,
@@ -759,10 +784,10 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
       if (!given.length) refuse("Pass `values`: {\"@img1.exposure\": 0.4, \"budget\": 1200}.");
       const done: string[] = [];
       const problems: string[] = [];
-      for (const [k, v] of given.slice(0, 40)) {
-        const bad = agentProblem(c, k, v);
+      for (const [k, v] of given.slice(0, 40).sort(trackFirst)) {
+        const bad = setChecked(session, c, k, v);
         if (bad) problems.push(`${k}: ${bad}`);
-        else { setValue(c, k, v as Value); done.push(`${k}=${JSON.stringify(v).slice(0, 40)}`); }
+        else done.push(`${k}=${JSON.stringify(v).slice(0, 40)}`);
       }
       if (!done.length) refuse(`Nothing set. ${problems.join("; ")}`);
       return { text: `Set ${done.join(", ")}.${problems.length ? ` Not set: ${problems.join("; ")}.` : ""}`, preview: done[0]! };
@@ -1113,7 +1138,7 @@ export async function runPanaceaTool(session: string, name: string, args: Record
           commit(session, e, { ...newCanvas(args.new.trim().slice(0, 80)) }, "agent");
         }
         setOpen(session, true);
-        return { ok: true, summary: `${describeCanvas(e.canvas)}\nLibrary (place with panacea_place recipe; panacea_look library:"words" to search and see trees):\n${libraryIndex(allRecipes().filter((r) => r.origin === "builtin" || r.uses > 0), e.canvas.surfaces.length ? null : "general").slice(0, 3000)}`, preview: e.canvas.name };
+        return { ok: true, summary: `${describeCanvas(e.canvas, { appValue: songValues(session, e.canvas) })}\nLibrary (place with panacea_place recipe; panacea_look library:"words" to search and see trees):\n${libraryIndex(allRecipes().filter((r) => r.origin === "builtin" || r.uses > 0), e.canvas.surfaces.length ? null : "general").slice(0, 3000)}`, preview: e.canvas.name };
       }
 
       case "panacea_look": {
@@ -1161,7 +1186,7 @@ export async function runPanaceaTool(session: string, name: string, args: Record
         const recent = e.acts.slice(-12).map((a) => a.text);
         return {
           ok: true,
-          summary: [describeCanvas(e.canvas, { trees: args.trees !== false }), recent.length ? `What the person did lately: ${recent.join("; ")}.` : "", profileWords(profileNow()) ?? ""].filter(Boolean).join("\n"),
+          summary: [describeCanvas(e.canvas, { trees: args.trees !== false, appValue: songValues(session, e.canvas) }), recent.length ? `What the person did lately: ${recent.join("; ")}.` : "", profileWords(profileNow()) ?? ""].filter(Boolean).join("\n"),
           preview: e.canvas.name,
         };
       }

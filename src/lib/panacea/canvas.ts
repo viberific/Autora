@@ -515,7 +515,7 @@ const show = (v: Value | undefined): string => {
 };
 
 /** The canvas in words, for the agent: what is on it, what each panel is and is bound to, and every value that is not its default. */
-export function describeCanvas(canvas: Canvas, opts: { trees?: boolean } = {}): string {
+export function describeCanvas(canvas: Canvas, opts: { trees?: boolean; appValue?: (bind: string) => Value | undefined } = {}): string {
   const lines: string[] = [`Canvas "${canvas.name}": ${canvas.surfaces.length} surface${canvas.surfaces.length === 1 ? "" : "s"}, ${canvas.panels.length} panel${canvas.panels.length === 1 ? "" : "s"}${canvas.focus ? `; the person is working on ${canvas.focus}` : ""}.`];
   for (const s of canvas.surfaces) {
     const changed = paramsOf(s.kind, s.table)
@@ -527,7 +527,8 @@ export function describeCanvas(canvas: Canvas, opts: { trees?: boolean } = {}): 
     const flags = [!treeLive(p.tree) ? "not connected to its app: its controls change nothing, put it away" : "", p.state !== "live" ? p.state : "", p.pinned ? "pinned" : "", p.group ? `group ${p.group}` : "", p.by === "person" ? "placed by the person" : "", holdsWords(p.tree) ? (p.writes === "agent" ? "you may write in it" : "its words are the person's") : ""].filter(Boolean).join(", ");
     lines.push(`- panel ${p.id} "${p.title}"${p.recipe ? ` (recipe ${p.recipe})` : ""} on ${p.context} at ${p.x},${p.y} w${p.w}${flags ? ` [${flags}]` : ""}${p.why ? ` -- why: ${p.why}` : ""}${opts.trees ? `\n    ${treeWords(p.tree)}` : ""}`);
   }
-  const shared = Object.entries(canvas.values);
+  // A value that lives in an app (the song's tempo) is read off the app, so what the agent is told is what the person sees.
+  const shared = Object.entries(canvas.values).map(([k, v]) => [k, opts.appValue?.(k) ?? v] as const);
   if (shared.length) lines.push(`Shared values: ${shared.slice(0, 40).map(([k, v]) => `${k}=${show(v)}`).join(", ")}.`);
   if (canvas.gone.length) lines.push(`Faded lately (the person can bring back): ${canvas.gone.map((g) => `${g.id} "${g.title}"`).join(", ")}.`);
   if (canvas.project) lines.push(describeProject(canvas.project));

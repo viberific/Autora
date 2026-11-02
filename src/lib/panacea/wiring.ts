@@ -19,7 +19,7 @@ const APP_VALUE = /^(doc|music|video|model|game|ui)\./;
  * The app values an adapter acts on, exactly or by a prefix ending in "." (the adapters fill this in as each app is
  * connected: docs/PANACEA-GAPS.md, G1).
  */
-const WIRED: readonly string[] = [];
+const WIRED: readonly string[] = ["music."];
 
 /** Whether something acts on this bind. */
 function bindWired(bind: string): boolean {

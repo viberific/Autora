@@ -141,6 +141,13 @@ await test("the 3D manual says every changing call is done in the window by hand
   }
 });
 
+await test("the Music manual says Panacea's Music panels drive the song, with a Track list for a track's controls", () => {
+  const music = manualText("studio");
+  for (const needle of ["Panacea's Music panels drive this same song", "Track list", "panacea_set", "Drum pattern", "no panels for envelope"]) {
+    assert.ok(music.includes(needle), `the Music manual lacks "${needle}"`);
+  }
+});
+
 await test("the Music manual says that with Visible work on the studio tools are done in the window by hand", () => {
   const music = manualText("studio");
   for (const needle of ["With Visible work on", "by your hand, live", "Song tray", "Add track", "piano roll", "drum grid", "finished song goes in", "With Visible work off"]) {

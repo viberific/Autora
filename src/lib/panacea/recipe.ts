@@ -130,10 +130,10 @@ const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n
 
 function readOptions(raw: unknown, errors: string[], where: string): Option[] | string | undefined {
   if (raw === undefined) return undefined;
-  // Options read off a surface when drawn: a column's values, an image's palette, the looks.
+  // Options read off a surface or an app when drawn: a column's values, an image's palette, the looks, the song's tracks.
   if (typeof raw === "string") {
-    if (/^(column:.{1,60}|columns|palette|looks)$/.test(raw)) return raw;
-    errors.push(`${where}: options is a list, or "column:<name>", "columns", "palette" or "looks".`);
+    if (/^(column:.{1,60}|columns|palette|looks|tracks)$/.test(raw)) return raw;
+    errors.push(`${where}: options is a list, or "column:<name>", "columns", "palette", "looks" or "tracks".`);
     return undefined;
   }
   if (!Array.isArray(raw)) { errors.push(`${where}: options must be a list.`); return undefined; }

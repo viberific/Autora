@@ -13,6 +13,8 @@
  *
  * Shared by the server and the page, so written without DOM or Node types.
  */
+import { MUSIC_TRACK } from "./apps/music";
+import { INSTRUMENTS, NOTE_NAMES, SCALE_NAMES } from "../studio/model";
 import { MAX_DEPTH, type Value } from "./atoms";
 import { INTENTS, type RecipeNext, type RecipeWhen } from "./intent";
 import { checkTree, fingerprint, MAX_RECIPE_PARTS, type CheckContext, type Node, type RecipePart } from "./recipe";
@@ -86,6 +88,7 @@ const D = (p: string) => `@data.${p}`;
 const DOC = (p: string) => `@doc.${p}`;
 
 const LOOK_SWATCHES = "looks";
+const SWATCHES = ["#7c5cff", "#e8c15a", "#2f9c95", "#d96ba0", "#6aa6e8", "#e8a15a", "#e2574c"];
 
 function r(domain: Domain, id: string, name: string, about: string, tags: string, tree: Node, w = 288, values?: Record<string, Value>): Recipe {
   const key = `${domain}.${id}`;
@@ -209,28 +212,25 @@ const DOCUMENT: Recipe[] = [
   r("document", "language", "Language", "language and spelling", "language spelling spellcheck", stack(sel("doc.lang", "Language", ["English (UK)", "English (US)", "Dutch", "German", "French", "Spanish"]), tg("doc.spell", "Check spelling"))),
 ];
 
+// Every control here acts on the song in Autora Music (src/lib/panacea/apps/music.ts): wired, or the person's own words
+// for the agent to place (chords, sections), or not here at all. The engine has no envelope, filter, compressor, groove,
+// pad, arpeggiator, delay, drive, click or level meter, so there are no panels for them.
+const TRACK = () => sel(MUSIC_TRACK, "Track", "tracks");
 const MUSIC: Recipe[] = [
-  r("music", "transport", "Transport", "tempo, loop and click", "transport tempo bpm loop metronome", stack(st("music.bpm", "Tempo", { min: 30, max: 300, unit: "bpm" }), row(tg("music.loop", "Loop"), tg("music.click", "Click")))),
-  r("music", "key", "Key", "root and scale", "key scale root mode", row(sel("music.root", "Root", ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]), sel("music.scale", "Scale", ["major", "minor", "dorian", "mixolydian", "pentatonic", "blues"]))),
-  r("music", "channel", "Channel", "level, pan, mute and solo", "channel mixer volume pan mute solo", stack(sl("music.vol", "Volume", { min: 0, max: 100 }), kn("music.pan", "Pan", { min: -50, max: 50 }), row(tg("music.mute", "Mute"), tg("music.solo", "Solo")))),
+  r("music", "transport", "Transport", "tempo and loop", "transport tempo bpm loop", stack(st("music.bpm", "Tempo", { min: 30, max: 300, unit: "bpm" }), tg("music.loop", "Loop"))),
+  r("music", "key", "Key", "root and scale", "key scale root mode", row(sel("music.root", "Root", [...NOTE_NAMES]), sel("music.scale", "Scale", [...SCALE_NAMES]))),
+  r("music", "channel", "Channel", "level, pan, mute and solo of a track", "channel mixer volume pan mute solo", stack(TRACK(), sl("music.vol", "Volume", { min: 0, max: 100 }), kn("music.pan", "Pan", { min: -50, max: 50 }), row(tg("music.mute", "Mute"), tg("music.solo", "Solo")))),
   r("music", "drums", "Drum pattern", "sixteen steps of four drums", "drums beat pattern step sequencer", stack(pads("music.steps", "Pattern", 16, ["Kick", "Snare", "Hat", "Clap"])), 480),
-  r("music", "arrange", "Arrangement", "parts along the bars", "arrangement song structure timeline", stack(lanes("music.parts", "Bars", ["Drums", "Bass", "Chords", "Lead"], 32)), 520),
-  r("music", "envelope", "Envelope", "attack, decay, sustain, release", "synth envelope adsr attack release", row(kn("music.a", "Attack", { min: 0, max: 100 }), kn("music.d", "Decay", { min: 0, max: 100 }), kn("music.s", "Sustain", { min: 0, max: 100 }), kn("music.r", "Release", { min: 0, max: 100 })), 352),
-  r("music", "filter", "Filter", "cutoff, resonance and type", "filter cutoff resonance lowpass", stack(seg("music.ftype", "Type", ["Low", "Band", "High"]), row(kn("music.cutoff", "Cutoff", { min: 0, max: 100 }), kn("music.res", "Resonance", { min: 0, max: 100 })))),
-  r("music", "effects", "Effects", "reverb, delay and drive", "effects reverb delay drive distortion", row(kn("music.reverb", "Reverb", { min: 0, max: 100 }), kn("music.delay", "Delay", { min: 0, max: 100 }), kn("music.drive", "Drive", { min: 0, max: 100 }))),
-  r("music", "chords", "Chords", "a progression, and how it is played", "chords progression harmony", stack(lst("music.chords", "Progression", "Add a chord"), seg("music.cstyle", "Played", ["Block", "Arp", "Strum"]))),
-  r("music", "time", "Time", "tempo and time signature", "time signature meter tempo", stack(st("music.bpm", "Tempo", { min: 30, max: 300, unit: "bpm" }), seg("music.sig", "Time", ["3/4", "4/4", "6/8"]))),
-  r("music", "eq", "EQ", "low, mid and high", "eq equaliser bass treble", stack(sl("music.low", "Low", { min: -12, max: 12, centre: true, unit: "dB" }), sl("music.mid", "Mid", { min: -12, max: 12, centre: true, unit: "dB" }), sl("music.high", "High", { min: -12, max: 12, centre: true, unit: "dB" }))),
-  r("music", "compressor", "Compressor", "how much it squeezes", "compressor dynamics threshold ratio", stack(kn("music.thresh", "Threshold", { min: -60, max: 0, unit: "dB" }), kn("music.ratio", "Ratio", { min: 1, max: 20 }), adv(kn("music.attack", "Attack", { min: 0, max: 100, unit: "ms" })), adv(kn("music.release", "Release", { min: 10, max: 1000, unit: "ms" })))),
-  r("music", "groove", "Groove", "swing and a human feel", "swing groove humanize feel", stack(sl("music.swing", "Swing", { min: 0, max: 100, unit: "%" }), sl("music.human", "Humanize", { min: 0, max: 100, unit: "%" }))),
-  r("music", "structure", "Song structure", "sections in order", "structure verse chorus sections", stack(lst("music.sections", "Sections", "Verse, chorus…"))),
-  r("music", "instrument", "Instrument", "what plays this part", "instrument sound patch", stack(sw("music.inst", "Instrument", [{ value: "keys", label: "Keys", color: "#7c5cff" }, { value: "bass", label: "Bass", color: "#2f9c95" }, { value: "pad", label: "Pad", color: "#6aa6e8" }, { value: "lead", label: "Lead", color: "#e8a15a" }, { value: "kit", label: "Drums", color: "#e2574c" }]))),
-  r("music", "master", "Master", "overall level", "master output level loudness", stack(sl("music.master", "Master", { min: 0, max: 100 }), meter("music.level", "Level", 0, 100))),
-  r("music", "pad", "Performance pad", "two effects on one pad", "xy pad performance perform", stack(xy("music.xy", "Pad", "Filter", "Space")), 288),
-  r("music", "arp", "Arpeggiator", "pattern, octaves and rate", "arp arpeggiator pattern", stack(seg("music.arp", "Pattern", ["Up", "Down", "Up-down", "Random"]), st("music.oct", "Octaves", { min: 1, max: 4 }), seg("music.rate", "Rate", ["1/4", "1/8", "1/16"]))),
+  r("music", "effects", "Reverb", "how much room a track has", "effects reverb space room", stack(TRACK(), kn("music.reverb", "Reverb", { min: 0, max: 100 }))),
+  r("music", "chords", "Chords", "a progression, and how it is played", "chords progression harmony", stack(lst("chords", "Progression", "Add a chord"), seg("chordstyle", "Played", ["Block", "Arp", "Strum"]), ask("Play these", "Play the chords in the Chords panel, in the way set there, in the Music window (studio_make). Use exactly the chords I wrote."))),
+  r("music", "time", "Time", "tempo and time signature", "time signature meter tempo", stack(st("music.bpm", "Tempo", { min: 30, max: 300, unit: "bpm" }), seg("music.sig", "Time", ["2/4", "3/4", "4/4", "5/4", "6/8", "7/8"]))),
+  r("music", "eq", "EQ", "low, mid and high of a track", "eq equaliser bass treble", stack(TRACK(), sl("music.low", "Low", { min: -12, max: 12, centre: true, unit: "dB" }), sl("music.mid", "Mid", { min: -12, max: 12, centre: true, unit: "dB" }), sl("music.high", "High", { min: -12, max: 12, centre: true, unit: "dB" }))),
+  r("music", "structure", "Song structure", "sections in order", "structure verse chorus sections", stack(lst("sections", "Sections", "Verse, chorus…"), ask("Lay them out", "Lay out the sections in the Song structure panel, in that order, as clips in the Music window. Do not invent notes for them."))),
+  r("music", "instrument", "Instrument", "what plays a track", "instrument sound patch", stack(TRACK(), sw("music.inst", "Instrument", INSTRUMENTS.map((i, k) => ({ value: i.id, label: i.name, color: SWATCHES[k % SWATCHES.length] }))))),
+  r("music", "master", "Master", "overall level", "master output level loudness", stack(sl("music.master", "Master", { min: 0, max: 100 }))),
   r("music", "coach", "Melody coach", "questions and critique, never notes", "melody coach critique feedback ideas",
     stack(note("Autora listens to what you wrote and asks; the melody stays yours."), row(ask("Critique my melody", "Critique the melody I wrote: what works, what does not. Do not write notes."), ask("Ask me questions", "Ask me questions that would help me shape my melody. Do not write notes.")))),
-  r("music", "export", "Export", "bounce the song", "export bounce wav mp3", stack(seg("music.format", "Format", ["WAV", "MP3"]), ask("Bounce it", "Bounce the song in the format set in the Export panel."))),
+  r("music", "export", "Export", "bounce the song to a WAV file", "export bounce wav", stack(ask("Bounce it", "Bounce the song to a WAV file (studio_export)."))),
 ];
 
 const VIDEO: Recipe[] = [

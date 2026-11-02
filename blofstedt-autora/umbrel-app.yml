@@ -204,10 +204,9 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Panacea fixes. Dialogs opened from a window on the board, such as Load, take
-  clicks again. With Visible work on, the agent's hand works in the Music window
-  whenever it is mostly on screen, and the board's bottom bar steps aside while
-  the hand works so it never covers a control. A phone on its side keeps the Send
-  button on screen. A memory rewrite waiting for your answer is shown open
-  instead of folded into the steps. Panels whose controls are not yet connected
-  to their app are no longer offered.
+  Music panels now work. In Panacea, the Transport, Time, Key, Master, Channel,
+  EQ, Reverb, Instrument and Drum pattern panels change the song in Autora Music
+  itself, and the Music window shows it, and the other way round. Panels for a
+  track have a Track list. The agent sets them with the same effect. Chords and
+  Song structure hold your own words for the agent to place. Panels for things
+  the song has no way to do, such as envelope, filter and compressor, are gone.

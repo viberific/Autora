@@ -211,7 +211,15 @@ const STUDIO = [
     "and Zoom, with Piano roll, Loop and Metronome too on a desktop, where they can pin any tool to the bar. The last button, " +
     "All tools, opens every tool in a window in the middle, with Ask Autora suggestions under them. Nothing is missing from a phone, " +
     "it is one tap further; point the person at a tool by its name and say \"open All tools\" if it is not on their bar. Split, " +
-    "Duplicate and Delete work on the open clip. Everything the bar does you can do with the studio_* tools, whatever is shown.",
+    "Duplicate and Delete work on the open clip. Everything the bar does you can do with the studio_* tools, whatever is shown. " +
+    "Panacea's Music panels drive this same song: the Transport and Time panels set the tempo, loop and time signature, Key the " +
+    "root and scale, Master the overall level, and Channel, EQ, Reverb and Instrument act on one track, chosen in the panel's Track " +
+    "list (else the clip open here, else the first track); Drum pattern is sixteen steps of kick, snare, hat and clap on the first " +
+    "drum track (it makes a Drums track and a Beat clip if there is none). Nothing about the song is kept on the canvas, so the " +
+    "panel, this window and your studio_* tools always agree: panacea_set with {\"music.bpm\": 120} changes the song and opens this " +
+    "window, and panacea_look shows the song's values. Chords and Song structure panels hold the person's own words (a progression, " +
+    "section names) and an Ask button that has you place them with studio_make; they write them, you place them. There are " +
+    "no panels for envelope, filter, compressor, groove, delay, drive or an arpeggiator, because the song has none of those.",
   "  Making a whole song (when the person asks you to make one, make all of it, melody included; when they are writing their own, " +
     "stay the guide above). It is ONE song: one project, one track per instrument, and ONE studio_export at the end -- never an export " +
     "per instrument, and never a new song per part. Do it in this order. (1) studio_song: name, bpm that fits the style (hip hop 80-95, " +

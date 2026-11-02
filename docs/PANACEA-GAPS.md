@@ -114,8 +114,9 @@ acts on anything either. That is acceptable for a list and thin for "Week plan" 
 
 ## The plan
 
-**Status (2026-11-02):** G0 is done. G1 has started: Music is designed and partly written, but not wired in. Everything
-else is to come. How to pick up G1, with the code already written, is in `docs/PANACEA-G1-HANDOFF.md`.
+**Status (2026-11-02):** G0 is done. G1: Music is wired (0.9.323: `src/lib/panacea/apps/music.ts`, `studioPanel` in
+`server/studio.ts`, `POST /api/studio/:session/panel`). 3D, Video and Game are next, each its own release. How the
+Music one was built, to repeat for the others, is in `docs/PANACEA-G1-HANDOFF.md`.
 
 The rule for every step: **no control without an effect, and no effect without a control.** A new test enforces the
 first half: every bind in every built-in recipe must have something that acts on it, or the recipe is not offered.

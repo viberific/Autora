@@ -1706,7 +1706,7 @@ export function App() {
     { mode: "cad", open: cad.open, since: cad.since, revision: cad.by === "agent" ? cad.rev : undefined },
     { mode: "game", open: game.open, since: game.since, revision: game.by === "agent" ? game.rev : undefined },
     { mode: "photo", open: photo.open, since: photo.since, revision: photo.by === "agent" ? photo.rev : undefined },
-    { mode: "studio", open: studio.open, since: studio.since, revision: studio.by === "agent" ? studio.rev : undefined },
+    { mode: "studio", open: studio.open, since: studio.since, revision: studio.by === "agent" && studio.quiet !== studio.rev ? studio.rev : undefined },
     ...OFFICE_PANES.map((o) => { const win = windowAt(o.kind); return { mode: o.pane, open: !!win, since: win?.since, revision: win?.loadRev }; }),
   ], workspaceToolKey(view.buckets));
   const sidePane: SideWindow | null = (() => {
