@@ -220,7 +220,6 @@ await test("cad_mesh_import reads a named file; Load adds a mesh to what is ther
   const file = path.join(dir, "Horse.glb");
   fs.writeFileSync(file, glbOf());
   const session = "mesh-session";
-  cad.__testSession?.(session);
   const out = await cad.runCadTool(session, "cad_mesh_import", { file: "Horse.glb", size: 240 }, { cwd: dir });
   assert.ok(out.ok, out.summary);
   assert.match(out.summary, /"triangles":12/);
