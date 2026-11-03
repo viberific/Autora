@@ -286,7 +286,7 @@ const OFFICE = [
 ].join("\n");
 
 const CAD = [
-  "- Autora 3D (the cad_* tools): a modeller built from simple shapes. A shape is a flat outline pushed up to a height, in millimetres " +
+  "- Autora 3D (the cad_* tools): a modeller built from simple shapes (and meshes brought in from files). A shape is a flat outline pushed up to a height, in millimetres " +
     "(x right, y away, z up). cad_scene_get reads everything; cad_shape_add / draw / cut / set / move / turn / resize and cad_face_set / " +
     "cad_face_push / cad_edge_bevel change it; cad_shapes_join and cad_shapes_subtract combine shapes; cad_repeat_set makes arrays; " +
     "groups and a library hold reusable parts; cad_history_undo / redo step back; cad_batch does many in one call. Check a part " +
@@ -324,11 +324,21 @@ const CAD = [
     "something your hand may let go of the pick, close a card, fit the model in view, scroll in or out, or look from another " +
     "side, so the person's view can move. Then the finished model goes in, keeping the ids the window gave what the hand made. " +
     "Your result says \"Done by hand in the 3D window\" with each step, and \"Not by hand\" with why for what was not: the " +
-    "window has no control for cad_doc_set, cad_library_import, cad_library_rename on a phone or a new outline in cad_shape_set, Draw's " +
+    "window has no control for cad_doc_set, cad_library_import, cad_mesh_import (it reads a file), cad_library_rename on a phone or a new outline in cad_shape_set, Draw's " +
     "Cut goes all the way through (a shallower pocket goes in with the finished model), and the curve of a drawn shape's closing " +
     "side; anything the hand could not reach. Calls that only read are not shown. With Visible work off, or nobody watching, " +
     "every call changes the model at speed and the window shows it.",
-  "  Saving. The model is saved as you go; the window's top bar (Autora 3D, the count of shapes) also has Save, which keeps a copy in Artifacts as a GLB named after the chat, with the model itself beside it as a .model.json (what Load takes back). cad_export is still yours for other formats.",
+  "  Meshes. Extruded outlines cannot make organic forms (an animal, a face, a scan): for those, cad_mesh_import brings in a GLB (or glTF), " +
+    "OBJ or STL as ONE shape, the real surface, from a file you name (an artifact id or a path; the bytes never go through the " +
+    "conversation). A free CC0 model from Poly Pizza, Quaternius or Sketchfab, or one made in Blender, fits; size sets its longest side in mm " +
+    "(without it a GLB is metres and STL and OBJ are mm, and a speck or a building is fitted to 100 mm), up says which axis is up if it " +
+    "arrives lying down, and the reply says how many triangles it has and what size it came out (very large meshes are simplified to " +
+    "60000). It stands on the ground, beside what is there. Move, turn, resize (a mesh is scaled whole), colour, group and export work on it like " +
+    "any shape; it has no outline, faces, bevels or holes, so face, edge, cut, join and repeat tools refuse it with the reason, and no " +
+    "textures are read (colour it). The person can add one too: Load in the window's top bar takes a .glb, .gltf, .obj or .stl from Artifacts " +
+    "and adds it to the model without replacing it (the .model.json Load still replaces the model). What to make is the person's: " +
+    "for something they want to look real, suggest a mesh and ask which; do not pick one for them.",
+  "  Saving. The model is saved as you go; the window's top bar (Autora 3D, the count of shapes) also has Save, which keeps a copy in Artifacts as a GLB named after the chat, with the model itself beside it as a .model.json (what Load takes back; Load also adds a mesh file, see Meshes). cad_export is still yours for other formats.",
 ].join("\n");
 
 const GAME = [

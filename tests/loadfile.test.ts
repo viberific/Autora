@@ -22,7 +22,7 @@ await test("each app takes what it can open, and nothing it cannot", () => {
   assert.ok(loadable("photo", f("p.png", "image/png")) && loadable("photo", f("layers.psd")) && !loadable("photo", f("a.pdf")));
   assert.ok(loadable("video", f("clip.mp4", "video/mp4")) && loadable("video", f("song.wav", "audio/wav")) && !loadable("video", f("a.docx")));
   assert.ok(loadable("studio", f("Night.song.json")) && !loadable("studio", f("other.json")));
-  assert.ok(loadable("cad", f("Stand.model.json")) && !loadable("cad", f("Stand.glb")));
+  assert.ok(loadable("cad", f("Stand.model.json")) && loadable("cad", f("Stand.glb")) && loadable("cad", f("Horse.OBJ")) && loadable("cad", f("part.stl")) && !loadable("cad", f("part.step")));
   assert.ok(loadable("game", f("Game.json")) && loadable("game", f("hero.png", "image/png")) && loadable("game", f("theme.ogg")));
   assert.ok(loadable("panacea", f("Shoot.panacea.json")) && loadable("panacea", f("sunset.jpg", "image/jpeg")) && loadable("panacea", f("sales.csv")) && loadable("panacea", f("Night.song.json")));
   for (const a of LOAD_APPS) assert.equal(loadable(a, f("readme.txt", "text/plain")), a === "panacea", `${a} text support`);

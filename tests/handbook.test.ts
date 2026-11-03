@@ -141,6 +141,13 @@ await test("the Video manual says which edits are done in the window by hand wit
   }
 });
 
+await test("the 3D manual teaches mesh import: the tool, the formats, what a mesh cannot do, and Load adding one", () => {
+  const cad = manualText("cad");
+  for (const needle of ["cad_mesh_import", "GLB (or glTF), OBJ or STL", "bytes never go through the conversation", "size sets its longest side", "no outline, faces, bevels or holes", "Load in the window's top bar takes a .glb", "without replacing it"]) {
+    assert.ok(cad.includes(needle), `the 3D manual lacks "${needle}"`);
+  }
+});
+
 await test("the 3D manual says Panacea's 3D panels drive the model, with a Part list", () => {
   const cad = manualText("cad");
   for (const needle of ["Panacea's 3D panels drive this same model", "Part list", "panacea_set", "no panels for rotation"]) {

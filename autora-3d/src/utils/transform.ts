@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Body3D, Point2D } from '../types';
+import { Body3D, MeshData, Point2D } from '../types';
 import { moveFrame } from './frame';
 import { holeLoops, withHoles, withOutline } from './outline';
 
@@ -18,6 +18,26 @@ export interface BodyTransform {
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** A mesh with each of its ground points moved by `f` (heights untouched). */
+function mapMesh(mesh: MeshData, f: (p: Point2D) => Point2D): MeshData {
+  const positions = mesh.positions.slice();
+  for (let i = 0; i < positions.length; i += 3) {
+    const p = f({ x: positions[i], y: positions[i + 1] });
+    positions[i] = Math.round(p.x * 1000) / 1000;
+    positions[i + 1] = Math.round(p.y * 1000) / 1000;
+  }
+  return { positions, indices: mesh.indices };
+}
+
+/** A mesh shape's height changed to `height`, every height in the mesh scaled with it. */
+export function scaleMeshHeight(body: Body3D, height: number): Partial<Body3D> {
+  if (!body.mesh) return { extrusionHeight: height };
+  const k = height / Math.max(1e-6, body.extrusionHeight);
+  const positions = body.mesh.positions.slice();
+  for (let i = 2; i < positions.length; i += 3) positions[i] = Math.round(positions[i] * k * 1000) / 1000;
+  return { mesh: { positions, indices: body.mesh.indices }, extrusionHeight: height };
+}
 
 /** Rigid move/rotate of a body. Edge bevels and corner radii are index-based, so they carry over unchanged. */
 export function transformBody(body: Body3D, t: BodyTransform): Partial<Body3D> {
@@ -34,6 +54,7 @@ export function transformBody(body: Body3D, t: BodyTransform): Partial<Body3D> {
     };
   };
   return {
+    ...(body.mesh ? { mesh: mapMesh(body.mesh, move) } : {}),
     points: body.points.map(move),
     basePoints: body.basePoints?.map(move),
     holes: body.holes?.map((h) => h.map(move)),
@@ -80,6 +101,7 @@ export function scaleBodyAbout(body: Body3D, ax: number, ay: number, sx: number,
     x: round2(ax + (p.x - ax) * sx),
     y: round2(ay + (p.y - ay) * sy),
   });
+  if (body.mesh) return { mesh: mapMesh(body.mesh, scale), points: body.points.map(scale), basePoints: body.basePoints?.map(scale) };
   const base = (body.basePoints ?? body.points).map(scale);
   return {
     ...withOutline(body, { basePoints: base }),

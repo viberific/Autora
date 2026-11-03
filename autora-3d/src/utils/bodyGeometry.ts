@@ -13,6 +13,7 @@ import { loopFor, runLimit } from './edges';
 import { HEAL, healTriangles, weldVertices } from './meshHeal';
 import { manifoldReady, subtractAll } from './manifoldBoolean';
 import { buildCornerCutter } from './cornerBevel';
+import { meshGeometry } from './meshImport';
 
 const toPath = <T extends THREE.Path>(path: T, pts: { x: number; y: number }[]): T => {
   path.moveTo(pts[0].x, pts[0].y);
@@ -332,6 +333,14 @@ function resolveBevels(body: Body3D): ResolvedBevel[] {
  * Only edges listed in `edgeBevels` are beveled. `fast` skips the bevel cuts, for live previews while dragging.
  */
 export function buildBodyGeometry(body: Body3D, options: { fast?: boolean } = {}): THREE.BufferGeometry | null {
+  if (body.mesh) {
+    // An imported mesh is the solid itself: no outline to push up, no bevels. Organic forms read best smooth, so only sharp folds crease.
+    const raw = meshGeometry(body);
+    if (!raw) return null;
+    const shaded = toCreasedNormals(raw, THREE.MathUtils.degToRad(55));
+    raw.dispose();
+    return shaded;
+  }
   const shape = buildBodyShape(body);
   if (!shape) return null;
 

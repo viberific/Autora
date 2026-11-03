@@ -119,7 +119,7 @@ async function load(session: string, app: LoadApp, art: Artifact, route?: Panace
       return out.ok ? { ok: true, said: `${out.name ?? art.name} is open in Autora Music.` } : { ok: false, error: out.error };
     }
     case "cad": {
-      const out = await loadModel(session, data);
+      const out = await loadModel(session, data, art.name);
       return out.ok ? { ok: true, said: `${art.name} is open in Autora 3D (${out.shapes ?? 0} shape${out.shapes === 1 ? "" : "s"}).` } : { ok: false, error: out.error };
     }
     case "panacea": {

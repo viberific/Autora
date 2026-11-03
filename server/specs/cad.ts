@@ -707,9 +707,72 @@ export const cadSPECS: ToolSpec[] = [
     }
   },
   {
+    "name": "cad_mesh_import",
+    "group": "files",
+    "description": "Bring in a triangle mesh from a file as ONE shape: .glb/.gltf, .obj or .stl (a free CC0 model from Poly Pizza, Quaternius or Sketchfab, or one made in Blender). It arrives as the real surface, so organic forms (an animal, a face, a scan) are possible, which stock shapes and extruded outlines cannot give. It stands on the ground; size sets its longest side in mm (without it a GLB is read in metres, STL and OBJ in mm, and a result that is a speck or a building is fitted to 100 mm). Very large meshes are simplified to 60000 triangles. Move, turn, resize (cad_shape_resize scales it whole), recolour, group and export work on it; it has no outline, faces, bevels or holes, and cannot be joined or cut with the outline tools. Textures are not read: colour it with color or material.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "file": {
+          "type": "string",
+          "description": "The mesh file: an artifact id (file_...) or a path on the host. The host reads it."
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "glb",
+            "obj",
+            "stl"
+          ],
+          "description": "Only if the file name does not say (glTF counts as glb)."
+        },
+        "size": {
+          "type": "number",
+          "description": "The longest side of the result, mm."
+        },
+        "up": {
+          "type": "string",
+          "enum": [
+            "y",
+            "z"
+          ],
+          "description": "Which axis is up in the file. Default: y for GLB and OBJ, z for STL. Use it when the model arrives lying down."
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "elevation": {
+          "type": "number",
+          "description": "Height of its underside above the ground."
+        },
+        "name": {
+          "type": "string"
+        },
+        "color": {
+          "type": "string",
+          "description": "Hex colour such as \"#3b82f6\"."
+        },
+        "material": {
+          "type": "string",
+          "enum": [
+            "matte",
+            "metal",
+            "glossy",
+            "glass",
+            "neon"
+          ]
+        }
+      },
+      "required": []
+    }
+  },
+  {
     "name": "cad_shape_resize",
     "group": "files",
-    "description": "Set a shape's overall width (x), depth (y) and/or height (z). Corners and bevels stay valid.",
+    "description": "Set a shape's overall width (x), depth (y) and/or height (z). Corners and bevels stay valid. A mesh from a file is scaled to match.",
     "parameters": {
       "type": "object",
       "properties": {

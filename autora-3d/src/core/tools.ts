@@ -139,8 +139,25 @@ export const TOOL_SPECS: ToolSpec[] = [
     inputSchema: obj({ ids, degrees: { type: 'number' }, about: point }, ['ids', 'degrees']),
   },
   {
+    name: 'mesh_import',
+    description:
+      'Bring in a triangle mesh from a file as ONE shape: .glb/.gltf, .obj or .stl (a free CC0 model from Poly Pizza, Quaternius or Sketchfab, or one made in Blender). It arrives as the real surface, so organic forms (an animal, a face, a scan) are possible, which stock shapes and extruded outlines cannot give. It stands on the ground; size sets its longest side in mm (without it a GLB is read in metres, STL and OBJ in mm, and a result that is a speck or a building is fitted to 100 mm). Very large meshes are simplified to 60000 triangles. Move, turn, resize (shape_resize scales it whole), recolour, group and export work on it; it has no outline, faces, bevels or holes, and cannot be joined or cut with the outline tools. Textures are not read: colour it with color or material.',
+    inputSchema: obj({
+      file: { type: 'string', description: 'The mesh file: an artifact id (file_...) or a path on the host. The host reads it.' },
+      format: { type: 'string', enum: ['glb', 'obj', 'stl'], description: 'Only if the file name does not say (glTF counts as glb).' },
+      size: { type: 'number', description: 'The longest side of the result, mm.' },
+      up: { type: 'string', enum: ['y', 'z'], description: 'Which axis is up in the file. Default: y for GLB and OBJ, z for STL. Use it when the model arrives lying down.' },
+      x: { type: 'number' },
+      y: { type: 'number' },
+      elevation: { type: 'number', description: 'Height of its underside above the ground.' },
+      name: { type: 'string' },
+      color: color,
+      material,
+    }),
+  },
+  {
     name: 'shape_resize',
-    description: 'Set a shape\'s overall width (x), depth (y) and/or height (z). Corners and bevels stay valid.',
+    description: 'Set a shape\'s overall width (x), depth (y) and/or height (z). Corners and bevels stay valid. A mesh from a file is scaled to match.',
     inputSchema: obj({ id: { type: 'string' }, width: { type: 'number' }, depth: { type: 'number' }, height: { type: 'number' } }, ['id']),
   },
   {
@@ -289,6 +306,7 @@ export function runDocTool(ctx: ToolContext, name: string, rawArgs: unknown): To
       return { doc, result: sceneSummary(doc, { includeCopies: !!a.includeCopies }) };
     case 'shape_get': {
       const b = ops.need(doc, a.id);
+      if (b.mesh) return { doc, result: { summary: summarize(doc, b), note: 'A mesh from a file: a triangle surface with no outline, faces or edges to edit.' } };
       return { doc, result: { summary: summarize(doc, b), outline: { points: b.points, basePoints: b.basePoints, cornerRadii: b.cornerRadii, holes: b.holes }, faces: describeFaces(b), edges: describeEdgesOf(b) } };
     }
     case 'shape_faces':
@@ -312,6 +330,8 @@ export function runDocTool(ctx: ToolContext, name: string, rawArgs: unknown): To
       return done(ops.moveShapes(doc, a as ops.MoveArgs));
     case 'shape_turn':
       return done(ops.turnShapes(doc, a as ops.TurnArgs));
+    case 'mesh_import':
+      return done(ops.importMesh(doc, ids, a as ops.ImportMeshArgs));
     case 'shape_resize':
       return done(ops.resizeShape(doc, a as { id: string }));
     case 'face_set':
