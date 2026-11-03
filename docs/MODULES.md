@@ -528,6 +528,20 @@ Spectra's fetched renderer is most of what is on disk.
   the history steps. `cad_export` is saved as an artifact (the STL never goes through the conversation). Traps: the window opens
   on the agent's first call; an incognito chat has none; tool names in the engine's messages are prefixed on the way out
   (`asAgentSees`). The phone shows it as a tab in the pinned view like the other windows (`Thread.tsx`, `lib/stage.ts` kind `cad`).
+  **Meshes** (`autora-3d/src/utils/meshImport.ts`, `docs/autora-3d-mesh.patch`): a shape can be a triangle mesh brought in from a file
+  (`Body3D.mesh`, `[x, y, height]` triples in mm), the one way to get organic forms the extruded outlines cannot make. `readMesh` reads
+  GLB/glTF (node transforms, base colour; no Draco/meshopt, no external .bin), OBJ and STL without a DOM, so the engine and the page share
+  it; `joinSeams` welds duplicate vertices; `simplify` clusters anything over 60000 triangles; `placeMesh` sets units (GLB metres, else mm; a
+  speck or a building is fitted to 100 mm), the up axis (GLB/OBJ y, STL z; `up` overrides), `size`, and stands it on the ground beside the
+  rest. `points` of a mesh shape is just the box it fills, so selection, bounds, move, turn and resize work through the outline code
+  (`transformBody` and `scaleBodyAbout` carry the mesh; `scaleMeshHeight` scales its heights); `buildBodyGeometry` returns the mesh
+  (smooth, creased at 55 degrees) and ignores bevels. What needs an outline (`ops.solid`: faces, bevels, cuts, repeats; `noWall`: join and
+  subtract) refuses a mesh with the reason. The agent's `cad_mesh_import` names a file (`file`: artifact id or path); `runCadTool` reads it
+  (`readFileRef`) and hands the engine the bytes, so they never go through the conversation. The window's Load (`loadModel(session, data,
+  name)`) adds a `.glb/.gltf/.obj/.stl` to the model instead of replacing it (`loadable("cad")`). Traps: not read, and said so: textures, skins,
+  animation, sparse accessors; Panacea's `file-formats.ts` still routes no mesh (a `.glb` there is also a game resource), so Panacea's file
+  route does not take one yet; `docs/autora-3d-mesh.patch` is to be applied to the 3D-Modeling repository, or the next
+  `sync-autora-3d.mjs` loses it. Test: `tests/mesh-import.test.ts`.
 - `server/studio.ts`, `server/specs/studio.ts`, `src/lib/studio/`, `src/components/StudioWindow.tsx` + `src/components/studio/`:
   **Autora Music**, the music window, and the agent's `studio_*` tools. A song is tracks of clips of notes, in beats
   (`src/lib/studio/model.ts`: plain JSON, no DOM/React/Node, imported by the server *and* the page, so there is one idea of a valid

@@ -91,7 +91,8 @@ description: >-
   • Panacea 3D — an integrated modelling engine for things to design or print. The agent
   builds shapes by sketching an outline and pulling it up (and cutting, bevelling,
   repeating and measuring them) and you work on the same model beside the chat:
-  push and pull faces, move, resize and bevel by finger or mouse. Exports STL for
+  push and pull faces, move, resize and bevel by finger or mouse. Bring in a GLB,
+  OBJ or STL mesh for organic forms (an animal, a face, a scan). Exports STL for
   printing and GLB for games. Configure its capability on the Tools page.
 
 
@@ -204,14 +205,12 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Panacea's panels for the apps now work, and its windows can be laid out. The
-  Music, 3D, Video and Game panels change the song, the model, the film and the
-  game themselves, the app's window shows it, and a change made in the app shows
-  on the panel; a Track, Part, Clip or Object list picks what they act on, and the
-  agent sets them with the same effect. Panels for things an app has no way to do
-  are gone, and the rest hold your own choices and words for the agent to build.
-  The apps' windows and surfaces keep where you put them through a reload, a
-  click raises one, a Tidy button puts them in rows, a maximised window on a phone
-  stays clear of the buttons, and the agent lays them out the same way (watch it
-  drag and size them with Visible work on). A file now remembers which app made
-  it, so the lines between windows follow the work.
+  Autora 3D can now bring in a mesh. A GLB, glTF, OBJ or STL file becomes one
+  shape in the model, the real surface rather than an outline pushed up, so an
+  animal, a face or a scan is possible, which stock shapes could not make. Take
+  a free CC0 model (Poly Pizza, Quaternius, Sketchfab) or one from Blender, and
+  press Load in the 3D window or ask the agent (cad_mesh_import, with a size in
+  millimetres): it stands on the ground beside what is there, and moving,
+  turning, resizing, colouring, grouping and exporting work on it. Very large
+  meshes are simplified; textures are not read; faces, bevels, cuts and joins
+  need an outline and say so.

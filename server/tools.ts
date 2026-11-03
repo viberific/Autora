@@ -3965,7 +3965,7 @@ async function runToolUnredacted(
         // Autora 3D: one tool for each call the modeller declares (server/specs/cad.ts), run on the chat's model.
         if (spec.name.startsWith("cad_")) {
           if (ctx.memory.incognito) return { ok: false, summary: "An incognito chat keeps nothing, so it has no 3D window. Model in a normal chat." };
-          return await runCadTool(ctx.session, spec.name, args, { showFile: ctx.showFile });
+          return await runCadTool(ctx.session, spec.name, args, { showFile: ctx.showFile, cwd: terminalDir() });
         }
         const custom = spec.name.startsWith(CUSTOM_PREFIX) ? getCustomTool(spec.name) : undefined;
         if (custom) {

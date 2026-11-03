@@ -4,7 +4,8 @@
  */
 
 import { Body3D, DrawSession, EdgeSel, FaceSel, Frame, LibraryItem, MaterialType, Point2D, RepeatLink, RepeatSession, ShapeGroup, SWATCHES } from '../types';
-import { BodyTransform, resizeBody, selectionBounds, transformBody } from '../utils/transform';
+import { BodyTransform, resizeBody, scaleMeshHeight, selectionBounds, transformBody } from '../utils/transform';
+import { MeshError, meshFormatOf, placeMesh, readMesh, type MeshFormat } from '../utils/meshImport';
 import { cutShape, getPolygonSignedArea } from '../utils/geometry';
 import { joinBodies } from '../utils/join';
 import { SHAPE_LABELS, ShapeKind, primitiveOutline } from '../utils/primitives';
@@ -49,6 +50,13 @@ export function editable(doc: Doc, id: unknown): Body3D {
     return fail(`"${b.id}" is part of the linked library object "${g?.name ?? b.instanceOf}", so it cannot be edited on its own.`, `Move, turn or delete the whole object (${b.instanceOf}). To change the object itself call object_unlink on ${b.instanceOf}, edit the shapes, then library_save it (every copy follows); object_unlink with forget:true makes it separate shapes instead.`);
   }
   if (b.repeatOf) return fail(`"${b.id}" is a copy made by a live repeat, so it cannot be edited directly.`, `Edit its source "${b.repeatOf}" (every copy follows), or call repeat_remove first to make the copies separate shapes.`);
+  return b;
+}
+
+/** Like editable, for the edits that need an outline to push up (faces, bevels, cuts, repeats): a mesh from a file has none. */
+export function solid(doc: Doc, id: unknown): Body3D {
+  const b = editable(doc, id);
+  if (b.mesh) return fail(`"${b.id}" is a mesh brought in from a file, so it has no outline, faces or edges to edit.`, 'Move, turn, resize (shape_resize scales it whole), recolour, group or delete it.');
   return b;
 }
 
@@ -181,6 +189,89 @@ export function addShape(doc: Doc, ids: IdGen, a: AddShapeArgs): OpResult<{ id: 
   return { doc: { ...doc, bodies: [...doc.bodies, body] }, result: { id } };
 }
 
+// ---- Meshes from files --------------------------------------------------------------------------
+
+export interface ImportMeshArgs {
+  /** The file, base64. (The server fills this from `file` before the model sees the call.) */
+  data?: string;
+  file?: string;
+  format?: MeshFormat;
+  name?: string;
+  /** The longest side the shape gets, mm. */
+  size?: number;
+  up?: 'y' | 'z';
+  x?: number;
+  y?: number;
+  elevation?: number;
+  color?: string;
+  material?: MaterialType;
+}
+
+const fromBase64 = (text: string): Uint8Array => Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
+
+/** Brings a triangle mesh (GLB, OBJ or STL) in as one shape, standing on the ground, scaled and placed as asked. */
+export function importMesh(doc: Doc, ids: IdGen, a: ImportMeshArgs): OpResult<{ id: string; triangles: number; size: { width: number; depth: number; height: number }; scale: number; note?: string }> {
+  if (typeof a.data !== 'string' || !a.data) {
+    return fail(a.file ? 'This host cannot read files by itself, so the mesh was not given.' : 'Give the mesh file (file: an artifact id or path; the model host reads it).');
+  }
+  let bytes: Uint8Array;
+  try {
+    bytes = fromBase64(a.data);
+  } catch {
+    return fail('data is not base64.');
+  }
+  const format = a.format ?? meshFormatOf(a.name ?? a.file ?? '', bytes);
+  if (!format) return fail('Autora 3D reads GLB (or glTF), OBJ and STL. Say which with format, or give the file with its extension.');
+  if (a.up !== undefined && a.up !== 'y' && a.up !== 'z') return fail('up must be "y" or "z".');
+  const count = doc.bodies.filter((b) => !b.repeatOf).length + 1;
+  const around = selectionBounds(doc.bodies.filter((b) => b.visible && !b.frame));
+  const elevation = a.elevation !== undefined ? num(a.elevation, 'elevation') : 0;
+  if (elevation < 0) return fail('elevation cannot be below the ground (0).');
+  let placed;
+  try {
+    placed = placeMesh(readMesh(bytes, format), format, {
+      up: a.up,
+      size: a.size !== undefined ? num(a.size, 'size') : undefined,
+      x: a.x !== undefined ? num(a.x, 'x') : undefined,
+      y: a.y !== undefined ? num(a.y, 'y') : undefined,
+      beside: around ? { maxX: around.maxX, centerY: around.centerY } : undefined,
+    });
+  } catch (e) {
+    if (e instanceof MeshError) return fail(e.message);
+    throw e;
+  }
+  const id = ids('body');
+  const body: Body3D = {
+    id,
+    name: a.name ? String(a.name).replace(/\.(glb|gltf|obj|stl)$/i, '') : `Mesh ${count}`,
+    points: placed.points,
+    basePoints: placed.points,
+    mesh: placed.mesh,
+    extrusionHeight: placed.height,
+    elevation: round2(elevation),
+    color: colorOf(a.color ?? placed.color, SWATCHES[(count - 1) % SWATCHES.length].value),
+    materialType: materialOf(a.material, 'matte'),
+    visible: true,
+    createdAt: new Date().toISOString(),
+  };
+  const xs = placed.points.map((p) => p.x);
+  const ys = placed.points.map((p) => p.y);
+  const notes = [
+    placed.from ? `The file had ${placed.from} triangles; it was simplified to ${placed.triangles} to stay light.` : '',
+    a.size === undefined ? `Scaled by ${round2(placed.scale)} to millimetres (the file's own units); pass size to set its longest side.` : '',
+  ].filter(Boolean);
+  return {
+    doc: { ...doc, bodies: [...doc.bodies, body] },
+    result: {
+      id,
+      triangles: placed.triangles,
+      size: { width: round2(Math.max(...xs) - Math.min(...xs)), depth: round2(Math.max(...ys) - Math.min(...ys)), height: placed.height },
+      scale: round2(placed.scale),
+      ...(notes.length ? { note: notes.join(' ') } : {}),
+    },
+  };
+}
+
 // ---- Drawing ------------------------------------------------------------------------------------
 
 export type SurfaceSpec =
@@ -295,13 +386,15 @@ export function setShape(doc: Doc, a: SetArgs): OpResult<{ id: string }> {
   if (a.color !== undefined) patch.color = colorOf(a.color, b.color);
   if (a.material !== undefined) patch.materialType = materialOf(a.material, b.materialType);
   if (a.visible !== undefined) patch.visible = !!a.visible;
-  if (a.height !== undefined) patch.extrusionHeight = heightOf(a.height, b.extrusionHeight);
+  if (a.height !== undefined) patch = { ...patch, ...scaleMeshHeight(b, heightOf(a.height, b.extrusionHeight)) };
   if (a.elevation !== undefined) {
     if (b.frame) return fail('A shape on a wall has no elevation: move it with shape_move.');
     const e = num(a.elevation, 'elevation');
     if (e < 0) return fail('elevation cannot be below the ground (0).');
     patch.elevation = round2(e);
   }
+  if (a.outline && b.mesh) return fail(`"${b.id}" is a mesh brought in from a file: it has no outline to replace.`, 'Use shape_resize to scale it.');
+  if (a.cornerRadius !== undefined && b.mesh) return fail(`"${b.id}" is a mesh brought in from a file: it has no corners to round.`);
   if (a.outline) {
     const pts = (a.outline.points ?? []).map((p, i) => point(p, `outline.points[${i}]`));
     if (pts.length < 3) return fail('outline.points needs at least 3 points.');
@@ -389,7 +482,7 @@ export function resizeShape(doc: Doc, a: { id: string; width?: number; depth?: n
     if (w < 1 || d < 1) return fail('width and depth must be at least 1 mm.');
     next = replace(next, b.id, resizeBody(b, w, d));
   }
-  if (a.height !== undefined) next = replace(next, b.id, { extrusionHeight: heightOf(a.height, b.extrusionHeight) });
+  if (a.height !== undefined) next = replace(next, b.id, scaleMeshHeight(b, heightOf(a.height, b.extrusionHeight)));
   return { doc: next, result: { id: b.id } };
 }
 
@@ -410,7 +503,7 @@ export function parseFace(id: string, spec: FaceSpec): FaceSel {
 }
 
 export function setFace(doc: Doc, a: { id: string; face: FaceSpec; value: number }): OpResult<{ id: string; measure: { label: string; value: number } | null }> {
-  const b = editable(doc, a.id);
+  const b = solid(doc, a.id);
   const face = parseFace(b.id, a.face);
   if (face.kind === 'wall' && (face.index === undefined || !wallEnds(b, face.index))) return fail(`"${b.id}" has no wall ${face.index}.`, 'shape_faces lists its walls.');
   const value = num(a.value, 'value');
@@ -422,7 +515,7 @@ export function setFace(doc: Doc, a: { id: string; face: FaceSpec; value: number
 }
 
 export function pushFace(doc: Doc, a: { id: string; face: FaceSpec; by: number }): OpResult<{ id: string }> {
-  const b = editable(doc, a.id);
+  const b = solid(doc, a.id);
   const face = parseFace(b.id, a.face);
   if (face.kind === 'wall' && (face.index === undefined || !wallEnds(b, face.index))) return fail(`"${b.id}" has no wall ${face.index}.`, 'shape_faces lists its walls.');
   const patch = extrudeFace(b, face, num(a.by, 'by'));
@@ -445,7 +538,7 @@ export interface BevelArgs {
 }
 
 export function bevelEdges(doc: Doc, a: BevelArgs): OpResult<{ id: string; size: number; style: string | null; edges: number }> {
-  const b = editable(doc, a.id);
+  const b = solid(doc, a.id);
   if (b.frame) return fail('Bevels on shapes drawn on a wall are not supported yet.');
   let sels: EdgeSel[] = [];
   if (a.edges) sels = a.edges.map((e) => ({ bodyId: b.id, kind: e.kind, index: num(e.index, 'edges[].index') }));
@@ -555,6 +648,8 @@ export function ungroupShapes(doc: Doc, ids: IdGen, a: { group: string }): OpRes
 
 function noWall(bodies: Body3D[]) {
   if (bodies.some((b) => b.frame)) fail('Shapes drawn on a wall cannot be joined or cut yet.');
+  const mesh = bodies.find((b) => b.mesh);
+  if (mesh) fail(`"${mesh.id}" is a mesh brought in from a file: joining and cutting work on outlines, which it does not have.`, 'Group it with the other shapes instead (group_create).');
 }
 
 export function joinShapes(doc: Doc, ids: IdGen, a: { ids: string[] }): OpResult<{ created: string[] }> {
@@ -678,7 +773,7 @@ export interface CutArgs {
 
 /** Cuts a pocket or a hole: draws the outline on the top of the target and subtracts it downwards. */
 export function cutInto(doc: Doc, ids: IdGen, a: CutArgs): OpResult<{ created: string[]; changed: boolean }> {
-  const target = editable(doc, a.target);
+  const target = solid(doc, a.target);
   if (target.frame) return fail('Cutting into shapes drawn on a wall is not supported yet.');
   const surface = resolveSurface(doc, a.surface ?? { topOf: target.id });
   if (surface.frame) return fail('Cutting from a wall is not supported yet.');
@@ -689,7 +784,7 @@ export function cutInto(doc: Doc, ids: IdGen, a: CutArgs): OpResult<{ created: s
 
 /** Cuts a drawn outline down into a shape from the height `from` (the top of the shape, by default) by `depth` mm. */
 export function cutWithOutline(doc: Doc, ids: IdGen, a: { target: string; outline: DrawnOutline; from?: number; depth?: number }): OpResult<{ created: string[]; changed: boolean }> {
-  const target = editable(doc, a.target);
+  const target = solid(doc, a.target);
   if (target.frame) return fail('Cutting into shapes drawn on a wall is not supported yet.');
   const surface = { elevation: a.from ?? round2((target.elevation ?? 0) + target.extrusionHeight) };
   const depth = a.depth ?? target.extrusionHeight + 2;
@@ -723,7 +818,7 @@ export interface RepeatArgs {
 }
 
 export function setRepeat(doc: Doc, ids: IdGen, a: RepeatArgs): OpResult<{ id: string; copies: string[]; gap: number }> {
-  const b = editable(doc, a.id);
+  const b = solid(doc, a.id);
   const existing = doc.repeats.find((l) => l.bodyId === b.id);
   let s: RepeatSession = existing ? { ...existing } : defaultSession(b);
   // The path is anchored to the shape's centre.

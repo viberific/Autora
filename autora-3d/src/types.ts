@@ -51,6 +51,17 @@ export interface Frame {
   angle: number;
 }
 
+/**
+ * A triangle mesh brought in from a file (GLB, OBJ or STL): the shape's solid is this, not its outline pushed up. Positions are
+ * `[x, y, height]` triples in millimetres: x, y on the ground (moved and turned with the shape's outline), height above the
+ * shape's underside (so `elevation` lifts it). `points` of such a shape is the box its footprint fills.
+ */
+export interface MeshData {
+  positions: number[];
+  /** Three vertex numbers for each triangle, counter-clockwise seen from outside. */
+  indices: number[];
+}
+
 export interface Body3D {
   id: string;
   name: string;
@@ -70,6 +81,8 @@ export interface Body3D {
   /** Bevels on individual top/bottom edges. Nothing is beveled by default. */
   edgeBevels?: EdgeBevel[];
   cornerBevels?: CornerBevel[];
+  /** Set on a shape brought in as a mesh: its outline, bevels and holes are not used; `extrusionHeight` is the mesh's height. */
+  mesh?: MeshData;
   color: string;
   materialType: MaterialType;
   visible: boolean;

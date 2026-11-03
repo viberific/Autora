@@ -1,0 +1,852 @@
+diff --git a/autora-3d/src/core/inspect.ts b/autora-3d/src/core/inspect.ts
+index 35dc445..2829e37 100644
+--- a/autora-3d/src/core/inspect.ts
++++ b/autora-3d/src/core/inspect.ts
+@@ -52,6 +52,8 @@ export interface ShapeSummary {
+   repeat?: { kind: string; count: number; gap: number; follow: boolean; start: Point2D; end: Point2D; bend: Point2D | null };
+   /** Present on a shape drawn on a wall. */
+   wall?: Frame;
++  /** Present on a shape brought in from a mesh file: it has a triangle surface, not an outline (corners 4 is just the box it fills). */
++  mesh?: { triangles: number };
+ }
+ 
+ /** The corners of a shape, in the world, top and bottom. */
+@@ -109,6 +111,7 @@ export function summarize(doc: Doc, body: Body3D): ShapeSummary {
+   if (body.instanceOf) out.linkedTo = body.instanceOf;
+   if (link) out.repeat = { kind: link.kind, count: link.count, gap: round2(spacing(link)), follow: link.follow, start: link.start, end: link.end, bend: link.bend };
+   if (body.frame) out.wall = body.frame;
++  if (body.mesh) out.mesh = { triangles: body.mesh.indices.length / 3 };
+   return out;
+ }
+ 
+diff --git a/autora-3d/src/core/ops.ts b/autora-3d/src/core/ops.ts
+index 75bdfea..604c5c1 100644
+--- a/autora-3d/src/core/ops.ts
++++ b/autora-3d/src/core/ops.ts
+@@ -4,7 +4,8 @@
+  */
+ 
+ import { Body3D, DrawSession, EdgeSel, FaceSel, Frame, LibraryItem, MaterialType, Point2D, RepeatLink, RepeatSession, ShapeGroup, SWATCHES } from '../types';
+-import { BodyTransform, resizeBody, selectionBounds, transformBody } from '../utils/transform';
++import { BodyTransform, resizeBody, scaleMeshHeight, selectionBounds, transformBody } from '../utils/transform';
++import { MeshError, meshFormatOf, placeMesh, readMesh, type MeshFormat } from '../utils/meshImport';
+ import { cutShape, getPolygonSignedArea } from '../utils/geometry';
+ import { joinBodies } from '../utils/join';
+ import { SHAPE_LABELS, ShapeKind, primitiveOutline } from '../utils/primitives';
+@@ -52,6 +53,13 @@ export function editable(doc: Doc, id: unknown): Body3D {
+   return b;
+ }
+ 
++/** Like editable, for the edits that need an outline to push up (faces, bevels, cuts, repeats): a mesh from a file has none. */
++export function solid(doc: Doc, id: unknown): Body3D {
++  const b = editable(doc, id);
++  if (b.mesh) return fail(`"${b.id}" is a mesh brought in from a file, so it has no outline, faces or edges to edit.`, 'Move, turn, resize (shape_resize scales it whole), recolour, group or delete it.');
++  return b;
++}
++
+ function idList(doc: Doc, ids: unknown, what = 'ids', whole = false): Body3D[] {
+   if (!Array.isArray(ids) || !ids.length) return fail(`${what} must be a non-empty list of shape ids.`);
+   // `whole`: the operation acts on a linked object as a unit (move, turn, delete, group), so its shapes are fine.
+@@ -181,6 +189,89 @@ export function addShape(doc: Doc, ids: IdGen, a: AddShapeArgs): OpResult<{ id:
+   return { doc: { ...doc, bodies: [...doc.bodies, body] }, result: { id } };
+ }
+ 
++// ---- Meshes from files --------------------------------------------------------------------------
++
++export interface ImportMeshArgs {
++  /** The file, base64. (The server fills this from `file` before the model sees the call.) */
++  data?: string;
++  file?: string;
++  format?: MeshFormat;
++  name?: string;
++  /** The longest side the shape gets, mm. */
++  size?: number;
++  up?: 'y' | 'z';
++  x?: number;
++  y?: number;
++  elevation?: number;
++  color?: string;
++  material?: MaterialType;
++}
++
++const fromBase64 = (text: string): Uint8Array => Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
++
++/** Brings a triangle mesh (GLB, OBJ or STL) in as one shape, standing on the ground, scaled and placed as asked. */
++export function importMesh(doc: Doc, ids: IdGen, a: ImportMeshArgs): OpResult<{ id: string; triangles: number; size: { width: number; depth: number; height: number }; scale: number; note?: string }> {
++  if (typeof a.data !== 'string' || !a.data) {
++    return fail(a.file ? 'This host cannot read files by itself, so the mesh was not given.' : 'Give the mesh file (file: an artifact id or path; the model host reads it).');
++  }
++  let bytes: Uint8Array;
++  try {
++    bytes = fromBase64(a.data);
++  } catch {
++    return fail('data is not base64.');
++  }
++  const format = a.format ?? meshFormatOf(a.name ?? a.file ?? '', bytes);
++  if (!format) return fail('Autora 3D reads GLB (or glTF), OBJ and STL. Say which with format, or give the file with its extension.');
++  if (a.up !== undefined && a.up !== 'y' && a.up !== 'z') return fail('up must be "y" or "z".');
++  const count = doc.bodies.filter((b) => !b.repeatOf).length + 1;
++  const around = selectionBounds(doc.bodies.filter((b) => b.visible && !b.frame));
++  const elevation = a.elevation !== undefined ? num(a.elevation, 'elevation') : 0;
++  if (elevation < 0) return fail('elevation cannot be below the ground (0).');
++  let placed;
++  try {
++    placed = placeMesh(readMesh(bytes, format), format, {
++      up: a.up,
++      size: a.size !== undefined ? num(a.size, 'size') : undefined,
++      x: a.x !== undefined ? num(a.x, 'x') : undefined,
++      y: a.y !== undefined ? num(a.y, 'y') : undefined,
++      beside: around ? { maxX: around.maxX, centerY: around.centerY } : undefined,
++    });
++  } catch (e) {
++    if (e instanceof MeshError) return fail(e.message);
++    throw e;
++  }
++  const id = ids('body');
++  const body: Body3D = {
++    id,
++    name: a.name ? String(a.name).replace(/\.(glb|gltf|obj|stl)$/i, '') : `Mesh ${count}`,
++    points: placed.points,
++    basePoints: placed.points,
++    mesh: placed.mesh,
++    extrusionHeight: placed.height,
++    elevation: round2(elevation),
++    color: colorOf(a.color ?? placed.color, SWATCHES[(count - 1) % SWATCHES.length].value),
++    materialType: materialOf(a.material, 'matte'),
++    visible: true,
++    createdAt: new Date().toISOString(),
++  };
++  const xs = placed.points.map((p) => p.x);
++  const ys = placed.points.map((p) => p.y);
++  const notes = [
++    placed.from ? `The file had ${placed.from} triangles; it was simplified to ${placed.triangles} to stay light.` : '',
++    a.size === undefined ? `Scaled by ${round2(placed.scale)} to millimetres (the file's own units); pass size to set its longest side.` : '',
++  ].filter(Boolean);
++  return {
++    doc: { ...doc, bodies: [...doc.bodies, body] },
++    result: {
++      id,
++      triangles: placed.triangles,
++      size: { width: round2(Math.max(...xs) - Math.min(...xs)), depth: round2(Math.max(...ys) - Math.min(...ys)), height: placed.height },
++      scale: round2(placed.scale),
++      ...(notes.length ? { note: notes.join(' ') } : {}),
++    },
++  };
++}
++
+ // ---- Drawing ------------------------------------------------------------------------------------
+ 
+ export type SurfaceSpec =
+@@ -295,13 +386,15 @@ export function setShape(doc: Doc, a: SetArgs): OpResult<{ id: string }> {
+   if (a.color !== undefined) patch.color = colorOf(a.color, b.color);
+   if (a.material !== undefined) patch.materialType = materialOf(a.material, b.materialType);
+   if (a.visible !== undefined) patch.visible = !!a.visible;
+-  if (a.height !== undefined) patch.extrusionHeight = heightOf(a.height, b.extrusionHeight);
++  if (a.height !== undefined) patch = { ...patch, ...scaleMeshHeight(b, heightOf(a.height, b.extrusionHeight)) };
+   if (a.elevation !== undefined) {
+     if (b.frame) return fail('A shape on a wall has no elevation: move it with shape_move.');
+     const e = num(a.elevation, 'elevation');
+     if (e < 0) return fail('elevation cannot be below the ground (0).');
+     patch.elevation = round2(e);
+   }
++  if (a.outline && b.mesh) return fail(`"${b.id}" is a mesh brought in from a file: it has no outline to replace.`, 'Use shape_resize to scale it.');
++  if (a.cornerRadius !== undefined && b.mesh) return fail(`"${b.id}" is a mesh brought in from a file: it has no corners to round.`);
+   if (a.outline) {
+     const pts = (a.outline.points ?? []).map((p, i) => point(p, `outline.points[${i}]`));
+     if (pts.length < 3) return fail('outline.points needs at least 3 points.');
+@@ -389,7 +482,7 @@ export function resizeShape(doc: Doc, a: { id: string; width?: number; depth?: n
+     if (w < 1 || d < 1) return fail('width and depth must be at least 1 mm.');
+     next = replace(next, b.id, resizeBody(b, w, d));
+   }
+-  if (a.height !== undefined) next = replace(next, b.id, { extrusionHeight: heightOf(a.height, b.extrusionHeight) });
++  if (a.height !== undefined) next = replace(next, b.id, scaleMeshHeight(b, heightOf(a.height, b.extrusionHeight)));
+   return { doc: next, result: { id: b.id } };
+ }
+ 
+@@ -410,7 +503,7 @@ export function parseFace(id: string, spec: FaceSpec): FaceSel {
+ }
+ 
+ export function setFace(doc: Doc, a: { id: string; face: FaceSpec; value: number }): OpResult<{ id: string; measure: { label: string; value: number } | null }> {
+-  const b = editable(doc, a.id);
++  const b = solid(doc, a.id);
+   const face = parseFace(b.id, a.face);
+   if (face.kind === 'wall' && (face.index === undefined || !wallEnds(b, face.index))) return fail(`"${b.id}" has no wall ${face.index}.`, 'shape_faces lists its walls.');
+   const value = num(a.value, 'value');
+@@ -422,7 +515,7 @@ export function setFace(doc: Doc, a: { id: string; face: FaceSpec; value: number
+ }
+ 
+ export function pushFace(doc: Doc, a: { id: string; face: FaceSpec; by: number }): OpResult<{ id: string }> {
+-  const b = editable(doc, a.id);
++  const b = solid(doc, a.id);
+   const face = parseFace(b.id, a.face);
+   if (face.kind === 'wall' && (face.index === undefined || !wallEnds(b, face.index))) return fail(`"${b.id}" has no wall ${face.index}.`, 'shape_faces lists its walls.');
+   const patch = extrudeFace(b, face, num(a.by, 'by'));
+@@ -445,7 +538,7 @@ export interface BevelArgs {
+ }
+ 
+ export function bevelEdges(doc: Doc, a: BevelArgs): OpResult<{ id: string; size: number; style: string | null; edges: number }> {
+-  const b = editable(doc, a.id);
++  const b = solid(doc, a.id);
+   if (b.frame) return fail('Bevels on shapes drawn on a wall are not supported yet.');
+   let sels: EdgeSel[] = [];
+   if (a.edges) sels = a.edges.map((e) => ({ bodyId: b.id, kind: e.kind, index: num(e.index, 'edges[].index') }));
+@@ -555,6 +648,8 @@ export function ungroupShapes(doc: Doc, ids: IdGen, a: { group: string }): OpRes
+ 
+ function noWall(bodies: Body3D[]) {
+   if (bodies.some((b) => b.frame)) fail('Shapes drawn on a wall cannot be joined or cut yet.');
++  const mesh = bodies.find((b) => b.mesh);
++  if (mesh) fail(`"${mesh.id}" is a mesh brought in from a file: joining and cutting work on outlines, which it does not have.`, 'Group it with the other shapes instead (group_create).');
+ }
+ 
+ export function joinShapes(doc: Doc, ids: IdGen, a: { ids: string[] }): OpResult<{ created: string[] }> {
+@@ -678,7 +773,7 @@ export interface CutArgs {
+ 
+ /** Cuts a pocket or a hole: draws the outline on the top of the target and subtracts it downwards. */
+ export function cutInto(doc: Doc, ids: IdGen, a: CutArgs): OpResult<{ created: string[]; changed: boolean }> {
+-  const target = editable(doc, a.target);
++  const target = solid(doc, a.target);
+   if (target.frame) return fail('Cutting into shapes drawn on a wall is not supported yet.');
+   const surface = resolveSurface(doc, a.surface ?? { topOf: target.id });
+   if (surface.frame) return fail('Cutting from a wall is not supported yet.');
+@@ -689,7 +784,7 @@ export function cutInto(doc: Doc, ids: IdGen, a: CutArgs): OpResult<{ created: s
+ 
+ /** Cuts a drawn outline down into a shape from the height `from` (the top of the shape, by default) by `depth` mm. */
+ export function cutWithOutline(doc: Doc, ids: IdGen, a: { target: string; outline: DrawnOutline; from?: number; depth?: number }): OpResult<{ created: string[]; changed: boolean }> {
+-  const target = editable(doc, a.target);
++  const target = solid(doc, a.target);
+   if (target.frame) return fail('Cutting into shapes drawn on a wall is not supported yet.');
+   const surface = { elevation: a.from ?? round2((target.elevation ?? 0) + target.extrusionHeight) };
+   const depth = a.depth ?? target.extrusionHeight + 2;
+@@ -723,7 +818,7 @@ export interface RepeatArgs {
+ }
+ 
+ export function setRepeat(doc: Doc, ids: IdGen, a: RepeatArgs): OpResult<{ id: string; copies: string[]; gap: number }> {
+-  const b = editable(doc, a.id);
++  const b = solid(doc, a.id);
+   const existing = doc.repeats.find((l) => l.bodyId === b.id);
+   let s: RepeatSession = existing ? { ...existing } : defaultSession(b);
+   // The path is anchored to the shape's centre.
+diff --git a/autora-3d/src/core/tools.ts b/autora-3d/src/core/tools.ts
+index e656155..2b9265d 100644
+--- a/autora-3d/src/core/tools.ts
++++ b/autora-3d/src/core/tools.ts
+@@ -138,9 +138,26 @@ export const TOOL_SPECS: ToolSpec[] = [
+     description: 'Turn shapes about the vertical axis. Positive degrees turn counter-clockwise seen from above. Default pivot: the centre of the shapes.',
+     inputSchema: obj({ ids, degrees: { type: 'number' }, about: point }, ['ids', 'degrees']),
+   },
++  {
++    name: 'mesh_import',
++    description:
++      'Bring in a triangle mesh from a file as ONE shape: .glb/.gltf, .obj or .stl (a free CC0 model from Poly Pizza, Quaternius or Sketchfab, or one made in Blender). It arrives as the real surface, so organic forms (an animal, a face, a scan) are possible, which stock shapes and extruded outlines cannot give. It stands on the ground; size sets its longest side in mm (without it a GLB is read in metres, STL and OBJ in mm, and a result that is a speck or a building is fitted to 100 mm). Very large meshes are simplified to 60000 triangles. Move, turn, resize (shape_resize scales it whole), recolour, group and export work on it; it has no outline, faces, bevels or holes, and cannot be joined or cut with the outline tools. Textures are not read: colour it with color or material.',
++    inputSchema: obj({
++      file: { type: 'string', description: 'The mesh file: an artifact id (file_...) or a path on the host. The host reads it.' },
++      format: { type: 'string', enum: ['glb', 'obj', 'stl'], description: 'Only if the file name does not say (glTF counts as glb).' },
++      size: { type: 'number', description: 'The longest side of the result, mm.' },
++      up: { type: 'string', enum: ['y', 'z'], description: 'Which axis is up in the file. Default: y for GLB and OBJ, z for STL. Use it when the model arrives lying down.' },
++      x: { type: 'number' },
++      y: { type: 'number' },
++      elevation: { type: 'number', description: 'Height of its underside above the ground.' },
++      name: { type: 'string' },
++      color: color,
++      material,
++    }),
++  },
+   {
+     name: 'shape_resize',
+-    description: 'Set a shape\'s overall width (x), depth (y) and/or height (z). Corners and bevels stay valid.',
++    description: 'Set a shape\'s overall width (x), depth (y) and/or height (z). Corners and bevels stay valid. A mesh from a file is scaled to match.',
+     inputSchema: obj({ id: { type: 'string' }, width: { type: 'number' }, depth: { type: 'number' }, height: { type: 'number' } }, ['id']),
+   },
+   {
+@@ -289,6 +306,7 @@ export function runDocTool(ctx: ToolContext, name: string, rawArgs: unknown): To
+       return { doc, result: sceneSummary(doc, { includeCopies: !!a.includeCopies }) };
+     case 'shape_get': {
+       const b = ops.need(doc, a.id);
++      if (b.mesh) return { doc, result: { summary: summarize(doc, b), note: 'A mesh from a file: a triangle surface with no outline, faces or edges to edit.' } };
+       return { doc, result: { summary: summarize(doc, b), outline: { points: b.points, basePoints: b.basePoints, cornerRadii: b.cornerRadii, holes: b.holes }, faces: describeFaces(b), edges: describeEdgesOf(b) } };
+     }
+     case 'shape_faces':
+@@ -312,6 +330,8 @@ export function runDocTool(ctx: ToolContext, name: string, rawArgs: unknown): To
+       return done(ops.moveShapes(doc, a as ops.MoveArgs));
+     case 'shape_turn':
+       return done(ops.turnShapes(doc, a as ops.TurnArgs));
++    case 'mesh_import':
++      return done(ops.importMesh(doc, ids, a as ops.ImportMeshArgs));
+     case 'shape_resize':
+       return done(ops.resizeShape(doc, a as { id: string }));
+     case 'face_set':
+diff --git a/autora-3d/src/types.ts b/autora-3d/src/types.ts
+index 73baba9..2c950e6 100644
+--- a/autora-3d/src/types.ts
++++ b/autora-3d/src/types.ts
+@@ -51,6 +51,17 @@ export interface Frame {
+   angle: number;
+ }
+ 
++/**
++ * A triangle mesh brought in from a file (GLB, OBJ or STL): the shape's solid is this, not its outline pushed up. Positions are
++ * `[x, y, height]` triples in millimetres: x, y on the ground (moved and turned with the shape's outline), height above the
++ * shape's underside (so `elevation` lifts it). `points` of such a shape is the box its footprint fills.
++ */
++export interface MeshData {
++  positions: number[];
++  /** Three vertex numbers for each triangle, counter-clockwise seen from outside. */
++  indices: number[];
++}
++
+ export interface Body3D {
+   id: string;
+   name: string;
+@@ -70,6 +81,8 @@ export interface Body3D {
+   /** Bevels on individual top/bottom edges. Nothing is beveled by default. */
+   edgeBevels?: EdgeBevel[];
+   cornerBevels?: CornerBevel[];
++  /** Set on a shape brought in as a mesh: its outline, bevels and holes are not used; `extrusionHeight` is the mesh's height. */
++  mesh?: MeshData;
+   color: string;
+   materialType: MaterialType;
+   visible: boolean;
+diff --git a/autora-3d/src/utils/bodyGeometry.ts b/autora-3d/src/utils/bodyGeometry.ts
+index a8476e5..d815369 100644
+--- a/autora-3d/src/utils/bodyGeometry.ts
++++ b/autora-3d/src/utils/bodyGeometry.ts
+@@ -13,6 +13,7 @@ import { loopFor, runLimit } from './edges';
+ import { HEAL, healTriangles, weldVertices } from './meshHeal';
+ import { manifoldReady, subtractAll } from './manifoldBoolean';
+ import { buildCornerCutter } from './cornerBevel';
++import { meshGeometry } from './meshImport';
+ 
+ const toPath = <T extends THREE.Path>(path: T, pts: { x: number; y: number }[]): T => {
+   path.moveTo(pts[0].x, pts[0].y);
+@@ -332,6 +333,14 @@ function resolveBevels(body: Body3D): ResolvedBevel[] {
+  * Only edges listed in `edgeBevels` are beveled. `fast` skips the bevel cuts, for live previews while dragging.
+  */
+ export function buildBodyGeometry(body: Body3D, options: { fast?: boolean } = {}): THREE.BufferGeometry | null {
++  if (body.mesh) {
++    // An imported mesh is the solid itself: no outline to push up, no bevels. Organic forms read best smooth, so only sharp folds crease.
++    const raw = meshGeometry(body);
++    if (!raw) return null;
++    const shaded = toCreasedNormals(raw, THREE.MathUtils.degToRad(55));
++    raw.dispose();
++    return shaded;
++  }
+   const shape = buildBodyShape(body);
+   if (!shape) return null;
+ 
+diff --git a/autora-3d/src/utils/meshImport.ts b/autora-3d/src/utils/meshImport.ts
+new file mode 100644
+index 0000000..4389257
+--- /dev/null
++++ b/autora-3d/src/utils/meshImport.ts
+@@ -0,0 +1,455 @@
++/**
++ * @license
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++import * as THREE from 'three';
++import { Body3D, MeshData, Point2D } from '../types';
++
++// Reads a triangle mesh from a file (GLB/glTF, OBJ or STL) and turns it into a shape. No DOM, so the headless engine and the
++// page share it. Textures, skins and animation are not read: a mesh arrives as one solid with the shape's own colour and material.
++
++export type MeshFormat = 'glb' | 'obj' | 'stl';
++
++/** A mesh as the file had it: x, y, z triples in the file's own axes and units, and triangles as vertex numbers. */
++export interface RawMesh {
++  positions: number[];
++  indices: number[];
++  /** A colour the file gave (glTF base colour), as #rrggbb. */
++  color?: string;
++}
++
++/** Most triangles a shape keeps. A mesh with more is simplified (vertex clustering), which keeps its silhouette. */
++export const MAX_TRIANGLES = 60000;
++
++export class MeshError extends Error {}
++
++const bad = (message: string): never => {
++  throw new MeshError(message);
++};
++
++/** Which format a file is, from its name first and its first bytes if the name does not say. */
++export function meshFormatOf(name: string, data?: Uint8Array): MeshFormat | null {
++  const ext = /\.(glb|gltf|obj|stl)$/i.exec(name)?.[1]?.toLowerCase();
++  if (ext === 'glb' || ext === 'gltf') return 'glb';
++  if (ext === 'obj' || ext === 'stl') return ext;
++  if (!data || data.length < 12) return null;
++  if (data[0] === 0x67 && data[1] === 0x6c && data[2] === 0x54 && data[3] === 0x46) return 'glb';
++  const head = new TextDecoder().decode(data.subarray(0, Math.min(data.length, 256)));
++  if (/^\s*\{/.test(head) && /"asset"/.test(head)) return 'glb';
++  if (/^\s*solid\b/.test(head) && /facet|vertex/.test(head)) return 'stl';
++  if (/^\s*(#|v\s|o\s|g\s|mtllib)/m.test(head)) return 'obj';
++  return null;
++}
++
++/** Reads a file's triangles. Throws a MeshError saying what is wrong with the file. */
++export function readMesh(data: Uint8Array, format: MeshFormat): RawMesh {
++  const read = format === 'glb' ? readGltf(data) : format === 'obj' ? readObj(data) : readStl(data);
++  // Files split a vertex wherever a seam or a normal differs; the solid wants one vertex per place, and no triangle with no area.
++  const raw = joinSeams(read);
++  if (!raw.indices.length) bad('That file has no triangles in it.');
++  return raw;
++}
++
++// ---- STL -----------------------------------------------------------------------------------------
++
++function readStl(data: Uint8Array): RawMesh {
++  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
++  const positions: number[] = [];
++  if (data.byteLength >= 84) {
++    const count = view.getUint32(80, true);
++    if (84 + count * 50 === data.byteLength) {
++      for (let t = 0; t < count; t++) {
++        const at = 84 + t * 50 + 12;
++        for (let k = 0; k < 9; k++) positions.push(view.getFloat32(at + k * 4, true));
++      }
++      return weld(positions);
++    }
++  }
++  const text = new TextDecoder().decode(data);
++  const re = /vertex\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)/g;
++  for (let m = re.exec(text); m; m = re.exec(text)) positions.push(+m[1], +m[2], +m[3]);
++  if (!positions.length || positions.length % 9) bad('That is not an STL file Autora 3D can read (binary or ASCII).');
++  return weld(positions);
++}
++
++/** Triangles given corner by corner become an indexed mesh, sharing the vertices that sit at the same point. */
++function weld(corners: number[]): RawMesh {
++  const key = new Map<string, number>();
++  const positions: number[] = [];
++  const indices: number[] = [];
++  for (let i = 0; i < corners.length; i += 3) {
++    // Floats from a file: 1e-5 of a unit is far below anything a model shows, and joins a shared corner written twice.
++    const k = `${Math.round(corners[i] * 1e5)},${Math.round(corners[i + 1] * 1e5)},${Math.round(corners[i + 2] * 1e5)}`;
++    let n = key.get(k);
++    if (n === undefined) {
++      n = positions.length / 3;
++      key.set(k, n);
++      positions.push(corners[i], corners[i + 1], corners[i + 2]);
++    }
++    indices.push(n);
++  }
++  return { positions, indices: dropFlat(indices) };
++}
++
++/** Vertices at the same place become one, triangles that fall flat go, and vertices no triangle uses are dropped. */
++function joinSeams(mesh: RawMesh): RawMesh {
++  const key = new Map<string, number>();
++  const into = new Array<number>(mesh.positions.length / 3);
++  const positions: number[] = [];
++  for (let i = 0; i < into.length; i++) {
++    const [x, y, z] = [mesh.positions[i * 3], mesh.positions[i * 3 + 1], mesh.positions[i * 3 + 2]];
++    const k = `${Math.round(x * 1e5)},${Math.round(y * 1e5)},${Math.round(z * 1e5)}`;
++    let n = key.get(k);
++    if (n === undefined) {
++      n = positions.length / 3;
++      key.set(k, n);
++      positions.push(x, y, z);
++    }
++    into[i] = n;
++  }
++  const indices = dropFlat(mesh.indices.map((i) => into[i]));
++  const used = new Map<number, number>();
++  const kept: number[] = [];
++  const out = indices.map((i) => {
++    let n = used.get(i);
++    if (n === undefined) {
++      n = kept.length / 3;
++      used.set(i, n);
++      kept.push(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
++    }
++    return n;
++  });
++  return { ...mesh, positions: kept, indices: out };
++}
++
++function dropFlat(indices: number[]): number[] {
++  const out: number[] = [];
++  for (let i = 0; i + 2 < indices.length; i += 3) {
++    const [a, b, c] = [indices[i], indices[i + 1], indices[i + 2]];
++    if (a !== b && b !== c && a !== c) out.push(a, b, c);
++  }
++  return out;
++}
++
++// ---- OBJ -----------------------------------------------------------------------------------------
++
++function readObj(data: Uint8Array): RawMesh {
++  const positions: number[] = [];
++  const indices: number[] = [];
++  const text = new TextDecoder().decode(data);
++  for (const line of text.split(/\r?\n/)) {
++    if (line.charCodeAt(0) === 118 && line.charCodeAt(1) === 32) {
++      const p = line.trim().split(/\s+/);
++      const x = +p[1];
++      const y = +p[2];
++      const z = +p[3];
++      if (![x, y, z].every(Number.isFinite)) bad('That OBJ has a vertex that is not a number.');
++      positions.push(x, y, z);
++    } else if (line.charCodeAt(0) === 102 && line.charCodeAt(1) === 32) {
++      const count = positions.length / 3;
++      const ring = line
++        .trim()
++        .split(/\s+/)
++        .slice(1)
++        .map((token) => {
++          const n = parseInt(token.split('/')[0], 10);
++          return n < 0 ? count + n : n - 1;
++        });
++      if (ring.some((n) => !(n >= 0 && n < count))) bad('That OBJ has a face that names a vertex it does not have.');
++      for (let k = 1; k + 1 < ring.length; k++) indices.push(ring[0], ring[k], ring[k + 1]);
++    }
++  }
++  return { positions, indices: dropFlat(indices) };
++}
++
++// ---- glTF / GLB ----------------------------------------------------------------------------------
++
++const COMPONENT: Record<number, { size: number; read: (v: DataView, at: number) => number; norm: number }> = {
++  5120: { size: 1, read: (v, at) => v.getInt8(at), norm: 127 },
++  5121: { size: 1, read: (v, at) => v.getUint8(at), norm: 255 },
++  5122: { size: 2, read: (v, at) => v.getInt16(at, true), norm: 32767 },
++  5123: { size: 2, read: (v, at) => v.getUint16(at, true), norm: 65535 },
++  5125: { size: 4, read: (v, at) => v.getUint32(at, true), norm: 1 },
++  5126: { size: 4, read: (v, at) => v.getFloat32(at, true), norm: 1 },
++};
++const WIDTH: Record<string, number> = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 };
++
++type Json = Record<string, any>;
++
++function splitGlb(data: Uint8Array): { json: Json; bin: Uint8Array | null } {
++  if (data.length > 12 && data[0] === 0x67 && data[1] === 0x6c && data[2] === 0x54 && data[3] === 0x46) {
++    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
++    let json: Json | null = null;
++    let bin: Uint8Array | null = null;
++    for (let at = 12; at + 8 <= data.length; ) {
++      const length = view.getUint32(at, true);
++      const type = view.getUint32(at + 4, true);
++      const body = data.subarray(at + 8, at + 8 + length);
++      if (type === 0x4e4f534a) json = JSON.parse(new TextDecoder().decode(body));
++      else if (type === 0x004e4942 && !bin) bin = body;
++      at += 8 + length + ((4 - (length % 4)) % 4);
++    }
++    return { json: json ?? bad('That GLB has no model description in it.'), bin };
++  }
++  try {
++    return { json: JSON.parse(new TextDecoder().decode(data)), bin: null };
++  } catch {
++    return bad('That is not a GLB or glTF file.');
++  }
++}
++
++function readGltf(data: Uint8Array): RawMesh {
++  const { json, bin } = splitGlb(data);
++  const needs = [...(json.extensionsRequired ?? [])] as string[];
++  if (needs.includes('KHR_draco_mesh_compression') || needs.includes('EXT_meshopt_compression')) {
++    bad('That GLB is compressed (Draco or meshopt). Export it again without compression, or as OBJ or STL.');
++  }
++  const buffers: Uint8Array[] = (json.buffers ?? []).map((b: Json, i: number) => {
++    if (typeof b.uri === 'string') {
++      const m = /^data:[^,]*;base64,(.*)$/.exec(b.uri);
++      if (!m) return bad('That glTF points at a separate .bin file. Use a single .glb (or one with the data inside it).');
++      return Uint8Array.from(atob(m[1]), (c) => c.charCodeAt(0));
++    }
++    return i === 0 && bin ? bin : bad('That GLB is missing its data.');
++  });
++
++  const read = (index: number): { values: number[]; width: number } => {
++    const acc: Json = json.accessors?.[index] ?? bad('That GLB names an accessor it does not have.');
++    if (acc.sparse) bad('That GLB uses sparse data, which Autora 3D does not read.');
++    const comp = COMPONENT[acc.componentType] ?? bad('That GLB uses a data type Autora 3D does not read.');
++    const width = WIDTH[acc.type] ?? bad('That GLB uses a data layout Autora 3D does not read.');
++    const view: Json = json.bufferViews?.[acc.bufferView] ?? bad('That GLB names data it does not have.');
++    const buf = buffers[view.buffer] ?? bad('That GLB names a buffer it does not have.');
++    const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
++    const stride = view.byteStride || comp.size * width;
++    const base = (view.byteOffset ?? 0) + (acc.byteOffset ?? 0);
++    if (base + (acc.count - 1) * stride + comp.size * width > buf.byteLength) bad('That GLB is cut short.');
++    const values: number[] = [];
++    for (let i = 0; i < acc.count; i++) {
++      for (let k = 0; k < width; k++) {
++        const v = comp.read(dv, base + i * stride + k * comp.size);
++        values.push(acc.normalized ? Math.max(v / comp.norm, -1) : v);
++      }
++    }
++    return { values, width };
++  };
++
++  const positions: number[] = [];
++  const indices: number[] = [];
++  let color: string | undefined;
++
++  const take = (meshIndex: number, world: THREE.Matrix4) => {
++    const mesh: Json = json.meshes?.[meshIndex];
++    if (!mesh) return;
++    const v = new THREE.Vector3();
++    for (const prim of mesh.primitives ?? []) {
++      const mode = prim.mode ?? 4;
++      if (mode < 4 || prim.attributes?.POSITION === undefined) continue;
++      const first = positions.length / 3;
++      const { values } = read(prim.attributes.POSITION);
++      for (let i = 0; i + 2 < values.length; i += 3) {
++        v.set(values[i], values[i + 1], values[i + 2]).applyMatrix4(world);
++        positions.push(v.x, v.y, v.z);
++      }
++      const order = prim.indices !== undefined ? read(prim.indices).values : Array.from({ length: values.length / 3 }, (_, i) => i);
++      const tri: number[] = [];
++      if (mode === 4) tri.push(...order);
++      else if (mode === 5) for (let i = 0; i + 2 < order.length; i++) tri.push(...(i % 2 ? [order[i + 1], order[i], order[i + 2]] : [order[i], order[i + 1], order[i + 2]]));
++      else for (let i = 1; i + 1 < order.length; i++) tri.push(order[0], order[i], order[i + 1]);
++      for (let i = 0; i + 2 < tri.length; i += 3) {
++        const [a, b, c] = [tri[i], tri[i + 1], tri[i + 2]];
++        if (a !== b && b !== c && a !== c) indices.push(first + a, first + b, first + c);
++      }
++      const f = json.materials?.[prim.material]?.pbrMetallicRoughness?.baseColorFactor;
++      if (!color && Array.isArray(f) && f.length >= 3) color = `#${[0, 1, 2].map((k) => Math.round(Math.min(1, Math.max(0, srgb(f[k]))) * 255).toString(16).padStart(2, '0')).join('')}`;
++    }
++  };
++
++  const visit = (index: number, parent: THREE.Matrix4, seen: Set<number>) => {
++    const node: Json = json.nodes?.[index];
++    if (!node || seen.has(index)) return;
++    seen.add(index);
++    const local = new THREE.Matrix4();
++    if (Array.isArray(node.matrix)) local.fromArray(node.matrix);
++    else {
++      const t = node.translation ?? [0, 0, 0];
++      const r = node.rotation ?? [0, 0, 0, 1];
++      const s = node.scale ?? [1, 1, 1];
++      local.compose(new THREE.Vector3(...(t as [number, number, number])), new THREE.Quaternion(...(r as [number, number, number, number])), new THREE.Vector3(...(s as [number, number, number])));
++    }
++    const world = parent.clone().multiply(local);
++    if (node.mesh !== undefined) take(node.mesh, world);
++    for (const child of node.children ?? []) visit(child, world, seen);
++    seen.delete(index);
++  };
++
++  const scene: Json | undefined = json.scenes?.[json.scene ?? 0];
++  const roots: number[] = scene?.nodes ?? (json.nodes ?? []).map((_: unknown, i: number) => i);
++  for (const root of roots) visit(root, new THREE.Matrix4(), new Set());
++  if (!roots.length && json.meshes?.length) json.meshes.forEach((_: unknown, i: number) => take(i, new THREE.Matrix4()));
++  return { positions, indices, color };
++}
++
++/** glTF colours are linear; the shape's colour is sRGB, as a colour picker shows it. */
++const srgb = (c: number) => (c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055);
++
++// ---- Fewer triangles -----------------------------------------------------------------------------
++
++/**
++ * Brings a mesh down to `max` triangles by vertex clustering: every vertex in one cell of a grid becomes their average, and
++ * triangles that fall in on themselves go. Coarse, but a silhouette (a horse's legs, ears and tail) survives; a mesh already
++ * under the limit is returned as it is.
++ */
++export function simplify(mesh: RawMesh, max = MAX_TRIANGLES): RawMesh {
++  if (mesh.indices.length / 3 <= max) return mesh;
++  const box = new THREE.Box3();
++  const v = new THREE.Vector3();
++  for (let i = 0; i < mesh.positions.length; i += 3) box.expandByPoint(v.set(mesh.positions[i], mesh.positions[i + 1], mesh.positions[i + 2]));
++  const size = box.getSize(new THREE.Vector3());
++  const longest = Math.max(size.x, size.y, size.z) || 1;
++  let cells = Math.ceil(Math.cbrt(max) * 6);
++  for (;;) {
++    const cell = longest / cells;
++    const slot = new Map<string, number>();
++    const sums: number[] = [];
++    const counts: number[] = [];
++    const remap = new Array<number>(mesh.positions.length / 3);
++    for (let i = 0; i < remap.length; i++) {
++      const x = mesh.positions[i * 3];
++      const y = mesh.positions[i * 3 + 1];
++      const z = mesh.positions[i * 3 + 2];
++      const k = `${Math.floor((x - box.min.x) / cell)},${Math.floor((y - box.min.y) / cell)},${Math.floor((z - box.min.z) / cell)}`;
++      let n = slot.get(k);
++      if (n === undefined) {
++        n = counts.length;
++        slot.set(k, n);
++        counts.push(0);
++        sums.push(0, 0, 0);
++      }
++      remap[i] = n;
++      counts[n]++;
++      sums[n * 3] += x;
++      sums[n * 3 + 1] += y;
++      sums[n * 3 + 2] += z;
++    }
++    const indices = dropFlat(mesh.indices.map((i) => remap[i]));
++    if (indices.length / 3 <= max || cells < 8) {
++      const positions = counts.flatMap((c, n) => [sums[n * 3] / c, sums[n * 3 + 1] / c, sums[n * 3 + 2] / c]);
++      return { ...mesh, positions, indices };
++    }
++    cells = Math.floor(cells * 0.85);
++  }
++}
++
++// ---- Into a shape --------------------------------------------------------------------------------
++
++export interface MeshPlacement {
++  /** Which way is up in the file. glTF is "y"; STL is usually "z"; OBJ varies (Blender writes "y"). */
++  up?: 'y' | 'z';
++  /** The longest side the shape gets, mm. Without it the file's own units are kept (glTF is in metres). */
++  size?: number;
++  /** Where the footprint centre goes, mm. */
++  x?: number;
++  y?: number;
++  /** With no x: put it this far right of the shapes already there (their right edge and the middle of their depth). */
++  beside?: { maxX: number; centerY: number };
++  /** Height of its underside above the ground. */
++  elevation?: number;
++}
++
++export interface MeshShape {
++  mesh: MeshData;
++  points: Point2D[];
++  height: number;
++  /** The factor the file's numbers were multiplied by to get millimetres. */
++  scale: number;
++  triangles: number;
++  /** How many the file had, when it was simplified. */
++  from?: number;
++  color?: string;
++}
++
++/** The units a format is normally written in, relative to millimetres. */
++export const UNIT: Record<MeshFormat, number> = { glb: 1000, obj: 1, stl: 1 };
++export const UP: Record<MeshFormat, 'y' | 'z'> = { glb: 'y', obj: 'y', stl: 'z' };
++
++const r3 = (n: number) => Math.round(n * 1000) / 1000;
++
++/**
++ * Puts a mesh in the model's space: millimetres, z up, centred on its footprint and standing on the ground. A mesh is kept
++ * as `[x, y, height]` triples (x, y on the ground, height above its underside), so moving and turning a shape move its mesh the
++ * way they move any outline.
++ */
++export function placeMesh(raw: RawMesh, format: MeshFormat, at: MeshPlacement = {}): MeshShape {
++  const total = raw.indices.length / 3;
++  const mesh = simplify(raw);
++  const up = at.up ?? UP[format];
++  const n = mesh.positions.length / 3;
++  const x = new Array<number>(n);
++  const y = new Array<number>(n);
++  const z = new Array<number>(n);
++  for (let i = 0; i < n; i++) {
++    const [a, b, c] = [mesh.positions[i * 3], mesh.positions[i * 3 + 1], mesh.positions[i * 3 + 2]];
++    // Y-up files: the world's z runs toward the viewer, so the ground's y is minus it (the model stays facing the same way).
++    x[i] = a;
++    y[i] = up === 'y' ? -c : b;
++    z[i] = up === 'y' ? b : c;
++  }
++  const lo = [Math.min(...x), Math.min(...y), Math.min(...z)];
++  const hi = [Math.max(...x), Math.max(...y), Math.max(...z)];
++  const longest = Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
++  if (!(longest > 0) || !Number.isFinite(longest)) bad('That mesh has no size (all its points are the same).');
++
++  let scale = UNIT[format];
++  if (at.size !== undefined) {
++    if (!(at.size >= 1)) bad('size must be at least 1 mm.');
++    scale = at.size / longest;
++  } else if (longest * scale < 5 || longest * scale > 2000) {
++    // The file's units were a guess that came out as a speck or a building: fit it to something to work on.
++    scale = 100 / longest;
++  }
++  const half = { x: Math.max(0.5, ((hi[0] - lo[0]) * scale) / 2), y: Math.max(0.5, ((hi[1] - lo[1]) * scale) / 2) };
++  const cx = at.x ?? (at.beside ? Math.round(at.beside.maxX + 50 + half.x) : 0);
++  const cy = at.y ?? (at.beside ? Math.round(at.beside.centerY) : 0);
++  const ox = (lo[0] + hi[0]) / 2;
++  const oy = (lo[1] + hi[1]) / 2;
++  const positions: number[] = new Array(n * 3);
++  for (let i = 0; i < n; i++) {
++    positions[i * 3] = r3(cx + (x[i] - ox) * scale);
++    positions[i * 3 + 1] = r3(cy + (y[i] - oy) * scale);
++    positions[i * 3 + 2] = r3((z[i] - lo[2]) * scale);
++  }
++  return {
++    mesh: { positions, indices: mesh.indices },
++    points: [
++      { x: r3(cx - half.x), y: r3(cy - half.y) },
++      { x: r3(cx + half.x), y: r3(cy - half.y) },
++      { x: r3(cx + half.x), y: r3(cy + half.y) },
++      { x: r3(cx - half.x), y: r3(cy + half.y) },
++    ],
++    height: Math.max(1, r3((hi[2] - lo[2]) * scale)),
++    scale,
++    triangles: mesh.indices.length / 3,
++    ...(mesh.indices.length < raw.indices.length ? { from: total } : {}),
++    color: raw.color,
++  };
++}
++
++/** A mesh shape's raw solid, Y-up the way every body's is, standing on its elevation (shading is added by buildBodyGeometry). */
++export function meshGeometry(body: Body3D): THREE.BufferGeometry | null {
++  const m = body.mesh;
++  if (!m || m.indices.length < 3) return null;
++  const n = m.positions.length / 3;
++  const pos = new Float32Array(n * 3);
++  const lift = body.elevation ?? 0;
++  for (let i = 0; i < n; i++) {
++    pos[i * 3] = m.positions[i * 3];
++    pos[i * 3 + 1] = m.positions[i * 3 + 2] + lift;
++    pos[i * 3 + 2] = -m.positions[i * 3 + 1];
++  }
++  const geometry = new THREE.BufferGeometry();
++  geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
++  geometry.setIndex(new THREE.BufferAttribute(n > 65535 ? new Uint32Array(m.indices) : new Uint16Array(m.indices), 1));
++  return geometry;
++}
+diff --git a/autora-3d/src/utils/transform.ts b/autora-3d/src/utils/transform.ts
+index ce60b6d..cd864be 100644
+--- a/autora-3d/src/utils/transform.ts
++++ b/autora-3d/src/utils/transform.ts
+@@ -3,7 +3,7 @@
+  * SPDX-License-Identifier: Apache-2.0
+  */
+ 
+-import { Body3D, Point2D } from '../types';
++import { Body3D, MeshData, Point2D } from '../types';
+ import { moveFrame } from './frame';
+ import { holeLoops, withHoles, withOutline } from './outline';
+ 
+@@ -19,6 +19,26 @@ export interface BodyTransform {
+ 
+ const round2 = (n: number) => Math.round(n * 100) / 100;
+ 
++/** A mesh with each of its ground points moved by `f` (heights untouched). */
++function mapMesh(mesh: MeshData, f: (p: Point2D) => Point2D): MeshData {
++  const positions = mesh.positions.slice();
++  for (let i = 0; i < positions.length; i += 3) {
++    const p = f({ x: positions[i], y: positions[i + 1] });
++    positions[i] = Math.round(p.x * 1000) / 1000;
++    positions[i + 1] = Math.round(p.y * 1000) / 1000;
++  }
++  return { positions, indices: mesh.indices };
++}
++
++/** A mesh shape's height changed to `height`, every height in the mesh scaled with it. */
++export function scaleMeshHeight(body: Body3D, height: number): Partial<Body3D> {
++  if (!body.mesh) return { extrusionHeight: height };
++  const k = height / Math.max(1e-6, body.extrusionHeight);
++  const positions = body.mesh.positions.slice();
++  for (let i = 2; i < positions.length; i += 3) positions[i] = Math.round(positions[i] * k * 1000) / 1000;
++  return { mesh: { positions, indices: body.mesh.indices }, extrusionHeight: height };
++}
++
+ /** Rigid move/rotate of a body. Edge bevels and corner radii are index-based, so they carry over unchanged. */
+ export function transformBody(body: Body3D, t: BodyTransform): Partial<Body3D> {
+   // A shape standing on a wall keeps its outline; it is the wall frame that travels.
+@@ -34,6 +54,7 @@ export function transformBody(body: Body3D, t: BodyTransform): Partial<Body3D> {
+     };
+   };
+   return {
++    ...(body.mesh ? { mesh: mapMesh(body.mesh, move) } : {}),
+     points: body.points.map(move),
+     basePoints: body.basePoints?.map(move),
+     holes: body.holes?.map((h) => h.map(move)),
+@@ -80,6 +101,7 @@ export function scaleBodyAbout(body: Body3D, ax: number, ay: number, sx: number,
+     x: round2(ax + (p.x - ax) * sx),
+     y: round2(ay + (p.y - ay) * sy),
+   });
++  if (body.mesh) return { mesh: mapMesh(body.mesh, scale), points: body.points.map(scale), basePoints: body.basePoints?.map(scale) };
+   const base = (body.basePoints ?? body.points).map(scale);
+   return {
+     ...withOutline(body, { basePoints: base }),

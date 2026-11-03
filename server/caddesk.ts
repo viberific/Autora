@@ -22,6 +22,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { keepCopy, saveArtifact } from "./artifacts";
+import { FileRefError, readFileRef } from "./fileref";
 import { chatTitle } from "./folders";
 import { stateDir } from "./state";
 import { readDoc, saveDoc } from "./store";
@@ -261,6 +262,7 @@ const READS = new Set([
 const NO_CONTROL: Record<string, string> = {
   doc_set: "the window has no control that puts in a whole model",
   library_import: "the window has no control that imports library objects",
+  mesh_import: "the window has no control that reads a mesh file",
 };
 /** Undo and redo: done in the window with its own buttons, on the history the model already has. */
 const HISTORY = new Set(["history_undo", "history_redo"]);
@@ -414,12 +416,26 @@ async function historyByHand(session: string, engine: CadEngine, name: string): 
   return { res, said: `Done by hand in the 3D window, where the person watched: ${reply.did.join("; ")}.` + (reply.skipped ? ` (${reply.skipped})` : "") };
 }
 
+/** A mesh file (GLB, glTF, OBJ, STL), by its name: it is brought in as a shape, not read as a model. */
+const MESH_FILE = /\.(glb|gltf|obj|stl)$/i;
+
 /**
  * The person loads a model they kept (`.model.json`, or a document exported as JSON): it becomes the chat's model, as one
- * step of its history, and the window shows it.
+ * step of its history, and the window shows it. A mesh file (GLB, OBJ, STL) is added to the model as a shape instead, so
+ * what is already there stays.
  */
-export async function loadModel(session: string, data: Buffer): Promise<{ ok: boolean; error?: string; shapes?: number }> {
+export async function loadModel(session: string, data: Buffer, name = ""): Promise<{ ok: boolean; error?: string; shapes?: number }> {
   if (!validSession(session)) return { ok: false, error: "Autora 3D needs a chat to work in." };
+  if (MESH_FILE.test(name)) {
+    const engine = await engineOf(session);
+    const entry = entryFor(session);
+    setOpen(session, true);
+    entry.by = "agent";
+    entry.cue = null;
+    const res = await engine.execute("mesh_import", { data: data.toString("base64"), name });
+    if (!res.ok) return { ok: false, error: asAgentSees([res.error, res.hint].filter(Boolean).join(" ")) || "That mesh could not be read." };
+    return { ok: true, shapes: countShapes(engine.getDoc()) };
+  }
   let raw: unknown;
   try {
     raw = JSON.parse(data.toString("utf8"));
@@ -439,6 +455,8 @@ export async function loadModel(session: string, data: Buffer): Promise<{ ok: bo
 }
 
 interface CadToolHooks {
+  /** Where a relative file path is read from (the host's working folder). */
+  cwd?: string;
   /** Show a saved file in the thread. */
   showFile?: (file: { id: string; name: string; mime: string; size: number }) => void;
 }
@@ -463,6 +481,18 @@ export async function runCadTool(
     if (name === "batch" && Array.isArray(given.commands)) {
       given.commands = given.commands.map((c: any) =>
         c && typeof c.tool === "string" ? { ...c, tool: c.tool.replace(/^cad_/, "") } : c);
+    }
+    if (name === "mesh_import" && typeof given.file === "string" && given.data === undefined) {
+      // The model names a file; the bytes never go through the conversation.
+      try {
+        const f = readFileRef(given.file, hooks.cwd ?? process.cwd(), "mesh file", "cad_mesh_import");
+        given.data = f.data.toString("base64");
+        given.name = given.name ?? f.name;
+        delete given.file;
+      } catch (err) {
+        if (err instanceof FileRefError) return { ok: false, summary: err.message };
+        throw err;
+      }
     }
     const exportArgs = name === "export" ? { name: given.name } : null;
     if (exportArgs) delete given.name;
@@ -555,7 +585,8 @@ export function cadBriefing(on: boolean): string {
   }
   return (
     "- Autora 3D (the 3D modelling window): available. Tools: the cad_* family -- start with cad_scene_get; cad_export gives " +
-    "STL to print or GLB for games. " +
+    "STL to print or GLB for games. cad_mesh_import brings in a GLB, OBJ or STL file as a real surface (an animal, a face, a scan: " +
+    "the extruded shapes cannot make those, so for organic forms find a free CC0 mesh and import it). " +
     "Shapes are flat outlines pushed up to a height, in millimetres, x right, y away, z up. Model what the person asks to " +
     "make, print or design with these, not code. The window opens beside the chat on first use and the person can work " +
     "in it too: call cad_scene_get again before relying on what you saw earlier. Check a part with cad_shape_measure " +

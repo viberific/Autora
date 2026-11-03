@@ -52,6 +52,8 @@ export interface ShapeSummary {
   repeat?: { kind: string; count: number; gap: number; follow: boolean; start: Point2D; end: Point2D; bend: Point2D | null };
   /** Present on a shape drawn on a wall. */
   wall?: Frame;
+  /** Present on a shape brought in from a mesh file: it has a triangle surface, not an outline (corners 4 is just the box it fills). */
+  mesh?: { triangles: number };
 }
 
 /** The corners of a shape, in the world, top and bottom. */
@@ -109,6 +111,7 @@ export function summarize(doc: Doc, body: Body3D): ShapeSummary {
   if (body.instanceOf) out.linkedTo = body.instanceOf;
   if (link) out.repeat = { kind: link.kind, count: link.count, gap: round2(spacing(link)), follow: link.follow, start: link.start, end: link.end, bend: link.bend };
   if (body.frame) out.wall = body.frame;
+  if (body.mesh) out.mesh = { triangles: body.mesh.indices.length / 3 };
   return out;
 }
 
