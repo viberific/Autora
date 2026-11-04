@@ -91,8 +91,9 @@ description: >-
   • Panacea 3D — an integrated modelling engine for things to design or print. The agent
   builds shapes by sketching an outline and pulling it up (and cutting, bevelling,
   repeating and measuring them) and you work on the same model beside the chat:
-  push and pull faces, move, resize and bevel by finger or mouse. Bring in a GLB,
-  OBJ or STL mesh for organic forms (an animal, a face, a scan). Exports STL for
+  push and pull faces, move, resize and bevel by finger or mouse. For organic
+  forms (an animal, a face) the agent blends and lofts smooth shapes, and you can
+  bring in a GLB, OBJ or STL mesh. Exports STL for
   printing and GLB for games. Configure its capability on the Tools page.
 
 
@@ -205,12 +206,11 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Autora 3D can now bring in a mesh. A GLB, glTF, OBJ or STL file becomes one
-  shape in the model, the real surface rather than an outline pushed up, so an
-  animal, a face or a scan is possible, which stock shapes could not make. Take
-  a free CC0 model (Poly Pizza, Quaternius, Sketchfab) or one from Blender, and
-  press Load in the 3D window or ask the agent (cad_mesh_import, with a size in
-  millimetres): it stands on the ground beside what is there, and moving,
-  turning, resizing, colouring, grouping and exporting work on it. Very large
-  meshes are simplified; textures are not read; faces, bevels, cuts and joins
-  need an outline and say so.
+  Autora 3D can now model organic shapes. The agent can melt spheres, tapered
+  capsules and ellipsoids into one smooth surface (an animal's body, neck, head
+  and legs, with half described and mirrored), loft a smooth tube through
+  changing cross-sections (a leg, a tail, a horn) and smooth any mesh, so a
+  horse no longer has to be built from blocks. The results are mesh shapes: move,
+  turn, resize, colour, group and export work on them. It asks you about the
+  character of the form before refining. Hand-sculpting brushes for you come
+  next.

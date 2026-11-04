@@ -770,6 +770,258 @@ export const cadSPECS: ToolSpec[] = [
     }
   },
   {
+    "name": "cad_sculpt_blend",
+    "group": "files",
+    "description": "Make ONE smooth, organic shape by blending simple parts into a soft surface: the way to model an animal, a creature, a hand, a bottle, a cloud. Give parts: spheres, tapered capsules (a limb or neck: at, to, radius at each end) and ellipsoids (a body or head: radii along x, y, z). Where parts overlap they melt together over `smooth` mm. Positions are in mm on the ground (x, y) and up (z); parts may overlap and may sit anywhere. Give half of a symmetric creature and set mirror ({axis, at}) to reflect it. Build the big masses first (body, chest, hips, head), then limbs overlapping into them; look with cad_scene_get / a view and adjust the numbers, or use cad_sculpt_smooth. The result is a mesh shape: move, turn, resize, recolour and export work; it has no outline, faces or holes. A person can refine it by hand in the window.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "parts": {
+          "type": "array",
+          "description": "The parts to blend (1 to 64; mirroring doubles them).",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "sphere",
+                  "capsule",
+                  "ellipsoid"
+                ]
+              },
+              "at": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  },
+                  "z": {
+                    "type": "number",
+                    "description": "Height above the ground (default 0)."
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "description": "Sphere or ellipsoid centre, or a capsule's first end, mm."
+              },
+              "to": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  },
+                  "z": {
+                    "type": "number",
+                    "description": "Height above the ground (default 0)."
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "description": "A capsule's other end."
+              },
+              "radius": {
+                "type": "number",
+                "description": "Sphere radius, or a capsule's radius at `at`."
+              },
+              "radius2": {
+                "type": "number",
+                "description": "A capsule's radius at `to` (default: the same)."
+              },
+              "radii": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  },
+                  "z": {
+                    "type": "number",
+                    "description": "Height above the ground (default 0)."
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "description": "An ellipsoid's half-sizes along x, y and z."
+              }
+            },
+            "required": [
+              "kind",
+              "at"
+            ]
+          }
+        },
+        "smooth": {
+          "type": "number",
+          "description": "How wide the soft joins are, mm. Default: 0.6 x the smallest part radius. 0 leaves creases."
+        },
+        "detail": {
+          "type": "number",
+          "description": "Fineness: grid cells along the longest side (8 to 120, default 72). Higher is smoother and slower."
+        },
+        "mirror": {
+          "type": "object",
+          "properties": {
+            "axis": {
+              "type": "string",
+              "enum": [
+                "x",
+                "y",
+                "z"
+              ]
+            },
+            "at": {
+              "type": "number",
+              "description": "Where the mirror plane is on that axis. Default: the middle of the parts."
+            }
+          },
+          "required": [
+            "axis"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "color": {
+          "type": "string",
+          "description": "Hex colour such as \"#3b82f6\"."
+        },
+        "material": {
+          "type": "string",
+          "enum": [
+            "matte",
+            "metal",
+            "glossy",
+            "glass",
+            "neon"
+          ]
+        }
+      },
+      "required": [
+        "parts"
+      ]
+    }
+  },
+  {
+    "name": "cad_sculpt_loft",
+    "group": "files",
+    "description": "Make ONE smooth tube along a path through cross-sections that change size: a leg, a neck, a tail, a horn, a tentacle, a vase. Each section is a centre (mm) and an elliptical size; the path is a smooth curve through the centres and the ends are closed. radius is the half-size in the first direction (up for a path that runs sideways; along x for one that runs up or down) and radius2 the other (default: the same, a round tube). Result is a mesh shape, like cad_sculpt_blend.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "sections": {
+          "type": "array",
+          "description": "Two to 48 sections in order along the path.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  },
+                  "z": {
+                    "type": "number",
+                    "description": "Height above the ground (default 0)."
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "description": "A point in the model, mm: x, y on the ground and z up."
+              },
+              "radius": {
+                "type": "number"
+              },
+              "radius2": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "at",
+              "radius"
+            ]
+          }
+        },
+        "sides": {
+          "type": "number",
+          "description": "Points round each section (6 to 64, default 24)."
+        },
+        "steps": {
+          "type": "number",
+          "description": "Extra smooth steps between sections (1 to 12, default 4)."
+        },
+        "name": {
+          "type": "string"
+        },
+        "color": {
+          "type": "string",
+          "description": "Hex colour such as \"#3b82f6\"."
+        },
+        "material": {
+          "type": "string",
+          "enum": [
+            "matte",
+            "metal",
+            "glossy",
+            "glass",
+            "neon"
+          ]
+        }
+      },
+      "required": [
+        "sections"
+      ]
+    }
+  },
+  {
+    "name": "cad_sculpt_smooth",
+    "group": "files",
+    "description": "Smooth a mesh shape (from cad_sculpt_blend, cad_sculpt_loft or cad_mesh_import): evens out lumps and stair-steps without shrinking it. subdivide splits every triangle in four first (0 to 2) so a coarse mesh has more to work with. A gentle pass or two; it softens detail, so do it before adding fine features.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "passes": {
+          "type": "number",
+          "description": "Rounds of smoothing, 0 to 20 (default 2)."
+        },
+        "strength": {
+          "type": "number",
+          "description": "0 to 1, how far each round moves points (default 0.5)."
+        },
+        "subdivide": {
+          "type": "number",
+          "description": "0, 1 or 2 (default 0)."
+        }
+      },
+      "required": [
+        "id"
+      ]
+    }
+  },
+  {
     "name": "cad_shape_resize",
     "group": "files",
     "description": "Set a shape's overall width (x), depth (y) and/or height (z). Corners and bevels stay valid. A mesh from a file is scaled to match.",

@@ -324,10 +324,17 @@ const CAD = [
     "something your hand may let go of the pick, close a card, fit the model in view, scroll in or out, or look from another " +
     "side, so the person's view can move. Then the finished model goes in, keeping the ids the window gave what the hand made. " +
     "Your result says \"Done by hand in the 3D window\" with each step, and \"Not by hand\" with why for what was not: the " +
-    "window has no control for cad_doc_set, cad_library_import, cad_mesh_import (it reads a file), cad_library_rename on a phone or a new outline in cad_shape_set, Draw's " +
+    "window has no control for cad_doc_set, cad_library_import, cad_mesh_import (it reads a file), cad_sculpt_blend, cad_sculpt_loft, cad_sculpt_smooth, cad_library_rename on a phone or a new outline in cad_shape_set, Draw's " +
     "Cut goes all the way through (a shallower pocket goes in with the finished model), and the curve of a drawn shape's closing " +
     "side; anything the hand could not reach. Calls that only read are not shown. With Visible work off, or nobody watching, " +
     "every call changes the model at speed and the window shows it.",
+  "  Organic forms. When the person wants something alive or soft (a horse, a face, a creature, a bottle), build it rather than extruding outlines. " +
+    "cad_sculpt_blend melts parts into ONE smooth shape: spheres, tapered capsules (a limb or neck: at, to, radius and radius2 at the ends) and ellipsoids (a body or head: radii along x, y, z), in mm with x, y on the ground and z up. " +
+    "Overlapping parts join softly over smooth mm (default about 0.6 x the smallest radius; 0 leaves creases); detail (8 to 120, default 72) is the fineness; mirror ({axis, at}) reflects what you gave across a plane, so a creature is described from one side. " +
+    "Work big to small: body, chest and hips first, then neck, head, limbs overlapping into them, then small features; look at the result (a view, cad_scene_get) and rebuild with changed numbers rather than patching. A realistic animal needs proportion: legs are long, joints taper, the chest is deeper than the hips. " +
+    "cad_sculpt_loft makes a smooth tube along sections (centre, radius, radius2) for legs, a neck, a tail or a horn; cad_sculpt_smooth (id, passes, strength, subdivide 0 to 2) evens out any mesh shape without shrinking it. " +
+    "All three make a mesh shape, so move, turn, resize, recolour, group and export work and outline edits do not. The window has no controls for them yet, so with Visible work on they say \"Not by hand\". " +
+    "This is creative work: show the person your plan (the parts, the sizes) and ask what they want different before you refine; they decide the character of the form, you do the numbers.",
   "  Meshes. Extruded outlines cannot make organic forms (an animal, a face, a scan): for those, cad_mesh_import brings in a GLB (or glTF), " +
     "OBJ or STL as ONE shape, the real surface, from a file you name (an artifact id or a path; the bytes never go through the " +
     "conversation). A free CC0 model from Poly Pizza, Quaternius or Sketchfab, or one made in Blender, fits; size sets its longest side in mm " +

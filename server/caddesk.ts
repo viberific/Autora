@@ -263,6 +263,9 @@ const NO_CONTROL: Record<string, string> = {
   doc_set: "the window has no control that puts in a whole model",
   library_import: "the window has no control that imports library objects",
   mesh_import: "the window has no control that reads a mesh file",
+  sculpt_blend: "the window has no control that blends parts into a form",
+  sculpt_loft: "the window has no control that lofts sections into a tube",
+  sculpt_smooth: "the window has no control that smooths a surface",
 };
 /** Undo and redo: done in the window with its own buttons, on the history the model already has. */
 const HISTORY = new Set(["history_undo", "history_redo"]);
@@ -586,7 +589,9 @@ export function cadBriefing(on: boolean): string {
   return (
     "- Autora 3D (the 3D modelling window): available. Tools: the cad_* family -- start with cad_scene_get; cad_export gives " +
     "STL to print or GLB for games. cad_mesh_import brings in a GLB, OBJ or STL file as a real surface (an animal, a face, a scan: " +
-    "the extruded shapes cannot make those, so for organic forms find a free CC0 mesh and import it). " +
+    "the extruded shapes cannot make those, so for organic forms build them or import a free CC0 mesh). " +
+    "cad_sculpt_blend makes ONE smooth organic shape by melting spheres, tapered capsules and ellipsoids together (an animal's body, neck, head and legs; mirror reflects half of it), " +
+    "cad_sculpt_loft a smooth tube through changing cross-sections (a leg, tail, horn), and cad_sculpt_smooth evens out any mesh shape. " +
     "Shapes are flat outlines pushed up to a height, in millimetres, x right, y away, z up. Model what the person asks to " +
     "make, print or design with these, not code. The window opens beside the chat on first use and the person can work " +
     "in it too: call cad_scene_get again before relying on what you saw earlier. Check a part with cad_shape_measure " +

@@ -542,6 +542,7 @@ Spectra's fetched renderer is most of what is on disk.
   animation, sparse accessors; Panacea's `file-formats.ts` still routes no mesh (a `.glb` there is also a game resource), so Panacea's file
   route does not take one yet; `docs/autora-3d-mesh.patch` is to be applied to the 3D-Modeling repository, or the next
   `sync-autora-3d.mjs` loses it. Test: `tests/mesh-import.test.ts`.
+  **Organic forms** (`autora-3d/src/utils/organic.ts`, `docs/autora-3d-organic.patch`): `sculpt_blend` (spheres, tapered capsules, ellipsoids melted by a smooth union and meshed with surface nets, optional mirror), `sculpt_loft` (a tube through sections on a Catmull-Rom path) and `sculpt_smooth` (optional 4-way subdivision, then Taubin smoothing) each make or change a mesh shape (`ops.ts` `addSurface` goes through `placeMesh`, so a form is an ordinary mesh). No window controls yet, so they are "Not by hand" (`NO_CONTROL`). Test: `tests/sculpt.test.ts`. `docs/autora-3d-organic.patch` is to be applied to the 3D-Modeling repository, or the next sync loses it.
 - `server/studio.ts`, `server/specs/studio.ts`, `src/lib/studio/`, `src/components/StudioWindow.tsx` + `src/components/studio/`:
   **Autora Music**, the music window, and the agent's `studio_*` tools. A song is tracks of clips of notes, in beats
   (`src/lib/studio/model.ts`: plain JSON, no DOM/React/Node, imported by the server *and* the page, so there is one idea of a valid

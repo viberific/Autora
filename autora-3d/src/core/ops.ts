@@ -5,7 +5,8 @@
 
 import { Body3D, DrawSession, EdgeSel, FaceSel, Frame, LibraryItem, MaterialType, Point2D, RepeatLink, RepeatSession, ShapeGroup, SWATCHES } from '../types';
 import { BodyTransform, resizeBody, scaleMeshHeight, selectionBounds, transformBody } from '../utils/transform';
-import { MeshError, meshFormatOf, placeMesh, readMesh, type MeshFormat } from '../utils/meshImport';
+import { MeshError, meshFormatOf, placeMesh, readMesh, type MeshFormat, type RawMesh } from '../utils/meshImport';
+import { BlendPart, OrganicError, Section, Vec, blendMesh, loftMesh, mirrored, smoothMesh, subdivide } from '../utils/organic';
 import { cutShape, getPolygonSignedArea } from '../utils/geometry';
 import { joinBodies } from '../utils/join';
 import { SHAPE_LABELS, ShapeKind, primitiveOutline } from '../utils/primitives';
@@ -1038,4 +1039,178 @@ export function importLibrary(doc: Doc, a: { items: unknown }): OpResult<{ added
     }
   }
   return { doc: library === doc.library ? doc : settle({ ...doc, library }), result: { added, updated, skipped } };
+}
+
+// ---- Organic forms: blend, loft, smooth ---------------------------------------------------------
+
+const vec = (v: unknown, name: string): Vec => {
+  const p = v as Partial<Vec> | undefined;
+  if (!p || typeof p !== 'object') return fail(`${name} must be a point like {"x": 0, "y": 0, "z": 0}.`);
+  return { x: num(p.x, `${name}.x`), y: num(p.y, `${name}.y`), z: num(p.z, `${name}.z`, 0) };
+};
+
+const positive = (v: unknown, name: string): number => {
+  const n = num(v, name);
+  return n > 0 ? n : fail(`${name} must be above 0.`);
+};
+
+/** Adds a generated surface (millimetres, z up, where it is in the model) as one mesh shape. */
+function addSurface(doc: Doc, ids: IdGen, raw: RawMesh, a: { name?: string; color?: string; material?: MaterialType }, label: string): OpResult<{ id: string; triangles: number; size: { width: number; depth: number; height: number }; note?: string }> {
+  if (raw.indices.length < 3) return fail('The form came out empty.', 'Make the parts bigger or closer together.');
+  const p = raw.positions;
+  const lo = [Infinity, Infinity, Infinity];
+  const hi = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < p.length; i += 3) for (let c = 0; c < 3; c++) {
+    lo[c] = Math.min(lo[c], p[i + c]);
+    hi[c] = Math.max(hi[c], p[i + c]);
+  }
+  let placed;
+  try {
+    // Scale 1 (the longest side is its own size): the numbers already are millimetres, and the footprint centre stays where it is.
+    placed = placeMesh(raw, 'stl', { up: 'z', size: Math.max(...hi.map((h, c) => h - lo[c])), x: (lo[0] + hi[0]) / 2, y: (lo[1] + hi[1]) / 2 });
+  } catch (e) {
+    if (e instanceof MeshError) return fail(e.message);
+    throw e;
+  }
+  const count = doc.bodies.filter((b) => !b.repeatOf).length + 1;
+  const id = ids('body');
+  const body: Body3D = {
+    id,
+    name: a.name ? String(a.name) : `${label} ${count}`,
+    points: placed.points,
+    basePoints: placed.points,
+    mesh: placed.mesh,
+    extrusionHeight: placed.height,
+    elevation: round2(Math.max(0, lo[2])),
+    color: colorOf(a.color, SWATCHES[(count - 1) % SWATCHES.length].value),
+    materialType: materialOf(a.material, 'matte'),
+    visible: true,
+    createdAt: new Date().toISOString(),
+  };
+  return {
+    doc: { ...doc, bodies: [...doc.bodies, body] },
+    result: {
+      id,
+      triangles: placed.triangles,
+      size: { width: round2(hi[0] - lo[0]), depth: round2(hi[1] - lo[1]), height: placed.height },
+      ...(lo[2] < 0 ? { note: `Part of it is below the ground (${round2(lo[2])} mm); it was lifted to stand on it.` } : {}),
+    },
+  };
+}
+
+export interface BlendArgs {
+  parts: { kind: 'sphere' | 'capsule' | 'ellipsoid'; at: Vec; to?: Vec; radius?: number; radius2?: number; radii?: Vec }[];
+  /** How wide the soft joins between parts are, mm. */
+  smooth?: number;
+  /** Grid cells along the longest side. */
+  detail?: number;
+  mirror?: { axis: 'x' | 'y' | 'z'; at?: number };
+  name?: string;
+  color?: string;
+  material?: MaterialType;
+}
+
+/** One soft surface from spheres, tapered capsules and ellipsoids (an animal's body, neck, head and legs). */
+export function sculptBlend(doc: Doc, ids: IdGen, a: BlendArgs) {
+  if (!Array.isArray(a.parts) || !a.parts.length) return fail('parts is required: a list of {kind, at, ...}.', 'kind is sphere (radius), capsule (at, to, radius, radius2) or ellipsoid (radii).');
+  const parts: BlendPart[] = a.parts.map((p, i) => {
+    const w = `parts[${i}]`;
+    if (p.kind === 'sphere') return { kind: 'sphere', a: vec(p.at, `${w}.at`), radius: positive(p.radius, `${w}.radius`) };
+    if (p.kind === 'capsule') {
+      const radius = positive(p.radius, `${w}.radius`);
+      return { kind: 'capsule', a: vec(p.at, `${w}.at`), b: vec(p.to, `${w}.to`), radius, radius2: p.radius2 === undefined ? radius : positive(p.radius2, `${w}.radius2`) };
+    }
+    if (p.kind === 'ellipsoid') {
+      const r = vec(p.radii, `${w}.radii`);
+      if (!(r.x > 0 && r.y > 0 && r.z > 0)) return fail(`${w}.radii must all be above 0.`);
+      return { kind: 'ellipsoid', a: vec(p.at, `${w}.at`), radii: r };
+    }
+    return fail(`${w}.kind must be sphere, capsule or ellipsoid.`);
+  });
+  let all = parts;
+  if (a.mirror) {
+    if (!['x', 'y', 'z'].includes(a.mirror.axis)) return fail('mirror.axis must be x, y or z.');
+    const axis = a.mirror.axis;
+    const centre = a.mirror.at !== undefined ? num(a.mirror.at, 'mirror.at') : (Math.min(...parts.map((p) => p.a[axis])) + Math.max(...parts.map((p) => p.a[axis]))) / 2;
+    all = mirrored(parts, axis, centre);
+  }
+  const smallest = Math.min(...parts.map((p) => (p.kind === 'ellipsoid' ? Math.min((p.radii as Vec).x, (p.radii as Vec).y, (p.radii as Vec).z) : (p.radius as number))));
+  const smooth = a.smooth === undefined ? smallest * 0.6 : num(a.smooth, 'smooth');
+  if (smooth < 0) return fail('smooth cannot be negative.');
+  try {
+    return addSurface(doc, ids, blendMesh(all, { smooth, detail: a.detail === undefined ? 72 : num(a.detail, 'detail') }), a, 'Form');
+  } catch (e) {
+    if (e instanceof OrganicError) return fail(e.message);
+    throw e;
+  }
+}
+
+export interface LoftArgs {
+  sections: { at: Vec; radius: number; radius2?: number }[];
+  sides?: number;
+  steps?: number;
+  name?: string;
+  color?: string;
+  material?: MaterialType;
+}
+
+/** A tube along a smooth path through changing cross-sections (a leg, a neck, a tail). */
+export function sculptLoft(doc: Doc, ids: IdGen, a: LoftArgs) {
+  if (!Array.isArray(a.sections) || a.sections.length < 2) return fail('sections needs at least two: [{at: {x,y,z}, radius, radius2?}, ...].');
+  const sections: Section[] = a.sections.map((s, i) => ({
+    at: vec(s.at, `sections[${i}].at`),
+    radius: positive(s.radius, `sections[${i}].radius`),
+    ...(s.radius2 === undefined ? {} : { radius2: positive(s.radius2, `sections[${i}].radius2`) }),
+  }));
+  try {
+    return addSurface(doc, ids, loftMesh(sections, { sides: a.sides === undefined ? 24 : num(a.sides, 'sides'), steps: a.steps === undefined ? 4 : num(a.steps, 'steps') }), a, 'Loft');
+  } catch (e) {
+    if (e instanceof OrganicError) return fail(e.message);
+    throw e;
+  }
+}
+
+export interface SmoothArgs {
+  id: string;
+  /** Rounds of smoothing (default 2). */
+  passes?: number;
+  /** 0..1, how far each round moves points (default 0.5). */
+  strength?: number;
+  /** Splits every triangle in four first, this many times (0 to 2), so there is more surface to smooth. */
+  subdivide?: number;
+}
+
+/** Evens out a mesh shape's surface, optionally giving it finer triangles first. */
+export function smoothShape(doc: Doc, a: SmoothArgs) {
+  const b = editable(doc, a.id);
+  if (!b.mesh) return fail(`"${b.id}" has no mesh surface to smooth.`, 'Shapes from sculpt_blend, sculpt_loft and mesh_import do.');
+  const passes = Math.round(num(a.passes, 'passes', 2));
+  const strength = num(a.strength, 'strength', 0.5);
+  const split = Math.round(num(a.subdivide, 'subdivide', 0));
+  if (passes < 0 || passes > 20) return fail('passes must be 0 to 20.');
+  if (strength < 0 || strength > 1) return fail('strength must be 0 to 1.');
+  if (split < 0 || split > 2) return fail('subdivide must be 0, 1 or 2.');
+  let mesh: RawMesh = { positions: b.mesh.positions, indices: b.mesh.indices };
+  for (let i = 0; i < split; i++) {
+    if (mesh.indices.length / 3 * 4 > 200000) return fail('That would make more than 200000 triangles.', 'Use a lower subdivide.');
+    mesh = subdivide(mesh);
+  }
+  mesh = smoothMesh(mesh, passes, strength);
+  const p = mesh.positions;
+  const xs: number[] = [];
+  const ys: number[] = [];
+  let top = 0;
+  for (let i = 0; i < p.length; i += 3) {
+    xs.push(p[i]);
+    ys.push(p[i + 1]);
+    top = Math.max(top, p[i + 2]);
+  }
+  const lo = { x: Math.min(...xs), y: Math.min(...ys) };
+  const hi = { x: Math.max(...xs), y: Math.max(...ys) };
+  const points = [{ x: lo.x, y: lo.y }, { x: hi.x, y: lo.y }, { x: hi.x, y: hi.y }, { x: lo.x, y: hi.y }].map((q) => ({ x: round2(q.x), y: round2(q.y) }));
+  const positions = p.map((n) => Math.round(n * 1000) / 1000);
+  return {
+    doc: replace(doc, b.id, { mesh: { positions, indices: mesh.indices }, points, basePoints: points, extrusionHeight: Math.max(1, round2(top)) }),
+    result: { id: b.id, triangles: mesh.indices.length / 3 },
+  };
 }
