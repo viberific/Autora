@@ -11,7 +11,7 @@ import { Mapping, ReplaceStep, Step } from "prosemirror-transform";
 import type { Node as PMNode } from "prosemirror-model";
 import { schema } from "./document";
 
-export type Author = "agent" | "person";
+type Author = "agent" | "person";
 
 export interface DocOp {
   /** Order in this document's log, from 1. */
@@ -55,7 +55,7 @@ export function stepBetween(before: PMNode, after: PMNode): { step: Step; invers
 }
 
 /** What changed between two documents, in a few words: words added or removed, or that it was formatting. */
-export function describeChange(before: PMNode, after: PMNode): string {
+function describeChange(before: PMNode, after: PMNode): string {
   const words = (d: PMNode) => (d.textBetween(0, d.content.size, " ", " ").match(/\S+/g) ?? []).length;
   const gained = words(after) - words(before);
   if (gained > 0) return `+${gained} word${gained === 1 ? "" : "s"}`;

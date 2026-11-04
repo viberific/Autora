@@ -661,7 +661,7 @@ await test("an xlsx's first sheet reads as a table", async () => {
 // ---------------------------------------------------------------- documents --
 
 /** The document surface on this chat's canvas, as the server holds it. */
-const docOf = async () => ((await call("GET", `/api/panacea/${S}/doc`)).body.doc.surfaces as Array<{ id: string; kind: string; doc?: { mode: string; json: unknown }; params: Record<string, unknown> }>).find((x) => x.kind === "doc")!;
+const docOf = async () => ((await call("GET", `/api/panacea/${S}/doc`)).body.doc.surfaces as Array<{ id: string; kind: string; doc?: { mode: string; json: unknown; suggestions?: unknown[] }; params: Record<string, unknown> }>).find((x) => x.kind === "doc")!;
 const blockIds = async () => {
   const d = await docOf();
   const { blocksOf } = await import("../src/lib/panacea/document");
