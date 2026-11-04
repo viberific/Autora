@@ -167,7 +167,7 @@ import { dropSpectra, serveSpectra, spectraDocumentChanged, spectraRoutes, spect
 import { newFileRoutes } from "./server/newfile";
 import { loadFileRoutes, loadPanaceaFile, type FileLoadGuards } from "./server/loadfile";
 import { DESKS } from "./server/desks";
-import { cadRoutes, cadState, serveCad } from "./server/caddesk";
+import { cadRoutes, cadState, onCadCommand, serveCad } from "./server/caddesk";
 import { gameRoutes, gameState, serveGame } from "./server/gamedesk";
 import { photoRoutes, photoState, servePhoto } from "./server/photodesk";
 import { studioRoutes, studioState, studioTurnNote, studioVisible } from "./server/studio";
@@ -1295,6 +1295,12 @@ onOpencutChange((sessionId) => {
 /* Autora 3D, the same way: the window opens, and the model changes (by the agent's tools or the person's hands). */
 
 /* Autora Music, the same way: the window opens, and the song changes (by the agent's tools or the person's hands). */
+
+/* Every command made on a chat's 3D model, by the agent or the person, is an event: the log is the product (README.md). */
+onCadCommand((sessionId, cmd) => {
+  const session = sessions.get(sessionId);
+  if (session) emitEvent(session, "cad.command", cmd.who, { ...cmd });
+});
 
 /* Music, 3D, Games and Photo (server/desks.ts): the window opens, and its state changes (by the agent's tools or the person's hands). */
 for (const desk of DESKS) desk.onChange((sessionId) => sendEphemeral(sessionId, { type: desk.message, session: sessionId, state: desk.state(sessionId) }));

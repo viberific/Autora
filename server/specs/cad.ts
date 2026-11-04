@@ -1773,6 +1773,25 @@ export const cadSPECS: ToolSpec[] = [
     }
   },
   {
+    "name": "cad_history_log",
+    "group": "files",
+    "description": "What has been done to the model, oldest first: each command with who made it (you, or the person in the window), a short account and the revision after it. Use since_revision (the revision you last saw) to see what the person changed while you were not looking.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "last": {
+          "type": "integer",
+          "description": "How many of the latest commands (default 20, at most 100)."
+        },
+        "since_revision": {
+          "type": "integer",
+          "description": "Only commands after this revision."
+        }
+      },
+      "required": []
+    }
+  },
+  {
     "name": "cad_history_undo",
     "group": "files",
     "description": "Undo the last change.",

@@ -11,6 +11,7 @@ export { TOOL_SPECS, toolByName } from './tools';
 export type { ToolSpec } from './tools';
 export { counterIds, emptyDoc, parseDoc, settle, starterDoc } from './doc';
 export type { Doc, IdGen } from './doc';
+export type { CommandEntry, Who } from './commands';
 export { AgentError } from './errors';
 export { initManifold, manifoldReady } from '../utils/manifoldBoolean';
 export type { ShapeSummary, SceneSummary } from './inspect';

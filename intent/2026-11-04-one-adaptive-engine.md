@@ -126,4 +126,9 @@ P0: a read-only survey, no code, producing `docs/ENGINE-SURVEY.md`. Then P1 on 3
   and `server.ts` / `server/tools.ts` loop over it instead of naming each. Behaviour-preserving (e2e cad, studio, photo,
   toolload pass). Not yet: PDF, Office, Video in the registry; `runTool` cases and routes still named per desk; commands
   with inverse and authority tags; generated specs and manuals.
+- **P1, command layer on 3D done**: authority per command (`person` commands are not in the agent's tool list and are refused),
+  a log of every command with who/what/before/after, revert to before any command, `cad.command` events through
+  `emitEvent()`, `cad_history_log` for the agent, the person's sculpt stroke as a command. Not yet: a history list in the
+  window (the API exists), the log persisted across restarts (it lives with the engine), commands for the page's own edits
+  beyond `person_edit` (the window still sends whole models), generated manuals.
 - **P2 to P6**: not started. Each is a separate piece of work with its own parity checklist; they are months, not a session.

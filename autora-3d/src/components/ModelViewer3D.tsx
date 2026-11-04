@@ -14,7 +14,7 @@ import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { BevelStyle, Body3D, EdgeSel, FaceSel, MATERIAL_PRESETS, DrawForm, DrawSession, Frame, Point2D, RepeatSession, ShapeGroup } from '../types';
 import { withGroupMates } from '../utils/groups';
-import { Brush, SculptMesh, boundsOf } from '../utils/sculpt';
+import { Brush, SculptMesh } from '../utils/sculpt';
 import { buildBodyGeometry, buildBodyShape, featureEdges, getInteriorAnchor } from '../utils/bodyGeometry';
 import { bottomRange, faceMeasure, moveBottom, offsetWall, sameFace, wallBase } from '../utils/faces';
 import { EdgePath, defaultBevelSize, maxBevelSize, edgeKey, edgeSize, edgeStyle, edgesAroundFace, edgesOfKind, listEdges, primaryEdge, toggleEdge } from '../utils/edges';
@@ -162,6 +162,8 @@ export interface ModelViewer3DProps {
   onToggleMove?: () => void;
   /** Sculpting: while set, a press on this mesh shape works the surface with the brush instead of picking or moving it. */
   sculpt?: { bodyId: string; brush: Brush } | null;
+  /** A finished brush stroke: the shape's surface points after it (the person's own command, `sculpt_apply`). */
+  onSculpt?: (id: string, positions: number[]) => void;
 }
 
 const ACCENT = '#8b7cf6';
@@ -402,6 +404,7 @@ export default function ModelViewer3D({
   onToggleMove,
   onFaceValue,
   sculpt,
+  onSculpt,
 }: ModelViewer3DProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   /** The circle that shows how far the sculpt brush reaches; moved by the stroke code, not by React. */
@@ -501,6 +504,7 @@ export default function ModelViewer3D({
     onToggleMove,
     onFaceValue,
     sculpt,
+    onSculpt,
   };
 
   // ---- Scene setup (once) -------------------------------------------------
@@ -1481,9 +1485,7 @@ export default function ModelViewer3D({
       controls.enabled = true;
       if (renderer.domElement.hasPointerCapture(e.pointerId)) renderer.domElement.releasePointerCapture(e.pointerId);
       if (st.changed && !cancelled) {
-        const positions = st.sm.positions();
-        const { points, height } = boundsOf(positions);
-        live.current.onUpdateBody(st.id, { mesh: { positions, indices: st.sm.indices }, points, basePoints: points, extrusionHeight: height });
+        live.current.onSculpt?.(st.id, st.sm.positions());
       } else {
         // Nothing to keep: the shape is drawn again from what it was.
         const entry = entriesRef.current.get(st.id);

@@ -148,6 +148,13 @@ await test("the 3D manual teaches organic forms: blend, loft, smooth, and that t
   }
 });
 
+await test("the 3D manual teaches the command log: who did what, history_log since a revision, and the person's own commands", () => {
+  const cad = manualText("cad");
+  for (const needle of ["Who did what", "cad_history_log", "since_revision", "the person's own hand and are not given to you", "history_revert"]) {
+    assert.ok(cad.includes(needle), `the 3D manual lacks "${needle}"`);
+  }
+});
+
 await test("the 3D manual says the tool bar is contextual and where to find every tool", () => {
   const cad = manualText("cad");
   for (const needle of ["The tool bar is contextual", "with nothing made it is Shape and Draw", "Sculpt only for a mesh shape", "All tools (the grid icon"]) {

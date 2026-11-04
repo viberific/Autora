@@ -56,6 +56,28 @@ async function main() {
       assert.match(JSON.stringify(app.seen[app.seen.length - 1].messages), /Renamed by hand/);
     });
 
+    await test("every change is a command in the log and an event, with who made it; the person can go back to before one", async () => {
+      const log = (await app.api("GET", `/api/cad/${s}/commands`)).body.commands as { n: number; name: string; who: string; summary: string }[];
+      const add = log.find((c) => c.name === "shape_add");
+      assert.ok(add && add.who === "agent", JSON.stringify(log));
+      const edit = log.find((c) => c.name === "person_edit");
+      assert.ok(edit && edit.who === "person" && /Renamed by hand/.test(edit.summary), JSON.stringify(log));
+      assert.ok(!log.some((c) => c.name === "scene_get"), "reading is not a command");
+      const events = await app.events(s);
+      const evs = events.filter((e) => e.kind === "cad.command");
+      assert.ok(evs.some((e) => e.actor === "agent") && evs.some((e) => e.actor === "person"), "both reached the event log");
+      assert.equal((await app.api("POST", `/api/cad/${s}/revert`, { n: edit!.n })).status, 200);
+      const { body } = await app.api("GET", `/api/cad/${s}/doc`);
+      assert.equal(body.doc.bodies[0].name, "Stand", "back to before the rename");
+      assert.equal((await app.api("POST", `/api/cad/${s}/revert`, { n: 99999 })).status, 404);
+      assert.equal((await app.api("POST", `/api/cad/${s}/revert`, { n: "x" })).status, 400);
+      const after = (await app.api("GET", `/api/cad/${s}/commands`)).body.commands as { name: string; who: string }[];
+      assert.equal(after.at(-1)!.name, "history_revert");
+      // The person puts their rename back, so what follows sees the model it expects.
+      body.doc.bodies[0].name = "Renamed by hand";
+      assert.equal((await app.api("PUT", `/api/cad/${s}/doc`, { doc: body.doc })).status, 200);
+    });
+
     await test("an STL export lands in the thread as a file, not as base64 in the conversation", async () => {
       app.script.push({ tools: [{ name: "cad_export", args: { format: "stl", name: "stand" } }] });
       app.script.push({ text: "Exported." });

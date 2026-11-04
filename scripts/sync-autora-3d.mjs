@@ -77,14 +77,14 @@ rmSync(scratch, { recursive: true, force: true });
 /* Exporting is the one tool that changes shape here: the file cannot come back as base64 in the conversation, so
    server/caddesk.ts saves it as an artifact (with this name, if one is given) and the reply says what it is called. */
 const EXPORT_NOTE = " The file is saved as an artifact the person can download from the thread, and the reply names it; pass name to choose the file name.";
-const specs = TOOL_SPECS.filter((t) => !t.uiOnly).map((t) => ({
+const specs = TOOL_SPECS.filter((t) => !t.uiOnly && t.authority !== "person").map((t) => ({
   name: `cad_${t.name}`,
   group: "files",
   description: t.name === "export" ? t.description.replace(/, returned as base64/g, "") + EXPORT_NOTE : t.description,
   parameters: t.name === "export" ? { ...t.inputSchema, properties: { ...t.inputSchema.properties, name: { type: "string", description: "File name, without or with the extension." } } } : t.inputSchema,
 }));
 /* The tools mention each other by their own names ("call scene_get again"); the agent knows them as cad_scene_get. */
-const bare = TOOL_SPECS.filter((t) => t.name.includes("_") && !t.uiOnly).map((t) => t.name);
+const bare = TOOL_SPECS.filter((t) => t.name.includes("_") && !t.uiOnly && t.authority !== "person").map((t) => t.name);
 const prefix = (text) => text.replace(new RegExp(`(?<![\\w])(${bare.join("|")})(?![\\w])`, "g"), "cad_$1");
 /* Autora's own specs say what is allowed, not what is forbidden: `additionalProperties` is left out. */
 const written = JSON.parse(prefix(JSON.stringify(specs)).replace(/,?"additionalProperties":(true|false)/g, ""));

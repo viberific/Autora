@@ -6,6 +6,7 @@
 import { Body3D, DrawSession, EdgeSel, FaceSel, Frame, LibraryItem, MaterialType, Point2D, RepeatLink, RepeatSession, ShapeGroup, SWATCHES } from '../types';
 import { BodyTransform, resizeBody, scaleMeshHeight, selectionBounds, transformBody } from '../utils/transform';
 import { MeshError, meshFormatOf, placeMesh, readMesh, type MeshFormat, type RawMesh } from '../utils/meshImport';
+import { boundsOf } from '../utils/sculpt';
 import { BlendPart, OrganicError, Section, Vec, blendMesh, loftMesh, mirrored, smoothMesh, subdivide } from '../utils/organic';
 import { cutShape, getPolygonSignedArea } from '../utils/geometry';
 import { joinBodies } from '../utils/join';
@@ -1212,5 +1213,24 @@ export function smoothShape(doc: Doc, a: SmoothArgs) {
   return {
     doc: replace(doc, b.id, { mesh: { positions, indices: mesh.indices }, points, basePoints: points, extrusionHeight: Math.max(1, round2(top)) }),
     result: { id: b.id, triangles: mesh.indices.length / 3 },
+  };
+}
+
+export interface ApplySculptArgs {
+  id: string;
+  /** Every surface point after the stroke, `[x, y, height]` triples (mm), in the order the shape keeps them. */
+  positions: number[];
+}
+
+/** The person's brush stroke: puts the sculpted surface into a mesh shape and keeps its footprint and height true to it. */
+export function applySculpt(doc: Doc, a: ApplySculptArgs) {
+  const b = editable(doc, a.id);
+  if (!b.mesh) return fail(`"${b.id}" has no mesh surface to sculpt.`);
+  if (!Array.isArray(a.positions) || a.positions.length !== b.mesh.positions.length) return fail('positions must hold one [x, y, height] triple for every point the surface already has.');
+  if (a.positions.some((n) => typeof n !== 'number' || !Number.isFinite(n))) return fail('positions must all be finite numbers.');
+  const { points, height } = boundsOf(a.positions);
+  return {
+    doc: replace(doc, b.id, { mesh: { positions: a.positions, indices: b.mesh.indices }, points, basePoints: points, extrusionHeight: height }),
+    result: { id: b.id },
   };
 }

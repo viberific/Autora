@@ -1125,6 +1125,7 @@ export default function App() {
                   onFaceValue={handleFaceValue}
                   onToggleMove={() => setMoveOn((v) => !v)}
                   sculpt={sculpting}
+                  onSculpt={(id, positions) => void runOp((d) => ops.applySculpt(d, { id, positions }))}
                 />
 
                 {displayBodies.length === 0 && (

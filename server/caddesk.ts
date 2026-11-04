@@ -35,9 +35,24 @@ import type { Value } from "../src/lib/panacea/atoms";
 interface CadEngine {
   execute(name: string, args?: unknown, options?: { ifRevision?: number }): Promise<CadResponse>;
   getDoc(): CadDoc;
-  setDoc(doc: CadDoc): void;
+  setDoc(doc: CadDoc, who?: "agent" | "person"): void;
+  commandLog(): CadCommand[];
+  onCommand(fn: (entry: CadCommand) => void): () => void;
+  revertTo(n: number, who?: "agent" | "person"): boolean;
   subscribe(fn: (doc: CadDoc, revision: number) => void): () => void;
   toJSON(): CadDoc;
+}
+
+/** One command of the model's log: what was made, by whom, in a line (the models either side stay in the engine). */
+export interface CadCommand {
+  n: number;
+  name: string;
+  who: "agent" | "person";
+  ok: boolean;
+  changed: boolean;
+  revision: number;
+  at: number;
+  summary: string;
 }
 
 interface CadResponse {
@@ -98,6 +113,7 @@ interface Entry {
 
 const entries = new Map<string, Entry>();
 const listeners = new Set<(session: string) => void>();
+const commandListeners = new Set<(session: string, entry: CadCommand) => void>();
 
 const validSession = (id: string) => /^[A-Za-z0-9_-]{1,80}$/.test(id);
 
@@ -180,6 +196,9 @@ async function engineOf(session: string): Promise<CadEngine> {
   const engine = new c.Engine(doc);
   entry.engine = engine;
   entry.shapes = countShapes(engine.getDoc());
+  engine.onCommand((cmd) => {
+    for (const fn of commandListeners) fn(session, cmd);
+  });
   engine.subscribe((next) => {
     entry.rev++;
     entry.shapes = countShapes(next);
@@ -214,6 +233,17 @@ export function cadState(session: string): CadState {
 /** Told after every change to a chat's window or model, so the page can be told. */
 export function onCadChange(fn: (session: string) => void) {
   listeners.add(fn);
+}
+
+/** Told of every command made on a chat's model (the agent's calls and the person's edits), for the event log. */
+export function onCadCommand(fn: (session: string, entry: CadCommand) => void) {
+  commandListeners.add(fn);
+}
+
+/** The commands made on a chat's model so far, oldest first. */
+export async function cadCommands(session: string): Promise<CadCommand[]> {
+  if (!validSession(session)) return [];
+  return (await engineOf(session)).commandLog();
 }
 
 /** The chat is gone: let go of its model, and of the file it was kept in. */
@@ -256,7 +286,7 @@ const MOST = 24_000;
 
 /** Calls that only read: nothing to watch, so never by hand. */
 const READS = new Set([
-  "scene_get", "shape_get", "shape_faces", "shape_edges", "shape_measure", "library_list", "library_thumbnail", "library_export", "doc_get", "export",
+  "scene_get", "shape_get", "shape_faces", "shape_edges", "shape_measure", "library_list", "library_thumbnail", "library_export", "doc_get", "export", "history_log",
 ]);
 /** Calls the window has no control for: done here, and the agent is told so. */
 const NO_CONTROL: Record<string, string> = {
@@ -676,8 +706,36 @@ export function cadRoutes(app: Express, opts: {
       if (entry.handing) return res.json({ rev: entry.rev });
       // Stays "person" until the agent's next tool call says otherwise: that is who made the latest change.
       entry.by = "person";
-      engine.setDoc(doc);
+      engine.setDoc(doc, "person");
       res.json({ rev: entry.rev });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  /* The log of what was made on the model, by whom (docs/ENGINE-SURVEY.md, the command layer). */
+  app.get("/api/cad/:session/commands", async (req, res) => {
+    const id = known(req, res);
+    if (!id) return;
+    try {
+      res.json({ commands: await cadCommands(id) });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  /* The person goes back to before a command (the window's history list). A new change on top, so it can be undone. */
+  app.post("/api/cad/:session/revert", async (req, res) => {
+    const id = known(req, res);
+    if (!id) return;
+    if (opts.off()) return res.status(403).json({ error: "Autora 3D is switched off on the Tools page." });
+    const n = Number(req.body?.n);
+    if (!Number.isInteger(n)) return res.status(400).json({ error: "n must be a command number from the log." });
+    try {
+      const engine = await engineOf(id);
+      entryFor(id).by = "person";
+      if (!engine.revertTo(n, "person")) return res.status(404).json({ error: "That command changed nothing or is no longer kept." });
+      res.json({ rev: entryFor(id).rev });
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }

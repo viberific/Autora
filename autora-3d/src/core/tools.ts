@@ -20,6 +20,8 @@ export interface ToolSpec {
   readOnly?: boolean;
   /** True when only the live app can do it (it needs a screen). */
   uiOnly?: boolean;
+  /** Who may make this command: `agent` (the default) or `person`, the person's own hand, which the agent is never given. */
+  authority?: 'agent' | 'person';
 }
 
 const point = { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' } }, required: ['x', 'y'], description: 'A point on the ground plane, mm.' };
@@ -222,6 +224,12 @@ export const TOOL_SPECS: ToolSpec[] = [
     ),
   },
   {
+    name: 'sculpt_apply',
+    description: 'The person\'s brush stroke on a mesh shape: its surface points after the stroke. Not for the agent: shaping a form by hand is the person\'s.',
+    inputSchema: obj({ id: { type: 'string' }, positions: { type: 'array', items: { type: 'number' }, description: 'Every surface point after the stroke, [x, y, height] triples in mm.' } }, ['id', 'positions']),
+    authority: 'person',
+  },
+  {
     name: 'shape_resize',
     description: 'Set a shape\'s overall width (x), depth (y) and/or height (z). Corners and bevels stay valid. A mesh from a file is scaled to match.',
     inputSchema: obj({ id: { type: 'string' }, width: { type: 'number' }, depth: { type: 'number' }, height: { type: 'number' } }, ['id']),
@@ -323,6 +331,12 @@ export const TOOL_SPECS: ToolSpec[] = [
   { name: 'doc_get', description: 'The whole document as JSON (shapes, groups, repeats): save it, or hand it back to doc_set later.', inputSchema: obj({}), readOnly: true },
   { name: 'doc_set', description: 'Replace the whole model with a document from doc_get.', inputSchema: obj({ doc: { type: 'object' } }, ['doc']) },
   { name: 'doc_clear', description: 'Remove every shape.', inputSchema: obj({}) },
+  {
+    name: 'history_log',
+    description: 'What has been done to the model, oldest first: each command with who made it (you, or the person in the window), a short account and the revision after it. Use since_revision (the revision you last saw) to see what the person changed while you were not looking.',
+    inputSchema: obj({ last: { type: 'integer', description: 'How many of the latest commands (default 20, at most 100).' }, since_revision: { type: 'integer', description: 'Only commands after this revision.' } }),
+    readOnly: true,
+  },
   { name: 'history_undo', description: 'Undo the last change.', inputSchema: obj({}) },
   { name: 'history_redo', description: 'Redo the last undone change.', inputSchema: obj({}) },
   {
@@ -398,6 +412,8 @@ export function runDocTool(ctx: ToolContext, name: string, rawArgs: unknown): To
       return done(ops.turnShapes(doc, a as ops.TurnArgs));
     case 'mesh_import':
       return done(ops.importMesh(doc, ids, a as ops.ImportMeshArgs));
+    case 'sculpt_apply':
+      return done(ops.applySculpt(doc, a as unknown as ops.ApplySculptArgs));
     case 'sculpt_blend':
       return done(ops.sculptBlend(doc, ids, a as unknown as ops.BlendArgs));
     case 'sculpt_loft':

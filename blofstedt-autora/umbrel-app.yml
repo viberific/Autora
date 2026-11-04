@@ -206,8 +206,9 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  The 3D tool bar now shows only what the moment needs. With nothing made it is
-  just Shape and Draw; pick a shape and Move, Size, Material, Hide and Delete
-  appear; Sculpt shows only for a mesh shape, Join and Subtract only with two
-  picked, and Export once there is something to export. All tools still lists
-  every tool and what each one needs.
+  Autora 3D now keeps a log of every change to the model, with who made it (the
+  agent or you) and a short account. The agent can read it to see what you
+  changed while it was not looking, and you can go back to before any command
+  through the app's history route. Your brush strokes are your own commands: the
+  agent is never given them and is refused if it tries. The 3D tool bar also
+  shows only what the moment needs.
