@@ -17,7 +17,6 @@
  * The three things only a browser can do -- make sound, stop it, bounce the song to a file -- are commands to the open
  * window (`command`), which does them and answers. The agent cannot hear; playing is for the person.
  */
-import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { MUSIC_TRACK, isMusicBind, writeMusic } from "../src/lib/panacea/apps/music";
@@ -35,6 +34,7 @@ import { stepWords, studioSteps } from "../src/lib/studio/handsteps";
 import { chatTitle } from "./folders";
 import { stateDir } from "./state";
 import { readDoc, saveDoc } from "./store";
+import { createHandshake } from "./handshake";
 
 // ------------------------------------------------------------------ state --
 
@@ -80,7 +80,6 @@ interface Saved {
 
 const entries = new Map<string, Entry>();
 const listeners = new Set<(session: string) => void>();
-let pushed: (session: string, message: Record<string, unknown>) => void = () => undefined;
 /** Whether Visible work is on (server.ts says): then an edit is done in the open window by the agent's hand. */
 let visible: () => boolean = () => false;
 export function studioVisible(fn: () => boolean) {
@@ -136,7 +135,7 @@ function setOpen(session: string, open: boolean) {
   e.open = open;
   e.ready = false;
   if (open) e.since = Date.now();
-  else rejectAll(session, "The music window was closed.");
+  else hs.cancelAll(session, "The music window was closed.");
   persist(session, e);
   changed(session);
 }
@@ -197,7 +196,7 @@ export function loadSong(session: string, data: Buffer): { ok: boolean; error?: 
 
 /** The chat is gone: let go of its song, and of the file it was kept in. */
 export function dropStudio(session: string) {
-  rejectAll(session, "The chat was closed.");
+  hs.cancelAll(session, "The chat was closed.");
   entries.delete(session);
   if (!validSession(session)) return;
   fs.rmSync(path.join(stateDir(), `${savedName(session)}.json`), { force: true });
@@ -223,17 +222,8 @@ export function studioBriefing(on: boolean): string {
 
 // --------------------------------------------------------------- commands --
 
-type Pending = { session: string; resolve: (v: unknown) => void; reject: (e: Error) => void; timer: NodeJS.Timeout; claimed: boolean };
-const pending = new Map<string, Pending>();
-
-function rejectAll(session: string, why: string) {
-  for (const [id, p] of pending) {
-    if (p.session !== session) continue;
-    clearTimeout(p.timer);
-    pending.delete(id);
-    p.reject(new Error(why));
-  }
-}
+/** The offers to the window (server/handshake.ts). */
+const hs = createHandshake();
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -244,35 +234,16 @@ async function command(session: string, name: string, args: Record<string, unkno
   // The page loads after the window opens: give it time to say it is up.
   for (let waited = 0; !e.ready && waited < 20_000; waited += 150) await sleep(150);
   if (!e.ready) throw new Error("The music window did not start. It opens in the browser tab for this chat; if no tab is open, open Autora there and try again.");
-  const id = crypto.randomBytes(6).toString("hex");
-  return await new Promise<unknown>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      pending.delete(id);
-      reject(new Error(`The music window did not answer ${name} in ${Math.round(timeoutMs / 1000)} seconds.`));
-    }, timeoutMs);
-    const entry: Pending = { session, resolve, reject, timer, claimed: false };
-    pending.set(id, entry);
-    // Asked of a window that may not be there: nobody taking it soon is an answer.
-    if (claimMs) {
-      setTimeout(() => {
-        if (entry.claimed || !pending.has(id)) return;
-        clearTimeout(timer);
-        pending.delete(id);
-        entry.reject(new Error("unclaimed"));
-      }, claimMs);
-    }
-    const send = () => pushed(session, { type: "studio.command", session, id, name, args });
-    send();
-    // The same chat open in two tabs hears it twice and the first to claim does it; one that missed it is sent it again.
-    const again = setInterval(() => {
-      if (entry.claimed || !pending.has(id)) clearInterval(again);
-      else send();
-    }, 1500);
-    const settle = entry.resolve;
-    entry.resolve = (v) => { clearInterval(again); settle(v); };
-    const refuse = entry.reject;
-    entry.reject = (err) => { clearInterval(again); refuse(err); };
+  // The same chat open in two tabs hears it twice and the first to claim does it; one that missed it is sent it again.
+  // Asked of a window that may not be there: nobody taking it soon is an answer (`claimMs`).
+  const out = await hs.offer<unknown>(session, { type: "studio.command", session, name, args }, {
+    resendMs: 1500,
+    totalMs: timeoutMs,
+    claimMs,
+    timeoutError: `The music window did not answer ${name} in ${Math.round(timeoutMs / 1000)} seconds.`,
   });
+  if (!out.taken) throw new Error("unclaimed");
+  return out.value;
 }
 
 // ------------------------------------------------------------- by hand --
@@ -834,7 +805,7 @@ export function studioRoutes(app: Express, opts: {
   off: () => boolean;
   push: (session: string, message: Record<string, unknown>) => void;
 }) {
-  pushed = opts.push;
+  hs.setPush(opts.push);
   const known = (req: Request, res: Response): string | null => {
     const id = String(req.params.session);
     if (!validSession(id) || !opts.exists(id)) {
@@ -944,22 +915,15 @@ export function studioRoutes(app: Express, opts: {
   app.post("/api/studio/:session/claim", (req, res) => {
     const id = known(req, res);
     if (!id) return;
-    const p = pending.get(String(req.query.id ?? ""));
-    const won = !!p && p.session === id && !p.claimed;
-    if (won && p) p.claimed = true;
-    res.json({ won });
+    res.json({ won: hs.claim(id, String(req.query.id ?? "")).won });
   });
 
   app.post("/api/studio/:session/reply", bigJson, (req, res) => {
     const id = known(req, res);
     if (!id) return;
-    const p = pending.get(String(req.body?.id ?? ""));
-    if (p && p.session === id) {
-      clearTimeout(p.timer);
-      pending.delete(String(req.body.id));
-      if (req.body.ok) p.resolve(req.body.value);
-      else p.reject(new Error(String(req.body?.value?.message ?? "The window could not do that.")));
-    }
+    const callId = String(req.body?.id ?? "");
+    if (req.body?.ok) hs.reply(id, callId, req.body.value, { unclaimed: true });
+    else hs.fail(id, callId, new Error(String(req.body?.value?.message ?? "The window could not do that.")));
     res.json({ ok: true });
   });
 

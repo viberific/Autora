@@ -15,11 +15,11 @@
  * No window claims it within a few seconds (none open, or nobody has the page) -> nobody is watching, and the edit
  * simply appears, as with Visible work off.
  */
-import crypto from "node:crypto";
 import express, { type Express, type Request, type Response } from "express";
 import { strFromU8 } from "fflate";
 import { unzipCapped } from "./unzip";
 import { docxParagraphs, handing, officeState } from "./officedesk";
+import { createHandshake } from "./handshake";
 
 type Kind = "docx" | "xlsx" | "pptx";
 
@@ -237,43 +237,31 @@ export function stepWords(step: HandStep): string {
 
 // --------------------------------------------------------------- the wire --
 
-let pushed: (session: string, message: Record<string, unknown>) => void = () => undefined;
 let visible: () => boolean = () => false;
 
-type Pending = { session: string; kind: Kind; claimed: boolean; resolve: (r: HandReply) => void };
-const pending = new Map<string, Pending>();
+/** The offers to the window (server/handshake.ts). */
+const hs = createHandshake();
 
 const CLAIM_MS = 4_000;
 /** A person's pace: time to find each place and type it, and for the editor to start if it is starting. */
 const handTime = (steps: number) => 60_000 + steps * 25_000;
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /** The steps, typed in the window by the agent's hand; null when no window took them (nobody is watching). */
 export async function handToWindow(session: string, kind: Kind, steps: HandStep[]): Promise<HandReply | null> {
   if (!visible() || steps.length === 0) return null;
   const open = (officeState(session).windows as Array<{ kind: string; open?: boolean }>).some((w) => w.kind === kind && w.open);
   if (!open) return null;
-  const id = crypto.randomBytes(6).toString("hex");
-  let settle: (r: HandReply) => void = () => undefined;
-  const answered = new Promise<HandReply>((resolve) => { settle = resolve; });
-  const entry: Pending = { session, kind, claimed: false, resolve: (r) => settle(r) };
-  pending.set(id, entry);
-  const message = { type: "officedesk.hand", session, id, kind, steps };
   // While the hand types, what the editor saves is its typing, not the person's work: the desk does not take it.
   const quiet = handing(session, kind);
   try {
-    for (let waited = 0; !entry.claimed && waited < CLAIM_MS; waited += 1_000) {
-      pushed(session, message);
-      await sleep(1_000);
-    }
-    if (!entry.claimed) return null;
-    return await Promise.race([
-      answered,
-      sleep(handTime(steps.length)).then((): HandReply => ({ results: [], error: "the window took too long" })),
-    ]);
+    const out = await hs.offer<HandReply>(session, { type: "officedesk.hand", session, kind, steps }, {
+      claimMs: CLAIM_MS,
+      replyMs: handTime(steps.length),
+      onTimeout: () => ({ results: [], error: "the window took too long" }),
+    });
+    return out.taken ? out.value : null;
   } finally {
     quiet.end();
-    pending.delete(id);
   }
 }
 
@@ -282,7 +270,7 @@ export function officeHandRoutes(app: Express, opts: {
   push: (session: string, message: Record<string, unknown>) => void;
   visible: () => boolean;
 }): void {
-  pushed = opts.push;
+  hs.setPush(opts.push);
   visible = opts.visible;
   const known = (req: Request, res: Response): string | null => {
     const id = String(req.params.session);
@@ -296,24 +284,20 @@ export function officeHandRoutes(app: Express, opts: {
   app.post("/api/officedesk/:session/hand/claim", (req, res) => {
     const id = known(req, res);
     if (!id) return;
-    const p = pending.get(String(req.query.id ?? ""));
-    const won = Boolean(p && p.session === id && !p.claimed);
-    if (won && p) p.claimed = true;
-    res.json({ won });
+    res.json({ won: hs.claim(id, String(req.query.id ?? "")).won });
   });
 
   app.post("/api/officedesk/:session/hand/reply", express.json({ limit: "256kb" }), (req, res) => {
     const id = known(req, res);
     if (!id) return;
-    const p = pending.get(String(req.query.id ?? ""));
-    if (!p || p.session !== id || !p.claimed) return res.status(404).json({ error: "No such edit." });
     const body = (req.body ?? {}) as { results?: unknown; error?: unknown };
     const results = (Array.isArray(body.results) ? body.results : []).slice(0, 200).map((r: any): HandResult => ({
       i: Number(r?.i) || 0,
       ok: r?.ok === true,
       ...(typeof r?.error === "string" ? { error: r.error.slice(0, 300) } : {}),
     }));
-    p.resolve({ results, ...(typeof body.error === "string" ? { error: body.error.slice(0, 300) } : {}) });
+    const said: HandReply = { results, ...(typeof body.error === "string" ? { error: body.error.slice(0, 300) } : {}) };
+    if (!hs.reply(id, String(req.query.id ?? ""), said)) return res.status(404).json({ error: "No such edit." });
     res.json({ ok: true });
   });
 }

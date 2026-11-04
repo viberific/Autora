@@ -34,6 +34,12 @@ files), `photo/overlay/autora.rs` `hand_*`, `byHand` in `OpenCutWindow.tsx`. The
 ask the window to claim the call, plan steps from before/after, perform them, finish, fall back to a direct change if nobody is
 watching. The per-editor part is only "how to perform a step with this editor's own controls". Games has no hand yet.
 
+**Update (P3): the handshake is now one module.** `server/handshake.ts` holds the part that was copied seven times (3D, Photo,
+PDF, Office, Music, Panacea, Video): offer a call with an id, push it again until a window claims it, the first claim wins
+once, wait for the reply, a timeout, a failure or a cancel. Each editor keeps what is its own: the message, the reply's shape,
+its routes (which call `claim` / `reply` / `fail`) and what a timeout means. The per-editor hand itself (what a window does with
+a call, with its own controls) is not shared and cannot be: it is the editor's own interface. Games has no hand yet.
+
 ## Finding 3: undo is per editor, and so is the model
 
 | Editor | Model owner | Undo |

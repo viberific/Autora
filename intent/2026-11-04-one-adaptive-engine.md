@@ -139,4 +139,9 @@ P0: a read-only survey, no code, producing `docs/ENGINE-SURVEY.md`. Then P1 on 3
   gets no insert or replace operation". Suggestions are limited to rewording one block (about as long as it) or removing it, so
   the agent still cannot write new prose; if you want creative documents to refuse suggestions altogether, it is one check in
   `panacea_doc`.
-- **P3 to P6**: not started. Each is a separate piece of work with its own parity checklist; they are months, not a session.
+- **P3, shared hand protocol: done for the server side.** `server/handshake.ts` replaces seven copies of the claim/reply
+  protocol (`tests/handshake.test.ts`). Not shared, by nature: what each window's hand does with a call (its own controls), and
+  the page-side half of the handshake in each editor's frame (claim, run, reply), which lives inside the editors' own code
+  (`autora-3d/src/agentHand.ts`, `spectra-editor/src/autora/hand.ts`, `office/shim/hand.js`, `src/components/studio/hand.ts`...).
+  Games still has no hand. Next would be a shared page-side client, which means touching each fork's overlay.
+- **P4 to P6**: not started. Each is a separate piece of work with its own parity checklist; they are months, not a session.

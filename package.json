@@ -1,7 +1,7 @@
 {
   "name": "autora",
   "private": true,
-  "version": "0.9.331",
+  "version": "0.9.332",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",

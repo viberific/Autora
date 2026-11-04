@@ -31,6 +31,7 @@ import { VIDEO_CLIP, isVideoBind, videoCommands, type VideoState } from "../src/
 import type { Value } from "../src/lib/panacea/atoms";
 import { stateDir } from "./state";
 import { staticDir } from "./staticfiles";
+import { createHandshake } from "./handshake";
 
 // ------------------------------------------------------------- the store --
 
@@ -189,7 +190,6 @@ export function onOpencutChange(fn: (session: string) => void) {
   changed = fn;
 }
 
-let pushed: (session: string, message: Record<string, unknown>) => void = () => undefined;
 
 function win(session: string): Win {
   loadWins();
@@ -205,24 +205,15 @@ function setOpen(session: string, on: boolean) {
   w.readyAt = 0;
   w.problem = null;
   if (on) w.since = Date.now();
-  else rejectAll(session, "The video window was closed.");
+  else hs.cancelAll(session, "The video window was closed.");
   saveWins();
   changed(session);
 }
 
 // --------------------------------------------------------------- commands --
 
-type Pending = { session: string; resolve: (v: unknown) => void; reject: (e: Error) => void; timer: NodeJS.Timeout; claimed: boolean };
-const pending = new Map<string, Pending>();
-
-function rejectAll(session: string, why: string) {
-  for (const [id, p] of pending) {
-    if (p.session !== session) continue;
-    clearTimeout(p.timer);
-    pending.delete(id);
-    p.reject(new Error(why));
-  }
-}
+/** The offers to the window (server/handshake.ts). */
+const hs = createHandshake();
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -250,29 +241,18 @@ export async function command(session: string, name: string, args: Record<string
   if (!isReady(w)) {
     throw new Error("The video editor did not start. It opens in the browser tab for this chat; if no tab is open, open Autora there and try again.");
   }
-  const id = crypto.randomBytes(6).toString("hex");
-  return await new Promise<unknown>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      pending.delete(id);
-      // Slow is not failed: the editor may still be loading (a cold start takes a while), or may have done it and been
-      // slow to say so. Repeating a step that did land would do it twice, so the agent is told to look first.
-      reject(new Error(`The video editor did not answer ${name} in ${Math.round(timeoutMs / 1000)} seconds. That means it was slow, not that it failed: the step may still be done. Read the timeline with video_look before you repeat it.`));
-    }, timeoutMs);
-    const entry: Pending = { session, resolve, reject, timer, claimed: false };
-    pending.set(id, entry);
-    const send = () => pushed(session, { type: "opencut.command", session, id, name, args });
-    send();
-    /* A window that has only just mounted hears the command before its editor is up and lets it go by; it is sent
-       again until one takes it. (Taking is atomic, so a command is only ever done once.) */
-    const again = setInterval(() => {
-      if (entry.claimed || !pending.has(id)) clearInterval(again);
-      else send();
-    }, 1500);
-    const settle = entry.resolve;
-    entry.resolve = (v) => { clearInterval(again); if (isSnapshot(v)) lastSnapshot.set(session, v); settle(v); };
-    const refuse = entry.reject;
-    entry.reject = (e) => { clearInterval(again); refuse(e); };
+  /* A window that has only just mounted hears the command before its editor is up and lets it go by; it is sent
+     again until one takes it. (Taking is atomic, so a command is only ever done once.) */
+  const out = await hs.offer<unknown>(session, { type: "opencut.command", session, name, args }, {
+    resendMs: 1500,
+    totalMs: timeoutMs,
+    // Slow is not failed: the editor may still be loading (a cold start takes a while), or may have done it and been
+    // slow to say so. Repeating a step that did land would do it twice, so the agent is told to look first.
+    timeoutError: `The video editor did not answer ${name} in ${Math.round(timeoutMs / 1000)} seconds. That means it was slow, not that it failed: the step may still be done. Read the timeline with video_look before you repeat it.`,
   });
+  if (!out.taken) throw new Error("unclaimed");
+  if (isSnapshot(out.value)) lastSnapshot.set(session, out.value);
+  return out.value;
 }
 
 /** One-use links the window fetches a file to import from, so the bytes come through the app's own routes. */
@@ -294,7 +274,7 @@ type OpencutOptions = {
 };
 
 export function opencutRoutes(app: Express, opts: OpencutOptions): void {
-  pushed = opts.push;
+  hs.setPush(opts.push);
 
   /* What a Video panel shows: the project as the open editor has it. Reads only, and never wakes or opens the window:
      with it shut there is nothing to show (null). */
@@ -460,22 +440,15 @@ export function opencutRoutes(app: Express, opts: OpencutOptions): void {
   app.post("/api/opencut/claim", (req: Request, res: Response) => {
     const session = known(req, res);
     if (!session) return;
-    const p = pending.get(String(req.query.id ?? ""));
-    const won = !!p && p.session === session && !p.claimed;
-    if (won && p) p.claimed = true;
-    res.json({ won });
+    res.json({ won: hs.claim(session, String(req.query.id ?? "")).won });
   });
 
   app.post("/api/opencut/reply", (req: Request, res: Response) => {
     const session = known(req, res);
     if (!session) return;
-    const p = pending.get(String(req.body?.id ?? ""));
-    if (p && p.session === session) {
-      clearTimeout(p.timer);
-      pending.delete(String(req.body.id));
-      if (req.body.ok) p.resolve(req.body.value);
-      else p.reject(new Error(String(req.body?.value?.message ?? "The editor could not do that.")));
-    }
+    const callId = String(req.body?.id ?? "");
+    if (req.body?.ok) hs.reply(session, callId, req.body.value, { unclaimed: true });
+    else hs.fail(session, callId, new Error(String(req.body?.value?.message ?? "The editor could not do that.")));
     res.json({ ok: true });
   });
 
@@ -546,7 +519,7 @@ export function serveOpencut(app: Express, dist: string): void {
 /** The chat was deleted: nothing of the window is kept for it. */
 export function dropOpencut(session: string): void {
   lastSnapshot.delete(session);
-  rejectAll(session, "The chat was closed.");
+  hs.cancelAll(session, "The chat was closed.");
   loadWins();
   if (wins.delete(session)) saveWins();
   for (const [token, s] of sources) if (s.session === session) sources.delete(token);

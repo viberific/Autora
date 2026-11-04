@@ -10,20 +10,19 @@
  * No window claims it within a few seconds (none open, or nobody has the page) -> nobody is watching, and the edit is
  * done here at speed as with Visible work off.
  */
-import crypto from "node:crypto";
 import express, { type Express, type Request, type Response } from "express";
 import { deskState, expectHandSave } from "./pdfdesk";
+import { createHandshake } from "./handshake";
 
 export type HandStep = { kind: "field" | "add"; key: string | number; ok: boolean; skipped?: boolean; error?: string; what?: string; page?: number };
 export type HandJob = { fields?: Record<string, unknown>; add?: Array<Record<string, unknown> & { i: number }> };
 /** What the window did: each step, and whether its save reached the desk. */
 export type HandReply = { steps: HandStep[]; saved: boolean; error?: string };
 
-let pushed: (session: string, message: Record<string, unknown>) => void = () => undefined;
 let visible: () => boolean = () => false;
 
-type Pending = { session: string; claimed: boolean; resolve: (r: { steps: HandStep[]; saved: boolean; error?: string }) => void };
-const pending = new Map<string, Pending>();
+/** The offers to the window (server/handshake.ts). */
+const hs = createHandshake();
 
 /** How long a window has to take the edit before it is done here instead. */
 const CLAIM_MS = 4_000;
@@ -37,33 +36,24 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 /** The edit, done in the window by the agent's hand; null when no window took it (nobody is watching). */
 export async function handToWindow(session: string, job: HandJob, label: string): Promise<HandReply | null> {
   if (!visible() || !deskState(session).open) return null;
-  const id = crypto.randomBytes(6).toString("hex");
-  let settle: Pending["resolve"] = () => undefined;
-  const answered = new Promise<{ steps: HandStep[]; saved: boolean; error?: string }>((resolve) => { settle = resolve; });
-  const entry: Pending = { session, claimed: false, resolve: (r) => settle(r) };
-  pending.set(id, entry);
-  const message = { type: "pdfdesk.hand", session, id, job };
   let save: ReturnType<typeof expectHandSave> | null = null;
   try {
     // A window that has only just mounted lets the first one go by: it is sent again until one takes it, or nobody does.
-    for (let waited = 0; !entry.claimed && waited < CLAIM_MS; waited += 1_000) {
-      pushed(session, message);
-      await sleep(1_000);
-    }
-    if (!entry.claimed) return null;
-    // From here the window's next save is the hand's.
-    save = expectHandSave(session, label);
     const steps = (job.add?.length ?? 0) + Object.keys(job.fields ?? {}).length;
-    const reply = await Promise.race([
-      answered,
-      sleep(handTime(steps)).then(() => ({ steps: [] as HandStep[], saved: false, error: "the window took too long; what it did is in the window" })),
-    ]);
+    const out = await hs.offer<HandReply>(session, { type: "pdfdesk.hand", session, job }, {
+      claimMs: CLAIM_MS,
+      replyMs: handTime(steps),
+      // From the claim the window's next save is the hand's.
+      onClaimed: () => { save = expectHandSave(session, label); },
+      onTimeout: () => ({ steps: [], saved: false, error: "the window took too long; what it did is in the window" }),
+    });
+    if (!out.taken) return null;
+    const reply = out.value;
     let saved = false;
-    if (reply.saved) saved = await Promise.race([save.saved, sleep(SAVE_MS).then(() => false)]);
+    if (reply.saved && save) saved = await Promise.race([(save as ReturnType<typeof expectHandSave>).saved, sleep(SAVE_MS).then(() => false)]);
     return { steps: reply.steps, saved, ...(reply.error ? { error: reply.error } : {}) };
   } finally {
-    save?.end();
-    pending.delete(id);
+    (save as ReturnType<typeof expectHandSave> | null)?.end();
   }
 }
 
@@ -74,7 +64,7 @@ export function pdfHandRoutes(app: Express, opts: {
   /** Whether Visible work is on. */
   visible: () => boolean;
 }): void {
-  pushed = opts.push;
+  hs.setPush(opts.push);
   visible = opts.visible;
   const known = (req: Request, res: Response): string | null => {
     const id = String(req.params.session);
@@ -89,18 +79,13 @@ export function pdfHandRoutes(app: Express, opts: {
   app.post("/api/pdfdesk/:session/hand/claim", (req, res) => {
     const id = known(req, res);
     if (!id) return;
-    const p = pending.get(String(req.query.id ?? ""));
-    const won = Boolean(p && p.session === id && !p.claimed);
-    if (won && p) p.claimed = true;
-    res.json({ won });
+    res.json({ won: hs.claim(id, String(req.query.id ?? "")).won });
   });
 
   /* ...and says what it did. The file itself comes by the editor's own save. */
   app.post("/api/pdfdesk/:session/hand/reply", express.json({ limit: "256kb" }), (req, res) => {
     const id = known(req, res);
     if (!id) return;
-    const p = pending.get(String(req.query.id ?? ""));
-    if (!p || p.session !== id || !p.claimed) return res.status(404).json({ error: "No such edit." });
     const body = (req.body ?? {}) as { results?: unknown; saved?: unknown; error?: unknown };
     const steps = (Array.isArray(body.results) ? body.results : []).slice(0, 500).map((r: any): HandStep => ({
       kind: r?.kind === "field" ? "field" : "add",
@@ -111,7 +96,8 @@ export function pdfHandRoutes(app: Express, opts: {
       ...(typeof r?.what === "string" ? { what: r.what.slice(0, 120) } : {}),
       ...(Number.isInteger(r?.page) && r.page > 0 ? { page: r.page } : {}),
     }));
-    p.resolve({ steps, saved: body.saved === true, ...(typeof body.error === "string" ? { error: body.error.slice(0, 400) } : {}) });
+    const said: HandReply = { steps, saved: body.saved === true, ...(typeof body.error === "string" ? { error: body.error.slice(0, 400) } : {}) };
+    if (!hs.reply(id, String(req.query.id ?? ""), said)) return res.status(404).json({ error: "No such edit." });
     res.json({ ok: true });
   });
 }

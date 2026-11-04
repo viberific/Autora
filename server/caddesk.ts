@@ -16,7 +16,6 @@
  * geometry kernel), built by the autora-3d sub-project, and the server is typechecked without it. Without the build the
  * tools are simply not offered (`cadAvailable`).
  */
-import crypto from "node:crypto";
 import express, { type Express, type Request, type Response } from "express";
 import fs from "node:fs";
 import path from "node:path";
@@ -28,6 +27,7 @@ import { stateDir } from "./state";
 import { readDoc, saveDoc } from "./store";
 import { staticDir } from "./staticfiles";
 import { cadSPECS } from "./specs/cad";
+import { UNTAKEN, createHandshake } from "./handshake";
 import { MODEL_PART, isModelBind, modelCommands, type ModelDoc } from "../src/lib/panacea/apps/model";
 import type { Value } from "../src/lib/panacea/atoms";
 
@@ -302,37 +302,20 @@ const HISTORY = new Set(["history_undo", "history_redo"]);
 /** How long a window has to take the call before it is done here instead: nobody watching counts as Visible work off. */
 const CLAIM_MS = 4000;
 
-let pushTo: (session: string, message: Record<string, unknown>) => void = () => undefined;
 let visible: () => boolean = () => false;
 let watched: (session: string) => boolean = () => true;
 
 type HandReply = { did?: string[]; skipped?: string; doc?: unknown };
-type Handing = { session: string; claimed: boolean; goal: unknown; need: string[]; resolve: (r: HandReply | null) => void };
-const handing = new Map<string, Handing>();
+/** The offers to the window (server/handshake.ts). */
+const hs = createHandshake();
 
 /**
  * Hand one call to the open window and wait for what its hand did; null when no window took it. `goal` is the model as the
  * call leaves it, which the window is given when it takes the call, so its hand knows what each number should end up as.
  */
 async function handToWindow(session: string, name: string, args: Record<string, unknown>, goal: unknown, need: string[] = []): Promise<HandReply | null> {
-  const id = crypto.randomBytes(6).toString("hex");
-  return await new Promise<HandReply | null>((resolve) => {
-    const entry: Handing = { session, claimed: false, goal, need, resolve: () => undefined };
-    const send = () => pushTo(session, { type: "cad.hand", session, id, name, args });
-    const again = setInterval(() => { if (!entry.claimed) send(); }, 1000);
-    const done = (r: HandReply | null) => {
-      clearInterval(again);
-      clearTimeout(unclaimed);
-      clearTimeout(slow);
-      handing.delete(id);
-      resolve(r);
-    };
-    entry.resolve = done;
-    handing.set(id, entry);
-    send();
-    const unclaimed = setTimeout(() => { if (!entry.claimed) done(null); }, CLAIM_MS);
-    const slow = setTimeout(() => done(null), 150_000);
-  });
+  const out = await hs.offer<HandReply>(session, { type: "cad.hand", session, name, args }, { claimMs: CLAIM_MS, totalMs: 150_000, onTimeout: () => UNTAKEN, info: { goal, need } });
+  return out.taken ? out.value : null;
 }
 
 /** The shapes and groups of the model a call names: the window waits for them before its hand starts. */
@@ -645,7 +628,7 @@ export function cadRoutes(app: Express, opts: {
   /** Whether a page has the chat open: with none, no call waits for a window to take it. */
   watched?: (session: string) => boolean;
 }) {
-  if (opts.push) pushTo = opts.push;
+  if (opts.push) hs.setPush(opts.push);
   if (opts.visible) visible = opts.visible;
   if (opts.watched) watched = opts.watched;
   const known = (req: Request, res: Response): string | null => {
@@ -771,23 +754,21 @@ export function cadRoutes(app: Express, opts: {
   app.post("/api/cad/:session/hand/claim", (req, res) => {
     const id = known(req, res);
     if (!id) return;
-    const h = handing.get(String(req.query.id ?? ""));
-    const won = Boolean(h && h.session === id && !h.claimed);
-    if (won && h) h.claimed = true;
-    res.json(won && h ? { won, goal: h.goal, need: h.need } : { won });
+    const c = hs.claim(id, String(req.query.id ?? ""));
+    const info = c.info as { goal?: unknown; need?: string[] } | undefined;
+    res.json(c.won ? { won: true, goal: info?.goal, need: info?.need } : { won: false });
   });
 
   app.post("/api/cad/:session/hand/reply", bigJson, (req, res) => {
     const id = known(req, res);
     if (!id) return;
-    const h = handing.get(String(req.query.id ?? ""));
-    if (!h || h.session !== id || !h.claimed) return res.status(404).json({ error: "No such call." });
     const b = req.body as { did?: unknown; skipped?: unknown; doc?: unknown } | null;
-    h.resolve({
+    const said: HandReply = {
       did: Array.isArray(b?.did) ? b.did.filter((x): x is string => typeof x === "string").slice(0, 40).map((x) => x.slice(0, 160)) : [],
       skipped: typeof b?.skipped === "string" ? b.skipped.slice(0, 200) : undefined,
       doc: b?.doc,
-    });
+    };
+    if (!hs.reply(id, String(req.query.id ?? ""), said)) return res.status(404).json({ error: "No such call." });
     res.json({ ok: true });
   });
 

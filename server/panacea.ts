@@ -42,6 +42,7 @@ import { studioPanel, studioSong } from "./studio";
 import { addStep, createProject, decide, describeProject, linkPieces, phaseFor, setStepDone, stepById, type Project } from "../src/lib/panacea/project";
 import { addCard, applyBoardParam, boardListing, boardMarkdown, boardSvg, createBoard, editCard, editLink, linkCards, moveCard, removeCard, tidy, unlink, type BoardMode, type BoardState } from "../src/lib/panacea/board";
 import { Node as PMNode } from "prosemirror-model";
+import { createHandshake } from "./handshake";
 import { schema as pmSchema } from "../src/lib/panacea/document";
 import { MAX_SUGGESTIONS, createDoc, docStateOf, formatBlock, insertBlocks, listing, outlineOf, applyParam, deleteBlock, replaceBlockText, stateOf, suggestionProblem, toMarkdown, blockRange, type DocMode, type Suggestion } from "../src/lib/panacea/document";
 import { listOps, readLog, record as recordOp, undoOp, type DocLog } from "../src/lib/panacea/doclog";
@@ -105,7 +106,6 @@ interface Saved {
 
 const entries = new Map<string, Entry>();
 const listeners = new Set<(session: string) => void>();
-let pushed: (session: string, message: Record<string, unknown>) => void = () => undefined;
 let visible: (session: string) => boolean = () => false;
 /** Whether Visible work is on and somebody has this chat on screen to watch it (server.ts says). */
 export function panaceaVisible(fn: (session: string) => boolean) {
@@ -168,7 +168,7 @@ function setOpen(session: string, open: boolean) {
   e.open = open;
   e.ready = false;
   if (open) e.since = Date.now();
-  else rejectAll(session, "The Panacea window was closed.");
+  else hs.cancelAll(session, "The Panacea window was closed.");
   persist(session, e);
   changed(session);
 }
@@ -208,7 +208,7 @@ function commit(session: string, e: Entry, next: Canvas, who: "agent" | "person"
 
 /** The chat is gone: let go of its canvas, and of the file it was kept in. */
 export function dropPanacea(session: string) {
-  rejectAll(session, "The chat was closed.");
+  hs.cancelAll(session, "The chat was closed.");
   const e = entries.get(session);
   if (e?.suggestTimer) clearTimeout(e.suggestTimer);
   entries.delete(session);
@@ -345,17 +345,8 @@ export function onPanaceaTouch(fn: (session: string, text: string) => void) {
 
 // --------------------------------------------------------------- commands --
 
-type Pending = { session: string; resolve: (v: unknown) => void; reject: (e: Error) => void; timer: NodeJS.Timeout; claimed: boolean };
-const pending = new Map<string, Pending>();
-
-function rejectAll(session: string, why: string) {
-  for (const [id, p] of pending) {
-    if (p.session !== session) continue;
-    clearTimeout(p.timer);
-    pending.delete(id);
-    p.reject(new Error(why));
-  }
-}
+/** The offers to the window (server/handshake.ts). */
+const hs = createHandshake();
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -365,33 +356,14 @@ async function command(session: string, name: string, args: Record<string, unkno
   const e = entryFor(session);
   for (let waited = 0; !e.ready && waited < 20_000; waited += 150) await sleep(150);
   if (!e.ready) throw new Error("The Panacea window did not start. It opens in the browser tab for this chat; if no tab is open, open Autora there and try again.");
-  const id = crypto.randomBytes(6).toString("hex");
-  return await new Promise<unknown>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      pending.delete(id);
-      reject(new Error(`The Panacea window did not answer ${name} in ${Math.round(timeoutMs / 1000)} seconds.`));
-    }, timeoutMs);
-    const entry: Pending = { session, resolve, reject, timer, claimed: false };
-    pending.set(id, entry);
-    if (claimMs) {
-      setTimeout(() => {
-        if (entry.claimed || !pending.has(id)) return;
-        clearTimeout(timer);
-        pending.delete(id);
-        entry.reject(new Error("unclaimed"));
-      }, claimMs);
-    }
-    const send = () => pushed(session, { type: "panacea.command", session, id, name, args });
-    send();
-    const again = setInterval(() => {
-      if (entry.claimed || !pending.has(id)) clearInterval(again);
-      else send();
-    }, 1500);
-    const settle = entry.resolve;
-    entry.resolve = (v) => { clearInterval(again); settle(v); };
-    const refuse = entry.reject;
-    entry.reject = (err) => { clearInterval(again); refuse(err); };
+  const out = await hs.offer<unknown>(session, { type: "panacea.command", session, name, args }, {
+    resendMs: 1500,
+    totalMs: timeoutMs,
+    claimMs,
+    timeoutError: `The Panacea window did not answer ${name} in ${Math.round(timeoutMs / 1000)} seconds.`,
   });
+  if (!out.taken) throw new Error("unclaimed");
+  return out.value;
 }
 
 /** Work went from one app to another (src/lib/panacea/flows.ts): noted on the chat's canvas, for the line between them. */
@@ -1349,7 +1321,7 @@ export async function runPanaceaTool(session: string, name: string, args: Record
         const done = edit(session, name, next, modelled.args, hooks);
         setOpen(session, true);
         // Stop ends the wait for the window's hand at once (the page halts the hand itself: src/lib/handHalt.ts).
-        hooks.onCancel?.(() => rejectAll(session, "Stopped by the person."));
+        hooks.onCancel?.(() => hs.cancelAll(session, "Stopped by the person."));
         const hand = await byHand(session, e, next);
         if (hooks.cancelled?.()) return { ok: false, summary: "Stopped by the person before this was done: the canvas keeps what the hand had done so far, and nothing more." };
         if (hand) e.quiet = e.rev + 1;
@@ -1447,7 +1419,7 @@ export function panaceaRoutes(app: Express, opts: {
   push: (session: string, message: Record<string, unknown>) => void;
   loadFile?: (session: string, artifact: ReturnType<typeof saveArtifact>, options: WorkspaceFileOptions) => Promise<FileLoadResult>;
 }) {
-  pushed = opts.push;
+  hs.setPush(opts.push);
   const known = (req: Request, res: Response): string | null => {
     const id = String(req.params.session);
     if (!validSession(id) || !opts.exists(id)) {
@@ -1745,22 +1717,15 @@ export function panaceaRoutes(app: Express, opts: {
   app.post("/api/panacea/:session/claim", (req, res) => {
     const id = known(req, res);
     if (!id) return;
-    const p = pending.get(String(req.query.id ?? ""));
-    const won = !!p && p.session === id && !p.claimed;
-    if (won && p) p.claimed = true;
-    res.json({ won });
+    res.json({ won: hs.claim(id, String(req.query.id ?? "")).won });
   });
 
   app.post("/api/panacea/:session/reply", bigJson, (req, res) => {
     const id = known(req, res);
     if (!id) return;
-    const p = pending.get(String(req.body?.id ?? ""));
-    if (p && p.session === id) {
-      clearTimeout(p.timer);
-      pending.delete(String(req.body.id));
-      if (req.body.ok) p.resolve(req.body.value);
-      else p.reject(new Error(String(req.body?.value?.message ?? "The window could not do that.")));
-    }
+    const callId = String(req.body?.id ?? "");
+    if (req.body?.ok) hs.reply(id, callId, req.body.value, { unclaimed: true });
+    else hs.fail(id, callId, new Error(String(req.body?.value?.message ?? "The window could not do that.")));
     res.json({ ok: true });
   });
 }

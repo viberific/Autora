@@ -206,10 +206,9 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Documents in Panacea now keep a history. Every change is a step with who made
-  it (you or Autora) and what it did, and the History button on the document's
-  bar lets you take any one step back on its own while the later ones stay. When
-  Autora has a better wording for something you wrote, it now suggests it
-  instead of only saying so in the chat: the suggestion waits on the bar, and
-  nothing changes until you press Accept, which makes it your own edit. A
-  suggestion is a rewording of one block, never new writing.
+  Under the hood, every window now hands the agent's work over by the same
+  mechanism: 3D, Photo, PDF, Pages, Sheets, Slides, Music, Video and Panacea
+  share one handshake for offering a step to the open window, one window taking
+  it, and waiting for its answer, instead of seven copies. Nothing changes in
+  what you see; it means a new kind of window needs less to be added, and a
+  fix to that handover now reaches all of them.
