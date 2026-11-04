@@ -266,6 +266,10 @@ struct Rail {
     catalogue: Option<std::rc::Rc<Catalogue>>,
     /// Where the bar drew what the agent's hand may press, last frame (`hand_*`).
     spots: Spots,
+    /// The bar's items the person has reached for in this window: they stay on the bar (`needed`).
+    used: std::collections::HashSet<String>,
+    /// The bar's items as last told to the page (a comma list of ids), so it is told again only when they change.
+    told: String,
 }
 
 /// Where things the agent's hand presses were drawn, in the editor's points.
@@ -612,7 +616,16 @@ fn rail_bar(app: &PhotocraftApp, ctx: &egui::Context) {
     let ids = if phone { default_ids(true) } else { pins.clone().unwrap_or_else(|| default_ids(false)) };
     let room = if phone { screen.width() } else { screen.height() - 16.0 * k };
     let slots = (((room - 2.0 * pad - 12.0 * k + gap) / (size + gap)).floor() as usize).saturating_sub(1).max(1);
-    let shown: Vec<Item> = ids.iter().filter_map(|id| all.find(id)).take(slots).collect();
+    // How many are pinned and fit: what All tools counts against when a tool is pinned, however many the picture needs just now.
+    let on_bar = ids.iter().filter_map(|id| all.find(id)).take(slots).count();
+    let candidates: Vec<Item> = ids.iter().filter_map(|id| all.find(id)).collect();
+    let has_picture = app.session.active().is_some();
+    // The tools the person has reached for in this window stay on the bar; the one in use counts from the moment it is.
+    let used = RAIL.with(|p| {
+        let mut p = p.borrow_mut();
+        p.used.insert(tool_item(tool).id);
+        p.used.clone()
+    });
 
     let on_of = |item: &Item| match &item.act {
         Act::Tool(t) => tool == *t,
@@ -632,13 +645,60 @@ fn rail_bar(app: &PhotocraftApp, ctx: &egui::Context) {
         Act::Command(id) => asks.push(Ask::Command(id.clone(), serde_json::json!({}))),
     };
 
+    // The bar follows the work (docs/TOOL-RAIL.md): with no picture open it has no tools; with one, the tools a picture is for, and
+    // Undo and Redo when there is something to take back or put back, Brush settings and Colour while painting; the rest (Lasso, Magic
+    // wand, Fill, Type, Eyedropper...) join once the person has reached for one. All tools still has everything.
+    let needed_of = |item: &Item| -> bool {
+        if !has_picture {
+            return false;
+        }
+        if on_of(item) || used.contains(&item.id) {
+            return true;
+        }
+        match &item.act {
+            Act::Command(id) if id == "edit.undo" => can_undo,
+            Act::Command(id) if id == "edit.redo" => can_redo,
+            Act::Command(_) => true,
+            Act::Sheet(Sheet::Layers) => true,
+            Act::Sheet(Sheet::Brush) => painting(tool),
+            Act::Sheet(Sheet::Colour) => painting(tool) || matches!(tool, Tool::Gradient | Tool::Type | Tool::VerticalType | Tool::Eyedropper),
+            Act::Tool(t) => matches!(t, Tool::Move | Tool::RectMarquee | Tool::Crop | Tool::Brush | Tool::Eraser) || (painting(tool) && *t == Tool::Eyedropper),
+        }
+    };
+    // Each item eases in and out over a quarter of a second, growing and shrinking its slot so the others slide: nothing pops.
+    let shown: Vec<(Item, f32)> = candidates
+        .into_iter()
+        .filter_map(|item| {
+            let a = ctx.animate_bool_with_time(egui::Id::new(("autora-need", item.id.clone())), needed_of(&item), 0.25);
+            (a > 0.0).then_some((item, a))
+        })
+        .take(slots)
+        .collect();
+
+    // What the bar shows, told to the page when it changes (the window ignores it; tests read it, since the bar is drawn on a canvas).
+    let settled = shown.iter().filter(|(_, a)| *a >= 1.0).map(|(i, _)| i.id.as_str()).collect::<Vec<_>>().join(",");
+    RAIL.with(|p| {
+        let mut p = p.borrow_mut();
+        if p.told != settled {
+            p.told = settled.clone();
+            drop(send("rail", Some(&settled), None));
+        }
+    });
+
     let draw_buttons = |ui: &mut egui::Ui, asks: &mut Vec<Ask>| {
-        for item in &shown {
+        for (item, a) in &shown {
             let tip = match &item.act {
                 Act::Command(id) => photocraft_ui_egui::shortcuts::shortcut_label(app, id).map_or_else(|| item.label.clone(), |s| format!("{}  ({s})", item.label)),
                 _ => item.label.clone(),
             };
-            if round(ui, item.icon, item.color, on_of(item), enabled_of(item), size, &tip).clicked() {
+            let r = ui.scope(|ui| {
+                if *a < 1.0 {
+                    ui.set_opacity(*a);
+                }
+                round(ui, item.icon, item.color, on_of(item), enabled_of(item) && *a > 0.9, size * a.max(0.02), &tip)
+            });
+            if r.inner.clicked() {
+                RAIL.with(|p| p.borrow_mut().used.insert(item.id.clone()));
                 press(item, asks);
             }
         }
@@ -779,7 +839,7 @@ fn rail_bar(app: &PhotocraftApp, ctx: &egui::Context) {
                         }
                     });
                 });
-                let hint = toast.clone().unwrap_or_else(|| if phone { "Tap a tool to use it.".to_string() } else { format!("Pin the tools you use most to your bar. It has room for {slots} at this window size ({} pinned).", shown.len()) });
+                let hint = toast.clone().unwrap_or_else(|| if phone { "Tap a tool to use it.".to_string() } else { format!("Pin the tools you use most to your bar. It has room for {slots} at this window size ({} pinned).", on_bar) });
                 ui.label(egui::RichText::new(hint).size(11.5 * k).color(egui::Color32::from_rgb(122, 130, 151)));
                 let mut query = RAIL.with(|p| p.borrow().search.clone());
                 let field = ui.add(egui::TextEdit::singleline(&mut query).hint_text("Search every tool and command").desired_width(width));
@@ -830,7 +890,7 @@ fn rail_bar(app: &PhotocraftApp, ctx: &egui::Context) {
                                             let pr = ui.allocate_exact_size(egui::vec2(tile_w, 14.0 * k), egui::Sense::click());
                                             ui.painter().text(pr.0.center(), egui::Align2::CENTER_CENTER, if pinned { "Pinned" } else { "Pin to bar" }, egui::FontId::proportional(9.5 * k), if pinned { item.color } else { egui::Color32::from_rgb(122, 130, 151) });
                                             if pr.1.clicked() {
-                                                if !pinned && shown.len() >= slots {
+                                                if !pinned && on_bar >= slots {
                                                     RAIL.with(|p| p.borrow_mut().toast = Some("The bar is full. Unpin a tool first.".into()));
                                                 } else {
                                                     RAIL.with(|p| p.borrow_mut().toast = None);

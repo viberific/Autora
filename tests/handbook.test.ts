@@ -155,6 +155,13 @@ await test("the 3D manual teaches the command log: who did what, history_log sin
   }
 });
 
+await test("the Photo manual says the bar follows the picture: Undo only with something to take back, specialist tools wait in All tools", () => {
+  const photo = manualText("photo");
+  for (const needle of ["that follows the picture", "with no picture open it has no tools", "Undo only once there is something to take back", "wait in All tools until the person reaches for one", "say \"open All tools\" and name it"]) {
+    assert.ok(photo.includes(needle), `the Photo manual lacks "${needle}"`);
+  }
+});
+
 await test("the PDF manual says the bar follows the work: no tools without a document, specialist tools wait in All tools until reached for", () => {
   const pdf = manualText("pdf");
   for (const needle of ["The bar follows the work", "with no document open it has no tools, only All tools", "Erase comes only when there are unsaved marks", "wait in All tools until the person reaches for one", "say \"open All tools\" and name it"]) {

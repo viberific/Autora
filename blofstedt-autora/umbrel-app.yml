@@ -206,11 +206,9 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  The PDF tool bar now follows your document. With nothing open it is empty; with
-  a PDF open it shows what a document is for (select, text, highlight, draw,
-  shapes, note, redact, sign, edit text), adds Erase when there are marks, Fill
-  fields when the pages have form fields and Organize when there is more than one
-  page, and the specialist tools (stamps, callout, measure...) join the bar once
-  you reach for one. Tools fade in and out instead of popping, and the bar holds
-  steady through the brief blank after a save. All tools still lists everything.
-  The agent's hand also waits for the bar to fill before it presses a tool.
+  The Photo tool bar now follows your picture. With nothing open it is empty;
+  with a picture it shows move, select, crop, brush, eraser and layers, Undo
+  only once there is something to take back and Redo once something has been
+  taken back, and brush settings and colour while you paint. Lasso, magic wand,
+  fill, type and eyedropper join the bar once you reach for one. Tools ease in
+  and out instead of popping, and All tools still lists everything.

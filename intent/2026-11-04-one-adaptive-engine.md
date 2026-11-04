@@ -156,8 +156,8 @@ P0: a read-only survey, no code, producing `docs/ENGINE-SURVEY.md`. Then P1 on 3
   when their state and briefing fit the same interface.
 - **Controls that follow the work and fade into the ground (the objective, after P4).** The shared rail now has `needed` on each
   tool and `useFading`: a tool the work has nothing for is off the bar, fades out in place, and fades back in when it has
-  something to act on; All tools still lists it with what it needs. Music, Games, 3D and PDF use it (PDF's is its own copy in Spectra's frame, `spectra-editor/src/autora/rail-need.ts`; 3D's rail is its own copy,
-  `docs/autora-3d-fade.patch`); a browser test (`tests/ui-studio.test.ts`) holds Music's behaviour. Not yet: Video, Photo and the Office windows still show every tool at once; Games' behaviour is typechecked but not
+  something to act on; All tools still lists it with what it needs. Music, Games, 3D, PDF and Photo use it (Photo's is in the Rust overlay `photo/overlay/autora.rs`; PDF's is its own copy in Spectra's frame, `spectra-editor/src/autora/rail-need.ts`; 3D's rail is its own copy,
+  `docs/autora-3d-fade.patch`); a browser test (`tests/ui-studio.test.ts`) holds Music's behaviour. Not yet: Video and the Office windows still show every tool at once; Games' behaviour is typechecked but not
   driven in a browser here (its editor is not built in this container). Beyond the bar: the native Panacea panels already
   appear with the selection and fade away; extending `needed` from "what is picked" to "what the person seems to be doing"
   (the intent bus, P6) is where proactivity goes next.

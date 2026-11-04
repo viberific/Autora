@@ -537,8 +537,11 @@ const PHOTO = [
     "colour management) is yours; the look, mood, composition and what the picture is of are theirs: suggest and ask, and leave values " +
     "where they can change them. What the person sees (the editor's own menu bar, toolbox, options bar, status bar and panel dock are " +
     "away: no menu bar, no toolbox): the picture alone, and a round, coloured tool bar (down the right side on a desktop, along the bottom " +
-    "on a phone) that shows only as many tools as fit: Move, Select, Crop, Brush, Eraser, Layers and Undo on a phone, with Lasso, Magic " +
-    "wand, Fill, Type, Eyedropper, Colour and Redo too on a desktop, where they can pin any tool or command to the bar. Layers, Brush " +
+    "on a phone) that follows the picture: with no picture open it has no tools; with one it shows Move, Select, Crop, Brush, Eraser and Layers, " +
+    "Undo only once there is something to take back and Redo only once something has been taken back, and Brush settings and Colour while a " +
+    "paint tool is in use. Lasso, Magic wand, Fill, Type and Eyedropper (a desktop pins them) wait in All tools until the person reaches for one " +
+    "and then stay on the bar; a tool that is not needed fades out and fades back in when it is, so do not tell the person to press a tool " +
+    "that is not there: say \"open All tools\" and name it. The bar shows only as many as fit, and on a desktop they can pin any tool or command to it. Layers, Brush " +
     "settings and Colour open as a small card beside the bar. The last button, All tools, opens every one of the editor's tools in groups " +
     "(Select, Paint, Retouch, Type and shapes...), the three cards, and every live command of the menus under its menu's name (File, Edit, " +
     "Image, Layer, Filter...), with a search box. Name a tool by its button and say \"open All tools\" if it is not on their bar. The " +
