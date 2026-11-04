@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.95"
+version: "0.3.96"
 port: 8096
 # umbrelOS only hands a container the GPU when the manifest says so: with this
 # permission it adds /dev/dri plus the render/video groups those nodes belong
@@ -60,10 +60,20 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  A finished episode is no longer read back through Flix's own server before it plays. The first play after a restart
-  walked the whole file from the first byte to the last -- 614 MB, about 43 seconds -- before a single frame appeared,
-  and it did that again after every restart; the file is now read straight from the disk, so it starts at once.
+  Subtitle auto-sync now corrects your episodes instead of measuring them and
+  throwing the answer away. Twenty-one of the twenty-five stored fits sat below
+  the confidence gate, so they never moved a line.
 
 
-  A file that is still downloading is played exactly as it was: only what has arrived can be read, so those keep going
-  through the streaming route, which waits for the next piece instead of reading a hole.
+  The measurement itself was the real problem: it asked whether a subtitle line
+  was anywhere inside a stretch of speech, and a line is inside one for as long
+  as it is being said, so a correct subtitle and one half a second out scored the
+  same. Measuring the same real episodes again showed the old fitter was 250 to
+  300 ms late on every one of them. A line is now scored against where speech
+  starts, and the answer is the middle of the best window rather than its edge.
+
+
+  The gate now judges the shape of the score curve rather than its height, so a
+  genuinely mistimed subtitle is corrected and one that is already right is left
+  alone. Every stored measurement is taken once more on the next play. A manual
+  nudge in the player still overrides it.
