@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.94"
+version: "0.3.95"
 port: 8096
 # umbrelOS only hands a container the GPU when the manifest says so: with this
 # permission it adds /dev/dri plus the render/video groups those nodes belong
@@ -60,11 +60,10 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Two fixes for the sound going out of step with the picture, and the reason only a restart ever helped. Any attempt to
-  put the picture back in place mid-episode -- a change of size, a recovery after a stall, a retry -- was throwing an error
-  instead of working, from 0.3.89 onwards; those repairs work now. And a source is no longer swapped underneath a running
-  player: the old one is torn down completely first, which is what used to leave the sound on its own clock.
+  A finished episode is no longer read back through Flix's own server before it plays. The first play after a restart
+  walked the whole file from the first byte to the last -- 614 MB, about 43 seconds -- before a single frame appeared,
+  and it did that again after every restart; the file is now read straight from the disk, so it starts at once.
 
 
-  A finished episode is also read straight from disk now, so a smaller size starts at once instead of waiting on a
-  re-read of the whole file, and the size being left stops holding the box the moment you leave it.
+  A file that is still downloading is played exactly as it was: only what has arrived can be read, so those keep going
+  through the streaming route, which waits for the next piece instead of reading a hole.
