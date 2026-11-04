@@ -321,7 +321,7 @@
   /*
    * What the work needs on the bar now (docs/TOOL-RAIL.md, "The bar follows the work"). A tool with a rule is there when its rule says so;
    * one without is always there (once a document is open: with none, the bar has no tools). Everything stays in All tools. An app with no
-   * RULES yet (Sheets and Slides, until theirs are written) keeps the bar it has always had.
+   * RULES yet (Slides, until its are written) keeps the bar it has always had.
    */
   const RULES = {
     docs: {
@@ -332,6 +332,13 @@
       left: (c) => c.text, centre: (c) => c.text, right: (c) => c.text, justify: (c) => c.text, spacing: (c) => c.text,
       indent: (c) => c.inList || c.selected, outdent: (c) => c.inList || c.selected,
       // The editor's own word on whether there is anything to take back or put back.
+      undo: (c) => c.undo, redo: (c) => c.redo,
+    },
+    sheets: {
+      // A block of cells picked: how it sits, wraps, joins, is bordered and written as numbers, and what can be done to it as data.
+      left: (c) => c.range, centre: (c) => c.range, right: (c) => c.range, wrap: (c) => c.range, merge: (c) => c.range, borders: (c) => c.range,
+      currency: (c) => c.range, percent: (c) => c.range, thousands: (c) => c.range, moredec: (c) => c.range, lessdec: (c) => c.range,
+      strike: (c) => c.range, sort: (c) => c.range, cond: (c) => c.range, astable: (c) => c.range, styles: (c) => c.range,
       undo: (c) => c.undo, redo: (c) => c.redo,
     },
   }[app];
@@ -348,6 +355,12 @@
         selected: inside && !sel.isCollapsed, inList: !!at?.closest("li"),
         undo: !!undo && !isOff(undo), redo: !!redo && !isOff(redo),
       };
+    }
+    if (app === "sheets") {
+      // The grid is drawn on a canvas; the name box above it says what is picked ("A1", or "A1:B3", "A:A", "3:3" for more than a cell).
+      const box = document.querySelector("[data-u-comp='defined-name'] input");
+      const undo = find(["undo"]), redo = find(["redo"]);
+      return { doc: !!box, range: !!box && String(box.value || "").includes(":"), undo: !!undo && !isOff(undo), redo: !!redo && !isOff(redo) };
     }
     return { doc: true };
   }

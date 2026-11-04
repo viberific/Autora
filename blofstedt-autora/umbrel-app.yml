@@ -206,9 +206,9 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  The Pages tool bar now follows your document. Bold, italic, underline, bullets
-  and numbering are always there; alignment comes once the document has words;
-  highlight, text colour, text size and clear formatting appear while you have
-  words picked and fade away when you do not; indent and outdent come with a
-  list; Undo shows only once there is something to take back. Tools collapse and
-  fade in place so the others slide, and All tools still lists everything.
+  The Sheets tool bar now follows what you have picked. A single cell gets the
+  essentials (bold, italic, underline, colours, insert row and column,
+  AutoSum); pick a block of cells, a column or a row and alignment, wrap text,
+  merge, borders, the number formats, sort and filter and format as table
+  appear, and fade away when you pick one cell again. Undo shows only once
+  there is something to take back. All tools still lists everything.

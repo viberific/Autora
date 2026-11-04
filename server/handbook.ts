@@ -282,8 +282,11 @@ const OFFICE = [
     "document has words; Highlight, Text colour, Bigger text, Clear formatting and Cut or Copy only while words are picked; Indent and Outdent " +
     "in a list or with words picked; Undo only once there is something to take back and Redo once something has been taken back; a tool that is not " +
     "needed fades out and back in when it is, so do not tell the person to press a tool that is not there: pick the words first, or say " +
-    "\"open All tools\" and name it. (Sheets: bold, italic, fill, number formats, insert row and column, " +
-    "AutoSum; Slides: new slide, layout, present, bold, italic, text size), and a last button, All tools, that opens every command the " +
+    "\"open All tools\" and name it. Sheets follows what is picked the same way: Bold, Italic, Underline, Fill colour, Text colour, Insert row, " +
+    "Insert column and AutoSum are always there; Align left, Centre, Wrap text, Merge cells, Borders, the number formats (Currency, Percent, " +
+    "Thousands, decimals), Sort & filter, Conditional formatting and Format as table only while a block of cells is picked (a range, a column " +
+    "or a row, not a single cell); Undo and Redo only with something to take back or put back; to bring them, pick the block first (type its " +
+    "address in the name box) or say \"open All tools\". (Slides: new slide, layout, present, bold, italic, text size), and a last button, All tools, that opens every command the " +
     "editor has, one group per old ribbon tab (Insert, Design, Layout, Review, View...), where a desktop can pin any of them to the bar. " +
     "Commands with a drop-down open it beside the bar. The keyboard shortcuts work on a desktop as ever. Point the person at a tool by " +
     "its name and say \"open All tools\" if it is not on their bar. You have every tool whatever is shown.",

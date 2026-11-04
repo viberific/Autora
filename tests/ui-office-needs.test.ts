@@ -83,6 +83,34 @@ async function main() {
       });
       await page.close();
     }
+
+    {
+      const { page, frame, shown } = await open({ name: "office_create", args: { type: "xlsx", name: "pets", rows: [["Breed", "Weight"], ["Beagle", 10.5], ["Corgi", 12]] } }, "sheets");
+      await test("sheets: a cell gets the essentials; a block of cells gets how it sits, wraps and is written as numbers; they fade away again", async () => {
+        const go = async (address: string) => {
+          // Typed into the name box, as the agent's hand does: the grid is a canvas and has nothing to click.
+          await page.locator("iframe").first().focus();
+          await frame.evaluate(() => { const i = document.querySelector<HTMLInputElement>("[data-u-comp='defined-name'] input")!; i.focus(); i.select(); });
+          await page.keyboard.type(address);
+          await page.keyboard.press("Enter");
+        };
+        await until("the grid to be up", async () => (await shown()).includes("Bold"), 40_000);
+        await go("B2");
+        await sleep(900);
+        const one = await shown();
+        for (const l of ["Bold", "Italic", "Underline", "Fill colour", "AutoSum", "Insert row", "Insert column"]) assert.ok(one.includes(l), `${l} is on the bar with a cell picked: ${one}`);
+        for (const l of ["Align left", "Wrap text", "Currency", "Percent", "Undo", "Redo"]) assert.ok(!one.includes(l), `${l} waits: ${one}`);
+        if (process.env.OFFICE_SHOTS) await page.screenshot({ path: `${process.env.OFFICE_SHOTS}/sheets-cell.png` });
+        await go("A1:B3");
+        await until("the block tools to arrive", async () => { const now = await shown(); return now.includes("Align left") && now.includes("Wrap text") && now.includes("Currency") && now.includes("Percent"); });
+        await sleep(400);
+        if (process.env.OFFICE_SHOTS) await page.screenshot({ path: `${process.env.OFFICE_SHOTS}/sheets-range.png` });
+        await go("B2");
+        await until("the block tools to fade away with one cell picked", async () => !(await shown()).includes("Currency"));
+        assert.ok((await shown()).includes("Bold"), "and the essentials stay");
+      });
+      await page.close();
+    }
   } finally {
     await browser.close();
     await app.stop();

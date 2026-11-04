@@ -155,6 +155,13 @@ await test("the 3D manual teaches the command log: who did what, history_log sin
   }
 });
 
+await test("the Office manual says the Sheets bar follows what is picked: block tools only with a range, the essentials with a cell", () => {
+  const office = manualText("office");
+  for (const needle of ["Sheets follows what is picked the same way", "Insert row, Insert column and AutoSum are always there", "only while a block of cells is picked (a range, a column or a row, not a single cell)", "type its address in the name box"]) {
+    assert.ok(office.includes(needle), `the Office manual lacks "${needle}"`);
+  }
+});
+
 await test("the Office manual says the Pages bar follows the document: text tools only while words are picked, Undo only with something to take back", () => {
   const office = manualText("office");
   for (const needle of ["In Pages the bar follows the document", "Highlight, Text colour, Bigger text, Clear formatting and Cut or Copy only while words are picked", "Undo only once there is something to take back", "pick the words first, or say"]) {
