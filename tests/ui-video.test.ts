@@ -111,7 +111,7 @@ async function main() {
       assert.match(text, /image "violet.png"/, "the picture is on the timeline");
       assert.match(text, /text "Hello from Autora" {2}1\.00s to 3\.00s/, "and so is the title, in full, as long as asked");
       // Visible work is on: the title went in from the Text panel's "+", and its words were typed in.
-      assert.match(text, /Default text[^\n]{0,40}typed the words, by hand in the Video window/, `the title was added by hand: ${text.slice(text.lastIndexOf("Done (add_text)"), text.lastIndexOf("Done (add_text)") + 1500)}`);
+      assert.match(text, /Default text[^\n]{0,40}typed the words( into its Content field)?, by hand in the Video window/, `the title was added by hand: ${text.slice(text.lastIndexOf("Done (add_text)"), text.lastIndexOf("Done (add_text)") + 1500)}`);
     });
 
     await test("it is beside the chat, named for the app, and the cursor played", async () => {
@@ -136,6 +136,22 @@ async function main() {
       assert.equal(theirs, mine, "the accent is Autora's");
       const font = await editor.evaluate(() => getComputedStyle(document.body).fontFamily);
       assert.match(font, /Inter/);
+    });
+
+    await test("the desktop bar follows the work: the tools a timeline with clips is for, and the clip tools come when clips are picked", async () => {
+      const bar = () => editor.locator(".rail-bar.is-desktop button:not(.is-leaving)").evaluateAll((bs) => bs.map((b) => b.getAttribute("aria-label")).filter((l) => l !== "All tools"));
+      const until = async (what: string, fn: () => Promise<boolean>) => { for (let i = 0; i < 40; i++) { if (await fn()) return; await sleep(150); } throw new Error(`timed out: ${what}`); };
+      await until("the bar to have its tools", async () => (await bar()).includes("Split"));
+      for (const l of ["Media", "Text", "Effects", "Captions", "Play", "Split", "Snapping"]) assert.ok((await bar()).includes(l), `${l} is on the bar: ${await bar()}`);
+      assert.ok(!(await bar()).includes("Redo"), "Redo waits until something has been taken back");
+      // The agent's last step left a clip picked, so what a picked clip can do is on the bar. Escape puts every clip down: those go.
+      const key = (init: KeyboardEventInit) => editor.evaluate((i) => document.dispatchEvent(new KeyboardEvent("keydown", { ...i, bubbles: true })), init);
+      await key({ key: "Escape" });
+      await until("the clip tools to fade away", async () => !(await bar()).includes("Delete") && !(await bar()).includes("Duplicate"));
+      assert.ok((await bar()).includes("Split"), "the timeline's own tools stay");
+      // Pick every clip (the editor's Ctrl+A): they come back.
+      await key({ key: "a", ctrlKey: true });
+      await until("the clip tools to arrive", async () => (await bar()).includes("Delete") && (await bar()).includes("Duplicate"));
     });
 
     await test("a person's edits are the editor's own, and the agent reads them back", async () => {
@@ -166,12 +182,22 @@ async function main() {
       assert.equal(await frame.locator('.rail-bar.is-phone button[aria-label="Media"]').count(), 1, "Media is a tool of the bar");
       assert.equal(await frame.locator("[data-phone-panel]").count(), 0, "no sheet until asked for");
       assert.equal(await frame.locator("[data-phone-toolbar]").count(), 0, "the old row of timeline buttons is gone: they are tools of the bar");
-      assert.equal(await frame.locator(".rail-bar.is-phone button").count(), 8, "seven tools and the grid button; every other tool is one tap away in All tools");
+      // The bar follows the work: this project has a clip but nothing is picked and nothing has been done by hand, so it is the tools
+      // a clip is for (Media, Play, Split) and the grid button; Edit, Duplicate, Delete and Undo come with a picked clip or a change.
+      const onBar = await frame.locator(".rail-bar.is-phone button:not(.is-leaving)").evaluateAll((bs) => bs.map((b) => b.getAttribute("aria-label")));
+      assert.deepEqual(onBar, ["Media", "Play", "Split", "All tools"], `the phone's bar: ${onBar}`);
+      await frame.evaluate(() => document.querySelector<HTMLElement>('.rail-bar.is-phone button[aria-label="All tools"]')!.click());
+      await frame.waitForSelector(".rail-grid", { timeout: 5_000 });
+      for (const label of ["Edit", "Duplicate", "Delete", "Undo", "Export"]) assert.ok((await frame.locator(".rail-grid").getByText(label, { exact: true }).count()) > 0, `${label} is one tap away in All tools`);
+      await frame.evaluate(() => document.querySelector<HTMLElement>(".rail-grid .rail-x")!.click());
+      await frame.waitForSelector(".rail-grid", { state: "detached", timeout: 5_000 });
       assert.equal(await frame.locator("[data-phone-sheet]").count(), 0, "and no second Media / Edit row");
       assert.equal(await frame.locator("header").count(), 0, "OpenCut's own header row is gone: the window's bar names the project");
-      await frame.click('.rail-bar.is-phone button[aria-label="Media"]');
+      // Pressed from inside the frame: Playwright's own click into this frame, which sits in the scaled workspace, does not always land.
+      const media = () => frame.evaluate(() => document.querySelector<HTMLElement>('.rail-bar.is-phone button[aria-label="Media"]')!.click());
+      await media();
       await frame.waitForSelector('[data-phone-panel="media"]', { timeout: 5_000 });
-      await frame.click('.rail-bar.is-phone button[aria-label="Media"]');
+      await media();
       assert.equal(await frame.locator("[data-phone-panel]").count(), 0, "the same button puts it away");
       await phone.close();
     });

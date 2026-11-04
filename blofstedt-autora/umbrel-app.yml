@@ -206,9 +206,10 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  The Photo tool bar now follows your picture. With nothing open it is empty;
-  with a picture it shows move, select, crop, brush, eraser and layers, Undo
-  only once there is something to take back and Redo once something has been
-  taken back, and brush settings and colour while you paint. Lasso, magic wand,
-  fill, type and eyedropper join the bar once you reach for one. Tools ease in
-  and out instead of popping, and All tools still lists everything.
+  The Video tool bar now follows your project. Media and Text are always there;
+  Effects, Captions, Play, Split, Snapping and Zoom come once the timeline has
+  clips; Duplicate, Delete and Edit only while clips are picked; Undo only once
+  there is something to take back and Redo once something has been taken back.
+  Tools fade in and out instead of popping, and All tools still lists everything.
+  The agent knows the bar changes and points you to All tools when a tool is not
+  on it.

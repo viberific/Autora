@@ -173,9 +173,11 @@ const VIDEO = [
     "renders a file (MP4 by default, or WebM with format) and can take a while; only when asked. Leave the editor alone while the person holds it. The story, pacing, music " +
     "and look are theirs. What the person sees (there is no strip of tabs at the left, no row of timeline buttons and, on a phone, no " +
     "Media / Edit / Export row any more): the preview, the timeline with only its curves, scenes and zoom slider above it, the properties, " +
-    "and a round, coloured tool bar (down the right side on a desktop, along the bottom on a phone) that shows only as many tools as fit: " +
-    "Media, Text, Effects, Captions, Play, Split, Duplicate, Delete, Snapping, Zoom, Undo and Redo on a desktop (Media, Edit, Play, Split, " +
-    "Duplicate, Delete, Undo on a phone). The last button, All tools, opens every tool: the panels (Media, Sounds, Text, Stickers, " +
+    "and a round, coloured tool bar (down the right side on a desktop, along the bottom on a phone) that follows the work and shows only as many " +
+    "tools as fit. Media and Text are always there; Effects, Captions, Play, Split, Snapping, Zoom and (on a phone) Export come once the timeline has " +
+    "clips; Duplicate, Delete and (on a phone) Edit only while clips are picked; Undo only once there is something to take back and Redo once " +
+    "something has been taken back. A tool that is not needed fades out and fades back in when it is, so do not tell the person to press a tool " +
+    "that is not there: pick the clip first, or say \"open All tools\" and name it. The last button, All tools, opens every tool: the panels (Media, Sounds, Text, Stickers, " +
     "Effects, Transitions, Captions, Adjustment, Settings), playback, the clip edits (cut left and right, copy, paste, extract audio, " +
     "mute, show or hide, select all), the timeline (snapping, ripple, bookmark, zoom) and history; a desktop can pin any of them. Each " +
     "is a button you can click with video_ui by its name. The keyboard shortcuts work on a desktop as ever. Point the person at a tool by " +
