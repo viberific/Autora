@@ -871,6 +871,78 @@ await test("a project: phases with regions, the plan waits for approval, steps, 
   assert.equal(repaired.surfaces.find((x) => x.id === notes.id)!.phase, undefined, "a phase the project no longer has is dropped");
 });
 
+await test("a document keeps an operation log: who changed it and how, with one step taken back on its own", async () => {
+  panacea.dropPanacea(S);
+  assert.ok((await run("panacea_surface", { document: "# Log\n\nFirst line.\n\nSecond line.", title: "Log" })).ok);
+  const [title, first, second] = await blockIds();
+  const d = await docOf();
+  const route = (tail: string) => `/api/panacea/${S}/doc/${d.id}/${tail}`;
+  assert.ok((await run("panacea_doc", { ops: [{ op: "format", id: second!.id, set: { align: "center" } }] })).ok);
+  // The person types in the first line: the window sends the whole document.
+  const canvas = (await call("GET", `/api/panacea/${S}/doc`)).body;
+  const typed = canvas.doc.surfaces.find((x: { id: string }) => x.id === d.id);
+  const { replaceBlockText, docStateOf } = await import("../src/lib/panacea/document");
+  const replaced = replaceBlockText(stateOf(typed.doc), first!.id, "First line, by hand.");
+  assert.ok(typeof replaced !== "string");
+  typed.doc = docStateOf(replaced as never, "guide");
+  assert.equal((await call("PUT", `/api/panacea/${S}/doc`, { doc: canvas.doc, rev: canvas.rev })).status, 200);
+  const log = (await call("GET", route("log"))).body.ops as { n: number; who: string; summary: string }[];
+  assert.deepEqual(log.map((o) => o.who), ["agent", "person"], JSON.stringify(log));
+  assert.match(log[0]!.summary, /formatted/);
+  // Take the agent's formatting back; the person's words stay.
+  const undo = await call("POST", route("undo"), { n: log[0]!.n });
+  assert.equal(undo.status, 200, JSON.stringify(undo.body));
+  const after = await blockIds();
+  assert.equal(after.find((b) => b.id === first!.id)!.text, "First line, by hand.");
+  assert.notEqual((await docOf()).doc!.json, undefined);
+  const log2 = (await call("GET", route("log"))).body.ops as { who: string; summary: string }[];
+  assert.match(log2.at(-1)!.summary, /took back step 1/);
+  assert.equal(log2.at(-1)!.who, "person");
+  assert.equal((await call("POST", route("undo"), { n: 999 })).status, 409);
+  assert.equal((await call("POST", route("undo"), { n: "x" })).status, 400);
+  void title;
+});
+
+await test("the agent suggests a rewording; nothing changes until the person accepts, and stale or oversized ones are refused", async () => {
+  panacea.dropPanacea(S);
+  assert.ok((await run("panacea_surface", { document: "# Story\n\nThe door was open.\n\nShe went in.", title: "Story" })).ok);
+  const [, door] = await blockIds();
+  const d = await docOf();
+  const route = `/api/panacea/${S}/doc/${d.id}/suggestion`;
+  const ok = await run("panacea_doc", { ops: [{ op: "suggest", id: door!.id, text: "The door stood open.", reason: "stronger verb" }] });
+  assert.ok(ok.ok, ok.summary);
+  assert.match(ok.summary, /nothing changed until the person accepts/);
+  assert.equal((await blockIds()).find((b) => b.id === door!.id)!.text, "The door was open.", "not applied");
+  const sug = (await docOf()).doc!.suggestions as { id: string; kind: string }[];
+  assert.equal(sug.length, 1);
+  assert.match((await run("panacea_look", { doc: "" })).summary, /suggestions waiting.*stronger verb/);
+  // Not new writing: too long, an insert, no reason, a block that is not there.
+  const long = await run("panacea_doc", { ops: [{ op: "suggest", id: door!.id, text: "x".repeat(400), reason: "more" }] });
+  assert.ok(!long.ok && /more than a rewording/.test(long.summary), long.summary);
+  assert.ok(!(await run("panacea_doc", { ops: [{ op: "suggest", id: door!.id, text: "Hi", reason: "" }] })).ok);
+  assert.ok(!(await run("panacea_doc", { ops: [{ op: "suggest", id: "nope", text: "Hi there", reason: "because" }] })).ok);
+  // The person waves one away and accepts another.
+  assert.equal((await call("POST", route, { id: sug[0]!.id, action: "dismiss" })).status, 200);
+  assert.equal(((await docOf()).doc as { suggestions?: unknown[] }).suggestions, undefined);
+  assert.ok((await run("panacea_doc", { ops: [{ op: "suggest", id: door!.id, text: "The door stood open.", reason: "stronger verb" }] })).ok);
+  const again = (await docOf()).doc!.suggestions as { id: string }[];
+  assert.equal((await call("POST", route, { id: again[0]!.id, action: "accept" })).status, 200);
+  assert.equal((await blockIds()).find((b) => b.id === door!.id)!.text, "The door stood open.");
+  const log = (await call("GET", `/api/panacea/${S}/doc/${d.id}/log`)).body.ops as { who: string; summary: string }[];
+  assert.equal(log.at(-1)!.who, "person");
+  assert.match(log.at(-1)!.summary, /accepted a suggestion: stronger verb/);
+  // Words changed since the suggestion: not applied.
+  assert.ok((await run("panacea_doc", { ops: [{ op: "mode", mode: "agent" }] })).ok);
+  assert.ok((await run("panacea_doc", { ops: [{ op: "suggest", id: door!.id, remove: true, reason: "cut it" }] })).ok);
+  const stale = (await docOf()).doc!.suggestions as { id: string }[];
+  assert.ok((await run("panacea_doc", { ops: [{ op: "replace", id: door!.id, text: "Rewritten meanwhile." }] })).ok);
+  const refused = await call("POST", route, { id: stale[0]!.id, action: "accept" });
+  assert.equal(refused.status, 409);
+  assert.match(refused.body.error, /changed since/);
+  assert.equal((await call("POST", route, { id: "gone", action: "accept" })).status, 404);
+  assert.equal((await call("POST", route, { id: stale[0]!.id, action: "maybe" })).status, 400);
+});
+
 server.close();
 console.log(`\n${passed} passed`);
 process.exit(0);

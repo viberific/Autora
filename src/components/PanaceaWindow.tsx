@@ -329,10 +329,10 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
 
   const hold = doc.hold;
   const api: PanaceaApi = useMemo(() => ({
-    canvas, profile: displayProfile, sessionId, set, act, ask, hold, expand, writeDoc, writeBoard, setMode,
+    canvas, profile: displayProfile, sessionId, set, act, ask, hold, expand, writeDoc, writeBoard, setMode, refresh: doc.refresh,
     value: (key: string) => apps.read(key, canvas.values[pickOf(key)]) ?? valueAt(canvas, key),
     options: apps.options,
-  }), [apps, canvas, displayProfile, sessionId, set, act, ask, hold, expand, writeDoc, writeBoard, setMode]);
+  }), [apps, canvas, displayProfile, sessionId, set, act, ask, hold, expand, writeDoc, writeBoard, setMode, doc.refresh]);
 
   // ------------------------------------------------------- panel actions --
 

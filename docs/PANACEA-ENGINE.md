@@ -88,8 +88,11 @@ the design directly.
 
 - **M0 done** (kinds registry). **M1 begun: documents** (`docs/PANACEA.md`, "Documents"): the native model, the editor, panels that
   follow the selection, the authority split enforced in `panacea_doc`, import by drop or Load, Markdown export. Not yet in M1:
-  suggested edits as ghosts (a guided document can only be formatted, not rewritten, so there is no path yet for Autora to
-  *suggest* a rewording), an operation log of steps (the canvas history snapshots whole documents instead), tables, DOCX.
+  tables, DOCX. **Since:** an operation log of steps per document (`src/lib/panacea/doclog.ts`: ProseMirror steps with their
+  inverses, who made them, one step taken back on its own with the later ones kept, refused when what it touched has since
+  been rewritten), and suggested edits as ghosts (`panacea_doc` `suggest`: a rewording of one block or removing it, with a
+  reason, never new writing; accepted or dismissed by the person from the document's bar, accepting being their own edit).
+  The canvas history still snapshots whole canvases for Ctrl+Z; the log sits beside it and is what the History list reads.
 - Found on the way: the board's two "pan into view" effects overshot when an agent added a surface and its panels together
   (they measured mid-glide); fixed, and it would have hit tables too.
 

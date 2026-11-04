@@ -154,7 +154,7 @@ const DOC: SurfaceKindDef = {
   apply: (s, param, value) => {
     if (!s.doc) return;
     const next = applyParam(stateOf(s.doc), param, value);
-    if (next) s.doc = docStateOf(next, s.doc.mode);
+    if (next) s.doc = docStateOf(next, s.doc.mode, s.doc.suggestions);
   },
 };
 

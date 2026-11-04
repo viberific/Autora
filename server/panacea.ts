@@ -41,7 +41,10 @@ import { videoPanel, videoSnapshot } from "./opencut";
 import { studioPanel, studioSong } from "./studio";
 import { addStep, createProject, decide, describeProject, linkPieces, phaseFor, setStepDone, stepById, type Project } from "../src/lib/panacea/project";
 import { addCard, applyBoardParam, boardListing, boardMarkdown, boardSvg, createBoard, editCard, editLink, linkCards, moveCard, removeCard, tidy, unlink, type BoardMode, type BoardState } from "../src/lib/panacea/board";
-import { createDoc, docStateOf, formatBlock, insertBlocks, listing, outlineOf, applyParam, deleteBlock, replaceBlockText, stateOf, toMarkdown, type DocMode } from "../src/lib/panacea/document";
+import { Node as PMNode } from "prosemirror-model";
+import { schema as pmSchema } from "../src/lib/panacea/document";
+import { MAX_SUGGESTIONS, createDoc, docStateOf, formatBlock, insertBlocks, listing, outlineOf, applyParam, deleteBlock, replaceBlockText, stateOf, suggestionProblem, toMarkdown, blockRange, type DocMode, type Suggestion } from "../src/lib/panacea/document";
+import { listOps, readLog, record as recordOp, undoOp, type DocLog } from "../src/lib/panacea/doclog";
 import { KINDS, type SurfaceKind } from "../src/lib/panacea/kinds";
 import { assembleRecipe, BUILTINS, DOMAINS, libraryIndex, searchLibrary, type Domain, type Recipe } from "../src/lib/panacea/library";
 import { cooling, normalizeProfile, noteDismiss, noteSide, noteUse, preferredSide, profileWords, quieted, sideOf, usageKey, type Profile } from "../src/lib/panacea/profile";
@@ -89,12 +92,15 @@ interface Entry {
   /** When a suggestion was last made, and how many this hour. */
   suggested: number[];
   suggestTimer?: NodeJS.Timeout;
+  /** Each document's operation log (src/lib/panacea/doclog.ts): kept here, because the page's copy of a document is only its tree. */
+  docLogs: Record<string, DocLog>;
 }
 
 interface Saved {
   canvas: Canvas;
   open: boolean;
   since: number;
+  docLogs?: Record<string, unknown>;
 }
 
 const entries = new Map<string, Entry>();
@@ -126,6 +132,7 @@ function entryFor(session: string): Entry {
       ready: false,
       acts: [],
       suggested: [],
+      docLogs: readLogs(saved?.docLogs),
     };
     entries.set(session, entry);
   }
@@ -134,7 +141,7 @@ function entryFor(session: string): Entry {
 
 function persist(session: string, e: Entry) {
   if (!validSession(session)) return;
-  saveDoc(savedName(session), () => ({ canvas: e.canvas, open: e.open, since: e.since }) satisfies Saved);
+  saveDoc(savedName(session), () => ({ canvas: e.canvas, open: e.open, since: e.since, docLogs: e.docLogs }) satisfies Saved);
 }
 
 function changed(session: string) {
@@ -166,7 +173,32 @@ function setOpen(session: string, open: boolean) {
   changed(session);
 }
 
-function commit(session: string, e: Entry, next: Canvas, who: "agent" | "person") {
+/** A document's tree changed between two canvases: one step in its log, by whoever made the change. */
+function logDocs(e: Entry, next: Canvas, who: "agent" | "person", note: string) {
+  const keep: Record<string, DocLog> = {};
+  for (const s of next.surfaces) {
+    const before = e.canvas.surfaces.find((x) => x.id === s.id);
+    let log = e.docLogs[s.id];
+    if (before?.doc && s.doc && JSON.stringify(before.doc.json) !== JSON.stringify(s.doc.json)) {
+      try {
+        log = recordOp(log, PMNode.fromJSON(pmSchema, before.doc.json), PMNode.fromJSON(pmSchema, s.doc.json), who, note);
+      } catch {
+        // A tree that does not parse is refused elsewhere; here it only goes unlogged.
+      }
+    }
+    if (log && s.doc) keep[s.id] = log;
+  }
+  e.docLogs = keep;
+}
+
+function readLogs(raw: unknown): Record<string, DocLog> {
+  const out: Record<string, DocLog> = {};
+  if (raw && typeof raw === "object") for (const [id, v] of Object.entries(raw)) { const log = readLog(v); if (log) out[id] = log; }
+  return out;
+}
+
+function commit(session: string, e: Entry, next: Canvas, who: "agent" | "person", note = "") {
+  logDocs(e, next, who, note);
   e.canvas = next;
   e.rev++;
   e.by = who;
@@ -1000,6 +1032,7 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
       if (ops.length > 40) refuse("At most 40 ops in one call.");
       let state = stateOf(s.doc!);
       let mode = s.doc!.mode;
+      let suggestions: Suggestion[] | undefined = s.doc!.suggestions;
       const done: string[] = [];
       /** Words are the person's unless they gave them to Autora: formatting is never held back, writing is. */
       const writes = (what: string) => {
@@ -1052,16 +1085,30 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
             done.push(`removed ${id}`);
             break;
           }
+          case "suggest": {
+            // Proposed, never applied: the person accepts or waves it away from the document's bar. Allowed whoever writes.
+            if (!id) refuse(`${where} needs \`id\` (a block) and either \`text\` (the block reworded) or \`remove: true\`, and a \`reason\`.`);
+            const range = blockRange(state.doc, id) ?? refuse(`${where}: there is no block ${id}. Read the ids with panacea_look doc:.`);
+            const was = state.doc.textBetween(range.from, range.to, " ", " ");
+            const kind = op.remove === true ? "delete" : "replace";
+            const problem = suggestionProblem(was, kind, op.text, op.reason);
+            if (problem) refuse(`${where}: ${problem}`);
+            const pending = (s.doc!.suggestions ?? []).filter((x) => x.block !== id);
+            if (pending.length >= MAX_SUGGESTIONS) refuse(`${where}: ${MAX_SUGGESTIONS} suggestions are waiting for an answer. Let the person deal with those first.`);
+            suggestions = [...pending, { id: `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, block: id, kind, ...(kind === "replace" ? { text: String(op.text) } : {}), was, reason: String(op.reason).trim(), at: Date.now() }];
+            done.push(`suggested ${kind === "delete" ? "removing" : "rewording"} ${id} (nothing changed until the person accepts)`);
+            break;
+          }
           case "mode": {
             mode = op.mode === "agent" || op.mode === "guide" ? op.mode : refuse(`${where}: mode is "agent" (you may write) or "guide" (the person writes).`);
             done.push(mode === "agent" ? "switched the document to Autora writing (the person can switch it back)" : "gave the writing back to the person");
             break;
           }
           default:
-            refuse(`${where}: op is format, style, insert, replace, delete or mode.`);
+            refuse(`${where}: op is format, style, insert, replace, delete, suggest or mode.`);
         }
       });
-      s.doc = docStateOf(state, mode);
+      s.doc = docStateOf(state, mode, suggestions);
       KINDS.doc.settle?.(s);
       const blocks = listing(state.doc).split("\n");
       return { text: `${done.join("; ")}.\nBlocks now (${blocks.length}):\n${blocks.slice(0, 80).join("\n")}${blocks.length > 80 ? "\n… (panacea_look doc: for the rest)" : ""}`, preview: done[0]! };
@@ -1252,6 +1299,7 @@ export async function runPanaceaTool(session: string, name: string, args: Record
               `Document ${d.id} "${d.title}": ${d.params.words} words; ${d.doc!.mode === "agent" ? "Autora may write in it" : "the person writes it: you format and structure, you do not write its words"}.`,
               caret.isTextblock && caret.attrs.id ? `The person's caret is in [${String(caret.attrs.id)}].` : "",
               outline ? `Outline:\n${outline}` : "No headings yet.",
+              d.doc!.suggestions?.length ? `Your suggestions waiting for the person's answer (${d.doc!.suggestions.length}): ${d.doc!.suggestions.map((x) => `[${x.block}] ${x.kind === "delete" ? "remove" : "reword"}: ${x.reason}`).join(" | ")}. Do not repeat them.` : "",
               `Blocks (id, kind, text; panacea_doc changes them by id):\n${text.length > 20_000 ? `${text.slice(0, 20_000)}\n… (cut; ask with \`full\` for blocks in full, or read the file)` : text}`,
             ].filter(Boolean).join("\n"),
             preview: d.title,
@@ -1305,7 +1353,7 @@ export async function runPanaceaTool(session: string, name: string, args: Record
         const hand = await byHand(session, e, next);
         if (hooks.cancelled?.()) return { ok: false, summary: "Stopped by the person before this was done: the canvas keeps what the hand had done so far, and nothing more." };
         if (hand) e.quiet = e.rev + 1;
-        commit(session, e, next, "agent");
+        commit(session, e, next, "agent", done.text.split("\n")[0]!.slice(0, 160));
         return { ok: true, summary: `${done.text}${modelNote}${hand ? ` ${hand}` : ""}`, preview: done.preview };
       }
 
@@ -1469,6 +1517,73 @@ export function panaceaRoutes(app: Express, opts: {
     const next = normalizeCanvas(req.body?.doc);
     if (!next) return res.status(400).json({ error: "That is not a Panacea canvas." });
     commit(id, e, next, "person");
+    res.json({ rev: e.rev });
+  });
+
+  /* A document's operation log (src/lib/panacea/doclog.ts): who changed it and how, without the steps. */
+  app.get("/api/panacea/:session/doc/:surface/log", (req, res) => {
+    const id = known(req, res);
+    if (!id) return;
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ ops: listOps(entryFor(id).docLogs[String(req.params.surface)]) });
+  });
+
+  /* The person takes one step of a document back, keeping the later ones. A new step on top, so it can be undone too. */
+  app.post("/api/panacea/:session/doc/:surface/undo", express.json(), (req, res) => {
+    const id = known(req, res);
+    if (!id) return;
+    if (opts.off()) return res.status(403).json({ error: OFF });
+    const e = entryFor(id);
+    const s = e.canvas.surfaces.find((x) => x.id === String(req.params.surface));
+    const n = numberOr(req.body?.n);
+    if (!s?.doc) return res.status(404).json({ error: "There is no such document." });
+    if (n === null || !Number.isInteger(n)) return res.status(400).json({ error: "n must be a step number from the log." });
+    const log = e.docLogs[s.id];
+    if (!log) return res.status(404).json({ error: "This document has no log yet." });
+    try {
+      const out = undoOp(PMNode.fromJSON(pmSchema, s.doc.json), log, n);
+      if ("error" in out) return res.status(409).json({ error: out.error });
+      const next = structuredClone(e.canvas);
+      const doc = next.surfaces.find((x) => x.id === s.id)!;
+      const base = stateOf(doc.doc!);
+      doc.doc = docStateOf(base.apply(base.tr.replaceWith(0, base.doc.content.size, out.doc.content)), doc.doc!.mode, doc.doc!.suggestions);
+      KINDS.doc.settle?.(doc);
+      const was = log.ops.find((o) => o.n === n);
+      commit(id, e, next, "person", `took back step ${n}${was ? ` (${was.summary})` : ""}`);
+      res.json({ rev: e.rev });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  /* The person answers a suggestion: accepting makes the change as their own edit (and it is a step in the log); either way
+     it is gone from the bar. A suggestion about words that have changed since is not applied. */
+  app.post("/api/panacea/:session/doc/:surface/suggestion", express.json(), (req, res) => {
+    const id = known(req, res);
+    if (!id) return;
+    if (opts.off()) return res.status(403).json({ error: OFF });
+    const e = entryFor(id);
+    const next = structuredClone(e.canvas);
+    const s = next.surfaces.find((x) => x.id === String(req.params.surface));
+    if (!s?.doc) return res.status(404).json({ error: "There is no such document." });
+    const sug = (s.doc.suggestions ?? []).find((x) => x.id === String(req.body?.id));
+    if (!sug) return res.status(404).json({ error: "That suggestion is gone." });
+    const action = req.body?.action;
+    if (action !== "accept" && action !== "dismiss") return res.status(400).json({ error: "action is accept or dismiss." });
+    const rest = (s.doc.suggestions ?? []).filter((x) => x.id !== sug.id);
+    let state = stateOf(s.doc);
+    if (action === "accept") {
+      const range = blockRange(state.doc, sug.block);
+      const now = range ? state.doc.textBetween(range.from, range.to, " ", " ") : null;
+      if (now === null) return res.status(409).json({ error: "That block is gone, so the suggestion no longer applies." });
+      if (now !== sug.was) return res.status(409).json({ error: "Those words have changed since Autora suggested this, so it was not applied. Dismiss it, or ask for a new one." });
+      const made = sug.kind === "delete" ? deleteBlock(state, sug.block) : replaceBlockText(state, sug.block, sug.text ?? "");
+      if (typeof made === "string") return res.status(409).json({ error: made });
+      state = made;
+    }
+    s.doc = docStateOf(state, s.doc.mode, rest);
+    KINDS.doc.settle?.(s);
+    commit(id, e, next, "person", action === "accept" ? `accepted a suggestion: ${sug.reason}`.slice(0, 160) : "");
     res.json({ rev: e.rev });
   });
 

@@ -204,6 +204,13 @@ await test("the Music manual says that with Visible work on the studio tools are
   }
 });
 
+await test("the Panacea manual teaches a document's history and suggestions: proposed, never applied, the person accepts", () => {
+  const p = manualText("panacea");
+  for (const needle of ["keeps a history", "take any one step back on its own", "{op:\"suggest\"", "A suggestion changes nothing", "their own edit", "never new writing"]) {
+    assert.ok(p.includes(needle), `the Panacea manual lacks "${needle}"`);
+  }
+});
+
 await test("the Panacea manual teaches laying out the windows: the person's gestures and the agent's, kept with the canvas", () => {
   const p = manualText("panacea");
   for (const needle of ["Layout. The apps' windows", "Tidy in the board's", "panacea_arrange: `windows`", "`tidy`", "front first", "same gesture"]) {

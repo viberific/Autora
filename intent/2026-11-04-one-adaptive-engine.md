@@ -131,4 +131,12 @@ P0: a read-only survey, no code, producing `docs/ENGINE-SURVEY.md`. Then P1 on 3
   `emitEvent()`, `cad_history_log` for the agent, the person's sculpt stroke as a command. Not yet: a history list in the
   window (the API exists), the log persisted across restarts (it lives with the engine), commands for the page's own edits
   beyond `person_edit` (the window still sends whole models), generated manuals.
-- **P2 to P6**: not started. Each is a separate piece of work with its own parity checklist; they are months, not a session.
+- **P2, documents: done for what the plan named.** A step-based operation log per document with who/what and selective
+  undo; ghost suggestions (rewording or removal, never new writing) accepted by the person as their own edit; the History
+  and Suggestions bar in the page. Not done: tables, DOCX, the selection-bound `@sel.parent` binds beyond what `paramsFromState`
+  already does, and replacing the canvas-wide Ctrl+Z snapshots with the log (they sit side by side).
+  **Decision to review:** the engine plan says both "Autora proposes the person's parts as ghost edits" and "creative writing
+  gets no insert or replace operation". Suggestions are limited to rewording one block (about as long as it) or removing it, so
+  the agent still cannot write new prose; if you want creative documents to refuse suggestions altogether, it is one check in
+  `panacea_doc`.
+- **P3 to P6**: not started. Each is a separate piece of work with its own parity checklist; they are months, not a session.

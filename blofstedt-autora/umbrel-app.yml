@@ -206,9 +206,10 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Autora 3D now keeps a log of every change to the model, with who made it (the
-  agent or you) and a short account. The agent can read it to see what you
-  changed while it was not looking, and you can go back to before any command
-  through the app's history route. Your brush strokes are your own commands: the
-  agent is never given them and is refused if it tries. The 3D tool bar also
-  shows only what the moment needs.
+  Documents in Panacea now keep a history. Every change is a step with who made
+  it (you or Autora) and what it did, and the History button on the document's
+  bar lets you take any one step back on its own while the later ones stay. When
+  Autora has a better wording for something you wrote, it now suggests it
+  instead of only saying so in the chat: the suggestion waits on the bar, and
+  nothing changes until you press Accept, which makes it your own edit. A
+  suggestion is a rewording of one block, never new writing.
