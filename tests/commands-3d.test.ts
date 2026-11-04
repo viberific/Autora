@@ -60,7 +60,7 @@ await test("every change is logged with who made it and a short summary; reads a
 
 await test("a change the window sends is logged as the person's, described from the difference", async () => {
   const e = new core.Engine(core.emptyDoc());
-  const id = await ball(e);
+  await ball(e);
   const doc = e.getDoc();
   const body = doc.bodies[0];
   e.setDoc({ ...doc, bodies: [{ ...body, mesh: { positions: body.mesh.positions.map((n: number) => n + 0.1), indices: body.mesh.indices } }] }, "person");

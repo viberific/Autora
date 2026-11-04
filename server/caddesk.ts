@@ -44,7 +44,7 @@ interface CadEngine {
 }
 
 /** One command of the model's log: what was made, by whom, in a line (the models either side stay in the engine). */
-export interface CadCommand {
+interface CadCommand {
   n: number;
   name: string;
   who: "agent" | "person";
@@ -241,7 +241,7 @@ export function onCadCommand(fn: (session: string, entry: CadCommand) => void) {
 }
 
 /** The commands made on a chat's model so far, oldest first. */
-export async function cadCommands(session: string): Promise<CadCommand[]> {
+async function cadCommands(session: string): Promise<CadCommand[]> {
   if (!validSession(session)) return [];
   return (await engineOf(session)).commandLog();
 }
