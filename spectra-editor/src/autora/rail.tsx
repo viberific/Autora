@@ -95,7 +95,13 @@ function useOpen(): Open {
 }
 
 /** A tile's own command; the Select button puts the open tool away. */
-const commandOf = (t: Tile): CommandId => (t.id === "sign" ? "tools.stamp" : t.id === "select" ? "tools.close" : t.command ?? (t.mode ? (`tools.${t.mode}` as CommandId) : (`tools.open.${t.tool}` as CommandId)));
+const commandOf = (t: Tile): CommandId => (t.id === "sign" ? "tools.stamp" : t.id === "select" ? "tools.close" : (t.command as CommandId | undefined) ?? (t.mode ? (`tools.${t.mode}` as CommandId) : (`tools.open.${t.tool}` as CommandId)));
+
+/** Every command a tile names must be one of Spectra's: said once, at start, so a typo is a console error and not a dead button. */
+for (const t of Object.values(TOOLS)) {
+  const id = commandOf(t);
+  if (!(id in COMMANDS)) console.error(`[autora rail] the ${t.id} tile names ${id}, which Spectra does not have`);
+}
 
 /* ------------------------------------------------------------------ pins */
 
