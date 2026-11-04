@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.91"
+version: "0.3.92"
 port: 8096
 # umbrelOS only hands a container the GPU when the manifest says so: with this
 # permission it adds /dev/dri plus the render/video groups those nodes belong
@@ -60,11 +60,12 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Subtitles that are nearly right can now be nudged. The player's bar has a small minus and plus either side of CC: a press
-  moves every line a quarter of a second earlier or later, holding one keeps going, and Flix remembers the number for that
-  episode on every device. It wins over the automatic timing, and nudging back to zero brings the automatic timing back. On a
-  phone the two buttons sit on a line of their own just above the bar, where the row has room for them.
+  The sound no longer drifts away from the picture. Stepping a stalled episode down to a smaller size used to swap the source
+  underneath the running player, and the old sound pipeline kept its own clock, so picture and sound ran at different speeds
+  until the episode was stopped and restarted. A swap now tears the old pipeline down completely and resumes at the same spot.
+  The smaller size also starts at once instead of being queued behind the size it replaces, and a finished episode is read
+  straight from disk, so a jump deep into an episode costs a seek instead of re-reading the whole file.
 
 
-  The automatic measurement no longer stays forever: a subtitle measured by an older version of the fitting is measured again
-  the next time it plays, and one that was never sure of itself is looked at again after a week. A nudge is never lost to that.
+  For anyone reporting a playback problem: the log now records, for every source the player attaches, which kind it is and
+  what sound it carries, and how far the picture has drifted from the sound when it passes 150 ms.
