@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.92"
+version: "0.3.93"
 port: 8096
 # umbrelOS only hands a container the GPU when the manifest says so: with this
 # permission it adds /dev/dri plus the render/video groups those nodes belong
@@ -60,12 +60,9 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  The sound no longer drifts away from the picture. Stepping a stalled episode down to a smaller size used to swap the source
-  underneath the running player, and the old sound pipeline kept its own clock, so picture and sound ran at different speeds
-  until the episode was stopped and restarted. A swap now tears the old pipeline down completely and resumes at the same spot.
-  The smaller size also starts at once instead of being queued behind the size it replaces, and a finished episode is read
-  straight from disk, so a jump deep into an episode costs a seek instead of re-reading the whole file.
+  A playback fix that was meant to be in 0.3.89: any attempt to put the picture back in place mid-episode -- a change of
+  size, a recovery after a stall, a retry -- was throwing an error instead of working, which is why only stopping the video
+  and opening it again ever helped. Those repairs work now, which is what keeps the sound with the picture.
 
 
-  For anyone reporting a playback problem: the log now records, for every source the player attaches, which kind it is and
-  what sound it carries, and how far the picture has drifted from the sound when it passes 150 ms.
+  0.3.92 also stopped a source being swapped under a running player and gave the size being left back to the box at once.
