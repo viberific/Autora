@@ -155,6 +155,13 @@ await test("the 3D manual teaches the command log: who did what, history_log sin
   }
 });
 
+await test("the Music and Games manuals say the tool bar shows only what the work needs, and that tools fade in and out", () => {
+  const music = manualText("studio");
+  for (const needle of ["shows only what the song needs", "an empty song has Add track and Song", "fade in while a clip is picked and fade out when nothing is"]) assert.ok(music.includes(needle), `the Music manual lacks "${needle}"`);
+  const game = manualText("game");
+  for (const needle of ["only what the moment needs", "Abilities and Delete only once an object is picked", "fades out and fades back in when it has"]) assert.ok(game.includes(needle), `the Games manual lacks "${needle}"`);
+});
+
 await test("the 3D manual says the tool bar is contextual and where to find every tool", () => {
   const cad = manualText("cad");
   for (const needle of ["The tool bar is contextual", "with nothing made it is Shape and Draw", "Sculpt only for a mesh shape", "All tools (the grid icon"]) {

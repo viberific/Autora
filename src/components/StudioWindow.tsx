@@ -318,15 +318,15 @@ export function StudioWindow({ sessionId, phone }: { sessionId: string; phone: b
 
   const tools: RailTool[] = [
     { id: "add", label: "Add track", group: "Build", icon: <IconPlus size={20} />, color: VERB.draw, phone: true, on: trayId === "add", disabled: full_, about: "A new instrument", run: () => toggleTray("add") },
-    { id: "split", label: "Split", group: "Edit the clip", icon: <IconScissors size={20} />, color: VERB.shape, phone: true, disabled: !hasClip, about: "Cut the clip in two at the playhead (or the middle)", run: split },
-    { id: "duplicate", label: "Duplicate", group: "Edit the clip", icon: <IconCopy size={20} />, color: VERB.text, phone: true, disabled: !hasClip, about: "Copy it straight after itself (Ctrl+D)", run: duplicate },
-    { id: "delete", label: "Delete", group: "Edit the clip", icon: <IconTrash size={20} />, color: VERB.remove, phone: true, disabled: !hasClip, about: "Delete the clip (Delete)", run: removeClip },
+    { id: "split", needed: hasClip, label: "Split", group: "Edit the clip", icon: <IconScissors size={20} />, color: VERB.shape, phone: true, disabled: !hasClip, about: "Cut the clip in two at the playhead (or the middle)", run: split },
+    { id: "duplicate", needed: hasClip, label: "Duplicate", group: "Edit the clip", icon: <IconCopy size={20} />, color: VERB.text, phone: true, disabled: !hasClip, about: "Copy it straight after itself (Ctrl+D)", run: duplicate },
+    { id: "delete", needed: hasClip, label: "Delete", group: "Edit the clip", icon: <IconTrash size={20} />, color: VERB.remove, phone: true, disabled: !hasClip, about: "Delete the clip (Delete)", run: removeClip },
     { id: "song", label: "Song", group: "Song", icon: <IconMusic size={20} />, color: VERB.select, phone: true, on: trayId === "song", about: "Tempo, key and length", run: () => toggleTray("song") },
-    { id: "mixer", label: "Mixer", group: "Song", icon: <IconSliders size={20} />, color: VERB.highlight, phone: true, on: dock === "mixer", about: "Levels, pan, mute and solo", run: () => setDock(dock === "mixer" ? "editor" : "mixer") },
-    { id: "zoom", label: "Zoom", group: "View", icon: <IconSearch size={20} />, color: VERB.note, phone: true, on: trayId === "zoom", about: "How wide a beat is", run: () => toggleTray("zoom") },
-    { id: "editor", label: "Piano roll", group: "View", icon: <IconTable size={20} />, color: VERB.note, desktop: true, on: dock === "editor", about: "The notes of the open clip", run: () => setDock(dock === "editor" ? "closed" : "editor") },
-    { id: "loop", label: "Loop", group: "Playback", icon: <IconRepeat size={20} />, color: VERB.insert, desktop: true, on: project.loop, about: "Loop the song", run: () => song.edit((d) => { d.loop = !d.loop; }) },
-    { id: "metronome", label: "Metronome", group: "Playback", icon: <IconMetronome size={20} />, color: VERB.stamp, desktop: true, on: metro, about: "Click track", run: () => setMetro(!metro) },
+    { id: "mixer", needed: project.tracks.length > 0, label: "Mixer", group: "Song", icon: <IconSliders size={20} />, color: VERB.highlight, phone: true, on: dock === "mixer", about: "Levels, pan, mute and solo", run: () => setDock(dock === "mixer" ? "editor" : "mixer") },
+    { id: "zoom", needed: project.tracks.length > 0, label: "Zoom", group: "View", icon: <IconSearch size={20} />, color: VERB.note, phone: true, on: trayId === "zoom", about: "How wide a beat is", run: () => toggleTray("zoom") },
+    { id: "editor", needed: hasClip, label: "Piano roll", group: "View", icon: <IconTable size={20} />, color: VERB.note, desktop: true, on: dock === "editor", about: "The notes of the open clip", run: () => setDock(dock === "editor" ? "closed" : "editor") },
+    { id: "loop", needed: project.tracks.length > 0, label: "Loop", group: "Playback", icon: <IconRepeat size={20} />, color: VERB.insert, desktop: true, on: project.loop, about: "Loop the song", run: () => song.edit((d) => { d.loop = !d.loop; }) },
+    { id: "metronome", needed: project.tracks.length > 0, label: "Metronome", group: "Playback", icon: <IconMetronome size={20} />, color: VERB.stamp, desktop: true, on: metro, about: "Click track", run: () => setMetro(!metro) },
   ];
   const trayTool = trayId ? tools.find((t) => t.id === trayId) ?? null : null;
 

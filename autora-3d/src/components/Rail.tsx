@@ -47,6 +47,7 @@ import {
 } from 'lucide-react';
 import { SHAPE_LABELS, ShapeKind } from '../utils/primitives';
 import Sidebar from './Sidebar';
+import { useFading } from '../hooks/useFading';
 import { EdgePanel, FacePanel, SculptPanel, SizePositionPanel, sculptable, selectionMode, type TopBarProps } from './TopBar';
 
 const SHAPE_ICONS: Record<ShapeKind, LucideIcon> = {
@@ -213,7 +214,8 @@ export default function Rail(props: RailProps) {
     if (t.id === 'file') return props.bodyCount > 0;
     return !t.disabled;
   };
-  const shown = ids.filter((id) => needed(byId.get(id)!));
+  const wanted = ids.filter((id) => needed(byId.get(id)!));
+  const shown = useFading(wanted.slice(0, room));
 
   // The window's own size is the room: its height on a desktop (the bar is a column), its width on a phone (a row).
   useLayoutEffect(() => {
@@ -331,7 +333,7 @@ export default function Rail(props: RailProps) {
             : 'fixed right-2.5 top-1/2 -translate-y-1/2 z-40 flex flex-col items-center gap-[3px] p-[5px] rounded-full bg-slate-800/90 backdrop-blur border border-white/10 shadow-2xl shadow-black/50 max-h-[calc(100%-1.5rem)] overflow-hidden'
         }
       >
-        {shown.slice(0, room).map((id) => {
+        {shown.map(({ id, leaving }) => {
           const t = byId.get(id)!;
           const Icon = t.icon;
           return (
@@ -341,10 +343,11 @@ export default function Rail(props: RailProps) {
               aria-label={t.label}
               aria-pressed={t.on || undefined}
               title={nameOf(t)}
-              disabled={t.disabled}
+              disabled={t.disabled || leaving}
+              tabIndex={leaving ? -1 : undefined}
               onClick={() => press(t)}
               style={{ ['--tc' as string]: t.color, background: t.on ? t.color : `color-mix(in srgb, ${t.color} 16%, transparent)`, color: t.on ? '#fff' : t.color, boxShadow: t.on ? `0 6px 18px color-mix(in srgb, ${t.color} 45%, transparent)` : undefined }}
-              className={`shrink-0 rounded-full flex items-center justify-center transition-colors disabled:opacity-35 disabled:pointer-events-none ${phone ? 'h-10 w-10' : 'h-[34px] w-[34px]'}`}
+              className={`shrink-0 rounded-full flex items-center justify-center transition-all duration-200 disabled:opacity-35 disabled:pointer-events-none ${leaving ? 'opacity-0 scale-60 pointer-events-none' : 'animate-rail-in'} ${phone ? 'h-10 w-10' : 'h-[34px] w-[34px]'}`}
             >
               <Icon size={phone ? 20 : 18} strokeWidth={1.75} />
             </button>

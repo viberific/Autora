@@ -20,6 +20,9 @@ Live copy of the first version: https://claude.ai/artifact/A5vaGaNwJ8EFLA35jv3gD
 3. **The bar never scrolls, in either direction.** It shows only as many tools as fit the space the page
    has (measure with a `ResizeObserver`) and the grid button is always last, after a divider.
 4. **The grid button opens "All tools"**: every tool the app has, grouped, each tile in its tool's colour.
+5. **The bar follows the work** (`needed` on `RailTool`, `useFading` in `src/lib/toolrail.ts`): a window says when each tool is useful (nothing picked, no
+   track, nothing placed yet) and the bar shows only those; the rest fade out of the bar, fade back in when the work needs them, and are
+   always in All tools with what they need said. Music, Games and 3D do this; the PDF, Video and Photo bars are still every tool at once.
    A modal in the centre of the screen on desktop and phone alike, over a dimmed backdrop.
 5. **Desktop: pin and unpin.** Each tile has a pin; pinned tools are what the bar shows, in pin order.
    Pinning beyond what fits is refused ("The bar is full"). "Reset bar" restores the defaults. Pins are kept

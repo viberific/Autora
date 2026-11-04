@@ -206,8 +206,9 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  The editors Autora hosts (PDF, Video, Music, Pages, Sheets, Slides, 3D, Games
-  and Photo) are now listed in one table that the Tools page switches, the
-  agent's manuals, the tool lists and the Load buttons are all checked against,
-  so they cannot drift apart. The first check found that the Video manual never
-  said an export can be MP4 or WebM; the agent now knows.
+  The tool bars in Music, Games and 3D now follow your work: an empty song shows
+  just Add track and Song, and Mixer, Zoom and the clip tools fade in as there is
+  something to use them on and fade out when there is not. Games hides Abilities,
+  Delete, Undo and Redo until they have something to act on, and 3D does the same
+  for Move, Size, Material and the rest. Nothing is taken away: All tools still
+  lists every tool and says what each one needs.

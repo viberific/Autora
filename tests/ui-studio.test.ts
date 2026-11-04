@@ -46,6 +46,18 @@ async function main() {
       await shot("1-empty");
     });
 
+    const bar = async () => (await page.$$eval(".rail-bar button:not(.is-leaving)", (bs) => bs.map((b) => b.getAttribute("aria-label")))).filter((l) => l !== "All tools");
+
+    await test("the tool bar shows only what the song needs: an empty song has the way to start, and the rest fades in as there is work", async () => {
+      const empty = await bar();
+      assert.deepEqual(empty, ["Add track", "Song"], `an empty song's bar: ${empty}`);
+      // Everything is still one press away, with what it needs said.
+      await page.click('.rail-bar button[aria-label="All tools"]');
+      const grid = page.locator(".rail-grid");
+      for (const label of ["Mixer", "Split", "Piano roll", "Metronome"]) assert.ok(await grid.getByText(label, { exact: true }).count() > 0, `${label} is in All tools`);
+      await page.keyboard.press("Escape");
+    });
+
     await test("one click makes a drum part you can hear straight away, and it is saved", async () => {
       await page.click(".st-start:has-text('Beat')");
       await page.waitForSelector(".st-clip");
@@ -56,10 +68,19 @@ async function main() {
       assert.ok(await page.locator(".st-step.is-on").count() > 5, "the drum grid shows the hits");
     });
 
+    await test("with a clip picked the bar grows (Mixer, Zoom, Loop, and the clip's own tools), and they leave once a new track is picked", async () => {
+      const labels = await bar();
+      for (const l of ["Add track", "Song", "Mixer", "Zoom", "Loop", "Split", "Duplicate", "Delete", "Piano roll"]) assert.ok(labels.includes(l), `${l} is on the bar: ${labels}`);
+      await shot("1b-clip-tools");
+    });
+
     await test("chords come in the song's key; the piano roll shows them and a click draws a note", async () => {
       await page.click('.rail-bar button[aria-label="Add track"]');
       await page.click(".rail-tray .st-add-chip:has-text('Keys')");
       await page.waitForSelector(".st-row:nth-child(3)");
+      // The new track is what is picked and it has no clip yet, so the clip's own tools have faded out of the bar.
+      await until("the clip tools fade away", async () => !(await bar()).includes("Split"), 4000);
+      assert.ok((await bar()).includes("Mixer"), "the song's own tools stay");
       // Make a clip on the new track by dragging across its lane.
       const lane = page.locator(".st-lane").nth(1);
       const box = (await lane.boundingBox())!;

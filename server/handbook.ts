@@ -213,8 +213,9 @@ const STUDIO = [
     "only when they ask you to. Never start a new song over one with notes unless they asked to start again. What the person sees " +
     "(there is no old toolbar, tab strip or add-track row any more): a slim transport row (play, back to the start, the position, " +
     "undo, redo), the arrangement, and a round, coloured tool bar (down the right side on a desktop, along the bottom on a phone) " +
-    "that shows only as many tools as fit: Add track, Split, Duplicate, Delete, Song (tempo, key and bars, in a small tray), Mixer " +
-    "and Zoom, with Piano roll, Loop and Metronome too on a desktop, where they can pin any tool to the bar. The last button, " +
+    "that shows only what the song needs, and as many as fit: an empty song has Add track and Song (tempo, key and bars, in a small tray); " +
+    "once there is a track Mixer and Zoom join, with Loop and Metronome on a desktop; and Split, Duplicate, Delete and the Piano roll fade in " +
+    "while a clip is picked and fade out when nothing is. They can pin any tool to the bar on a desktop. The last button, " +
     "All tools, opens every tool in a window in the middle, with Ask Autora suggestions under them. Nothing is missing from a phone, " +
     "it is one tap further; point the person at a tool by its name and say \"open All tools\" if it is not on their bar. Split, " +
     "Duplicate and Delete work on the open clip. Everything the bar does you can do with the studio_* tools, whatever is shown. " +
@@ -368,8 +369,9 @@ const GAME = [
     "settings are yours; the idea, story, characters, world, look and feel are theirs. For \"make it slippery\" or \"jump\", make the " +
     "behavior and leave each value where they can change it. What the person sees (GDevelop's own tab strip, toolbar, Share and Home " +
     "are away): the scene alone, and a round, coloured tool bar (down the right side on a desktop, along the bottom on a phone) that shows " +
-    "only as many tools as fit: Play, Add object, Objects, Properties, Abilities, Undo and Delete on a phone, with Layers, Scenes and Redo " +
-    "too on a desktop, where they can pin any tool to the bar. Play runs the game inside the window (a box with Restart, Full screen and " +
+    "only what the moment needs, and as many as fit: Play, Add object, Objects and Properties from the start; Abilities and Delete only " +
+    "once an object is picked or placed, Undo and Redo only when there is something to take back or put back, Restart only while it plays " +
+    "(a tool with nothing to act on fades out and fades back in when it has), with Layers and Scenes too on a desktop, where they can pin any tool to the bar. Play runs the game inside the window (a box with Restart, Full screen and " +
     "Stop), never in a pop-up. Add object opens the editor's New object dialog, which starts on objects from scratch (there is no Asset " +
     "Store: nothing is fetched). Abilities is the picked object's behaviors (jump, move, physics). The last button, All tools, opens every " +
     "tool in groups (Play, Build, Make it do things, Scenes, View, Edit, Game, Share, Advanced): scene settings and variables, 2D/3D view, " +

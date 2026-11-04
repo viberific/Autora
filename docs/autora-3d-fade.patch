@@ -1,0 +1,109 @@
+diff --git a/autora-3d/src/components/Rail.tsx b/autora-3d/src/components/Rail.tsx
+index 4294709..919cdc8 100644
+--- a/autora-3d/src/components/Rail.tsx
++++ b/autora-3d/src/components/Rail.tsx
+@@ -47,6 +47,7 @@ import {
+ } from 'lucide-react';
+ import { SHAPE_LABELS, ShapeKind } from '../utils/primitives';
+ import Sidebar from './Sidebar';
++import { useFading } from '../hooks/useFading';
+ import { EdgePanel, FacePanel, SculptPanel, SizePositionPanel, sculptable, selectionMode, type TopBarProps } from './TopBar';
+ 
+ const SHAPE_ICONS: Record<ShapeKind, LucideIcon> = {
+@@ -213,7 +214,8 @@ export default function Rail(props: RailProps) {
+     if (t.id === 'file') return props.bodyCount > 0;
+     return !t.disabled;
+   };
+-  const shown = ids.filter((id) => needed(byId.get(id)!));
++  const wanted = ids.filter((id) => needed(byId.get(id)!));
++  const shown = useFading(wanted.slice(0, room));
+ 
+   // The window's own size is the room: its height on a desktop (the bar is a column), its width on a phone (a row).
+   useLayoutEffect(() => {
+@@ -331,7 +333,7 @@ export default function Rail(props: RailProps) {
+             : 'fixed right-2.5 top-1/2 -translate-y-1/2 z-40 flex flex-col items-center gap-[3px] p-[5px] rounded-full bg-slate-800/90 backdrop-blur border border-white/10 shadow-2xl shadow-black/50 max-h-[calc(100%-1.5rem)] overflow-hidden'
+         }
+       >
+-        {shown.slice(0, room).map((id) => {
++        {shown.map(({ id, leaving }) => {
+           const t = byId.get(id)!;
+           const Icon = t.icon;
+           return (
+@@ -341,10 +343,11 @@ export default function Rail(props: RailProps) {
+               aria-label={t.label}
+               aria-pressed={t.on || undefined}
+               title={nameOf(t)}
+-              disabled={t.disabled}
++              disabled={t.disabled || leaving}
++              tabIndex={leaving ? -1 : undefined}
+               onClick={() => press(t)}
+               style={{ ['--tc' as string]: t.color, background: t.on ? t.color : `color-mix(in srgb, ${t.color} 16%, transparent)`, color: t.on ? '#fff' : t.color, boxShadow: t.on ? `0 6px 18px color-mix(in srgb, ${t.color} 45%, transparent)` : undefined }}
+-              className={`shrink-0 rounded-full flex items-center justify-center transition-colors disabled:opacity-35 disabled:pointer-events-none ${phone ? 'h-10 w-10' : 'h-[34px] w-[34px]'}`}
++              className={`shrink-0 rounded-full flex items-center justify-center transition-all duration-200 disabled:opacity-35 disabled:pointer-events-none ${leaving ? 'opacity-0 scale-60 pointer-events-none' : 'animate-rail-in'} ${phone ? 'h-10 w-10' : 'h-[34px] w-[34px]'}`}
+             >
+               <Icon size={phone ? 20 : 18} strokeWidth={1.75} />
+             </button>
+diff --git a/autora-3d/src/hooks/useFading.ts b/autora-3d/src/hooks/useFading.ts
+new file mode 100644
+index 0000000..4c5a104
+--- /dev/null
++++ b/autora-3d/src/hooks/useFading.ts
+@@ -0,0 +1,40 @@
++/**
++ * @license
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++import { useEffect, useRef, useState } from 'react';
++
++/** How long a tool takes to fade out of the bar; the CSS transition on `leaving` is the same length. */
++const FADE_MS = 250;
++
++/**
++ * The ids the bar shows, with the ones that have just gone kept for a moment, marked `leaving`, so a tool fades out of its place
++ * instead of vanishing, and the others do not jump until it has gone.
++ */
++export function useFading(present: string[]): { id: string; leaving: boolean }[] {
++  const key = present.join('\u0000');
++  const last = useRef<string[]>(present);
++  /** The bar as it was when the tools now fading were still on it: where each of them sits. */
++  const order = useRef<string[]>(present);
++  const [leaving, setLeaving] = useState<string[]>([]);
++  useEffect(() => {
++    const gone = last.current.filter((id) => !present.includes(id));
++    if (gone.length) order.current = last.current;
++    last.current = present;
++    if (!gone.length) return;
++    setLeaving((cur) => [...new Set([...cur, ...gone])]);
++    const t = setTimeout(() => setLeaving((cur) => cur.filter((id) => !gone.includes(id))), FADE_MS);
++    return () => clearTimeout(t);
++    // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` is `present`'s content
++  }, [key]);
++  const merged = present.map((id) => ({ id, leaving: false }));
++  // A tool that has just gone stays by the tool it was after while it fades.
++  for (const id of leaving) {
++    if (present.includes(id)) continue;
++    const prev = order.current.slice(0, Math.max(0, order.current.indexOf(id))).reverse().find((o) => merged.some((m) => m.id === o));
++    const at = prev === undefined ? 0 : merged.findIndex((m) => m.id === prev) + 1;
++    merged.splice(at, 0, { id, leaving: true });
++  }
++  return merged;
++}
+diff --git a/autora-3d/src/index.css b/autora-3d/src/index.css
+index b3f6e42..be49b2e 100644
+--- a/autora-3d/src/index.css
++++ b/autora-3d/src/index.css
+@@ -3,6 +3,13 @@
+ @import "tailwindcss";
+ 
+ @theme {
++  /* A tool the work has just come to need fades into the bar (Rail.tsx). */
++  --animate-rail-in: rail-in 0.2s ease-out;
++  @keyframes rail-in {
++    from { opacity: 0; transform: scale(0.6); }
++    to { opacity: 1; transform: none; }
++  }
++
+   --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+   --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, monospace;
+ 

@@ -56,7 +56,9 @@ export function GameRail({ phone, rail, run, ask, asked }: {
   const toggleTray = useCallback((id: "scenes" | "zoom") => setTray((cur) => (cur === id ? null : id)), []);
   const need = ready ? undefined : "The editor is starting";
 
-  const tools: RailTool[] = [
+  // A tool the work has nothing for yet (nothing picked to give abilities to, nothing placed to delete, no editor yet) is off the
+  // bar, and fades back in when there is; All tools still lists it and says what it needs.
+  const tools: RailTool[] = ([
     { id: "play", label: "Play", group: "Play", icon: <IconPlay size={20} />, color: VERB.text, phone: true, desktop: true, on: !!rail?.playing, disabled: !ready, about: rail?.playing ? "Stop playing" : "Play your game right here", run: () => run("play") },
     { id: "restart", label: "Restart", group: "Play", icon: <IconRepeat size={20} />, color: VERB.text, disabled: !ready || !rail?.playing, about: "Start the game again from the beginning", run: () => run("restart") },
 
@@ -87,7 +89,7 @@ export function GameRail({ phone, rail, run, ask, asked }: {
     { id: "export", label: "Export web game", group: "Share", icon: <IconDownload size={20} />, color: VERB.insert, disabled: !ready, about: "A web game you can put anywhere, as a .zip", run: () => run("export") },
 
     { id: "rules", label: rail?.on === "events" ? "Back to the scene" : "Rules", group: "Advanced", icon: <IconCode size={20} />, color: VERB.highlight, on: rail?.on === "events", disabled: !ready, about: "The game's rules as events. Autora writes these when you ask; here is the sheet itself", run: () => run("rules") },
-  ];
+  ] as RailTool[]).map((t) => ({ ...t, needed: !t.disabled }));
 
   const trayTool = tray ? tools.find((t) => t.id === tray) ?? null : null;
 

@@ -154,4 +154,12 @@ P0: a read-only survey, no code, producing `docs/ENGINE-SURVEY.md`. Then P1 on 3
   its own piece of work against that editor's own command API, in the order the plan gives (Sheets first), and none was
   started here. The desks registry (`server/desks.ts`) still covers only Music, 3D, Games and Photo; PDF, Office and Video join it
   when their state and briefing fit the same interface.
+- **Controls that follow the work and fade into the ground (the objective, after P4).** The shared rail now has `needed` on each
+  tool and `useFading`: a tool the work has nothing for is off the bar, fades out in place, and fades back in when it has
+  something to act on; All tools still lists it with what it needs. Music, Games and 3D use it (3D's rail is its own copy,
+  `docs/autora-3d-fade.patch`); a browser test (`tests/ui-studio.test.ts`) holds Music's behaviour. Not yet: the PDF (Spectra's
+  own rail), Video, Photo and the Office windows still show every tool at once; Games' behaviour is typechecked but not
+  driven in a browser here (its editor is not built in this container). Beyond the bar: the native Panacea panels already
+  appear with the selection and fade away; extending `needed` from "what is picked" to "what the person seems to be doing"
+  (the intent bus, P6) is where proactivity goes next.
 - **P5 and P6**: not started. Each is a separate piece of work with its own parity checklist; they are months, not a session.
