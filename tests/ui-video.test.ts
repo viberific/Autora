@@ -139,13 +139,13 @@ async function main() {
     });
 
     await test("the desktop bar follows the work: the tools a timeline with clips is for, and the clip tools come when clips are picked", async () => {
-      const bar = () => editor.locator(".rail-bar.is-desktop button:not(.is-leaving)").evaluateAll((bs) => bs.map((b) => b.getAttribute("aria-label")).filter((l) => l !== "All tools"));
+      const bar = (): Promise<(string | null)[]> => editor.locator(".rail-bar.is-desktop button:not(.is-leaving)").evaluateAll((bs: Element[]) => bs.map((b) => b.getAttribute("aria-label")).filter((l) => l !== "All tools"));
       const until = async (what: string, fn: () => Promise<boolean>) => { for (let i = 0; i < 40; i++) { if (await fn()) return; await sleep(150); } throw new Error(`timed out: ${what}`); };
       await until("the bar to have its tools", async () => (await bar()).includes("Split"));
       for (const l of ["Media", "Text", "Effects", "Captions", "Play", "Split", "Snapping"]) assert.ok((await bar()).includes(l), `${l} is on the bar: ${await bar()}`);
       assert.ok(!(await bar()).includes("Redo"), "Redo waits until something has been taken back");
       // The agent's last step left a clip picked, so what a picked clip can do is on the bar. Escape puts every clip down: those go.
-      const key = (init: KeyboardEventInit) => editor.evaluate((i) => document.dispatchEvent(new KeyboardEvent("keydown", { ...i, bubbles: true })), init);
+      const key = (init: { key: string; ctrlKey?: boolean }): Promise<boolean> => editor.evaluate((i: { key: string; ctrlKey?: boolean }) => document.dispatchEvent(new KeyboardEvent("keydown", { key: i.key, ctrlKey: !!i.ctrlKey, bubbles: true })), init);
       await key({ key: "Escape" });
       await until("the clip tools to fade away", async () => !(await bar()).includes("Delete") && !(await bar()).includes("Duplicate"));
       assert.ok((await bar()).includes("Split"), "the timeline's own tools stay");
