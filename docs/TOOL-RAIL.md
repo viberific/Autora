@@ -22,7 +22,7 @@ Live copy of the first version: https://claude.ai/artifact/A5vaGaNwJ8EFLA35jv3gD
 4. **The grid button opens "All tools"**: every tool the app has, grouped, each tile in its tool's colour.
 5. **The bar follows the work** (`needed` on `RailTool`, `useFading` in `src/lib/toolrail.ts`): a window says when each tool is useful (nothing picked, no
    track, nothing placed yet) and the bar shows only those; the rest fade out of the bar, fade back in when the work needs them, and are
-   always in All tools with what they need said. Music, Games and 3D do this; the PDF, Video and Photo bars are still every tool at once.
+   always in All tools with what they need said. Music, Games, 3D and PDF do this; the Video and Photo bars are still every tool at once. The PDF bar's rules are in `spectra-editor/src/autora/rail-need.ts`: no tools without a document; the tools a document is for with one; Erase with unsaved marks, Fill fields with form fields in view, Organize with several pages; a tool in use or reached for stays. What the editor says about the document is held for two seconds (`holdWork`) so a re-render after a save does not fade the bar out and back, and the agent's hand waits for the bar to fill and to stop moving before it presses (`pickTool` in `hand.ts`), as a person would.
    A modal in the centre of the screen on desktop and phone alike, over a dimmed backdrop.
 5. **Desktop: pin and unpin.** Each tile has a pin; pinned tools are what the bar shows, in pin order.
    Pinning beyond what fits is refused ("The bar is full"). "Reset bar" restores the defaults. Pins are kept

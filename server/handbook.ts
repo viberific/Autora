@@ -115,7 +115,12 @@ const PDF = [
     "pdf_compress shrinks. Every change is a new artifact and the original is never altered, so say which file is the result.",
   "  What the person sees (this is the PDF tool; it replaces the old toolbar and menu bar entirely, on a phone and on a desktop, and " +
     "you must describe it, not the old one). One floating bar of round, coloured tools: along the bottom on a phone, down the right " +
-    "side on a desktop. The bar shows only the tools that fit and never scrolls. A phone shows Select (blue), Text (green), Highlight " +
+    "side on a desktop. The bar follows the work: with no document open it has no tools, only All tools; with one it shows the tools a " +
+    "document is for (Select, Text, Highlight, Draw, Shapes, Note, Redact, Sign and Edit text), and Erase comes only when there are unsaved " +
+    "marks, Fill fields only when the pages in view have form fields, Organize only when there is more than one page. The other pinned " +
+    "tools (Pen highlight, Stamps, Callout, Add image, Link, Measure...) wait in All tools until the person reaches for one, and then " +
+    "stay on the bar; a tool that is not needed fades out and fades back in when it is, so do not tell the person to press a tool that is " +
+    "not there: say \"open All tools\" and name it. The bar shows only the tools that fit and never scrolls. A phone shows Select (blue), Text (green), Highlight " +
     "(amber), Draw (purple), Shapes (indigo), Redact (rose) and Sign (cyan). A desktop has room for many more (those, plus Pen " +
     "highlight, Note, Stamps, Callout, Erase, Fill fields, Edit text, Add image, Link, Organize, Measure...) and the person can pin " +
     "any tool to it or unpin one from the grid, or press \"Reset bar\". The last button (a grid of four squares, \"All tools\") " +

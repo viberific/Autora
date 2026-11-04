@@ -155,6 +155,13 @@ await test("the 3D manual teaches the command log: who did what, history_log sin
   }
 });
 
+await test("the PDF manual says the bar follows the work: no tools without a document, specialist tools wait in All tools until reached for", () => {
+  const pdf = manualText("pdf");
+  for (const needle of ["The bar follows the work", "with no document open it has no tools, only All tools", "Erase comes only when there are unsaved marks", "wait in All tools until the person reaches for one", "say \"open All tools\" and name it"]) {
+    assert.ok(pdf.includes(needle), `the PDF manual lacks "${needle}"`);
+  }
+});
+
 await test("the Music and Games manuals say the tool bar shows only what the work needs, and that tools fade in and out", () => {
   const music = manualText("studio");
   for (const needle of ["shows only what the song needs", "an empty song has Add track and Song", "fade in while a clip is picked and fade out when nothing is"]) assert.ok(music.includes(needle), `the Music manual lacks "${needle}"`);

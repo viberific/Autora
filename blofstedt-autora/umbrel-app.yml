@@ -206,9 +206,11 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  The tool bars in Music, Games and 3D now follow your work: an empty song shows
-  just Add track and Song, and Mixer, Zoom and the clip tools fade in as there is
-  something to use them on and fade out when there is not. Games hides Abilities,
-  Delete, Undo and Redo until they have something to act on, and 3D does the same
-  for Move, Size, Material and the rest. Nothing is taken away: All tools still
-  lists every tool and says what each one needs.
+  The PDF tool bar now follows your document. With nothing open it is empty; with
+  a PDF open it shows what a document is for (select, text, highlight, draw,
+  shapes, note, redact, sign, edit text), adds Erase when there are marks, Fill
+  fields when the pages have form fields and Organize when there is more than one
+  page, and the specialist tools (stamps, callout, measure...) join the bar once
+  you reach for one. Tools fade in and out instead of popping, and the bar holds
+  steady through the brief blank after a save. All tools still lists everything.
+  The agent's hand also waits for the bar to fill before it presses a tool.

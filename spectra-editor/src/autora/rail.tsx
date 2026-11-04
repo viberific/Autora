@@ -29,6 +29,8 @@ import { COMMANDS, type CommandId } from "../renderer/commands/registry";
 import { tCommandTitle } from "../renderer/i18n";
 import { getAutoraDetect, setAutoraColor, setAutoraDetect, setAutoraWidth, type Detect, type WidthMode } from "../renderer/autora-style";
 import { DESKTOP_DEFAULT, GRID, ICONS, PHONE_DEFAULT, TOOLS, type Tile } from "./rail-tools";
+import { useFading } from "./fading";
+import { NO_WORK, holdWork, isOn, needed, type Open, type Work } from "./rail-need";
 
 /** Whether this frame was opened as the phone's. Read once: a window does not change its mind. */
 export const isPhone = (): boolean => new URLSearchParams(location.search).get("phone") === "1";
@@ -44,15 +46,16 @@ function Icon({ name, size = 20 }: { name: string; size?: number }) {
 
 /* ------------------------------------------------------- what is open now */
 
-interface Open {
-  /** The armed canvas mode (`select` when none). */
-  mode: string;
-  /** The open tool (Comment, Redact, Protect...), or null. */
-  tool: string | null;
-  /** Sign is up: Spectra's stamp mode with only the signatures showing (see the `autora-signing` rules in autora.css). */
-  signing?: boolean;
-  /** The left panel (a desktop's): open or not, and which of Spectra's nav panels it shows. */
-  pane?: { open: boolean; panel: string };
+function readWork(): Work {
+  const state = getCommandContext()?.state;
+  const file = state?.activeFileId ? state.files.get(state.activeFileId) : undefined;
+  if (!state || !file) return NO_WORK;
+  return {
+    doc: true,
+    pages: file.pageCount,
+    marks: state.workspace.documents.some((d) => d.pages.some((p) => (p.annotations?.length ?? 0) > 0)),
+    fields: !!document.querySelector(".page-form-widget"),
+  };
 }
 
 function readOpen(): Open {
@@ -61,6 +64,7 @@ function readOpen(): Open {
     mode: (ui?.tool as string | undefined) ?? "select",
     tool: (ui?.activeToolId as string | null | undefined) ?? null,
     pane: ui ? { open: !!ui.navPane.open, panel: String(ui.navPane.panel) } : undefined,
+    work: readWork(),
   };
 }
 
@@ -69,10 +73,16 @@ function useOpen(): Open {
   const [open, setOpen] = useState<Open>(readOpen);
   useEffect(() => {
     let frame = 0;
+    let seen: { work: Work; at: number } | null = null;
     const read = () => {
       frame = 0;
-      const next = readOpen();
-      setOpen((prev) => (prev.mode === next.mode && prev.tool === next.tool && prev.pane?.open === next.pane?.open && prev.pane?.panel === next.pane?.panel ? prev : next));
+      const raw = readOpen();
+      // What the document has, held steady: the editor's state reads empty for a beat after a save (rail-need.ts `holdWork`).
+      const held = holdWork(raw.work, seen, performance.now());
+      seen = held.seen;
+      const next: Open = { ...raw, work: held.work };
+      setOpen((prev) => (prev.mode === next.mode && prev.tool === next.tool && prev.pane?.open === next.pane?.open && prev.pane?.panel === next.pane?.panel
+        && prev.work.doc === next.work.doc && prev.work.pages === next.work.pages && prev.work.marks === next.work.marks && prev.work.fields === next.work.fields ? prev : next));
     };
     const poke = () => { if (!frame) frame = requestAnimationFrame(read); };
     poke();
@@ -83,9 +93,6 @@ function useOpen(): Open {
   }, []);
   return open;
 }
-
-/** Whether a tile's tool or mode is the one open. */
-const isOn = (t: Tile, open: Open): boolean => (t.id === "sign" ? !!open.signing : t.id === "stamp" ? open.mode === "stamp" && !open.signing : t.mode ? open.mode === t.mode : t.tool ? open.tool === t.tool && open.mode === "select" : t.id === "select" && open.mode === "select" && open.tool === null);
 
 /** A tile's own command; the Select button puts the open tool away. */
 const commandOf = (t: Tile): CommandId => (t.id === "sign" ? "tools.stamp" : t.id === "select" ? "tools.close" : t.command ?? (t.mode ? (`tools.${t.mode}` as CommandId) : (`tools.open.${t.tool}` as CommandId)));
@@ -131,17 +138,19 @@ function useSlots(): number {
   return slots;
 }
 
-function Bar({ open, slots, ids, onGrid, onPick }: { open: Open; slots: number; ids: string[]; onGrid: () => void; onPick: (t: Tile) => void }) {
-  const shown = ids.slice(0, slots).map((id) => TOOLS[id]);
+function Bar({ open, used, slots, ids, onGrid, onPick }: { open: Open; used: ReadonlySet<string>; slots: number; ids: string[]; onGrid: () => void; onPick: (t: Tile) => void }) {
+  const shown = useFading(ids.filter((id) => needed(TOOLS[id]!, open, used)).slice(0, slots)).map(({ id, leaving }) => ({ t: TOOLS[id]!, leaving }));
   return (
     <nav className="autora-rail" aria-label="PDF tools" data-testid="phone-bar">
-      {shown.map((t) => {
+      {shown.map(({ t, leaving }) => {
         const on = isOn(t, open);
         return (
           <button
             key={t.id}
             type="button"
-            className={`autora-rail-btn${on ? " is-on" : ""}`}
+            className={`autora-rail-btn${on ? " is-on" : ""}${leaving ? " is-leaving" : ""}`}
+            disabled={leaving}
+            tabIndex={leaving ? -1 : undefined}
             style={{ ["--tc" as string]: t.color }}
             data-phone={t.id}
             data-tip={t.label}
@@ -621,6 +630,12 @@ function Rail() {
     invokeCommand(commandOf(t));
   }, [open.signing, raw.mode]);
 
+  // The tools the person has reached for in this window stay on the bar (`needed`).
+  const [used, setUsed] = useState<ReadonlySet<string>>(() => new Set());
+  useEffect(() => {
+    const now = Object.values(TOOLS).filter((t) => t.id !== "select" && isOn(t, open)).map((t) => t.id);
+    if (now.some((id) => !used.has(id))) setUsed((cur) => new Set([...cur, ...now]));
+  }, [open, used]);
   const ids = PHONE ? PHONE_DEFAULT : pins;
   const left = useLeftHost();
   // A desktop's left side is the file menu and the pages: open it once, and leave it however the person puts it after that.
@@ -636,7 +651,7 @@ function Rail() {
       {!PHONE && left && <LeftPanel host={left} open={open} />}
       {tray && <Tray mode={tray} />}
       {redact && <RedactTray />}
-      <Bar open={open} slots={slots} ids={ids} onGrid={() => setGrid(true)} onPick={pick} />
+      <Bar open={open} used={used} slots={slots} ids={ids} onGrid={() => setGrid(true)} onPick={pick} />
       {grid && <Grid open={open} slots={slots} pins={pins.slice(0, slots)} setPins={setPins} onClose={() => setGrid(false)} onPick={pick} toast={say} />}
       {menu && <Menu onClose={() => setMenu(false)} />}
       <EscapeCloses active={grid || menu} onClose={() => { setGrid(false); setMenu(false); }} />
