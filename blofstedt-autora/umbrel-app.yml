@@ -206,10 +206,9 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  The Video tool bar now follows your project. Media and Text are always there;
-  Effects, Captions, Play, Split, Snapping and Zoom come once the timeline has
-  clips; Duplicate, Delete and Edit only while clips are picked; Undo only once
-  there is something to take back and Redo once something has been taken back.
-  Tools fade in and out instead of popping, and All tools still lists everything.
-  The agent knows the bar changes and points you to All tools when a tool is not
-  on it.
+  The Pages tool bar now follows your document. Bold, italic, underline, bullets
+  and numbering are always there; alignment comes once the document has words;
+  highlight, text colour, text size and clear formatting appear while you have
+  words picked and fade away when you do not; indent and outdent come with a
+  list; Undo shows only once there is something to take back. Tools collapse and
+  fade in place so the others slide, and All tools still lists everything.

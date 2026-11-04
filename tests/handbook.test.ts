@@ -155,6 +155,13 @@ await test("the 3D manual teaches the command log: who did what, history_log sin
   }
 });
 
+await test("the Office manual says the Pages bar follows the document: text tools only while words are picked, Undo only with something to take back", () => {
+  const office = manualText("office");
+  for (const needle of ["In Pages the bar follows the document", "Highlight, Text colour, Bigger text, Clear formatting and Cut or Copy only while words are picked", "Undo only once there is something to take back", "pick the words first, or say"]) {
+    assert.ok(office.includes(needle), `the Office manual lacks "${needle}"`);
+  }
+});
+
 await test("the Video manual says the bar follows the work: clip tools only with clips picked, Undo only with something to take back", () => {
   const video = manualText("video");
   for (const needle of ["follows the work and shows only as many tools as fit", "Media and Text are always there", "Duplicate, Delete and (on a phone) Edit only while clips are picked", "Undo only once there is something to take back", "pick the clip first, or say"]) {

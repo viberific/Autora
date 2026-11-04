@@ -67,6 +67,12 @@
     #autora-rail button.rb.on { color: #fff; background: var(--tc); box-shadow: 0 6px 18px color-mix(in srgb, var(--tc) 45%, transparent); }
     #autora-rail button.rb:disabled { opacity: .35; cursor: default; }
     #autora-rail button.rb svg, .ar-tile svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    /* The bar follows the work (RULES below): a tool the document has nothing for collapses out of its place and fades, and the others slide;
+       it comes back the same way. Hidden, it is out of the tab order and cannot be pressed. */
+    #autora-rail button.rb { transition: background .15s, box-shadow .15s, opacity .25s, transform .25s, height .25s, width .25s, margin .25s; }
+    html.autora-desktop #autora-rail button.rb[data-need="0"] { height: 0; margin: -1.5px 0; opacity: 0; transform: scale(.6); pointer-events: none; visibility: hidden; transition: background .15s, opacity .25s, transform .25s, height .25s, margin .25s, visibility 0s .25s; }
+    html.autora-phone #autora-rail button.rb[data-need="0"] { width: 0; margin: 0 -1px; opacity: 0; transform: scale(.6); pointer-events: none; visibility: hidden; transition: background .15s, opacity .25s, transform .25s, width .25s, margin .25s, visibility 0s .25s; }
+    @media (prefers-reduced-motion: reduce) { #autora-rail button.rb { transition: none !important; } }
     #autora-rail .div { flex: none; background: rgba(255,255,255,.13); }
     html.autora-desktop #autora-rail .div { width: 20px; height: 1px; margin: 2px 0; }
     html.autora-phone #autora-rail .div { width: 1px; height: 24px; margin: 0 2px; }
@@ -277,6 +283,8 @@
     await showTab("home");
     for (const x of found) { TOOLS.push(x); byId.set(x.id, x); }
     refresh();
+    // Every command is read and the Home tab is back: tools can be pressed and their state read (tests wait for this).
+    root.setAttribute("data-rail-scanned", "1");
   }
 
   const anchored = () => root.classList.contains("rail-ribbon");
@@ -308,6 +316,63 @@
     if (!anchored() || (e.target instanceof Element && e.target.closest("#autora-rail, #autora-grid"))) return;
     setTimeout(() => { setAnchor(false); if (curTab !== "home") void showTab("home"); }, 400);
   }, true);
+
+  /* ------------------------------------------------------- the bar follows the work */
+  /*
+   * What the work needs on the bar now (docs/TOOL-RAIL.md, "The bar follows the work"). A tool with a rule is there when its rule says so;
+   * one without is always there (once a document is open: with none, the bar has no tools). Everything stays in All tools. An app with no
+   * RULES yet (Sheets and Slides, until theirs are written) keeps the bar it has always had.
+   */
+  const RULES = {
+    docs: {
+      // Words that are picked: what can be done to them.
+      strike: (c) => c.selected, highlight: (c) => c.selected, color: (c) => c.selected, larger: (c) => c.selected, smaller: (c) => c.selected,
+      clearfmt: (c) => c.selected, painter: (c) => c.selected, cut: (c) => c.selected, copy: (c) => c.selected,
+      // A paragraph with words in it: how it sits and is spaced; a list item or picked paragraphs: how far in.
+      left: (c) => c.text, centre: (c) => c.text, right: (c) => c.text, justify: (c) => c.text, spacing: (c) => c.text,
+      indent: (c) => c.inList || c.selected, outdent: (c) => c.inList || c.selected,
+      // The editor's own word on whether there is anything to take back or put back.
+      undo: (c) => c.undo, redo: (c) => c.redo,
+    },
+  }[app];
+  /** What the open document has, read off the editor's page (a few times a second, with the bar's other state). */
+  function readContext() {
+    if (app === "docs") {
+      const surface = document.querySelector('.ProseMirror[contenteditable="true"]') || document.querySelector(".ProseMirror");
+      const sel = window.getSelection();
+      const inside = !!(surface && sel && sel.anchorNode && surface.contains(sel.anchorNode));
+      const at = inside ? (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement) : null;
+      const undo = find(["undo"]), redo = find(["redo"]);
+      return {
+        doc: !!surface, text: !!surface && (surface.textContent || "").trim().length > 0,
+        selected: inside && !sel.isCollapsed, inList: !!at?.closest("li"),
+        undo: !!undo && !isOff(undo), redo: !!redo && !isOff(redo),
+      };
+    }
+    return { doc: true };
+  }
+  /** The editor reads "no document" or "no words" for a beat while it re-renders; that is held for two seconds before the bar believes it. */
+  const HOLD_MS = 2000;
+  let seen = null;
+  function steady(raw) {
+    const now = Date.now();
+    const lost = seen && ((seen.ctx.doc && !raw.doc) || (seen.ctx.text && !raw.text));
+    if (!seen || !lost || now - seen.at >= HOLD_MS) { seen = { ctx: raw, at: now }; return raw; }
+    return { ...raw, doc: seen.ctx.doc, text: seen.ctx.text };
+  }
+  const needed = (tool, c) => !!c.doc && (RULES[tool.id] ? !!RULES[tool.id](c) : true);
+  /** Marks which of the pinned tools the work needs, as many as fit; the CSS fades the rest out. */
+  function applyNeed() {
+    if (!RULES || !bar) return;
+    const c = steady(readContext());
+    let free = room();
+    for (const b of bar.querySelectorAll("button[data-tool]")) {
+      const yes = needed(byId.get(b.dataset.tool), c) && free > 0;
+      if (yes) free--;
+      const want = yes ? "1" : "0";
+      if (b.dataset.need !== want) b.dataset.need = want;
+    }
+  }
 
   /* ------------------------------------------------------------------ the bar and the grid */
   const svg = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true">${(window.__autoraIcons || {})[name] || (window.__autoraIcons || {}).plus || ""}</svg>`;
@@ -349,7 +414,7 @@
   function drawBar() {
     if (!bar) return;
     bar.textContent = "";
-    for (const id of shownIds().slice(0, room())) {
+    for (const id of RULES ? shownIds() : shownIds().slice(0, room())) {
       const tool = byId.get(id);
       const b = document.createElement("button");
       b.type = "button";
@@ -362,8 +427,11 @@
       b.innerHTML = iconOf(tool);
       swallow(b);
       b.addEventListener("click", () => void run(tool));
+      if (RULES) b.dataset.need = "1";
       bar.appendChild(b);
     }
+    // Marked before the first frame is drawn, so nothing fades that was never in; a transition runs on each change from there.
+    if (RULES) applyNeed();
     const div = document.createElement("i");
     div.className = "div";
     bar.appendChild(div);
@@ -384,6 +452,7 @@
   /** Which tools are lit or dimmed: read from the editor's own buttons, a few times a second (only while its Home tab is the one open). */
   function paint() {
     if (curTab !== "home") return;
+    applyNeed();
     if (bar) {
       for (const b of bar.querySelectorAll("button[data-tool]")) {
         const s = state(byId.get(b.dataset.tool));
