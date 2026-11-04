@@ -206,10 +206,8 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  You can now sculpt in the 3D window. Pick a mesh shape (one the agent made
-  with Blend or Loft, or one you loaded) and press Sculpt: paint on it with
-  Grab, Build (or Carve), Smooth and Flatten, choose the size and strength,
-  mirror left to right or front to back, and make the surface finer for smaller
-  detail. Each stroke is one undo step. The agent starts the form and does the
-  technical work; the shaping is yours, so it has no brush of its own and will
-  not rebuild what you have sculpted.
+  The 3D tool bar now shows only what the moment needs. With nothing made it is
+  just Shape and Draw; pick a shape and Move, Size, Material, Hide and Delete
+  appear; Sculpt shows only for a mesh shape, Join and Subtract only with two
+  picked, and Export once there is something to export. All tools still lists
+  every tool and what each one needs.

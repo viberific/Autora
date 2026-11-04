@@ -148,6 +148,13 @@ await test("the 3D manual teaches organic forms: blend, loft, smooth, and that t
   }
 });
 
+await test("the 3D manual says the tool bar is contextual and where to find every tool", () => {
+  const cad = manualText("cad");
+  for (const needle of ["The tool bar is contextual", "with nothing made it is Shape and Draw", "Sculpt only for a mesh shape", "All tools (the grid icon"]) {
+    assert.ok(cad.includes(needle), `the 3D manual lacks "${needle}"`);
+  }
+});
+
 await test("the 3D manual teaches the sculpt tool as the person's hand, and not to rebuild what they sculpted", () => {
   const cad = manualText("cad");
   for (const needle of ["Sculpting by hand", "Grab", "Carve or Shift", "Finer surface", "one undo step", "you have no brush tool, on purpose", "Do not rebuild a shape they have sculpted"]) {

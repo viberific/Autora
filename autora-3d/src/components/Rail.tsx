@@ -201,6 +201,20 @@ export default function Rail(props: RailProps) {
   };
   const ids = phone ? tools.filter((t) => t.phone).map((t) => t.id) : pins.filter((id) => byId.has(id));
 
+  /**
+   * The bar shows what the moment needs, not every tool at once: with nothing made it is Shape and Draw (and the Library, once
+   * something is saved in it); a tool that has nothing to act on yet (Move with no pick, Join with one shape, Sculpt on an
+   * outline) is not there until it does. A tool in use, or whose card is open, always stays. All tools still lists every one.
+   */
+  const needed = (t: Tool): boolean => {
+    if (t.on || t.id === openId) return true;
+    if (t.id === 'shapes' || t.id === 'draw') return true;
+    if (t.id === 'library') return props.library.length > 0;
+    if (t.id === 'file') return props.bodyCount > 0;
+    return !t.disabled;
+  };
+  const shown = ids.filter((id) => needed(byId.get(id)!));
+
   // The window's own size is the room: its height on a desktop (the bar is a column), its width on a phone (a row).
   useLayoutEffect(() => {
     const measure = () => {
@@ -317,7 +331,7 @@ export default function Rail(props: RailProps) {
             : 'fixed right-2.5 top-1/2 -translate-y-1/2 z-40 flex flex-col items-center gap-[3px] p-[5px] rounded-full bg-slate-800/90 backdrop-blur border border-white/10 shadow-2xl shadow-black/50 max-h-[calc(100%-1.5rem)] overflow-hidden'
         }
       >
-        {ids.slice(0, room).map((id) => {
+        {shown.slice(0, room).map((id) => {
           const t = byId.get(id)!;
           const Icon = t.icon;
           return (
