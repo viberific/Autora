@@ -192,10 +192,11 @@ import { studioSPECS } from "./specs/studio";
 import { panaceaSPECS } from "./specs/panacea";
 import { cadSPECS } from "./specs/cad";
 import { gameSPECS } from "./specs/game";
-import { gameAvailable, gameBriefing, gameState, loadGame, runGameTool } from "./gamedesk";
-import { cadAvailable, cadBriefing, cadState, loadModel, runCadTool } from "./caddesk";
+import { DESKS } from "./desks";
+import { gameAvailable, gameState, loadGame, runGameTool } from "./gamedesk";
+import { cadAvailable, cadState, loadModel, runCadTool } from "./caddesk";
 import { photoSPECS } from "./specs/photo";
-import { photoAvailable, photoBriefing, runPhotoTool } from "./photodesk";
+import { photoAvailable, runPhotoTool } from "./photodesk";
 import { killTree, processPressure } from "./processes";
 
 // ------------------------------------------------------------- the registry --
@@ -4098,9 +4099,8 @@ export async function capabilityBriefing(): Promise<string> {
   lines.push(studioBriefing(windows.studio.enabled));
   lines.push(panaceaBriefing(windows.panacea.enabled));
   // Only a server that has the modeller built in says anything about it.
-  if (cadAvailable()) lines.push(cadBriefing(windows.cad.enabled));
-  if (gameAvailable()) lines.push(gameBriefing(windows.game.enabled));
-  if (photoAvailable()) lines.push(photoBriefing(windows.photo.enabled));
+  // (Music's line stays above, before Panacea's, where the model has always read it.)
+  for (const desk of DESKS) if (desk.id !== "studio" && desk.available()) lines.push(desk.briefing(windows[desk.id].enabled));
   lines.push(windows.widgets.enabled
     ? "- Explainer widgets: always available. Tool: widget_show. When someone " +
       "asks how something works -- a physical process, a mechanism, an " +

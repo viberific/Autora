@@ -115,3 +115,15 @@ through the log. This is the visible payoff and only becomes cheap after P4 reac
 ## First step
 
 P0: a read-only survey, no code, producing `docs/ENGINE-SURVEY.md`. Then P1 on 3D.
+
+## Progress
+
+- **P0 done** (2026-11-04): `docs/ENGINE-SURVEY.md`. Decision: adapter, not rewrite.
+- **Contextual tools, 3D done**: the bar shows what the moment needs (`needed()` in `autora-3d/src/components/Rail.tsx`),
+  All tools lists everything. Other windows' bars still show every tool; each follows when its bar is rebuilt
+  (`docs/TOOL-RAIL.md`).
+- **P1, first slice done**: `server/desks.ts` registers Music, 3D, Games and Photo (state, change message, drop, briefing)
+  and `server.ts` / `server/tools.ts` loop over it instead of naming each. Behaviour-preserving (e2e cad, studio, photo,
+  toolload pass). Not yet: PDF, Office, Video in the registry; `runTool` cases and routes still named per desk; commands
+  with inverse and authority tags; generated specs and manuals.
+- **P2 to P6**: not started. Each is a separate piece of work with its own parity checklist; they are months, not a session.
