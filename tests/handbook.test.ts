@@ -148,6 +148,13 @@ await test("the 3D manual teaches organic forms: blend, loft, smooth, and that t
   }
 });
 
+await test("the 3D manual teaches the sculpt tool as the person's hand, and not to rebuild what they sculpted", () => {
+  const cad = manualText("cad");
+  for (const needle of ["Sculpting by hand", "Grab", "Carve or Shift", "Finer surface", "one undo step", "you have no brush tool, on purpose", "Do not rebuild a shape they have sculpted"]) {
+    assert.ok(cad.includes(needle), `the 3D manual lacks "${needle}"`);
+  }
+});
+
 await test("the 3D manual teaches mesh import: the tool, the formats, what a mesh cannot do, and Load adding one", () => {
   const cad = manualText("cad");
   for (const needle of ["cad_mesh_import", "GLB (or glTF), OBJ or STL", "bytes never go through the conversation", "size sets its longest side", "no outline, faces, bevels or holes", "Load in the window's top bar takes a .glb", "without replacing it"]) {

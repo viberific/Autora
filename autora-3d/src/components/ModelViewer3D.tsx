@@ -14,6 +14,7 @@ import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { BevelStyle, Body3D, EdgeSel, FaceSel, MATERIAL_PRESETS, DrawForm, DrawSession, Frame, Point2D, RepeatSession, ShapeGroup } from '../types';
 import { withGroupMates } from '../utils/groups';
+import { Brush, SculptMesh, boundsOf } from '../utils/sculpt';
 import { buildBodyGeometry, buildBodyShape, featureEdges, getInteriorAnchor } from '../utils/bodyGeometry';
 import { bottomRange, faceMeasure, moveBottom, offsetWall, sameFace, wallBase } from '../utils/faces';
 import { EdgePath, defaultBevelSize, maxBevelSize, edgeKey, edgeSize, edgeStyle, edgesAroundFace, edgesOfKind, listEdges, primaryEdge, toggleEdge } from '../utils/edges';
@@ -159,6 +160,8 @@ export interface ModelViewer3DProps {
   moveOn?: boolean;
   /** Two-finger tap asks to show or hide the move arrows. */
   onToggleMove?: () => void;
+  /** Sculpting: while set, a press on this mesh shape works the surface with the brush instead of picking or moving it. */
+  sculpt?: { bodyId: string; brush: Brush } | null;
 }
 
 const ACCENT = '#8b7cf6';
@@ -330,8 +333,19 @@ function placeFrame(root: THREE.Group, body: Body3D) {
   root.matrixWorldNeedsUpdate = true;
 }
 
+/** A mesh shape is rebuilt when its surface is a new object (sculpting makes one), however little its box changed. */
+const meshIds = new WeakMap<object, number>();
+let meshCount = 0;
+const meshId = (m?: object) => {
+  if (!m) return 0;
+  let id = meshIds.get(m);
+  if (!id) meshIds.set(m, (id = ++meshCount));
+  return id;
+};
+
 const bodySignature = (b: Body3D) =>
   JSON.stringify([
+    meshId(b.mesh),
     b.points,
     b.basePoints,
     b.cornerRadii,
@@ -387,8 +401,11 @@ export default function ModelViewer3D({
   moveOn,
   onToggleMove,
   onFaceValue,
+  sculpt,
 }: ModelViewer3DProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
+  /** The circle that shows how far the sculpt brush reaches; moved by the stroke code, not by React. */
+  const brushRingRef = useRef<HTMLDivElement | null>(null);
   const [isSceneReady, setIsSceneReady] = useState(false);
   /** Body whose bevel cuts are skipped while its outline is being dragged. */
   const [fastId, setFastId] = useState<string | null>(null);
@@ -483,6 +500,7 @@ export default function ModelViewer3D({
     moveOn,
     onToggleMove,
     onFaceValue,
+    sculpt,
   };
 
   // ---- Scene setup (once) -------------------------------------------------
@@ -1337,8 +1355,164 @@ export default function ModelViewer3D({
       }
     };
 
+    // ---- Sculpting: a press on the picked mesh shape works its surface with the brush ----------------------
+    interface Stroke {
+      id: string;
+      mesh: THREE.Mesh;
+      sm: SculptMesh;
+      attr: THREE.BufferAttribute;
+      lift: number;
+      pointerId: number;
+      last: [number, number, number];
+      plane: THREE.Plane;
+      start: THREE.Vector3;
+      changed: boolean;
+    }
+    let stroke: Stroke | null = null;
+    let ringBusy = false;
+    const sculptTarget = () => {
+      const sc = live.current.sculpt;
+      const entry = sc ? entriesRef.current.get(sc.bodyId) : undefined;
+      const mesh = entry?.group.children.find((c): c is THREE.Mesh => c instanceof THREE.Mesh);
+      return sc && entry && mesh && entry.body.mesh && !entry.body.frame ? { sc, entry, mesh } : null;
+    };
+    /** Where a pointer at this spot meets the sculpted shape: in the world, and in the shape's own numbers (x, y, height). */
+    const sculptHit = (clientX: number, clientY: number, mesh: THREE.Mesh, lift: number) => {
+      setRay(clientX, clientY);
+      const hit = raycaster.intersectObject(mesh, false)[0];
+      if (!hit) return null;
+      return { world: hit.point.clone(), model: [hit.point.x, -hit.point.z, hit.point.y - lift] as [number, number, number] };
+    };
+    const showRing = (clientX: number, clientY: number, world: THREE.Vector3 | null, brush: Brush | undefined) => {
+      const ring = brushRingRef.current;
+      if (!ring) return;
+      if (!world || !brush) {
+        ring.style.display = 'none';
+        return;
+      }
+      const rect = renderer.domElement.getBoundingClientRect();
+      const dist = camera.position.distanceTo(world);
+      const pxPerMm = rect.height / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * dist);
+      const size = Math.max(6, brush.radius * 2 * pxPerMm);
+      ring.style.display = 'block';
+      ring.style.width = ring.style.height = `${size}px`;
+      ring.style.left = `${clientX - rect.left - size / 2}px`;
+      ring.style.top = `${clientY - rect.top - size / 2}px`;
+    };
+    const paint = (st: Stroke) => {
+      st.sm.writeWorld(st.attr.array as Float32Array, st.lift);
+      st.attr.needsUpdate = true;
+      st.mesh.geometry.computeVertexNormals();
+      st.mesh.geometry.computeBoundingSphere();
+      st.mesh.geometry.computeBoundingBox();
+      invalidate(true);
+    };
+    const startStroke = (e: PointerEvent): boolean => {
+      const target = sculptTarget();
+      if (!target || !e.isPrimary || e.button !== 0) return false;
+      const { sc, entry, mesh } = target;
+      const lift = entry.body.elevation ?? 0;
+      const hit = sculptHit(e.clientX, e.clientY, mesh, lift);
+      if (!hit) return false; // off the shape: let the view orbit
+      const sm = new SculptMesh(entry.body.mesh!.positions, entry.body.mesh!.indices);
+      // While the stroke runs the shape is a plain smooth-shaded copy that is cheap to update; the finished shape replaces it.
+      const n = entry.body.mesh!.positions.length / 3;
+      const geometry = new THREE.BufferGeometry();
+      const attr = new THREE.BufferAttribute(new Float32Array(n * 3), 3);
+      attr.setUsage(THREE.DynamicDrawUsage);
+      geometry.setAttribute('position', attr);
+      geometry.setIndex(new THREE.BufferAttribute(n > 65535 ? new Uint32Array(sm.indices) : new Uint16Array(sm.indices), 1));
+      sm.writeWorld(attr.array as Float32Array, lift);
+      geometry.computeVertexNormals();
+      mesh.geometry.dispose();
+      mesh.geometry = geometry;
+      entry.outline.visible = false;
+      const normal = camera.getWorldDirection(new THREE.Vector3()).negate();
+      stroke = { id: sc.bodyId, mesh, sm, attr, lift, pointerId: e.pointerId, last: hit.model, plane: new THREE.Plane().setFromNormalAndCoplanarPoint(normal, hit.world), start: hit.world, changed: false };
+      controls.enabled = false;
+      renderer.domElement.setPointerCapture(e.pointerId);
+      live.current.onDragStateChange?.(true);
+      if (sc.brush.kind === 'grab') sm.grabBegin(hit.model, sc.brush);
+      else {
+        sm.dab(hit.model, { ...sc.brush, carve: sc.brush.carve !== e.shiftKey });
+        stroke.changed = true;
+        paint(stroke);
+      }
+      return true;
+    };
+    const moveStroke = (e: PointerEvent) => {
+      const st = stroke;
+      const sc = live.current.sculpt;
+      if (!st || !sc) return;
+      const brush = { ...sc.brush, carve: sc.brush.carve !== e.shiftKey };
+      if (brush.kind === 'grab') {
+        setRay(e.clientX, e.clientY);
+        const q = raycaster.ray.intersectPlane(st.plane, new THREE.Vector3());
+        if (!q) return;
+        st.sm.grabMove([q.x - st.start.x, -(q.z - st.start.z), q.y - st.start.y]);
+        st.changed = true;
+        paint(st);
+        showRing(e.clientX, e.clientY, st.start, brush);
+        return;
+      }
+      const hit = sculptHit(e.clientX, e.clientY, st.mesh, st.lift);
+      if (!hit) return;
+      // A dab every quarter of the brush's reach, so a quick stroke is as even as a slow one.
+      const step = Math.max(1, brush.radius * 0.25);
+      const dist = Math.hypot(hit.model[0] - st.last[0], hit.model[1] - st.last[1], hit.model[2] - st.last[2]);
+      const count = Math.min(10, Math.floor(dist / step));
+      for (let i = 1; i <= count; i++) {
+        const t = (i * step) / dist;
+        st.sm.dab([st.last[0] + (hit.model[0] - st.last[0]) * t, st.last[1] + (hit.model[1] - st.last[1]) * t, st.last[2] + (hit.model[2] - st.last[2]) * t], brush);
+        st.changed = true;
+      }
+      if (count > 0) {
+        const t = (count * step) / dist;
+        st.last = [st.last[0] + (hit.model[0] - st.last[0]) * t, st.last[1] + (hit.model[1] - st.last[1]) * t, st.last[2] + (hit.model[2] - st.last[2]) * t];
+        paint(st);
+      }
+      showRing(e.clientX, e.clientY, hit.world, brush);
+    };
+    const endStroke = (e: PointerEvent, cancelled: boolean) => {
+      const st = stroke;
+      if (!st) return;
+      stroke = null;
+      st.sm.grabEnd();
+      controls.enabled = true;
+      if (renderer.domElement.hasPointerCapture(e.pointerId)) renderer.domElement.releasePointerCapture(e.pointerId);
+      if (st.changed && !cancelled) {
+        const positions = st.sm.positions();
+        const { points, height } = boundsOf(positions);
+        live.current.onUpdateBody(st.id, { mesh: { positions, indices: st.sm.indices }, points, basePoints: points, extrusionHeight: height });
+      } else {
+        // Nothing to keep: the shape is drawn again from what it was.
+        const entry = entriesRef.current.get(st.id);
+        if (entry) {
+          entriesRef.current.delete(st.id);
+          bodyGroupRef.current?.remove(entry.root);
+          disposeObject(entry.group);
+          live.current.onUpdateBody(st.id, {});
+        }
+      }
+      live.current.onDragStateChange?.(false);
+    };
+    /** The brush circle follows the pointer over the shape when nothing is pressed. */
+    const hoverRing = (e: PointerEvent) => {
+      if (ringBusy) return;
+      ringBusy = true;
+      const x = e.clientX;
+      const y = e.clientY;
+      requestAnimationFrame(() => {
+        ringBusy = false;
+        const target = sculptTarget();
+        const hit = target && e.pointerType === 'mouse' ? sculptHit(x, y, target.mesh, target.entry.body.elevation ?? 0) : null;
+        showRing(x, y, hit?.world ?? null, target?.sc.brush);
+      });
+    };
+
     const onPointerDown = (e: PointerEvent) => {
-      if (live.current.draw) return; // the Draw tool reads the pointer while a sketch is open
+      if (live.current.draw) return;
+      if (startStroke(e)) return; // the Draw tool reads the pointer while a sketch is open
       trackTouchDown(e);
       pickPx = e.pointerType === 'touch' ? EDGE_PICK_TOUCH_PX : EDGE_PICK_PX;
       // A second finger means the user wants to orbit/pinch: abandon any one-finger drag.
@@ -1393,6 +1567,11 @@ export default function ModelViewer3D({
 
     const onPointerMove = (e: PointerEvent) => {
       if (live.current.draw) return;
+      if (stroke) {
+        if (e.pointerId === stroke.pointerId) moveStroke(e);
+        return;
+      }
+      if (live.current.sculpt) hoverRing(e);
       trackTouchMove(e);
       if (drag || candidate) pending = { x: e.clientX, y: e.clientY, shift: e.shiftKey };
       else if (e.pointerType === 'mouse' && e.buttons === 0) pendingHover = { x: e.clientX, y: e.clientY };
@@ -1490,14 +1669,23 @@ export default function ModelViewer3D({
       }
     };
     const onPointerUp = (e: PointerEvent) => {
+      if (stroke) {
+        endStroke(e, false);
+        return;
+      }
       trackTouchUp(e);
       finishPointer(e, false);
     };
     const onPointerCancel = (e: PointerEvent) => {
+      if (stroke) {
+        endStroke(e, true);
+        return;
+      }
       trackTouchUp(e);
       finishPointer(e, true);
     };
     const onPointerLeave = () => {
+      if (brushRingRef.current) brushRingRef.current.style.display = 'none';
       pendingHover = null;
       clearHoverRef.current();
     };
@@ -2413,11 +2601,16 @@ export default function ModelViewer3D({
     onDragStateChange?.(false);
   };
 
+  useEffect(() => {
+    if (!sculpt && brushRingRef.current) brushRingRef.current.style.display = 'none';
+  }, [sculpt]);
+
   const handleSelectCameraAngle = useCallback((face: CubeFace) => frameViewRef.current(face), []);
 
   return (
     <div className="absolute inset-0 select-none touch-none overflow-hidden">
       <div ref={mountRef} className="absolute inset-0" />
+      <div ref={brushRingRef} aria-hidden="true" className="absolute z-20 pointer-events-none rounded-full border-2 border-accent-300/80 bg-accent-300/10" style={{ display: 'none' }} />
 
       {hold && (
         <svg className="absolute z-30 pointer-events-none" style={{ left: hold.x - 30, top: hold.y - 30 }} width={60} height={60} viewBox="0 0 60 60">

@@ -27,7 +27,8 @@ import type { AgentHost } from './core/agent';
 import Sidebar from './components/Sidebar';
 import Rail, { type RailProps, usePhone } from './components/Rail';
 import LeftPane, { type PaneTab } from './components/LeftPane';
-import TopBar from './components/TopBar';
+import TopBar, { sculptable } from './components/TopBar';
+import { DEFAULT_BRUSH, type Brush } from './utils/sculpt';
 import ConfirmDeleteModal from './components/ConfirmDeleteModal';
 import { useHistory } from './hooks/useHistory';
 import { defaultSession } from './utils/repeat';
@@ -193,6 +194,7 @@ export default function App() {
   const [hint, setHint] = useState('');
   /** Which bar menu is open (one at a time). */
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [brush, setBrush] = useState<Brush>(DEFAULT_BRUSH);
   /** The X / Y / Z move arrows, toggled with a two-finger tap. */
   const [moveOn, setMoveOn] = useState(false);
 
@@ -978,9 +980,18 @@ export default function App() {
     ...sharedItems.filter((i) => !library.some((x) => x.id === i.id)).map((i) => ({ id: i.id, name: i.name, shapes: i.bodies.length, shared: true, inProject: false, thumb: thumbnailUrl(i, 88) })),
   ];
 
+  /** Sculpting is on while its panel is open over a mesh shape: a press on that shape then paints instead of picking. */
+  const sculpting = openMenu === 'sculpt' && selectedBodies.length === 1 && sculptable(selectedBodies[0]) ? { bodyId: selectedBodies[0].id, brush } : null;
+
   const railProps: RailProps = {
     openId: openMenu,
     setOpenId: setOpenMenu,
+    brush,
+    onBrush: (patch: Partial<Brush>) => setBrush((b) => ({ ...b, ...patch })),
+    onFiner: () => {
+      const only = selectedBodies.length === 1 ? selectedBodies[0] : null;
+      if (only && runOp((d) => ops.smoothShape(d, { id: only.id, subdivide: 1, passes: 0 }))) notify('Surface made finer. Press ⌘Z to undo.');
+    },
     canUndo: history.canUndo,
     canRedo: history.canRedo,
     onUndo: doUndo,
@@ -1113,6 +1124,7 @@ export default function App() {
                   moveOn={moveOn}
                   onFaceValue={handleFaceValue}
                   onToggleMove={() => setMoveOn((v) => !v)}
+                  sculpt={sculpting}
                 />
 
                 {displayBodies.length === 0 && (

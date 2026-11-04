@@ -18,6 +18,7 @@ import {
   LayoutGrid,
   Layers3,
   Library,
+  Brush,
   LogIn,
   LogOut,
   Move,
@@ -46,7 +47,7 @@ import {
 } from 'lucide-react';
 import { SHAPE_LABELS, ShapeKind } from '../utils/primitives';
 import Sidebar from './Sidebar';
-import { EdgePanel, FacePanel, SizePositionPanel, selectionMode, type TopBarProps } from './TopBar';
+import { EdgePanel, FacePanel, SculptPanel, SizePositionPanel, sculptable, selectionMode, type TopBarProps } from './TopBar';
 
 const SHAPE_ICONS: Record<ShapeKind, LucideIcon> = {
   box: Square,
@@ -176,6 +177,7 @@ export default function Rail(props: RailProps) {
     { id: 'size', label: 'Size & position', group: 'Shape', icon: Move, color: C.insert, phone: true, desktop: true, on: openId === 'size', disabled: n < 1, hint: picked, run: toggleOpen('size') },
     { id: 'props', label: 'Properties', group: 'Shape', icon: SlidersHorizontal, color: C.select, on: openId === 'props', disabled: !(props.selected.length === 1 && !props.group), hint: picked, run: toggleOpen('props') },
     { id: 'material', label: 'Material', group: 'Shape', icon: Palette, color: C.text, desktop: true, on: openId === 'material', disabled: !(props.selected.length === 1 && !props.group), hint: picked, run: toggleOpen('material') },
+    { id: 'sculpt', label: 'Sculpt', group: 'Shape', icon: Brush, color: C.draw, phone: true, desktop: true, on: openId === 'sculpt', disabled: !(props.selected.length === 1 && sculptable(props.selected[0])), hint: 'Select a mesh shape', run: toggleOpen('sculpt') },
     { id: 'edges', label: 'Pick edges', group: 'Shape', icon: SquareDashed, color: C.shape, on: openId === 'edges', disabled: mode !== 'edge', hint: 'Tap an edge of a shape', run: toggleOpen('edges') },
     { id: 'face', label: 'Push & pull', group: 'Shape', icon: Layers3, color: C.note, on: openId === 'face', disabled: mode !== 'face', hint: 'Tap a face of a shape', run: toggleOpen('face') },
     { id: 'save', label: props.object?.state === 'editing' ? `Save to “${props.object.item}”` : 'Save to library', group: 'Library', icon: BookmarkPlus, color: C.gold, disabled: !props.canSave && props.object?.state !== 'editing', hint: 'Select a group or a shape', run: props.onSaveToLibrary },
@@ -280,6 +282,7 @@ export default function Rail(props: RailProps) {
       case 'file': return <Sidebar {...sidebar} section="export" />;
       case 'edges': return <EdgePanel {...props} />;
       case 'face': return <FacePanel {...props} />;
+      case 'sculpt': return <SculptPanel {...props} />;
       default: return null;
     }
   })();

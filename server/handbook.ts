@@ -335,6 +335,14 @@ const CAD = [
     "cad_sculpt_loft makes a smooth tube along sections (centre, radius, radius2) for legs, a neck, a tail or a horn; cad_sculpt_smooth (id, passes, strength, subdivide 0 to 2) evens out any mesh shape without shrinking it. " +
     "All three make a mesh shape, so move, turn, resize, recolour, group and export work and outline edits do not. The window has no controls for them yet, so with Visible work on they say \"Not by hand\". " +
     "This is creative work: show the person your plan (the parts, the sizes) and ask what they want different before you refine; they decide the character of the form, you do the numbers.",
+  "  Sculpting by hand. The Sculpt tool (brush icon, Shape group; only with one mesh shape picked) opens a panel with four brushes: Grab " +
+    "(drag a part of the surface along), Build (raise it where the person paints; Carve or Shift cuts in), Smooth and Flatten, a Size in mm, a Strength, " +
+    "Mirror (Off, L-R or F-B across the shape's middle) and Finer surface (splits every triangle in four so the brush can make smaller detail). " +
+    "While it is open, pressing on that shape paints on it and dragging empty space turns the view; a stroke is one undo step. This is the person's hand: " +
+    "you have no brush tool, on purpose, because the shaping of a form is theirs. What you do is the technical background: start the form (cad_sculpt_blend or cad_sculpt_loft), " +
+    "make the surface finer or smoother when they ask (cad_sculpt_smooth with subdivide), tell them where the tool is, suggest what to work on (\"the neck could be thicker where it meets the chest\"), " +
+    "and when they say they have been sculpting, call cad_scene_get again before you rely on the shape: its triangles and size may have changed. Do not rebuild a shape they have sculpted. " +
+    "Only mesh shapes can be sculpted: a drawn outline, a shape on a wall, a repeat's copy or a library object's part has no surface of its own.",
   "  Meshes. Extruded outlines cannot make organic forms (an animal, a face, a scan): for those, cad_mesh_import brings in a GLB (or glTF), " +
     "OBJ or STL as ONE shape, the real surface, from a file you name (an artifact id or a path; the bytes never go through the " +
     "conversation). A free CC0 model from Poly Pizza, Quaternius or Sketchfab, or one made in Blender, fits; size sets its longest side in mm " +
