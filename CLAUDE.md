@@ -166,3 +166,14 @@ non-creative work completely. Ask of every feature: is there creativity in this?
   plans first, then switches itself to build with `set_mode`; the switches show in the thread, the
   selector stays on Agent), Build (works straight away) or Plan (read-only).
   Planning is refused, never asked about.
+
+## Working with an agent here
+
+- Start non-trivial work in plan mode: name the files that change, the order, the risks and the tests that prove it. Ideas and
+  incidents worth building go in `intent/` first (see its README).
+- Verification is part of done: run `npm run check`, paste its output (healthy: every step ends `ok`, tests report 0 failed).
+  A bug fix starts with a failing test, committed or kept unedited while fixing.
+- `.claude/settings.json` hooks block hand edits to fetched upstream checkouts and `.env` files, and ask before a `PIN.json` edit.
+- The `verifier` subagent (`.claude/agents/`) re-checks a finished change with fresh context; it reports and never fixes.
+- Review policy for automated review is `REVIEW.md` (root). When review flags the same mistake twice, add it here.
+- A change to the prompt, tools, skills or hooks is measured with `npm run eval -- code` before it merges.
