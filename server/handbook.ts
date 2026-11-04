@@ -14,6 +14,7 @@
  *
  * Pure text.
  */
+import { CAPABILITIES, capabilityOf } from "./capabilities";
 
 const OVERVIEW = [
   "How Autora's windows work (all of these tools are yours from the first message; none needs loading):",
@@ -164,7 +165,7 @@ const VIDEO = [
     "keyframes, speed), change tracks, scenes and size with video_project. Read the timeline with video_look and see a moment with " +
     "video_frame before you say it is done. video_catalog lists what exists (effects, masks, graphics, stickers) so nothing is guessed. " +
     "When no typed tool covers something, video_ui reads the editor's screen and clicks and types in it as a person would. video_export " +
-    "renders a file and can take a while; only when asked. Leave the editor alone while the person holds it. The story, pacing, music " +
+    "renders a file (MP4 by default, or WebM with format) and can take a while; only when asked. Leave the editor alone while the person holds it. The story, pacing, music " +
     "and look are theirs. What the person sees (there is no strip of tabs at the left, no row of timeline buttons and, on a phone, no " +
     "Media / Edit / Export row any more): the preview, the timeline with only its curves, scenes and zoom slider above it, the properties, " +
     "and a round, coloured tool bar (down the right side on a desktop, along the bottom on a phone) that shows only as many tools as fit: " +
@@ -561,21 +562,16 @@ export function manualId(tool: string): ManualId | null {
   if (tool.startsWith("browser_") || tool === "web_search" || tool === "http_request") return "browser";
   if (tool === "app_preview") return "creator";
   if (tool === "terminal" || tool === "run_background") return "terminal";
-  if (tool.startsWith("pdf_")) return "pdf";
-  if (tool.startsWith("video_")) return "video";
-  if (tool.startsWith("studio_")) return "studio";
+  const hosted = capabilityOf(tool);
+  if (hosted) return hosted.id;
   if (tool.startsWith("panacea_")) return "panacea";
-  if (tool.startsWith("office_")) return "office";
-  if (tool.startsWith("cad_")) return "cad";
-  if (tool.startsWith("game_")) return "game";
-  if (tool.startsWith("photo_")) return "photo";
   if (tool === "widget_show") return "widgets";
   return null;
 }
 
 const WORK_MODES: Partial<Record<ManualId, string>> = {
-  browser: "Web", creator: "Apps & code", pdf: "PDF", video: "Video", studio: "Music",
-  office: "Documents, Spreadsheets or Presentations", cad: "3D", game: "Games", photo: "Images", widgets: "Explainers",
+  browser: "Web", creator: "Apps & code", widgets: "Explainers",
+  ...Object.fromEntries(CAPABILITIES.map((c) => [c.id, c.workMode])),
 };
 
 export const manualText = (id: ManualId): string => {

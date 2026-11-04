@@ -144,4 +144,14 @@ P0: a read-only survey, no code, producing `docs/ENGINE-SURVEY.md`. Then P1 on 3
   the page-side half of the handshake in each editor's frame (claim, run, reply), which lives inside the editors' own code
   (`autora-3d/src/agentHand.ts`, `spectra-editor/src/autora/hand.ts`, `office/shim/hand.js`, `src/components/studio/hand.ts`...).
   Games still has no hand. Next would be a shared page-side client, which means touching each fork's overlay.
-- **P4 to P6**: not started. Each is a separate piece of work with its own parity checklist; they are months, not a session.
+- **P4, registry and parity matrix: done; per-editor command layers: not done.** `server/capabilities.ts` is one table of the
+  seven hosted editors (prefix, name, engine, workspace modes, Tools page switches, formats opened and saved, Visible-work
+  status). `windowOff` (tools.ts) and `manualId` / the manual headers (handbook.ts) now read it instead of a chain of prefix
+  checks, and `tests/capabilities.test.ts` holds every other table to it: the tool families, `loadable()`, the manuals'
+  mention of what each editor saves, `docs/VISIBLE-WORK.md`, the workspace modes and the desks. It found one real gap on its
+  first run (the Video manual never said export is MP4 or WebM), fixed. What P4 as written also asks is not done: a command
+  layer per editor like 3D's (authority, log, revert) for Sheets, Slides, PDF, Photo, Music, Video and Games. Each of those is
+  its own piece of work against that editor's own command API, in the order the plan gives (Sheets first), and none was
+  started here. The desks registry (`server/desks.ts`) still covers only Music, 3D, Games and Photo; PDF, Office and Video join it
+  when their state and briefing fit the same interface.
+- **P5 and P6**: not started. Each is a separate piece of work with its own parity checklist; they are months, not a session.
