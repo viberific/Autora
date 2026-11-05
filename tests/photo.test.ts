@@ -30,7 +30,7 @@ async function test(name: string, fn: () => Promise<void> | void) {
 // ------------------------------------------------------------------ specs --
 
 await test("every spec is a photo_ tool with a description and an object schema", () => {
-  assert.equal(photoSPECS.length, 6);
+  assert.equal(photoSPECS.length, 7);
   for (const s of photoSPECS) {
     assert.match(s.name, /^photo_[a-z_]+$/);
     assert.ok(s.description.length > 20, s.name);

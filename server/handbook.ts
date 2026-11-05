@@ -591,6 +591,11 @@ const PHOTO = [
   "  Saving. The picture is saved as you go; the window's top bar (Autora Photo, its size and layers), on a desktop too, has Save, which keeps a PNG of it in Artifacts named after the chat (the layered picture stays in the window). photo_export is still yours for other formats.",
   "  The layer the person is on in the window is in your briefing for about two minutes after it changes: when they say \"this layer\" or " +
     "\"this\", they mean that one, so act on it without asking which.",
+  "  Who did what in the picture. Every change to the picture is a command in a log, with who made it (you, or the person painting or editing in the window) and a line saying what. " +
+    "photo_history reads it: call it with since_revision (the revision you last saw) to learn what the person changed while you were not looking, instead of guessing from the layers. " +
+    "photo_history with action revert and n puts the picture back as it was just before command n (and everything after it); that is a new change on top, so it can be taken back, and it shows " +
+    "in the log as a revert. The look of the picture is the person's: you may take back only your own changes, and you are refused when command n, or any after it, is theirs; say what you would " +
+    "change and let them undo it in the window. The pictures from before are kept for the last 10 commands (up to 300 MB), and they survive a restart.",
 ].join("\n");
 
 const WIDGETS = [

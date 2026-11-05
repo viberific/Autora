@@ -3960,6 +3960,7 @@ async function runToolUnredacted(
       case "photo_info":
       case "photo_commands":
       case "photo_edit":
+      case "photo_history":
       case "photo_export":
         if (ctx.memory.incognito) {
           return { ok: false, summary: "Not available in an incognito chat: the photo window keeps its picture on disk." };

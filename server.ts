@@ -169,7 +169,7 @@ import { loadFileRoutes, loadPanaceaFile, type FileLoadGuards } from "./server/l
 import { DESKS } from "./server/desks";
 import { cadRoutes, cadState, onCadCommand, serveCad } from "./server/caddesk";
 import { gameRoutes, gameState, serveGame } from "./server/gamedesk";
-import { photoPickNote, photoRoutes, photoState, servePhoto } from "./server/photodesk";
+import { onPhotoCommand, photoPickNote, photoRoutes, photoState, servePhoto } from "./server/photodesk";
 import { onStudioCommand, studioRoutes, studioState, studioTurnNote, studioVisible } from "./server/studio";
 import { appOfArtifact, appOfFile, appOfTool } from "./src/lib/panacea/flows";
 import { dropPanacea, noteFlow, onPanaceaChange, onPanaceaTouch, panaceaRoutes, panaceaState, panaceaSuggester, panaceaTurnNote, panaceaVisible } from "./server/panacea";
@@ -1306,6 +1306,12 @@ onCadCommand((sessionId, cmd) => {
 onOfficeCommand((sessionId, cmd) => {
   const session = sessions.get(sessionId);
   if (session) emitEvent(session, "office.command", cmd.who, { ...cmd });
+});
+
+/* And every command made on a chat's picture (server/commandlog.ts). */
+onPhotoCommand((sessionId, cmd) => {
+  const session = sessions.get(sessionId);
+  if (session) emitEvent(session, "photo.command", cmd.who, { ...cmd });
 });
 
 /* And every command made on a chat's video project (server/commandlog.ts). */

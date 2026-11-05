@@ -213,13 +213,24 @@ P0: a read-only survey, no code, producing `docs/ENGINE-SURVEY.md`. Then P1 on 3
   (`?session=`). Tested with a fake editor that has an undo stack (`tests/videolog.test.ts`); NOT driven in OpenCut, and what the timeline
   fingerprint leaves out (clip volume and other params the snapshot does not carry) cannot be told apart.
 
+- **Command layer, Photo (0.9.349): done, and it needed no Rust.** I had assumed it would; it did not, because the server holds the
+  working file (`work.pcraft`) and every change passes through `noteChange()` in `server/photodesk.ts`. Before each change the file is
+  copied aside (`stage`), and the change keeps the copy under its command number: going back to before a command puts that copy back
+  (through the same path the person's saves take, so the window loads it). Copies are files: they survive a restart; newest 10, 300 MB.
+  The words come from `doc.inspect` before and after (`server/photolog.ts`: size, layers added or removed, a layer's visible/opacity/
+  blend/locked/name when the reading has them), so painted pixels read as "changed the picture"; the agent's edits are said by the
+  commands it applied. The person's saves within 30 s are one command; a save of identical bytes is not logged. Authority as Music and
+  Video: the look is the person's, so the agent takes back only its own changes (**the same decision to review**). `photo.command`
+  events; `photo_history`; `GET /commands`, `POST /commands/revert`. Tested with a stand-in command line (`tests/photolog.test.ts`);
+  the `doc.inspect` layer fields beyond size and names are guessed and untested against the real PhotoCraft CLI; not driven in the window.
+
 ## Left to do (as of 0.9.341, in the order to take it)
 
 1. **P6 rest (PDF, Photo, Video pick: done in 0.9.342; remaining: the Office browser test and presence-based proactivity).** Was: report the pick from PDF (selected text/region), Photo (layer/selection) and Video (selected clip), the same way, with the
    briefing line and a handbook sentence each. Add a browser test for the Office shim-to-server pick path. Then the wider P6 idea:
    proactivity from "what the person seems to be doing" (the presence/companion code), not only what is picked.
 2. **Command layers (P4's unfinished half)**, one editor at a time against its own API, each with authority (agent/person), a log with
-   before/after, revert, and `cad.command`-style events: Sheets, Slides, Pages, PDF, Music and Video (0.9.343 to 0.9.348) are done; next Photo, Games (its step log exists in Panacea's
+   before/after, revert, and `cad.command`-style events: Sheets, Slides, Pages, PDF, Music, Video and Photo (0.9.343 to 0.9.349) are done; next Games (it has no agent hand yet) (its step log exists in Panacea's
    `doclog.ts`, not in the hosted Pages editor), PDF, Photo, Music, Video, Games. `server/desks.ts` should gain PDF, Office and Video when their state fits.
 3. **P5, cross-window entities** (a chart in a sheet shown on a slide, a photo used in a page): needs step 2 for at least Sheets and Slides.
 4. **Games has no agent hand** (a shared page-side client touching each fork's overlay); Games' fading bar is typechecked but not driven in a browser.

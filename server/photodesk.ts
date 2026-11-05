@@ -31,6 +31,8 @@ import express, { type Express, type Request, type Response } from "express";
 import fs from "node:fs";
 import path from "node:path";
 import { keepCopy, saveArtifact } from "./artifacts";
+import { addCommand, logText, openPersonRun, type OfficeCommand } from "./commandlog";
+import { describePhotoChange } from "./photolog";
 import { chatTitle } from "./folders";
 import { readFileRef, FileRefError } from "./fileref";
 import type { ChatImage } from "./llm";
@@ -104,6 +106,12 @@ interface Entry {
   line: Promise<unknown>;
   /** The layer the person is on, and when it was said; not kept on disk. */
   pick?: Pick;
+  /** Every change to the picture as a command (who, what), oldest first. See commandlog.ts. */
+  log: OfficeCommand[];
+  lseq: number;
+  /** What the command line read of the picture as the last change left it, and just before each command: for the log's words. */
+  reading?: Inspected;
+  readings: Map<number, Inspected | undefined>;
 }
 
 const entries = new Map<string, Entry>();
@@ -114,7 +122,7 @@ const stateFile = (session: string) => path.join(folder(session), "state.json");
 function entryFor(session: string): Entry {
   let entry = entries.get(session);
   if (!entry) {
-    let saved: { open?: boolean; since?: number; size?: { w: number; h: number }; layers?: number } = {};
+    let saved: { open?: boolean; since?: number; size?: { w: number; h: number }; layers?: number; log?: OfficeCommand[]; lseq?: number } = {};
     if (validSession(session)) {
       try {
         saved = JSON.parse(fs.readFileSync(stateFile(session), "utf8"));
@@ -122,7 +130,7 @@ function entryFor(session: string): Entry {
         // no state yet
       }
     }
-    entry = { open: Boolean(saved.open), since: saved.since ?? 0, rev: 0, by: "agent", size: saved.size, layers: saved.layers, hand: -1, line: Promise.resolve() };
+    entry = { open: Boolean(saved.open), since: saved.since ?? 0, rev: 0, by: "agent", size: saved.size, layers: saved.layers, hand: -1, line: Promise.resolve(), log: Array.isArray(saved.log) ? saved.log : [], lseq: Number(saved.lseq) || 0, readings: new Map() };
     entries.set(session, entry);
   }
   return entry;
@@ -132,7 +140,7 @@ function remember(session: string) {
   const e = entryFor(session);
   try {
     fs.mkdirSync(folder(session), { recursive: true, mode: 0o700 });
-    fs.writeFileSync(stateFile(session), JSON.stringify({ open: e.open, since: e.since, size: e.size, layers: e.layers }), { mode: 0o600 });
+    fs.writeFileSync(stateFile(session), JSON.stringify({ open: e.open, since: e.since, size: e.size, layers: e.layers, log: e.log, lseq: e.lseq }), { mode: 0o600 });
   } catch {
     // The window works without it; it only forgets that it was open.
   }
@@ -259,8 +267,15 @@ function countLayers(layers: unknown): number {
   return n;
 }
 
-/** Note a new state of the picture: from the agent's tools, or from the person's window. */
-function noteChange(session: string, by: "agent" | "person", doc?: Inspected) {
+/** What a change is, for the log: who made it, what kind, and in a line. */
+interface Said {
+  who: "agent" | "person";
+  name: OfficeCommand["name"];
+  line: string;
+}
+
+/** Note a new state of the picture: from the agent's tools, or from the person's window. `said` makes it a command in the log. */
+function noteChange(session: string, by: "agent" | "person", doc?: Inspected, said?: Said) {
   const e = entryFor(session);
   e.rev += 1;
   e.by = by;
@@ -268,8 +283,119 @@ function noteChange(session: string, by: "agent" | "person", doc?: Inspected) {
     e.size = sizeOf(doc) ?? e.size;
     e.layers = countLayers(doc.layers);
   }
+  if (said) logCommand(session, e, doc, said);
+  if (doc) e.reading = doc;
   remember(session);
   changed(session);
+}
+
+// ------------------------------------------------------- the command log --
+
+/*
+ * The picture is a file the server holds (work.pcraft), so a command's "before" is a copy of that file taken just before the
+ * change: `stage` copies it aside, and the change that follows keeps the copy under the command's number. Copies survive a
+ * restart (they are files), newest 10 and 300 MB of them; going back to before a command puts its copy back.
+ */
+
+const versionsDir = (session: string) => path.join(folder(session), "versions");
+const versionFile = (session: string, n: number) => path.join(versionsDir(session), `v${n}.pcraft`);
+const pendingFile = (session: string) => path.join(versionsDir(session), "pending.pcraft");
+const KEPT_VERSIONS = 10;
+const KEPT_BYTES = 300 * 1024 * 1024;
+/** The person's changes within this long of their last are one command: a brush stroke is many saves. */
+const RUN_MS = 30_000;
+
+const commandListeners = new Set<(session: string, entry: OfficeCommand) => void>();
+/** Told of every command made on a chat's picture (the agent's, the person's, a revert), for the event log. */
+export function onPhotoCommand(fn: (session: string, entry: OfficeCommand) => void) {
+  commandListeners.add(fn);
+}
+
+/** Copy the picture as it is now aside, before something changes it (nothing, when there is no picture yet). */
+function stage(session: string): void {
+  try {
+    fs.mkdirSync(versionsDir(session), { recursive: true, mode: 0o700 });
+    if (fs.existsSync(workFile(session))) fs.copyFileSync(workFile(session), pendingFile(session));
+    else fs.rmSync(pendingFile(session), { force: true });
+  } catch (err) {
+    console.warn(`[photodesk] ${session}: could not keep the picture aside: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+const sameBytes = (a: string, b: string): boolean => {
+  try {
+    return fs.statSync(a).size === fs.statSync(b).size && fs.readFileSync(a).equals(fs.readFileSync(b));
+  } catch {
+    return false;
+  }
+};
+
+/** Keep only the newest copies, and no more than the byte cap. */
+function trimVersions(session: string, e: Entry): void {
+  let total = 0;
+  const live = e.log.map((c) => c.n).filter((n) => fs.existsSync(versionFile(session, n))).sort((a, b) => b - a);
+  live.forEach((n, i) => {
+    const size = fs.statSync(versionFile(session, n)).size;
+    total += size;
+    if (i >= KEPT_VERSIONS || total > KEPT_BYTES) fs.rmSync(versionFile(session, n), { force: true });
+  });
+}
+
+function logCommand(session: string, e: Entry, doc: Inspected | undefined, said: Said): void {
+  const staged = fs.existsSync(pendingFile(session));
+  // The window sends the picture now and then as it is: nothing changed, nothing to log.
+  if (said.who === "person" && said.name === "person_edit" && staged && sameBytes(pendingFile(session), workFile(session))) {
+    fs.rmSync(pendingFile(session), { force: true });
+    return;
+  }
+  const last = e.log[e.log.length - 1];
+  const run = said.who === "person" && said.name === "person_edit" && last && Date.now() - last.at < RUN_MS ? openPersonRun(e.log, true) : null;
+  if (run) {
+    // The same run of the person's painting: one command, said again from where it began.
+    const lines = describePhotoChange(e.readings.get(run.n), doc);
+    run.summary = (said.line && lines.length === 1 && lines[0] === "changed the picture" ? said.line : lines.join("; ")).slice(0, 400);
+    run.at = Date.now();
+    run.rev = e.rev;
+    fs.rmSync(pendingFile(session), { force: true });
+    for (const fn of commandListeners) fn(session, run);
+    return;
+  }
+  const entry = addCommand(e.log, ++e.lseq, { who: said.who, name: said.name, at: Date.now(), rev: e.rev, before: staged ? e.lseq : null, summary: said.line });
+  if (staged) {
+    try { fs.renameSync(pendingFile(session), versionFile(session, entry.n)); } catch { entry.before = null; }
+  }
+  e.readings.set(entry.n, e.reading);
+  while (e.readings.size > 40) e.readings.delete(e.readings.keys().next().value as number);
+  trimVersions(session, e);
+  for (const fn of commandListeners) fn(session, entry);
+}
+
+/** The commands made on a chat's picture, oldest first. */
+export function photoLog(session: string): OfficeCommand[] {
+  return validSession(session) ? [...entryFor(session).log] : [];
+}
+
+/**
+ * Go back to just before command n: its copy of the picture goes back in place, as a new change that can itself be taken back.
+ * The person may go back to before any command; the agent only to before one of its own with none of the person's after it
+ * (the look, colour and composition are theirs). Null when done, else why not. The caller holds the chat's line (inLine).
+ */
+async function revertPhotoCommandHeld(session: string, n: number, who: "agent" | "person"): Promise<string | null> {
+  if (!validSession(session)) return "Autora Photo needs a chat to work in.";
+  const e = entryFor(session);
+  const cmd = e.log.find((c) => c.n === n);
+  if (!cmd) return "That command is not in the log.";
+  if (who === "agent" && e.log.some((c) => c.n >= n && c.who === "person")) {
+    return "That command, or one after it, is the person's own work, and the look of the picture is theirs: you do not take it back. Say what you would change and let them undo it in the window, or ask them.";
+  }
+  if (cmd.before === null) return "That command began the picture; there is nothing before it to go back to.";
+  const file = versionFile(session, n);
+  if (!fs.existsSync(file)) return "The picture from before that command is no longer kept (the last 10 are, up to 300 MB).";
+  stage(session);
+  const doc = await keepFromWindow(session, fs.readFileSync(file));
+  // The window takes it as the agent's change whoever asked, or the person's own window would not load it.
+  noteChange(session, "agent", doc, { who, name: "revert", line: `went back to before command ${n} (${cmd.summary.slice(0, 80)})` });
+  return null;
 }
 
 // ------------------------------------------------------------------ by hand --
@@ -386,6 +512,7 @@ export async function runPhotoTool(session: string, tool: string, args: Record<s
             const ext = (path.extname(given.name).slice(1) || "png").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 8) || "png";
             const input = `in-${crypto.randomBytes(4).toString("hex")}.${ext}`;
             fs.writeFileSync(path.join(folder(session), input), given.data, { mode: 0o600 });
+            stage(session);
             try {
               const r = await serve(session, [
                 { method: "doc.open", params: { path: input } },
@@ -397,7 +524,7 @@ export async function runPhotoTool(session: string, tool: string, args: Record<s
               const doc = first(r.slice(2), "Could not read the picture") as Inspected;
               mine.by = "agent";
               setOpen(session, true);
-              noteChange(session, "agent", doc);
+              noteChange(session, "agent", doc, { who: "agent", name: "open", line: `opened ${given.name.slice(0, 80)}` });
               return { ok: true, summary: `Opened ${given.name} in Autora Photo.\n${cut(JSON.stringify(doc), "photo_info lists the layers.")}`, preview: given.name };
             } finally {
               fs.rmSync(path.join(folder(session), input), { force: true });
@@ -412,13 +539,14 @@ export async function runPhotoTool(session: string, tool: string, args: Record<s
               depth: 8,
               background: typeof n.background === "string" ? n.background : "white",
             };
+            stage(session);
             const r = await serve(session, [{ method: "doc.new", params }, { method: "doc.save", params: { path: WORK } }, { method: "doc.inspect" }]);
             first(r, "Could not make a canvas");
             first(r.slice(1), "Could not keep the picture");
             const doc = first(r.slice(2), "Could not read the picture") as Inspected;
             mine.by = "agent";
             setOpen(session, true);
-            noteChange(session, "agent", doc);
+            noteChange(session, "agent", doc, { who: "agent", name: "open", line: `started a new ${params.width}x${params.height} canvas` });
             return { ok: true, summary: `A new ${params.width}x${params.height} canvas is open in Autora Photo.`, preview: `${params.width}x${params.height}` };
           }
           // Just the window, on whatever is there.
@@ -430,6 +558,23 @@ export async function runPhotoTool(session: string, tool: string, args: Record<s
           first(r, "Could not open the picture");
           const doc = first(r.slice(1), "Could not read the picture") as Inspected;
           return { ok: true, summary: cut(JSON.stringify(doc), "photo_info lists the layers."), preview: "opened" };
+        }
+
+        case "photo_history": {
+          const action = String(args.action ?? "log");
+          if (action === "log") {
+            const since = Number(args.since_revision);
+            return { ok: true, summary: logText(mine.log, Number.isFinite(since) && since > 0 ? since : 0, "picture"), preview: "history log" };
+          }
+          if (action === "revert") {
+            const n = Number(args.n);
+            if (!Number.isInteger(n)) return { ok: false, summary: "revert needs n, a command number from the log." };
+            const problem = await revertPhotoCommandHeld(session, n, "agent");
+            return problem
+              ? { ok: false, summary: problem }
+              : { ok: true, summary: `The picture is back to just before command ${n}. That is a new change on top, so it can be taken back; photo_history log shows it as a revert.`, preview: `revert ${n}` };
+          }
+          return { ok: false, summary: "action is log or revert." };
         }
 
         case "photo_info": {
@@ -482,6 +627,8 @@ export async function runPhotoTool(session: string, tool: string, args: Record<s
             if (typeof id !== "string" || !id) throw new Error("every command needs an `id`");
             return { command: id, ...(s && typeof s === "object" && s.params && typeof s.params === "object" ? { params: s.params } : {}) };
           });
+          stage(session);
+          const applied = `applied ${batch.slice(0, 4).map((b: { command: string }) => b.command).join(", ")}${batch.length > 4 ? ` and ${batch.length - 4} more` : ""}`;
           const hand = await byHand(session, batch);
           if (hand && (hand.bytes || hand.results.length > 0)) {
             const said = hand.results
@@ -492,7 +639,7 @@ export async function runPhotoTool(session: string, tool: string, args: Record<s
               mine.by = "agent";
               // The window made this revision itself: it is told so, and does not load it again.
               mine.hand = mine.rev + 1;
-              noteChange(session, "agent", doc);
+              noteChange(session, "agent", doc, { who: "agent", name: "agent_edit", line: applied });
             }
             const bad = hand.results.findIndex((x) => x.ok === false);
             if (bad >= 0) {
@@ -518,7 +665,7 @@ export async function runPhotoTool(session: string, tool: string, args: Record<s
             const doc = r[3]?.ok ? (r[3].result as Inspected) : undefined;
             mine.by = "agent";
             setOpen(session, true);
-            noteChange(session, "agent", doc);
+            noteChange(session, "agent", doc, { who: "agent", name: "agent_edit", line: applied });
           }
           if (bad >= 0) {
             return { ok: false, summary: `Stopped at command ${bad + 1} (${batch[bad]?.command}).\n${cut(said, "")}\nThe ones before it were applied.`, preview: `stopped at ${batch[bad]?.command}` };
@@ -646,8 +793,9 @@ export function photoRoutes(app: Express, opts: {
     if (!cliFile()) {
       // No command line to check it with: keep it as the editor made it.
       fs.mkdirSync(folder(id), { recursive: true, mode: 0o700 });
+      stage(id);
       fs.writeFileSync(workFile(id), body, { mode: 0o600 });
-      noteChange(id, "person");
+      noteChange(id, "person", undefined, { who: "person", name: "person_edit", line: "changed the picture" });
       return res.json({ rev: entryFor(id).rev });
     }
     try {
@@ -659,9 +807,10 @@ export function photoRoutes(app: Express, opts: {
           const r = await serve(id, [{ method: "doc.open", params: { path: incoming } }, { method: "doc.inspect" }], { timeoutMs: 60_000 });
           first(r, "That is not a PhotoCraft picture");
           const doc = first(r.slice(1), "Could not read the picture") as Inspected;
+          stage(id);
           fs.renameSync(path.join(folder(id), incoming), workFile(id));
           // Stays "person" until the agent's next tool call says otherwise: that is who made the latest change.
-          noteChange(id, "person", doc);
+          noteChange(id, "person", doc, { who: "person", name: "person_edit", line: describePhotoChange(entryFor(id).reading, doc).join("; ") });
         } finally {
           fs.rmSync(path.join(folder(id), incoming), { force: true });
         }
@@ -698,6 +847,27 @@ export function photoRoutes(app: Express, opts: {
   });
 
   /* The agent's edit, by hand: the first window to ask does it. */
+  // The log of what was done to the picture, by whom (commandlog.ts); and the person going back to before any command.
+  app.get("/api/photo/:session/commands", (req, res) => {
+    const id = known(req, res);
+    if (id) res.json({ commands: photoLog(id) });
+  });
+
+  app.post("/api/photo/:session/commands/revert", express.json({ limit: "1kb" }), async (req, res) => {
+    const id = known(req, res);
+    if (!id) return;
+    if (opts.off()) return res.status(403).json({ error: "Autora Photo is switched off on the Tools page." });
+    const n = Number(req.body?.n);
+    if (!Number.isInteger(n)) return res.status(400).json({ error: "n must be a command number from the log." });
+    try {
+      const problem = await inLine(id, () => revertPhotoCommandHeld(id, n, "person"));
+      if (problem) return res.status(404).json({ error: problem });
+      res.json({ ok: true, rev: entryFor(id).rev });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   // The layer the person is on in the editor. Not a change to the picture: told to the agent in its next briefing.
   app.post("/api/photo/:session/pick", express.json({ limit: "2kb" }), (req, res) => {
     const id = known(req, res);
