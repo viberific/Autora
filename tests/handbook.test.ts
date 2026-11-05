@@ -169,6 +169,13 @@ await test("the Office manual says what the person has picked reaches the briefi
   }
 });
 
+await test("the windows overview says the navigation dock and Tidy appear only when the work needs them, and a blank canvas shows nothing", () => {
+  const text = windowsOverview();
+  for (const needle of ["The dock is not there on a blank canvas", "Tidy joins it only once there is more than one piece of work", "A blank canvas shows nothing at all, no instructions"]) {
+    assert.ok(text.includes(needle), needle);
+  }
+});
+
 await test("the Games manual teaches game_play: it plays the game, brings back pictures and errors, and the agent still asks how it feels", () => {
   const text = manualText("game");
   for (const needle of ["Playing the game", "game_play", "(press, hold, wait, click, shot)", "the errors the game threw", "with fresh false it plays the last preview", "ask the person how it plays"]) {

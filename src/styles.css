@@ -6526,6 +6526,7 @@ button.dock-card:hover { border-color: var(--border-strong); }
 .pw-engine-body > .app-pane { border: 0; }
 .pw-engine .pdf-window.is-full, .pw-engine .app-window.is-full, .pw-engine .cell.widget.is-expanded, .pw-engine .cell.shot.is-max { position: relative; inset: auto; z-index: auto; height: auto; padding: 0; }
 .pw-jump-dock { position: absolute; left: 12px; bottom: 72px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; max-width: calc(100% - 24px); padding: 6px; background: var(--s1); border: 1px solid var(--border-strong); border-radius: var(--r-lg); box-shadow: var(--shadow-lg); }
+.pw-jump-dock { animation: paArrive var(--dur-3) var(--ease) both; }
 .pw-jump-dock button { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: var(--r-md); background: var(--s2); color: var(--text); font: inherit; cursor: pointer; }
 .pw-jump-dock button:hover { background: var(--accent-soft); color: var(--accent-light); }
 .pw-surfaces > .app-pane:not([hidden]) { flex: 1; min-height: 0; }
@@ -8216,7 +8217,7 @@ body.is-resizing iframe { pointer-events: none; }
 .pa-selbar button:hover { background: var(--s4); }
 .pa-toast { position: absolute; top: 12px; right: 12px; padding: 8px 14px; background: var(--s2); border: 1px solid var(--border-strong); border-radius: var(--r-pill); box-shadow: var(--shadow); font-size: var(--fs-sm); color: var(--text); animation: paArrive var(--dur-2) var(--ease) both; }
 @media (prefers-reduced-motion: reduce) {
-  .pa-panel, .pa-surface, .pa-summon { animation: none; }
+  .pa-panel, .pa-surface, .pa-summon, .pw-jump-dock { animation: none; }
 }
 
 /* ==========================================================================

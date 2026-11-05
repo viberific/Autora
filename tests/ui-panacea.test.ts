@@ -73,7 +73,7 @@ async function main() {
       assert.equal((await app.api("POST", `/api/panacea/${s}/open`)).status, 200);
       await page.waitForSelector('.panacea-workspace .pa-window');
       await page.waitForSelector(".pa-board");
-      await workspaceReady(page);
+      await workspaceReady(page, { blank: true });
       await page.getByRole("button", { name: "Retract conversation", exact: true }).click();
       assert.equal(await page.locator(".pa-panel").count(), 0, "nothing on it until the work needs it");
       assert.equal(await page.locator(".pa-window").getByText("What do you want to do").count(), 0, "and no standing instructions");

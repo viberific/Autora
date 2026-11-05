@@ -206,8 +206,7 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  A blank canvas is now just blank: the "What do you want to do?" message is gone,
-  so nothing is drawn over your Music, 3D or other windows, and controls appear
-  only when your work needs them. The Tools page no longer lists internal tool
-  names. The assistant's history and game-testing tools also show a plain
-  description while they run.
+  The round buttons at the canvas's right edge now appear only when there is work
+  to move around: none on a blank canvas, and Tidy only once there is more than
+  one window or piece to put in rows. Controls show up when your work needs them
+  and stay out of the way otherwise.
