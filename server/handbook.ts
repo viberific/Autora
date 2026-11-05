@@ -286,7 +286,9 @@ const OFFICE = [
     "Insert column and AutoSum are always there; Align left, Centre, Wrap text, Merge cells, Borders, the number formats (Currency, Percent, " +
     "Thousands, decimals), Sort & filter, Conditional formatting and Format as table only while a block of cells is picked (a range, a column " +
     "or a row, not a single cell); Undo and Redo only with something to take back or put back; to bring them, pick the block first (type its " +
-    "address in the name box) or say \"open All tools\". (Slides: new slide, layout, present, bold, italic, text size), and a last button, All tools, that opens every command the " +
+    "address in the name box) or say \"open All tools\". Slides does the same: New slide, Layout and Present are always there; Bold, Italic, " +
+    "Underline, Text colour, text size, Clear formatting, Align & distribute, the Format pane, Cut and Copy only while a box or shape on the slide is " +
+    "picked (click it first), and fade away when nothing is; Undo and Redo only with something to take back or put back. A last button, All tools, that opens every command the " +
     "editor has, one group per old ribbon tab (Insert, Design, Layout, Review, View...), where a desktop can pin any of them to the bar. " +
     "Commands with a drop-down open it beside the bar. The keyboard shortcuts work on a desktop as ever. Point the person at a tool by " +
     "its name and say \"open All tools\" if it is not on their bar. You have every tool whatever is shown.",

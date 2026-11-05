@@ -206,9 +206,9 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  The Sheets tool bar now follows what you have picked. A single cell gets the
-  essentials (bold, italic, underline, colours, insert row and column,
-  AutoSum); pick a block of cells, a column or a row and alignment, wrap text,
-  merge, borders, the number formats, sort and filter and format as table
-  appear, and fade away when you pick one cell again. Undo shows only once
-  there is something to take back. All tools still lists everything.
+  The Slides tool bar now follows your deck. New slide, layout and present are
+  always there; click a box or shape on the slide and bold, italic, underline,
+  text colour, text size, align and distribute, the format pane, cut and copy
+  appear, and they fade away when nothing is picked. Undo shows only once there
+  is something to take back. With this, every window's tool bar follows the work
+  and fades into the background; All tools still lists everything.

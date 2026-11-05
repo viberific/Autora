@@ -111,6 +111,35 @@ async function main() {
       });
       await page.close();
     }
+    {
+      const spec = (title: string) => ({ title, type: "cover", background: "#0E1A2B", elements: [{ type: "shape", shape: "rect", x: 80, y: 80, w: 600, h: 120, fill: "#1F3A5F", paragraphs: [{ align: "left", runs: [{ text: title, sizePt: 40, color: "#FFFFFF" }] }] }] });
+      const { page, frame, shown } = await open({ name: "office_create", args: { type: "pptx", name: "pitch", spec: { pages: [spec("Hello"), spec("Second")] } } }, "slides");
+      await test("slides: a deck gets slide tools; picking a box on the slide brings the text and arrange tools; picking nothing takes them away", async () => {
+        await until("the deck's tools", async () => (await shown()).includes("New slide"), 40_000);
+        await sleep(1500);
+        const idle = await shown();
+        for (const l of ["New slide", "Layout", "Present"]) assert.ok(idle.includes(l), `${l} is on the bar with a deck open: ${idle}`);
+        for (const l of ["Bold", "Italic", "Underline", "Text colour", "Format pane", "Undo", "Redo"]) assert.ok(!idle.includes(l), `${l} waits until something is picked: ${idle}`);
+        // A real press on the slide (the slide is a canvas, so there is nothing in the page to click): the box at the top left of it.
+        const stage = async () => (await frame.evaluate(`(() => { const r = document.querySelector(".stage-wrap").getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; })()`)) as { x: number; y: number; w: number; h: number };
+        // The frame sits in the scaled workspace: a point inside it is scaled to become a point of the page.
+        const at = async (fx: number, fy: number) => {
+          const f = (await page.locator("iframe").first().boundingBox())!;
+          const st = await stage();
+          const k = f.width / ((await frame.evaluate("window.innerWidth")) as number);
+          await page.mouse.click(f.x + (st.x + st.w * fx) * k, f.y + (st.y + st.h * fy) * k);
+        };
+        await at(0.30, 0.20);
+        await until("the text tools to arrive", async () => { const now = await shown(); return now.includes("Bold") && now.includes("Italic") && now.includes("Underline"); });
+        if (process.env.OFFICE_SHOTS) await page.screenshot({ path: `${process.env.OFFICE_SHOTS}/slides-picked.png` });
+        assert.ok((await shown()).includes("New slide"), "the slide tools stay");
+        // Then a pause (two quick presses are a double-click) and a press on empty slide: nothing is picked.
+        await sleep(900);
+        await at(0.90, 0.90);
+        await until("the text tools to fade away with nothing picked", async () => !(await shown()).includes("Bold"));
+      });
+      await page.close();
+    }
   } finally {
     await browser.close();
     await app.stop();

@@ -155,6 +155,13 @@ await test("the 3D manual teaches the command log: who did what, history_log sin
   }
 });
 
+await test("the Office manual says the Slides bar follows what is picked: slide tools always, text tools only with a box picked", () => {
+  const office = manualText("office");
+  for (const needle of ["Slides does the same", "New slide, Layout and Present are always there", "only while a box or shape on the slide is picked (click it first)"]) {
+    assert.ok(office.includes(needle), `the Office manual lacks "${needle}"`);
+  }
+});
+
 await test("the Office manual says the Sheets bar follows what is picked: block tools only with a range, the essentials with a cell", () => {
   const office = manualText("office");
   for (const needle of ["Sheets follows what is picked the same way", "Insert row, Insert column and AutoSum are always there", "only while a block of cells is picked (a range, a column or a row, not a single cell)", "type its address in the name box"]) {

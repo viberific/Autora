@@ -321,7 +321,7 @@
   /*
    * What the work needs on the bar now (docs/TOOL-RAIL.md, "The bar follows the work"). A tool with a rule is there when its rule says so;
    * one without is always there (once a document is open: with none, the bar has no tools). Everything stays in All tools. An app with no
-   * RULES yet (Slides, until its are written) keeps the bar it has always had.
+   * RULES keeps the bar it has always had (all three have them now).
    */
   const RULES = {
     docs: {
@@ -332,6 +332,13 @@
       left: (c) => c.text, centre: (c) => c.text, right: (c) => c.text, justify: (c) => c.text, spacing: (c) => c.text,
       indent: (c) => c.inList || c.selected, outdent: (c) => c.inList || c.selected,
       // The editor's own word on whether there is anything to take back or put back.
+      undo: (c) => c.undo, redo: (c) => c.redo,
+    },
+    slides: {
+      // Something on the slide picked (the editor's own Bold is lit): what can be done to it, and how it sits among the others.
+      bold: (c) => c.selected, italic: (c) => c.selected, underline: (c) => c.selected, strike: (c) => c.selected, color: (c) => c.selected,
+      larger: (c) => c.selected, smaller: (c) => c.selected, clearfmt: (c) => c.selected, para: (c) => c.selected, arrange: (c) => c.selected,
+      formatpane: (c) => c.selected, cut: (c) => c.selected, copy: (c) => c.selected,
       undo: (c) => c.undo, redo: (c) => c.redo,
     },
     sheets: {
@@ -362,16 +369,28 @@
       const undo = find(["undo"]), redo = find(["redo"]);
       return { doc: !!box, range: !!box && String(box.value || "").includes(":"), undo: !!undo && !isOff(undo), redo: !!redo && !isOff(redo) };
     }
+    if (app === "slides") {
+      // The slide is drawn on a canvas, but the ribbon's own buttons know what is picked: they are lit when a box or shape is, dim when not.
+      const bold = find(["bold"]), undo = find(["undo"]), redo = find(["redo"]);
+      return { doc: !!document.querySelector(".stage-wrap, .slide-list"), selected: !!bold && !isOff(bold), undo: !!undo && !isOff(undo), redo: !!redo && !isOff(redo) };
+    }
     return { doc: true };
   }
-  /** The editor reads "no document" or "no words" for a beat while it re-renders; that is held for two seconds before the bar believes it. */
-  const HOLD_MS = 2000;
-  let seen = null;
+  /*
+   * The editor reads "no document", "no words" or "nothing picked" for a beat while it re-renders; each is held for a while before the bar
+   * believes it (a document or words for two seconds, a Slides pick for under one), so tools do not blink out and back.
+   */
+  const HOLD = { doc: 2000, text: 2000, selected: app === "slides" ? 800 : 0 };
+  const lastTrue = {};
   function steady(raw) {
     const now = Date.now();
-    const lost = seen && ((seen.ctx.doc && !raw.doc) || (seen.ctx.text && !raw.text));
-    if (!seen || !lost || now - seen.at >= HOLD_MS) { seen = { ctx: raw, at: now }; return raw; }
-    return { ...raw, doc: seen.ctx.doc, text: seen.ctx.text };
+    const out = { ...raw };
+    for (const [key, ms] of Object.entries(HOLD)) {
+      if (!ms || !(key in raw)) continue;
+      if (raw[key]) lastTrue[key] = now;
+      else if (lastTrue[key] && now - lastTrue[key] < ms) out[key] = true;
+    }
+    return out;
   }
   const needed = (tool, c) => !!c.doc && (RULES[tool.id] ? !!RULES[tool.id](c) : true);
   /** Marks which of the pinned tools the work needs, as many as fit; the CSS fades the rest out. */
