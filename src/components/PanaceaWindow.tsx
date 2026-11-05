@@ -721,6 +721,10 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
   }, [phaseNow, live]);
 
   const note = doc.notice ?? problem;
+  /* The bar (canvas name, whether it is saved, Load, Save) is for native work. With none on the canvas it has nothing to say,
+     so it is there in place but unseen and out of reach, and arrives with the first piece of work. A problem or a load in
+     progress is always said. Files are put on the canvas by dropping or pasting them. */
+  const idleBar = doc.ready && !note && !canvas.surfaces.length && !canvas.panels.length;
   const selectionGrouped = selected.size > 1 && (() => { const ids = [...selected]; const g = canvas.panels.find((p) => p.id === ids[0])?.group; return !!g && ids.every((id) => canvas.panels.find((p) => p.id === id)?.group === g); })();
 
   return (
@@ -730,7 +734,7 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
         onPointerDownCapture={() => setPointerBusy(true)}
         onFocusCapture={(e) => { if ((e.target as HTMLElement).closest("input,textarea,[contenteditable='true']")) setFieldBusy(true); }}
         onBlurCapture={(e) => { if (!(e.relatedTarget as HTMLElement | null)?.closest?.("input,textarea,[contenteditable='true']")) setFieldBusy(false); }}>
-        {!phone && <div className="pdf-bar">
+        {!phone && <div className="pdf-bar pa-canvas-bar" data-idle={idleBar ? "" : undefined} {...(idleBar ? ({ inert: "" } as object) : {})}>
           <span className="pdf-bar-ico" aria-hidden="true"><IconSparkle size={14} /></span>
           <span className="pdf-bar-app">Panacea</span>
           {nativeOpen && <input className="st-song-name" value={canvas.name} size={Math.max(4, canvas.name.length + 1)} maxLength={80} aria-label="Canvas name"

@@ -26,7 +26,7 @@ const OVERVIEW = [
     "only) and Full (adds tool steps and memory notes). A question or permission waiting keeps it open. Follow and the eye (Visible " +
     "work) sit in the top bar. Every surface and engine card lives in one pannable, zoomable scene, not tabs: the right-side icon dock " +
     "jumps the camera to one, Zoom out and Show all work [ ] frame them, and all engines stay mounted with their unsaved work. The dock is not " +
-    "there on a blank canvas, and Tidy joins it only once there is more than one piece of work: controls appear when the work needs them. A blank canvas shows nothing at all, no instructions. Every " +
+    "there on a blank canvas, and Tidy joins it only once there is more than one piece of work: controls appear when the work needs them. A blank canvas shows nothing at all, no instructions: the canvas name and Save bar arrive with the first piece of work, and the undo and redo slider once there is something to take back. Files are put on the canvas by dropping or pasting them; they sit there, and the controls for them come when you pick them. Every " +
     "window moves, resizes and maximises; x closes it. \"Follow\" moves the camera to your work, but not while the person types, drags, " +
     "pins or holds the camera; a manual jump stops it. Activity stays in the bubbles, contracted by default. A surface opens on the " +
     "first use of its tools or from Capabilities: never ask the person to open a window. A new empty chat has Open Panacea, to start " +

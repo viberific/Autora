@@ -32,8 +32,11 @@ export function History({ past, future, onScrub, onUndo, onRedo }: {
     el.addEventListener("pointermove", move);
     el.addEventListener("pointerup", up);
   };
+  /* With nothing to take back or put back it has nothing to offer: it stays where it is, so nothing moves when it is needed,
+     but unseen and out of reach until the first change. */
+  const idle = total === 0;
   return (
-    <div className="pa-history" aria-label="History">
+    <div className="pa-history" aria-label="History" data-idle={idle ? "" : undefined} {...(idle ? ({ inert: "" } as object) : {})}>
       <button type="button" className="pa-hbtn" onClick={onUndo} disabled={!past.length} aria-label="Undo" title={past.length ? `Undo: ${past.at(-1)!.label}` : "Undo"}><IconRotateCcw size={13} /></button>
       <div ref={track} className="pa-htrack" onPointerDown={drag} role="slider" aria-label="Changes" aria-valuemin={0} aria-valuemax={total} aria-valuenow={at}>
         {steps.map((s, i) => <i key={`${i}-${s.at}`} className={`pa-htick is-${s.by}${i >= at ? " is-ahead" : ""}`} style={{ left: `${pos(i + 1)}%` }} title={s.label} />)}

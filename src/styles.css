@@ -8202,7 +8202,9 @@ body.is-resizing iframe { pointer-events: none; }
 .pa-gone-list button { display: flex; justify-content: space-between; gap: 8px; border: 0; background: transparent; color: var(--text); padding: 7px 9px; border-radius: var(--r-xs); cursor: pointer; font-size: var(--fs-sm); text-align: left; }
 .pa-gone-list button span { color: var(--accent); font-size: var(--fs-xs); }
 .pa-gone-list button:hover { background: var(--s3); }
-.pa-history { display: flex; align-items: center; gap: 4px; padding: 4px; background: var(--s1); border: 1px solid var(--border); border-radius: var(--r-pill); box-shadow: var(--shadow-sm); }
+.pa-canvas-bar { transition: opacity var(--dur-3) var(--ease); }
+.pa-canvas-bar[data-idle], .pa-history[data-idle] { opacity: 0; pointer-events: none; }
+.pa-history { transition: opacity var(--dur-3) var(--ease); display: flex; align-items: center; gap: 4px; padding: 4px; background: var(--s1); border: 1px solid var(--border); border-radius: var(--r-pill); box-shadow: var(--shadow-sm); }
 .pa-hbtn { display: grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 50%; background: transparent; color: var(--text-2); cursor: pointer; }
 .pa-hbtn:hover:not(:disabled) { background: var(--s3); color: var(--text); }
 .pa-hbtn:disabled { color: var(--text-3); opacity: 0.5; cursor: default; }
@@ -8218,6 +8220,7 @@ body.is-resizing iframe { pointer-events: none; }
 .pa-toast { position: absolute; top: 12px; right: 12px; padding: 8px 14px; background: var(--s2); border: 1px solid var(--border-strong); border-radius: var(--r-pill); box-shadow: var(--shadow); font-size: var(--fs-sm); color: var(--text); animation: paArrive var(--dur-2) var(--ease) both; }
 @media (prefers-reduced-motion: reduce) {
   .pa-panel, .pa-surface, .pa-summon, .pw-jump-dock { animation: none; }
+  .pa-canvas-bar, .pa-history { transition: none; }
 }
 
 /* ==========================================================================
