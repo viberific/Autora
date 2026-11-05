@@ -169,6 +169,13 @@ await test("the Office manual says what the person has picked reaches the briefi
   }
 });
 
+await test("the PDF manual teaches the command log: who did what, pdf_history, revert", () => {
+  const text = manualText("pdf");
+  for (const needle of ["Who did what in the PDF", "pdf_history", "since_revision", "just before command n", "shows in the log as a revert", "declining one of your changes"]) {
+    assert.ok(text.includes(needle), needle);
+  }
+});
+
 await test("the PDF, Video and Photo manuals say what the person has picked reaches the briefing, so \"this\" means it", () => {
   for (const [id, needle] of [["pdf", "selected in a page"], ["video", "picked on the timeline"], ["photo", "layer the person is on"]] as const) {
     const text = manualText(id);

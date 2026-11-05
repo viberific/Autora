@@ -3678,6 +3678,7 @@ async function runToolUnredacted(
       case "pdf_redact":
       case "pdf_replace_text":
       case "pdf_compress":
+      case "pdf_history":
         return await runPdfTool(spec.name, args, {
           session: ctx.session,
           cwd: terminalDir(),

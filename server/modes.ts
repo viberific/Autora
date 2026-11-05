@@ -298,6 +298,8 @@ export function looksOnly(name: string, args: Record<string, any> = {}): boolean
   // Reading a PDF is looking; pulling its attachments out saves new files.
   if (name === "pdf_read") return !(Array.isArray(args.extract) ? args.extract.length : args.extract);
   if (name === "pdf_look") return true;
+  // The log is looking; going back to before a command changes the PDF.
+  if (name === "pdf_history") return String(args.action ?? "log") === "log";
   // Reading, checking and the guide look; an edit that is only a dry run looks too.
   if (name === "office_read" || name === "office_check" || name === "office_guide" || name === "office_look" || name === "office_open") return true;
   if (name === "office_edit") return args.dry_run === true;

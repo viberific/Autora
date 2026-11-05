@@ -1,17 +1,17 @@
 /**
- * The command log of a hosted editor whose document is a file (Sheets and Slides): every change is a command with who made it, a
+ * The command log of a hosted editor whose document is a file (Sheets, Slides, Pages and PDF): every change is a command with who made it, a
  * line saying what, and the version the document had just before it, so "go back to before this" is one restore. The
  * template is 3D's log (`caddesk.ts`); here the kernel stays the editor's own and the log is an adapter over the desk's
  * versions (docs/ENGINE-SURVEY.md, "adapter, not rewrite").
  *
- * Authority: Sheets and Slides are productivity work, so there is no command that is the person's alone; the agent may apply and revert
+ * Authority: these are productivity work, so there is no command that is the person's alone; the agent may apply and revert
  * any of them. `who` says who did it.
  */
 
 export type OfficeCommand = {
   n: number;
   who: "agent" | "person";
-  name: "open" | "agent_edit" | "person_edit" | "revert";
+  name: "open" | "agent_edit" | "person_edit" | "decline" | "revert";
   /** What it did, in a colleague's words. */
   summary: string;
   at: number;
@@ -41,6 +41,18 @@ export function addCommand(log: OfficeCommand[], seq: number, cmd: Omit<OfficeCo
 export function openPersonRun(log: OfficeCommand[], dirty: boolean): OfficeCommand | null {
   const last = log[log.length - 1];
   return dirty && last && last.who === "person" && last.name === "person_edit" ? last : null;
+}
+
+/**
+ * More of the same run of the person's typing or marking: its account gains the new lines (a line that repeats the last is
+ * one), for editors that report the change itself rather than a file to compare (the PDF window).
+ */
+export function extendRun(run: OfficeCommand, lines: string[], at: number, rev: number): void {
+  const have = run.summary ? run.summary.split("; ") : [];
+  for (const line of lines) if (have[have.length - 1] !== line) have.push(line);
+  run.summary = clip(have.join("; "));
+  run.at = at;
+  run.rev = rev;
 }
 
 /** The log as the agent reads it: since a revision, newest last. */

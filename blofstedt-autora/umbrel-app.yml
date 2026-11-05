@@ -206,8 +206,8 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Pages now keeps a log of every change to a document, the way Sheets and Slides
-  do: what you changed and what the assistant did, each in a line about the
-  words. The assistant can read it to see what you changed while it was away,
-  and can take the document back to just before any change. Going back is
-  itself a change you can take back.
+  The PDF window now keeps a log of every change to a PDF: the marks you add,
+  move or remove, the changes you decline, and what the assistant did, each in a
+  line. The assistant can read it to see what you did while it was away, and can
+  take the PDF back to just before any change. Going back is itself a change you
+  can take back.

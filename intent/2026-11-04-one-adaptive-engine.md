@@ -185,13 +185,20 @@ P0: a read-only survey, no code, producing `docs/ENGINE-SURVEY.md`. Then P1 on 3
   suggestions) is NOT bridged to it: they are two logs for two different documents (Panacea's native documents, the hosted .docx), and
   a bridge is the open follow-up if the person wants one history. All three Office apps now have a command log.
 
+- **Command layer, PDF (0.9.346): done.** The same log over the PDF desk's version list (`server/pdfdesk.ts`): `open`, `agent_edit`
+  (including the agent's hand's saves), `person_edit` (a run of marking is one command; page changes too), `decline` (the person declines
+  one of the agent's changes) and `revert`; `pdf.command` events; `pdf_history`; routes `GET /commands`, `POST /commands/revert`. The
+  account is the desk's own words ("added note ... on page 1"), not a file diff, so `commandlog.ts` gained `extendRun`. Tested in
+  `tests/pdflog.test.ts`; not driven in Spectra. Same limit as the Office apps: revert goes back to before command n and undoes what
+  followed. Accepting a change is not a command (it changes nothing in the file).
+
 ## Left to do (as of 0.9.341, in the order to take it)
 
 1. **P6 rest (PDF, Photo, Video pick: done in 0.9.342; remaining: the Office browser test and presence-based proactivity).** Was: report the pick from PDF (selected text/region), Photo (layer/selection) and Video (selected clip), the same way, with the
    briefing line and a handbook sentence each. Add a browser test for the Office shim-to-server pick path. Then the wider P6 idea:
    proactivity from "what the person seems to be doing" (the presence/companion code), not only what is picked.
 2. **Command layers (P4's unfinished half)**, one editor at a time against its own API, each with authority (agent/person), a log with
-   before/after, revert, and `cad.command`-style events: Sheets (0.9.343), Slides (0.9.344) and Pages (0.9.345) are done; next PDF, Photo, Music, Video, Games (its step log exists in Panacea's
+   before/after, revert, and `cad.command`-style events: Sheets (0.9.343), Slides (0.9.344), Pages (0.9.345) and PDF (0.9.346) are done; next Photo, Music, Video, Games (its step log exists in Panacea's
    `doclog.ts`, not in the hosted Pages editor), PDF, Photo, Music, Video, Games. `server/desks.ts` should gain PDF, Office and Video when their state fits.
 3. **P5, cross-window entities** (a chart in a sheet shown on a slide, a photo used in a page): needs step 2 for at least Sheets and Slides.
 4. **Games has no agent hand** (a shared page-side client touching each fork's overlay); Games' fading bar is typechecked but not driven in a browser.

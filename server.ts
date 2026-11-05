@@ -145,7 +145,7 @@ import { backgroundBriefing, findJob, listJobs, readTail, startJob, stopJob } fr
 import {
   addressIn, DEVICES, isLocalUrl, localAddress, serveFolder, waitForServer,
   type Device, } from "./server/preview";
-import { deskDocument, deskBriefing, deskHooks, deskRoutes, deskState, dropDesk, onDeskChange, onDeskTouch, personBase } from "./server/pdfdesk";
+import { deskDocument, deskBriefing, deskHooks, deskRoutes, deskState, dropDesk, onDeskChange, onDeskCommand, onDeskTouch, personBase } from "./server/pdfdesk";
 import { pdfHandRoutes } from "./server/pdfhand";
 import { officeHandRoutes } from "./server/officehand";
 import { staticDir } from "./server/staticfiles";
@@ -1306,6 +1306,12 @@ onCadCommand((sessionId, cmd) => {
 onOfficeCommand((sessionId, cmd) => {
   const session = sessions.get(sessionId);
   if (session) emitEvent(session, "office.command", cmd.who, { ...cmd });
+});
+
+/* And every command made on a chat's PDF (server/commandlog.ts). */
+onDeskCommand((sessionId, cmd) => {
+  const session = sessions.get(sessionId);
+  if (session) emitEvent(session, "pdf.command", cmd.who, { ...cmd });
 });
 
 /* Music, 3D, Games and Photo (server/desks.ts): the window opens, and its state changes (by the agent's tools or the person's hands). */

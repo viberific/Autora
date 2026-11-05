@@ -162,6 +162,10 @@ const PDF = [
   "  Saving. Edits are saved as you go. The window's top bar (Autora PDF, the file's name) also has Save: it presses the editor's own Save and says the file is kept in Artifacts. The person saves with it without asking you, and is not waiting on you when they do.",
   "  What the person has selected in a page (words in its text) is in your briefing for about two minutes after, with the page: when they say " +
     "\"this\" or \"these\", they mean that, so act on it without asking which.",
+  "  Who did what in the PDF. Every change to the PDF in the window is a command in a log, with who made it (you, or the person marking it up, or declining one of your changes) and a line saying what. " +
+    "pdf_history reads it: call it with since_revision (the revision you last saw) to learn what the person did while you were not looking, instead of guessing from the objects. " +
+    "pdf_history with action revert and n takes the PDF back to just before command n (and everything after it, pages changed included); that is a new change on top, so it can be " +
+    "taken back, and it shows in the log as a revert. You may revert any command, but do not undo what the person did unless they ask.",
 ].join("\n");
 
 const VIDEO = [

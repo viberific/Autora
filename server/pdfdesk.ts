@@ -25,6 +25,7 @@ import express, { type Express, type Request, type Response } from "express";
 import { getArtifact, saveArtifact, MAX_ARTIFACT_BYTES } from "./artifacts";
 import { outlineLines } from "./compose";
 import { cueForItem, flattenDesk, type Cue, type DeskHooks, type DeskItem, type DeskSnapshot } from "./pdf";
+import { addCommand, extendRun, logText, openPersonRun, type OfficeCommand } from "./commandlog";
 import { pickText, rememberPick, type Pick } from "./picked";
 import { stateDir } from "./state";
 
@@ -55,6 +56,10 @@ type Desk = DeskSnapshot & {
   cueSeq?: number;
   /** The words the person has selected in the page, and when it was said; not kept on disk. */
   pick?: Pick;
+  /** Every change as a command (who, what, the version just before), oldest first. See commandlog.ts. */
+  log?: OfficeCommand[];
+  /** The number the next command gets. */
+  lseq?: number;
 };
 
 /** One change by the agent, up for review in the window. */
@@ -122,6 +127,7 @@ function load(session: string): Desk | null {
       news: Array.isArray(meta.news) ? meta.news.map(String) : [], since: Number(meta.since) || Date.now(), problem: null,
       marks: Array.isArray(meta.marks) ? meta.marks : [], versions: Array.isArray(meta.versions) ? meta.versions : [],
       vseq: Number(meta.vseq) || 0, dirty: meta.dirty === true,
+      log: Array.isArray(meta.log) ? meta.log : undefined, lseq: Number(meta.lseq) || undefined,
     };
     desks.set(session, desk);
     return desk;
@@ -160,6 +166,28 @@ export function dropDesk(session: string) {
   try {
     for (const f of fs.readdirSync(DIR)) if (f === `${session}.json` || f === `${session}.pdf` || f.startsWith(`${session}.b`)) fs.rmSync(path.join(DIR, f), { force: true });
   } catch {}
+}
+
+// ------------------------------------------------------ the command log --
+
+const commandListeners: Array<(session: string, entry: OfficeCommand) => void> = [];
+/** Told of every command made on a chat's PDF (the agent's, the person's, a decline, a revert), for the event log. */
+export function onDeskCommand(fn: (session: string, entry: OfficeCommand) => void) {
+  commandListeners.push(fn);
+}
+
+/** One command. `run` is the person's run of marking it continues, if any (the same command, said again). */
+function record(session: string, desk: Desk, cmd: Omit<OfficeCommand, "n" | "rev" | "summary"> & { lines: string[] }, run?: OfficeCommand | null) {
+  desk.log ??= [];
+  const { lines, ...rest } = cmd;
+  if (run) {
+    extendRun(run, lines, rest.at, desk.rev);
+    for (const fn of commandListeners) fn(session, run);
+    return;
+  }
+  desk.lseq = (desk.lseq ?? 0) + 1;
+  const entry = addCommand(desk.log, desk.lseq, { ...rest, rev: desk.rev, summary: lines.join("; ") });
+  for (const fn of commandListeners) fn(session, entry);
 }
 
 // ------------------------------------------------------------ versions --
@@ -342,6 +370,8 @@ export function deskHooks(session: string): DeskHooks {
         versions: carried && was ? was.versions : [],
         vseq: carried && was ? was.vseq : 0,
         dirty: false,
+        log: carried && was ? was.log : undefined,
+        lseq: carried && was ? was.lseq : undefined,
         cues: shown.length ? shown : undefined,
         cueSeq: (was?.cueSeq ?? 0) + (shown.length ? 1 : 0),
       };
@@ -357,7 +387,13 @@ export function deskHooks(session: string): DeskHooks {
         desk.vseq = was.vseq;
       }
       desks.set(session, desk);
+      // What was there just before this change: the version the command is taken back to (null for a PDF just begun).
+      const beforeV = was && carried && desk.vseq > 0 ? desk.vseq : null;
       if (!was || !carried || review) snapshot(session, desk, review?.label ?? (was && carried ? "Changed by the agent" : "Opened"), "agent");
+      record(session, desk, {
+        who: "agent", name: was && carried ? "agent_edit" : "open", at: Date.now(), before: beforeV,
+        lines: [review?.label ?? (was && carried ? "changed the PDF" : "opened the PDF")],
+      });
       persist(session);
       changed(session);
     },
@@ -370,6 +406,8 @@ export function deskHooks(session: string): DeskHooks {
       persist(session);
       changed(session);
     },
+    commandLog: (sinceRev) => logText(load(session)?.log ?? [], sinceRev, "PDF"),
+    revert: (n, cwd) => revertDeskCommand(session, n, cwd, "agent"),
     news() {
       const desk = load(session);
       if (!desk || desk.news.length === 0) return "";
@@ -469,6 +507,9 @@ export function personChanges(session: string, upsert: unknown[], remove: unknow
   const desk = load(session);
   if (!desk) return false;
   const byId = new Map(desk.items.map((i) => [i.id, i]));
+  const run = openPersonRun(desk.log ?? [], desk.dirty);
+  const beforeV = desk.vseq > 0 ? desk.vseq : null;
+  const said: string[] = [];
   for (const raw of upsert.slice(0, 500)) {
     const item = cleanItem(raw);
     if (!item) continue;
@@ -478,14 +519,17 @@ export function personChanges(session: string, upsert: unknown[], remove: unknow
     else delete item.autora;
     if (!was) {
       desk.news.push(`added ${label(item)}`);
+      said.push(`added ${label(item)}`);
       touched(session, item.id, "add", `added ${label(item)}`);
     } else if (JSON.stringify({ ...was, x: 0, y: 0, drawingPoints: 0 }) === JSON.stringify({ ...item, x: 0, y: 0, drawingPoints: 0 })) {
       if (was.x !== item.x || was.y !== item.y) {
         desk.news.push(`moved ${label(item)}`);
+        said.push(`moved ${label(item)}`);
         touched(session, item.id, "move", `moved ${label(item)}`);
       }
     } else {
       desk.news.push(`changed ${label(item)}`);
+      said.push(`changed ${label(item)}`);
       touched(session, item.id, "edit", `changed ${label(item)}`);
     }
     byId.set(item.id, item);
@@ -494,6 +538,7 @@ export function personChanges(session: string, upsert: unknown[], remove: unknow
     const was = byId.get(id);
     if (!was) continue;
     desk.news.push(`removed ${label(was)}`);
+    said.push(`removed ${label(was)}`);
     touched(session, id, "remove", `removed ${label(was)}`);
     byId.delete(id);
   }
@@ -501,6 +546,7 @@ export function personChanges(session: string, upsert: unknown[], remove: unknow
   desk.items = [...byId.values()];
   desk.dirty = true;
   desk.rev++;
+  if (said.length) record(session, desk, { who: "person", name: "person_edit", at: Date.now(), before: beforeV, lines: squash(said) }, run);
   persist(session);
   changed(session);
   rewrite(session, cwd);
@@ -559,7 +605,9 @@ export function personBase(session: string, data: Buffer, items: unknown[], cwd:
     // One change of the agent's, however many writes the editor's Save took.
     if (!hand.saved) {
       desk.marks.push({ id: markId(), kind: "page", page: 1, label: hand.label, beforeBaseRev: before });
+      const beforeV = desk.vseq > 0 ? desk.vseq : null;
       snapshot(session, desk, hand.label, "agent");
+      record(session, desk, { who: "agent", name: "agent_edit", at: Date.now(), before: beforeV, lines: [hand.label] });
       hand.saved = true;
     }
     persist(session);
@@ -569,6 +617,8 @@ export function personBase(session: string, data: Buffer, items: unknown[], cwd:
     return null;
   }
   const kept = new Map(desk.items.map((i) => [i.id, i]));
+  const run = openPersonRun(desk.log ?? [], desk.dirty);
+  const beforeV = desk.vseq > 0 ? desk.vseq : null;
   desk.base = data;
   desk.items = items.slice(0, 2000).map(cleanItem).filter((i): i is DeskItem => Boolean(i)).map((i) => {
     const was = kept.get(i.id);
@@ -583,6 +633,7 @@ export function personBase(session: string, data: Buffer, items: unknown[], cwd:
   desk.baseRev++;
   desk.rev++;
   desk.dirty = true;
+  record(session, desk, { who: "person", name: "person_edit", at: Date.now(), before: beforeV, lines: ["changed the pages themselves (deleting, turning, reordering or merging pages)"] }, run);
   persist(session);
   changed(session);
   rewrite(session, cwd);
@@ -605,6 +656,9 @@ export function denyMarks(session: string, id: string | "all", cwd: string): boo
   if (!desk) return false;
   const marks = id === "all" ? [...desk.marks].reverse() : desk.marks.filter((m) => m.id === id);
   if (!marks.length) return false;
+  // What the person had done so far is kept before the decline goes on top, so the decline can be taken back.
+  if (desk.dirty) snapshot(session, desk, "Your changes", "person");
+  const declinedFrom = desk.vseq > 0 ? desk.vseq : null;
   const byId = new Map(desk.items.map((i) => [i.id, i]));
   for (const m of marks) {
     if (m.kind === "add" && m.itemId) byId.delete(m.itemId);
@@ -626,6 +680,7 @@ export function denyMarks(session: string, id: string | "all", cwd: string): boo
   desk.marks = desk.marks.filter((m) => !gone.has(m.id));
   desk.items = [...byId.values()];
   desk.rev++;
+  record(session, desk, { who: "person", name: "decline", at: Date.now(), before: declinedFrom, lines: [marks.length === 1 ? `declined: ${marks[0].label}` : `declined ${marks.length} of the agent's changes`] });
   snapshot(session, desk, marks.length === 1 ? `Declined: ${marks[0].label}` : `Declined ${marks.length} changes`, "person");
   persist(session);
   changed(session);
@@ -634,7 +689,7 @@ export function denyMarks(session: string, id: string | "all", cwd: string): boo
 }
 
 /** Go back to an earlier version of the file: the present one is kept too, so nothing is lost. */
-export function restoreVersion(session: string, n: number, cwd: string): string | null {
+export function restoreVersion(session: string, n: number, cwd: string, who: "agent" | "person" = "person", note?: string): string | null {
   const desk = load(session);
   if (!desk) return "There is no PDF open in the window.";
   const v = desk.versions.find((x) => x.n === n);
@@ -648,12 +703,29 @@ export function restoreVersion(session: string, n: number, cwd: string): string 
   desk.baseRev++;
   desk.rev++;
   desk.marks = [];
-  desk.news.push(`went back to version ${v.n} (${v.label})`);
-  snapshot(session, desk, `Went back to version ${v.n}`, "person");
+  if (who === "person") desk.news.push(`went back to version ${v.n} (${v.label})`);
+  const beforeV = desk.vseq > 0 ? desk.vseq : null;
+  record(session, desk, { who, name: "revert", at: Date.now(), before: beforeV, lines: [note ?? `went back to version ${v.n} (${v.label})`] });
+  snapshot(session, desk, `Went back to version ${v.n}`, who);
   persist(session);
   changed(session);
   rewrite(session, cwd);
   return null;
+}
+
+/** The commands made on a chat's PDF, oldest first. */
+export function deskCommands(session: string): OfficeCommand[] {
+  return [...(load(session)?.log ?? [])];
+}
+
+/** Go back to just before command n. A new change on top, so it can be undone; it is itself in the log. */
+export function revertDeskCommand(session: string, n: number, cwd: string, who: "agent" | "person"): string | null {
+  const desk = load(session);
+  if (!desk) return "There is no PDF open in the window.";
+  const cmd = desk.log?.find((c) => c.n === n);
+  if (!cmd) return "That command is not in the log.";
+  if (cmd.before === null) return "That command made the PDF; there is nothing before it to go back to.";
+  return restoreVersion(session, cmd.before, cwd, who, `went back to before command ${n} (${cmd.summary.slice(0, 80)})`);
 }
 
 /** An earlier version as a PDF, flattened as it was. */
@@ -748,6 +820,22 @@ export function deskRoutes(app: Express, opts: { exists: (session: string) => bo
     if (!id) return;
     const desk = load(id);
     if (desk?.open) desk.pick = rememberPick(req.body?.text);
+    res.json({ ok: true });
+  });
+
+  /* The log of what was done to the PDF, by whom (commandlog.ts); and going back to before a command. */
+  app.get("/api/pdfdesk/:session/commands", (req, res) => {
+    const id = known(req, res);
+    if (id) res.json({ commands: deskCommands(id) });
+  });
+
+  app.post("/api/pdfdesk/:session/commands/revert", express.json({ limit: "1kb" }), (req, res) => {
+    const id = known(req, res);
+    if (!id) return;
+    const n = Number(req.body?.n);
+    if (!Number.isInteger(n)) return res.status(400).json({ error: "n must be a command number from the log." });
+    const problem = revertDeskCommand(id, n, opts.cwd(), "person");
+    if (problem) return res.status(404).json({ error: problem });
     res.json({ ok: true });
   });
 
