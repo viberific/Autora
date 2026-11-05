@@ -224,6 +224,19 @@ P0: a read-only survey, no code, producing `docs/ENGINE-SURVEY.md`. Then P1 on 3
   events; `photo_history`; `GET /commands`, `POST /commands/revert`. Tested with a stand-in command line (`tests/photolog.test.ts`);
   the `doc.inspect` layer fields beyond size and names are guessed and untested against the real PhotoCraft CLI; not driven in the window.
 
+- **Games: the agent can play its game (0.9.350), the first step of "a first-time maker starts with an idea".** Decision after the
+  command-layer work: a command log for Games would harden a layer a beginner should not be looking at, so it is NOT built; the gap
+  that matters is that the agent built blind. `game_play` (`server/gameplay.ts`, `gamedesk.ts`): the window is asked to press its own
+  Play (`gamedesk.play` message -> `GameWindow` -> the rail's `restart`, so the person watches it start), the editor sends the preview
+  files to the server as it always has, and the server runs a COPY in an isolated headless Chromium (`withBrowserContext`; the game
+  reaches its own files only) with a script of press/hold/wait/click/shot, and returns pictures, the errors it threw, frames drawn and
+  whether the screen changed. Tested end to end in a real browser with a small canvas game and a simulated window
+  (`tests/gameplay.test.ts`, `tests/gameplay-tool.test.ts`). NOT tested: GDevelop's real runtime (its keyboard and canvas handling),
+  the editor's real preview export (not built in this container), and the window-side Play press. Needs the window open with its
+  editor running to start the current game; without it the tool plays the last preview and says it may be older. Next toward the goal
+  (see the 2026-11-05 discussion): art and sound for someone with none, the verbs-to-behaviours layer ("slippery", "jump") on `game.*`
+  panels, and the five-minute path written down and tried with a real beginner.
+
 ## Left to do (as of 0.9.341, in the order to take it)
 
 1. **P6 rest (PDF, Photo, Video pick: done in 0.9.342; remaining: the Office browser test and presence-based proactivity).** Was: report the pick from PDF (selected text/region), Photo (layer/selection) and Video (selected clip), the same way, with the

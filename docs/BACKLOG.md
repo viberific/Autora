@@ -87,7 +87,7 @@ export. A built-in run mode comes later and shares the game runtime from (3).
 > **Done in part (0.9.175):** Autora Games, GDevelop's editor as a window with the agent working on its project file
 > (docs/MODULES.md). That is this item's tier 1 on an existing engine, so "do not build two engines" now means: the 3D
 > game mode should target GDevelop's 3D objects, not a runtime of its own. Still open: the asset store through a proxy,
-> a screenshot/play tool so the agent can see the running game, and the debugger through the sandbox.
+> the debugger through the sandbox. (The play tool is done, 0.9.350: `game_play`, `server/gameplay.ts`.)
 
 Size: M to L, in tiers.
 

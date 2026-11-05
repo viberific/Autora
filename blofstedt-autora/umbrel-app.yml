@@ -206,9 +206,8 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  The Photo window now keeps a log of every change to your picture: what you
-  painted or edited and what the assistant did, each in a line. The assistant can
-  read it to see what you changed while it was away. How the picture looks is
-  yours, so the assistant can take back only its own changes, never yours; you
-  can go back to before any change. Going back is itself a change you can take
-  back.
+  The assistant can now play the game it is making. It starts the game in your
+  Games window, so you see it begin, then plays a copy with the keys it chooses
+  and looks at the screen: does it start, does anything move when a key is
+  pressed, did the game report an error. It tests its own work before telling you
+  it is done, so you do not have to press Play for it.

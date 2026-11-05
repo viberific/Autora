@@ -21,6 +21,7 @@ type Handlers = {
   /** Autora 3D's window: whether it is open, and what changed last. */
   onCadDesk?: (state: unknown) => void;
   onGameDesk?: (state: unknown) => void;
+  onGamePlay?: () => void;
   onPhotoDesk?: (state: unknown) => void;
   onPhotoHand?: (msg: unknown) => void;
   /** Autora Music's window: whether it is open, and what changed last. */
@@ -191,6 +192,9 @@ export class SessionStream {
           break;
         case "gamedesk":
           this.handlers.onGameDesk?.(msg.state);
+          break;
+        case "gamedesk.play":
+          this.handlers.onGamePlay?.();
           break;
         case "photodesk":
           this.handlers.onPhotoDesk?.(msg.state);

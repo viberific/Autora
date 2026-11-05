@@ -29,6 +29,9 @@ import catalogJson from "./game-catalog.json";
 import starterJson from "./game-starter.json";
 import { artifactPath, getArtifact, keepCopy } from "./artifacts";
 import { chatTitle } from "./folders";
+import { playPreview, parseSteps, type Played } from "./gameplay";
+import type { ChatImage } from "./llm";
+import { PdfRenderError } from "./pdfrender";
 import { stateDir } from "./state";
 import { readDoc, saveDoc } from "./store";
 import { staticDir } from "./staticfiles";
@@ -106,6 +109,8 @@ interface Entry {
   by: "agent" | "person";
   /** The revision a Panacea panel made: the window takes it without moving the camera. */
   quiet?: number;
+  /** When the game last changed, by anyone: a preview older than this is of an earlier game. Not kept on disk. */
+  changedAt: number;
 }
 
 /** What is kept on disk for a chat: its game, and whether its window was open. */
@@ -139,6 +144,7 @@ function entryFor(session: string): Entry {
       since: saved?.since ?? 0,
       rev: saved?.rev ?? 0,
       by: "agent",
+      changedAt: 0,
     };
     entries.set(session, entry);
   }
@@ -170,6 +176,7 @@ function commit(session: string, project: Json, by: "agent" | "person") {
   entry.project = project;
   entry.rev++;
   entry.by = by;
+  entry.changedAt = Date.now();
   persist(session);
   changed(session);
 }
@@ -835,6 +842,8 @@ function templateFor(args: Record<string, any>): { ok: boolean; text: string } {
 interface PreviewFile {
   bytes: Buffer;
   type: string;
+  /** When the editor sent it: a preview is made of many files over a moment. */
+  at: number;
 }
 
 const previews = new Map<string, Map<string, PreviewFile>>();
@@ -855,12 +864,59 @@ function keepPreview(session: string, file: string, bytes: Buffer, type: string)
   let files = previews.get(session);
   if (!files) previews.set(session, (files = new Map()));
   files.delete(file);
-  files.set(file, { bytes, type });
+  files.set(file, { bytes, type, at: Date.now() });
   // Old previews go first: the budget is the newest ones.
   for (const old of files.keys()) {
     if (previewTotal(files) <= PREVIEW_TOTAL_MAX) break;
     if (old !== file) files.delete(old);
   }
+}
+
+/**
+ * The newest preview the editor made: its files (paths like "/<instance>/preview/index.html"), the page to start at, and when the
+ * last of its files arrived. A preview is a folder named by its instance, and the editor sends its files one after another.
+ */
+function latestPreview(session: string): { files: Map<string, PreviewFile>; entry: string; at: number } | null {
+  const all = previews.get(session);
+  if (!all) return null;
+  const byInstance = new Map<string, Map<string, PreviewFile>>();
+  for (const [file, f] of all) {
+    const instance = file.split("/")[1];
+    if (!instance) continue;
+    let group = byInstance.get(instance);
+    if (!group) byInstance.set(instance, (group = new Map()));
+    group.set(file, f);
+  }
+  let best: { files: Map<string, PreviewFile>; entry: string; at: number } | null = null;
+  for (const group of byInstance.values()) {
+    const pages = [...group.keys()].filter((k) => k.endsWith("/index.html")).sort((a, b) => a.length - b.length);
+    if (!pages.length) continue;
+    const at = Math.max(...[...group.values()].map((f) => f.at));
+    if (!best || at > best.at) best = { files: group, entry: pages[0]!, at };
+  }
+  return best;
+}
+
+const playListeners = new Set<(session: string) => void>();
+/** Told when the agent wants the game started in its window (so the editor makes a preview). */
+export function onGamePlayRequest(fn: (session: string) => void) {
+  playListeners.add(fn);
+}
+
+/** How long a fresh preview is waited for: the editor builds the game's code first, and a first start is slow. */
+export const previewWait = { fresh: 60_000 };
+/** The preview is whole when its files have stopped arriving for this long. */
+const SETTLE_MS = 1_200;
+
+/** Ask the window to start the game, and wait for the preview it makes; null when none came. */
+async function freshPreview(session: string, since: number): Promise<ReturnType<typeof latestPreview>> {
+  for (const fn of playListeners) fn(session);
+  for (let waited = 0; waited < previewWait.fresh; waited += 250) {
+    const now = latestPreview(session);
+    if (now && now.at > since && Date.now() - now.at >= SETTLE_MS) return now;
+    await new Promise<void>((r) => setTimeout(r, 250));
+  }
+  return null;
 }
 
 /** The page a preview is: the game's, in a box of its own, that may use the pointer, sound and the keyboard but not this app. */
@@ -928,12 +984,17 @@ function resourceFor(kind: string, name: string, url: string): Json {
 interface GameToolHooks {
   /** Where "the person's files" are: a path the agent gives is looked for here. */
   cwd?: string;
+  /** Show a picture of the game in the conversation. */
+  showImage?: (png: Buffer, alt: string) => void;
+  cancelled?: () => boolean;
+  onCancel?: (stop: () => void) => void;
 }
 
 interface Outcome {
   ok: boolean;
   summary: string;
   preview?: string;
+  images?: ChatImage[];
 }
 
 const need = (args: Record<string, any>, key: string): string => {
@@ -1090,6 +1151,48 @@ export async function runGameTool(session: string, name: string, args: Record<st
         return { ok: true, summary: `Added the ${kept.kind} "${resourceName}" to the game's resources. Use that name where an object or an instruction takes a ${kept.kind}${kept.kind === "image" ? ` (a Sprite's animations[].directions[].sprites[].image; game_template object Sprite shows where)` : ""}.`, preview: `imported ${resourceName}` };
       }
 
+      case "game_play": {
+        const entry = entryFor(session);
+        if (!entry.project) return { ok: false, summary: "There is no game yet. Open one with game_open." };
+        const { steps, error } = parseSteps(args.script);
+        if (error) return { ok: false, summary: error };
+        const before = Date.now();
+        let preview = latestPreview(session);
+        let how = "";
+        if (args.fresh !== false) {
+          setOpen(session, true);
+          const fresh = await freshPreview(session, before);
+          if (fresh) {
+            preview = fresh;
+          } else {
+            how = preview
+              ? " The window did not make a new preview in time (is it open beside the chat, with the editor started?), so this is the last one it made."
+              : "";
+          }
+        }
+        if (!preview) {
+          return { ok: false, summary: "There is no preview of the game to play. The editor makes one when the game is started in the window (the Play button), and that needs the game window open beside the chat with its editor running: ask the person to open it and press Play once, or open it with game_open and try again." };
+        }
+        const stale = preview.at < entry.changedAt ? ` The game was changed after this preview was made (${Math.round((entry.changedAt - preview.at) / 1000)} s later), so it is an earlier version: use fresh (the default) to play the current one.` : "";
+        let played: Played;
+        try {
+          played = await playPreview(preview.files, preview.entry, steps, { width: Number(args.width) || undefined, height: Number(args.height) || undefined, cancelled: hooks.cancelled, onCancel: hooks.onCancel });
+        } catch (err) {
+          if (err instanceof PdfRenderError && err.code === "no-browser") return { ok: false, summary: `Playing the game needs a browser, and ${err.message.replace(/^.*?: /, "")}` };
+          if (err instanceof PdfRenderError && err.code === "cancelled") return { ok: false, summary: "Stopped." };
+          throw err;
+        }
+        for (const shot of played.shots) hooks.showImage?.(shot.png, `The game: ${shot.label}`);
+        const lines = [
+          `Played the game for ${played.seconds} s: ${played.shots.length} picture${played.shots.length === 1 ? "" : "s"} (${played.shots.map((x) => x.label).join(", ")}), in this result and shown in the conversation.${how}${stale}`,
+          played.frames < 10 ? `Only ${played.frames} frames were drawn: the game did not start, or it froze.` : `${played.frames} frames were drawn.`,
+          played.shots.length > 1 ? (played.changed ? "The screen was different in the last picture than in the first." : "The screen was the same in the first and last pictures: nothing visible happened. If you pressed keys, the game may not be listening to them, or the player is not where you think.") : "",
+          played.problems.length ? `The game reported ${played.problems.length} problem${played.problems.length === 1 ? "" : "s"}:\n${played.problems.map((x) => `- ${x}`).join("\n")}` : "The game reported no errors.",
+          "You cannot hear it, and a picture cannot show how it feels to play: ask the person how it plays before you say it is right.",
+        ].filter(Boolean);
+        return { ok: true, summary: lines.join("\n"), preview: `played ${played.seconds} s`, images: played.shots.map((x) => ({ mime: "image/png", data: x.png.toString("base64") })) };
+      }
+
       default:
         return { ok: false, summary: `Unknown tool "${name}".` };
     }
@@ -1105,11 +1208,11 @@ export function gameBriefing(on: boolean): string {
   }
   return (
     "- Autora Games (the game window, GDevelop's editor): available. Tools: game_open, game_look, game_edit, game_check, game_catalog, " +
-    "game_template and game_import. The game is the project file GDevelop saves (JSON: scenes, objects, behaviors, instances, events, " +
+    "game_template, game_import and game_play (play the game and see it). The game is the project file GDevelop saves (JSON: scenes, objects, behaviors, instances, events, " +
     "resources); read and change it with game_look and game_edit (set, insert, remove, merge at a path such as " +
     "layouts[Scene].objects[Player].behaviors). The person sees it change in the editor beside the chat and can change anything by " +
     "hand: call game_look again before relying on what you saw. Never write an instruction from memory: search the engine's own list " +
-    "with game_catalog (exact type and parameter order), copy shapes from game_template, and run game_check before you say a game is " +
+    "with game_catalog (exact type and parameter order), copy shapes from game_template, and run game_check and game_play before you say a game is " +
     "done. The technical work (events, behaviors, physics, wiring, the settings that make it run) is yours: do it completely. The " +
     "creative choices (the idea, the story, the characters, the world, the look, how it feels, the levels) are theirs: ask, suggest " +
     "and explain, and let them choose; if they ask for an action or a property (\"make it slippery\", \"jump\"), make it and leave " +

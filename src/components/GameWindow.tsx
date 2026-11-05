@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { SaveButton, keptAs } from "./SaveButton";
 import { LoadButton } from "./LoadButton";
 import { useFullscreen } from "../lib/fullscreen";
-import { gameStateNow, onGameState, useGameState } from "../lib/gamedesk";
+import { gameStateNow, onGamePlay, onGameState, useGameState } from "../lib/gamedesk";
 import { IconArrowLeft, IconGame, IconMaximize, IconMinimize } from "./Icons";
 import { GameRail, type GameRailState } from "./game/GameRail";
 
@@ -118,6 +118,24 @@ export function GameWindow({ sessionId, phone }: { sessionId: string; phone: boo
     });
     return keptAs(await fetch(`/api/game/${encodeURIComponent(sessionId)}/keep`, { method: "POST" }));
   }, [post, sessionId]);
+
+  /* The agent asked for the game to be played (game_play): Play is pressed as the person would, so the game starts in the window
+     where they can watch it, and the editor makes the preview the agent plays. A window whose editor is still starting does it as
+     soon as the editor says it is up. */
+  const playAsked = useRef(false);
+  useEffect(() => {
+    const unsubscribe = onGamePlay(() => {
+      if (ready.current) post({ autoraGameCmd: "run", id: "restart" });
+      else playAsked.current = true;
+    });
+    return unsubscribe;
+  }, [post]);
+  useEffect(() => {
+    if (up && playAsked.current) {
+      playAsked.current = false;
+      post({ autoraGameCmd: "run", id: "restart" });
+    }
+  }, [up, post]);
 
   /** A tool of the bar, pressed: the editor runs it. */
   const run = useCallback((id: string) => post({ autoraGameCmd: "run", id }), [post]);

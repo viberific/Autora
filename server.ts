@@ -168,7 +168,7 @@ import { newFileRoutes } from "./server/newfile";
 import { loadFileRoutes, loadPanaceaFile, type FileLoadGuards } from "./server/loadfile";
 import { DESKS } from "./server/desks";
 import { cadRoutes, cadState, onCadCommand, serveCad } from "./server/caddesk";
-import { gameRoutes, gameState, serveGame } from "./server/gamedesk";
+import { gameRoutes, gameState, onGamePlayRequest, serveGame } from "./server/gamedesk";
 import { onPhotoCommand, photoPickNote, photoRoutes, photoState, servePhoto } from "./server/photodesk";
 import { onStudioCommand, studioRoutes, studioState, studioTurnNote, studioVisible } from "./server/studio";
 import { appOfArtifact, appOfFile, appOfTool } from "./src/lib/panacea/flows";
@@ -1307,6 +1307,9 @@ onOfficeCommand((sessionId, cmd) => {
   const session = sessions.get(sessionId);
   if (session) emitEvent(session, "office.command", cmd.who, { ...cmd });
 });
+
+/* The agent wants the game started in its window (game_play): the page presses Play, so the editor makes a preview to play. */
+onGamePlayRequest((sessionId) => sendEphemeral(sessionId, { type: "gamedesk.play", session: sessionId }));
 
 /* And every command made on a chat's picture (server/commandlog.ts). */
 onPhotoCommand((sessionId, cmd) => {

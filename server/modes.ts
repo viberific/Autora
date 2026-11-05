@@ -314,6 +314,8 @@ export function looksOnly(name: string, args: Record<string, any> = {}): boolean
   // Looking at the picture is looking; opening one on the window does not change it, starting a new one or loading a file does.
   if (name === "photo_look" || name === "photo_info" || name === "photo_commands") return true;
   if (name === "photo_open") return !args.file && !args.new;
+  // Playing the game changes nothing in the project: it starts the game in the window and runs a copy to look at.
+  if (name === "game_play") return true;
   // The log is looking; putting the picture back as it was before a command changes it.
   if (name === "photo_history") return String(args.action ?? "log") === "log";
   // The same for the music window; playing and stopping change nothing in the song.

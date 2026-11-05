@@ -169,6 +169,13 @@ await test("the Office manual says what the person has picked reaches the briefi
   }
 });
 
+await test("the Games manual teaches game_play: it plays the game, brings back pictures and errors, and the agent still asks how it feels", () => {
+  const text = manualText("game");
+  for (const needle of ["Playing the game", "game_play", "(press, hold, wait, click, shot)", "the errors the game threw", "with fresh false it plays the last preview", "ask the person how it plays"]) {
+    assert.ok(text.includes(needle), needle);
+  }
+});
+
 await test("the Photo manual teaches the command log and that the look is the person's: only your own changes can be taken back", () => {
   const text = manualText("photo");
   for (const needle of ["Who did what in the picture", "photo_history", "since_revision", "just before command n", "shows in the log as a revert", "you may take back only your own changes", "the last 10 commands"]) {
