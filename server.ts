@@ -170,7 +170,7 @@ import { DESKS } from "./server/desks";
 import { cadRoutes, cadState, onCadCommand, serveCad } from "./server/caddesk";
 import { gameRoutes, gameState, serveGame } from "./server/gamedesk";
 import { photoPickNote, photoRoutes, photoState, servePhoto } from "./server/photodesk";
-import { studioRoutes, studioState, studioTurnNote, studioVisible } from "./server/studio";
+import { onStudioCommand, studioRoutes, studioState, studioTurnNote, studioVisible } from "./server/studio";
 import { appOfArtifact, appOfFile, appOfTool } from "./src/lib/panacea/flows";
 import { dropPanacea, noteFlow, onPanaceaChange, onPanaceaTouch, panaceaRoutes, panaceaState, panaceaSuggester, panaceaTurnNote, panaceaVisible } from "./server/panacea";
 import { joinProjects, windowOff } from "./server/tools";
@@ -1306,6 +1306,12 @@ onCadCommand((sessionId, cmd) => {
 onOfficeCommand((sessionId, cmd) => {
   const session = sessions.get(sessionId);
   if (session) emitEvent(session, "office.command", cmd.who, { ...cmd });
+});
+
+/* And every command made on a chat's song (server/commandlog.ts). */
+onStudioCommand((sessionId, cmd) => {
+  const session = sessions.get(sessionId);
+  if (session) emitEvent(session, "studio.command", cmd.who, { ...cmd });
 });
 
 /* And every command made on a chat's PDF (server/commandlog.ts). */

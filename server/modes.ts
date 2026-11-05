@@ -314,6 +314,8 @@ export function looksOnly(name: string, args: Record<string, any> = {}): boolean
   if (name === "photo_open") return !args.file && !args.new;
   // The same for the music window; playing and stopping change nothing in the song.
   if (name === "studio_look" || name === "studio_play") return true;
+  // The log is looking; going back to before a command changes the song.
+  if (name === "studio_history") return String(args.action ?? "log") === "log";
   if (name === "studio_open") return !String(args.new ?? "").trim();
   // Looking at the canvas or its library is looking; opening it does not change it, starting a new one does.
   if (name === "panacea_look") return true;

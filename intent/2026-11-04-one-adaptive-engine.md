@@ -192,13 +192,23 @@ P0: a read-only survey, no code, producing `docs/ENGINE-SURVEY.md`. Then P1 on 3
   `tests/pdflog.test.ts`; not driven in Spectra. Same limit as the Office apps: revert goes back to before command n and undoes what
   followed. Accepting a change is not a command (it changes nothing in the file).
 
+- **Command layer, Music (0.9.347): done, and the first with a person-only rule.** Music's song is plain JSON owned by the server, so
+  the log sits in its one funnel, `commit()` in `server/studio.ts`: every change (the agent's `studio_*` tools, the person's saves from the
+  window, a panel control, a loaded file) is a command with who and a line; the person's saves while they drag are one command (30 s run,
+  said again from where it began with `server/songlog.ts`'s song diff); an unchanged re-save is not logged. The song from before each
+  command is kept for the last 30 (references, not copies; not across a restart), and the log itself is kept on disk beside the song.
+  **Authority:** music is the person's (CLAUDE.md, "creativity involved"): `studio_history` revert is refused to the agent when command n,
+  or any after it, is the person's own, so it can take back only its own changes; the person may go back to before any command
+  (`POST /commands/revert`). `studio.command` events; `studio_history` log/revert; `GET /commands`. Tested in `tests/studiolog.test.ts`;
+  not driven in the Music window. Not done: the window's own Ctrl+Z is separate and not linked to the log.
+
 ## Left to do (as of 0.9.341, in the order to take it)
 
 1. **P6 rest (PDF, Photo, Video pick: done in 0.9.342; remaining: the Office browser test and presence-based proactivity).** Was: report the pick from PDF (selected text/region), Photo (layer/selection) and Video (selected clip), the same way, with the
    briefing line and a handbook sentence each. Add a browser test for the Office shim-to-server pick path. Then the wider P6 idea:
    proactivity from "what the person seems to be doing" (the presence/companion code), not only what is picked.
 2. **Command layers (P4's unfinished half)**, one editor at a time against its own API, each with authority (agent/person), a log with
-   before/after, revert, and `cad.command`-style events: Sheets (0.9.343), Slides (0.9.344), Pages (0.9.345) and PDF (0.9.346) are done; next Photo, Music, Video, Games (its step log exists in Panacea's
+   before/after, revert, and `cad.command`-style events: Sheets (0.9.343), Slides (0.9.344), Pages (0.9.345), PDF (0.9.346) and Music (0.9.347) are done; next Photo, Video, Games (its step log exists in Panacea's
    `doclog.ts`, not in the hosted Pages editor), PDF, Photo, Music, Video, Games. `server/desks.ts` should gain PDF, Office and Video when their state fits.
 3. **P5, cross-window entities** (a chart in a sheet shown on a slide, a photo used in a page): needs step 2 for at least Sheets and Slides.
 4. **Games has no agent hand** (a shared page-side client touching each fork's overlay); Games' fading bar is typechecked but not driven in a browser.

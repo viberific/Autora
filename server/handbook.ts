@@ -272,6 +272,11 @@ const STUDIO = [
     "on drum hits) and the notes past the hand's limit of 48 a call; your result says which was which. With Visible work off " +
     "(or the window shut) the song simply changes, the clips you touched lit for a moment.",
   "  Saving. The song is saved as you go; the window's top bar (beside the song's name, before Export) also has Save (and Ctrl+S), which writes it now and keeps a copy in Artifacts as <song name>.song.json. Export makes the WAV.",
+  "  Who did what in the song. Every change to the song in the Music window is a command in a log, with who made it (you, or the person working in the window) and a line saying what. " +
+    "studio_history reads it: call it with since_revision (the revision you last saw) to learn what the person changed while you were not looking, instead of guessing from the notes. " +
+    "studio_history with action revert and n takes the song back to just before command n (and everything after it); that is a new change on top, so the person can take it back, and it shows in the log as a revert. " +
+    "Music is the person's: you may take back only your own changes. If command n, or any after it, is the person's own work you are refused; say what you would change and let them undo it in the window. " +
+    "The song from before a command is kept for the last 30 commands, and not across a restart.",
 ].join("\n");
 
 const OFFICE = [

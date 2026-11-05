@@ -33,6 +33,8 @@ import { MAX_ARTIFACT_BYTES, keepCopy, saveArtifact } from "./artifacts";
 import { stepWords, studioSteps } from "../src/lib/studio/handsteps";
 import { chatTitle } from "./folders";
 import { stateDir } from "./state";
+import { addCommand, logText, openPersonRun, type OfficeCommand } from "./commandlog";
+import { describeSongChange } from "./songlog";
 import { readDoc, saveDoc } from "./store";
 import { createHandshake } from "./handshake";
 
@@ -70,6 +72,11 @@ interface Entry {
   ready: boolean;
   /** The revision the agent's hand made in the window (Visible work): the window has it, so it loads it without a flash. */
   quiet?: number;
+  /** Every change to the song as a command (who, what), oldest first. See commandlog.ts. */
+  log: OfficeCommand[];
+  lseq: number;
+  /** The song as it was just before each command, by command number: what "back to before it" goes to. Newest 30; not kept on disk. */
+  before: Map<number, Project>;
 }
 
 interface Saved {
@@ -102,6 +109,8 @@ function entryFor(session: string): Entry {
       by: "agent",
       focus: { trackId: null, clipId: null },
       ready: false,
+      ...restoredLog(session),
+      before: new Map(),
     };
     entries.set(session, entry);
   }
@@ -111,6 +120,38 @@ function entryFor(session: string): Entry {
 function persist(session: string, entry: Entry) {
   if (!validSession(session)) return;
   saveDoc(savedName(session), () => ({ project: entry.project, open: entry.open, since: entry.since }) satisfies Saved);
+  saveDoc(logName(session), () => ({ log: entry.log, lseq: entry.lseq }) satisfies SavedLog);
+}
+
+/** The command log is kept beside the song, apart from it, so a change to one does not rewrite the other. */
+interface SavedLog {
+  log: OfficeCommand[];
+  lseq: number;
+}
+const logName = (session: string) => `studio-${session}-log`;
+function restoredLog(session: string): { log: OfficeCommand[]; lseq: number } {
+  const saved = validSession(session) ? readDoc<SavedLog>(logName(session)) : null;
+  return { log: Array.isArray(saved?.log) ? saved!.log : [], lseq: Number(saved?.lseq) || 0 };
+}
+
+// ------------------------------------------------------- the command log --
+
+const commandListeners = new Set<(session: string, entry: OfficeCommand) => void>();
+/** Told of every command made on a chat's song (the agent's, the person's, a revert), for the event log. */
+export function onStudioCommand(fn: (session: string, entry: OfficeCommand) => void) {
+  commandListeners.add(fn);
+}
+
+const KEPT_BEFORE = 30;
+/** Saves of the person's within this long of their last are one command: dragging a note is many saves. */
+const RUN_MS = 30_000;
+
+/**
+ * Authority: Music is the person's. The agent may take back only what it made itself: a revert to before command n is
+ * refused to the agent when that command, or any after it, is the person's own.
+ */
+export function agentMayRevert(log: OfficeCommand[], n: number): boolean {
+  return !log.some((c) => c.n >= n && c.who === "person");
 }
 
 function changed(session: string) {
@@ -140,14 +181,70 @@ function setOpen(session: string, open: boolean) {
   changed(session);
 }
 
-/** A change to the song by `who`: kept, saved and announced. */
-function commit(session: string, e: Entry, next: Project, who: "agent" | "person") {
+/**
+ * A change to the song by `who`: kept, saved and announced. `said` is the log's account of it, as the log's `by`: usually the
+ * same `who`, but a person's revert or a song they load reaches the window as the agent's ("agent" is what makes it load).
+ */
+function commit(session: string, e: Entry, next: Project, who: "agent" | "person", said: { by?: "agent" | "person"; name: OfficeCommand["name"]; line: string }) {
   fitBars(next);
+  logCommand(session, e, e.project, next, said.by ?? who, said.name, said.line);
   e.project = next;
   e.rev++;
   e.by = who;
   persist(session, e);
   changed(session);
+}
+
+/** One command, or more of the person's run of editing (the same command, said again from where it began). */
+function logCommand(session: string, e: Entry, prior: Project, next: Project, who: "agent" | "person", name: OfficeCommand["name"], line: string) {
+  // The window saves the song as it is now now and then: nothing changed, nothing to log.
+  if (who === "person" && name === "person_edit" && JSON.stringify(prior) === JSON.stringify(next)) return;
+  const last = e.log[e.log.length - 1];
+  const run = who === "person" && name === "person_edit" && last && Date.now() - last.at < RUN_MS ? openPersonRun(e.log, true) : null;
+  if (run) {
+    const start = e.before.get(run.n);
+    const lines = start ? describeSongChange(start, next) : [];
+    run.summary = (lines.length ? lines.join("; ") : line).slice(0, 400);
+    run.at = Date.now();
+    run.rev = e.rev + 1;
+    for (const fn of commandListeners) fn(session, run);
+    return;
+  }
+  const entry = addCommand(e.log, ++e.lseq, { who, name, at: Date.now(), rev: e.rev + 1, before: e.lseq, summary: line });
+  e.before.set(entry.n, prior);
+  while (e.before.size > KEPT_BEFORE) e.before.delete(e.before.keys().next().value as number);
+  for (const fn of commandListeners) fn(session, entry);
+}
+
+/** The commands made on a chat's song, oldest first. */
+export function studioLog(session: string): OfficeCommand[] {
+  return validSession(session) ? [...entryFor(session).log] : [];
+}
+
+/** The agent's log of the song. */
+function songLog(session: string, sinceRev = 0): string {
+  return logText(entryFor(session).log, sinceRev, "song");
+}
+
+/**
+ * Go back to just before command n: a new change on top, so it can be taken back; it is itself in the log. The person may go
+ * back to before any command; the agent only to before one of its own, with none of the person's after it (see agentMayRevert).
+ */
+function revertStudioCommand(session: string, n: number, who: "agent" | "person"): string | null {
+  if (!validSession(session)) return "Autora Music needs a chat to work in.";
+  const e = entryFor(session);
+  const cmd = e.log.find((c) => c.n === n);
+  if (!cmd) return "That command is not in the log.";
+  if (who === "agent" && !agentMayRevert(e.log, n)) {
+    return "That command, or one after it, is the person's own work, and music is theirs: you do not take it back. Say what you would change and let them undo it in the window, or ask them.";
+  }
+  const prior = e.before.get(n);
+  if (!prior) return "The song from before that command is no longer kept (only the last 30 are, and none survive a restart).";
+  e.focus = { trackId: null, clipId: null };
+  setOpen(session, true);
+  // The window takes it as the agent's change whoever asked, or the person's own window would not load it.
+  commit(session, e, structuredClone(prior), "agent", { by: who, name: "revert", line: `went back to before command ${n} (${cmd.summary.slice(0, 80)})` });
+  return null;
 }
 
 /**
@@ -164,7 +261,7 @@ export function studioPanel(session: string, bind: string, value: unknown, track
   if ("error" in done) return { ok: false, error: done.error };
   setOpen(session, true);
   if (who === "person") e.quiet = e.rev + 1;
-  commit(session, e, next, "agent");
+  commit(session, e, next, "agent", { by: who, name: who === "person" ? "person_edit" : "agent_edit", line: done.did });
   return { ok: true, did: done.did };
 }
 
@@ -190,7 +287,7 @@ export function loadSong(session: string, data: Buffer): { ok: boolean; error?: 
   e.focus = { trackId: null, clipId: null };
   setOpen(session, true);
   // "agent" is what makes the window take a song it did not make itself; whose it is does not matter to it.
-  commit(session, e, project, "agent");
+  commit(session, e, project, "agent", { by: "person", name: "person_edit", line: `loaded the song "${project.name}"` });
   return { ok: true, name: project.name };
 }
 
@@ -200,6 +297,7 @@ export function dropStudio(session: string) {
   entries.delete(session);
   if (!validSession(session)) return;
   fs.rmSync(path.join(stateDir(), `${savedName(session)}.json`), { force: true });
+  fs.rmSync(path.join(stateDir(), `${logName(session)}.json`), { force: true });
 }
 
 /** What the agent is told at the start of a turn when the window is open. */
@@ -728,7 +826,7 @@ export async function runStudioTool(session: string, name: string, args: Record<
           if (bpm !== null) next.bpm = clamp(bpm, MIN_BPM, MAX_BPM);
           if (args.key !== undefined) next.key = parseKey(args.key) ?? next.key;
           e.focus = { trackId: null, clipId: null };
-          commit(session, e, next, "agent");
+          commit(session, e, next, "agent", { name: "open", line: `started a new song, "${next.name}"` });
         }
         setOpen(session, true);
         return { ok: true, summary: `${describeProject(e.project, { focus: e.focus })}`, preview: `"${e.project.name}"` };
@@ -758,8 +856,25 @@ export async function runStudioTool(session: string, name: string, args: Record<
         if (hand) for (const [from, to] of Object.entries(hand.ids)) done.text = done.text.split(from).join(to);
         // The window has the song already, by its own hand: it takes the finished one without lighting it up.
         if (hand) e.quiet = e.rev + 1;
-        commit(session, e, next, "agent");
+        commit(session, e, next, "agent", { name: "agent_edit", line: done.text.split("\n")[0]!.slice(0, 200) });
         return { ok: true, summary: `${done.text}${hand ? ` ${hand.said}` : ""}\n${describeProject(e.project, { focus: e.focus })}`, preview: done.preview };
+      }
+
+      case "studio_history": {
+        const action = String(args.action ?? "log");
+        if (action === "log") {
+          const since = Number(args.since_revision);
+          return { ok: true, summary: songLog(session, Number.isFinite(since) && since > 0 ? since : 0), preview: "history log" };
+        }
+        if (action === "revert") {
+          const n = Number(args.n);
+          if (!Number.isInteger(n)) return { ok: false, summary: "revert needs n, a command number from the log." };
+          const problem = revertStudioCommand(session, n, "agent");
+          return problem
+            ? { ok: false, summary: problem }
+            : { ok: true, summary: `The song is back to just before command ${n}. That is a new change on top, so the person can take it back; studio_history log shows it as a revert.`, preview: `revert ${n}` };
+        }
+        return { ok: false, summary: "action is log or revert." };
       }
 
       case "studio_play": {
@@ -842,8 +957,25 @@ export function studioRoutes(app: Express, opts: {
     }
     const next = normalizeProject(req.body?.doc);
     if (!next) return res.status(400).json({ error: "That is not an Autora Music song." });
-    commit(id, e, next, "person");
+    commit(id, e, next, "person", { name: "person_edit", line: describeSongChange(e.project, next).join("; ") || "changed the song" });
     res.json({ rev: e.rev });
+  });
+
+  /* The log of what was done to the song, by whom (commandlog.ts); and the person going back to before any command. */
+  app.get("/api/studio/:session/commands", (req, res) => {
+    const id = known(req, res);
+    if (id) res.json({ commands: [...entryFor(id).log] });
+  });
+
+  app.post("/api/studio/:session/commands/revert", express.json({ limit: "1kb" }), (req, res) => {
+    const id = known(req, res);
+    if (!id) return;
+    if (opts.off()) return res.status(403).json({ error: "Autora Music is switched off on the Tools page." });
+    const n = Number(req.body?.n);
+    if (!Number.isInteger(n)) return res.status(400).json({ error: "n must be a command number from the log." });
+    const problem = revertStudioCommand(id, n, "person");
+    if (problem) return res.status(404).json({ error: problem });
+    res.json({ ok: true, rev: entryFor(id).rev });
   });
 
   /* A panel's music control moved (Panacea): the song takes it, in one place for the person and the agent. */

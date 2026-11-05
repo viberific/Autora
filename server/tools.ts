@@ -3727,6 +3727,7 @@ async function runToolUnredacted(
       case "studio_notes":
       case "studio_make":
       case "studio_play":
+      case "studio_history":
       case "studio_export":
         if (ctx.memory.incognito) {
           return { ok: false, summary: "Not available in an incognito chat: the music window keeps its song on disk." };

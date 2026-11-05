@@ -141,7 +141,7 @@ await test("a song from anything is repaired, never trusted", () => {
 // ------------------------------------------------------------------ specs --
 
 await test("every spec is a studio_ tool with a description and an object schema", () => {
-  assert.equal(studioSPECS.length, 9);
+  assert.equal(studioSPECS.length, 10);
   for (const s of studioSPECS) {
     assert.match(s.name, /^studio_[a-z_]+$/);
     assert.ok(s.description.length > 40, s.name);

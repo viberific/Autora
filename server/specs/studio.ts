@@ -108,6 +108,24 @@ export const studioSPECS: ToolSpec[] = [
     },
   },
   {
+    name: "studio_history",
+    group: "files",
+    description:
+      "The log of changes to the song in the Music window: every change is a command with who made it (you, or the person working in the window) and a line saying what. " +
+      "action \"log\" reads it; since_revision (the revision you last saw) shows only what came after, so you learn what the person changed while you were not looking instead of " +
+      "guessing from the notes. action \"revert\" with n takes the song back to just before command n (everything after it too), a new change on top that the person can take back and that " +
+      "shows in the log as a revert. Music is the person's: you can take back only your own changes. A revert is refused if command n, or any after it, is the person's own work; " +
+      "then say what you would change and let them undo it in the window.",
+    parameters: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["log", "revert"], description: "log (default) or revert." },
+        since_revision: { type: "number", description: "log: only commands made after this revision." },
+        n: { type: "number", description: "revert: the command number to go back to before." },
+      },
+    },
+  },
+  {
     name: "studio_clip",
     group: "files",
     risky: true,

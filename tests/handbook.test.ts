@@ -169,6 +169,13 @@ await test("the Office manual says what the person has picked reaches the briefi
   }
 });
 
+await test("the Music manual teaches the command log and that music is the person's: only your own changes can be taken back", () => {
+  const text = manualText("studio");
+  for (const needle of ["Who did what in the song", "studio_history", "since_revision", "just before command n", "shows in the log as a revert", "you may take back only your own changes", "the last 30 commands"]) {
+    assert.ok(text.includes(needle), needle);
+  }
+});
+
 await test("the PDF manual teaches the command log: who did what, pdf_history, revert", () => {
   const text = manualText("pdf");
   for (const needle of ["Who did what in the PDF", "pdf_history", "since_revision", "just before command n", "shows in the log as a revert", "declining one of your changes"]) {
