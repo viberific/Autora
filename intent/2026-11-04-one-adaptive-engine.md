@@ -161,4 +161,22 @@ P0: a read-only survey, no code, producing `docs/ENGINE-SURVEY.md`. Then P1 on 3
   driven in a browser here (its editor is not built in this container). Beyond the bar: the native Panacea panels already
   appear with the selection and fade away; extending `needed` from "what is picked" to "what the person seems to be doing"
   (the intent bus, P6) is where proactivity goes next.
-- **P5 and P6**: not started. Each is a separate piece of work with its own parity checklist; they are months, not a session.
+- **P6, first slice (0.9.341): done for the Office windows.** Pages (picked words), Sheets (name-box range) and Slides (a box picked)
+  report what is picked (`office/shim/rail.js` `reportPick` -> `pick` host message -> `POST /api/officedesk/:session/pick` ->
+  `desk.pick`, kept two minutes, told in `officeBriefing`). Server tests are in `tests/officedesk.test.ts`; the shim-to-server path has no browser test yet.
+- **P5**: not started.
+
+## Left to do (as of 0.9.341, in the order to take it)
+
+1. **P6 rest:** report the pick from PDF (selected text/region), Photo (layer/selection) and Video (selected clip), the same way, with the
+   briefing line and a handbook sentence each. Add a browser test for the Office shim-to-server pick path. Then the wider P6 idea:
+   proactivity from "what the person seems to be doing" (the presence/companion code), not only what is picked.
+2. **Command layers (P4's unfinished half)**, one editor at a time against its own API, each with authority (agent/person), a log with
+   before/after, revert, and `cad.command`-style events: Sheets first, then Slides, Pages (its step log exists in Panacea's
+   `doclog.ts`, not in the hosted Pages editor), PDF, Photo, Music, Video, Games. `server/desks.ts` should gain PDF, Office and Video when their state fits.
+3. **P5, cross-window entities** (a chart in a sheet shown on a slide, a photo used in a page): needs step 2 for at least Sheets and Slides.
+4. **Games has no agent hand** (a shared page-side client touching each fork's overlay); Games' fading bar is typechecked but not driven in a browser.
+5. **3D upstream:** the patches `docs/autora-3d-organic.patch`, `-sculpt`, `-context`, `-commands`, `-fade` are not yet applied to the 3D-Modeling repository.
+6. **No history list in the 3D window** (the user said no; do not build it unless asked).
+7. **Container test failures to understand:** four Office tests fail identically at baseline (the Slides hand test, `ui-office-phone`,
+   `ui-office` "control taken", the All tools step of `ui-office-rail`), as do `game.test.ts` and `e2e-game.test.ts`.
