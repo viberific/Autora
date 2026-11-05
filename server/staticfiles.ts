@@ -107,3 +107,21 @@ export function staticDir(webDir: string, opts: SqueezeOptions & { fallthrough?:
     }),
   ];
 }
+
+/**
+ * Where an editor's build is missing from this server, a page that says so, in the frame where the editor would be,
+ * instead of a bare "Not Found" on white. Put in front of the editor's `staticDir`; with the build in place it does nothing.
+ */
+export function editorMissing(dir: string, name: string): RequestHandler {
+  return (_req, res, next) => {
+    if (fs.existsSync(path.join(dir, "index.html"))) return next();
+    res.status(503).setHeader("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'");
+    res.type("html").send(
+      `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">` +
+      `<body style="margin:0;display:grid;place-items:center;min-height:100vh;background:#0b0b10;color:#c9c9d4;font:14px system-ui,sans-serif;text-align:center">` +
+      `<div style="max-width:30em;padding:24px"><b style="color:#fff;font-size:16px">${name} is not installed on this server</b>` +
+      `<p style="margin:10px 0 0;line-height:1.5">This server was built without the ${name} editor, so its window has nothing to show. ` +
+      `Everything else in Panacea works; ${name} needs a full build (npm run build).</p></div>`,
+    );
+  };
+}

@@ -315,6 +315,8 @@ function ContextBar({ gauge }: { gauge: ContextGauge | null }) {
   const share = gauge ? Math.min(1, gauge.used / gauge.limit) : 0;
   const mark = gauge?.compactAt ?? 0.75;
   const pct = Math.round(share * 100);
+  // An empty gauge is a number and a bar with nothing in them: it appears with the first words.
+  if (share === 0) return null;
   const title = gauge
     ? `Context ${pct}% full: ${short(gauge.used)} of ${short(gauge.limit)} tokens${gauge.windowFrom === "default" ? " (assumed)" : ""}. Condenses at ${Math.round(mark * 100)}%`
     : "Context empty";

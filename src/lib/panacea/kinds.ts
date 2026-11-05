@@ -178,7 +178,10 @@ const BOARD: SurfaceKindDef = {
     const who = s.board?.mode === "agent" ? "Autora may write cards on it" : "its words are the person's: arrange, link, colour and ask questions, never write or remove their cards";
     return `${s.board?.diagram === "flowchart" ? "flowchart (process, decision, start/end nodes; directed connectors)" : "board"} "${s.title}", ${s.params.cards ?? 0} cards, ${s.params.links ?? 0} links, ${s.params.questions ?? 0} questions; ${who}`;
   },
-  meta: (s) => `${Number(s.params.cards ?? 0)} ${s.board?.diagram === "flowchart" ? "nodes · flowchart" : "cards"}`,
+  meta: (s) => {
+    const n = Number(s.params.cards ?? 0);
+    return s.board?.diagram === "flowchart" ? `${n} ${n === 1 ? "node" : "nodes"} · flowchart` : `${n} ${n === 1 ? "card" : "cards"}`;
+  },
   read: (raw) => {
     const board = readBoardState(raw.board);
     return board ? { board } : null;

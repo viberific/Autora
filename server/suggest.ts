@@ -377,7 +377,8 @@ export function offers(s: Signals, answered: Record<string, string>, quiet: Quie
     });
   }
 
-  if (s.tools.terminal && s.disk && s.disk.used / s.disk.total >= 0.75 && !covered(s.jobs, /disk|storage|space/i)) {
+  // Housekeeping, not an emergency: the starter above already speaks at 85%, so the weekly-check offer waits until it is tight.
+  if (s.tools.terminal && s.disk && s.disk.used / s.disk.total >= 0.9 && !covered(s.jobs, /disk|storage|space/i)) {
     const t = at(9 * 60, "1");
     out.push({
       key: "offer:disk",

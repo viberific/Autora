@@ -389,6 +389,15 @@ function builtFor(id: Capability["id"]): boolean {
   return true;
 }
 
+/** Which Tools page windows this server has an editor for. A window that is not installed cannot be turned on, so the pages say
+    "not installed" rather than "switched off" (the chooser, the new-file and load routes). */
+export function installedWindows(): Record<string, boolean> {
+  const office = builtFor("office");
+  // PDF and Video are fetched editors (docs/MAP.md): a server that never built them opens a white "Not Found" frame.
+  const built = (editor: string) => fs.existsSync(path.join(process.cwd(), "dist", editor, "index.html"));
+  return { pdf: built("spectra-editor"), video: built("opencut-editor"), studio: true, pages: office, sheets: office, slides: office, cad: builtFor("cad"), game: builtFor("game"), photo: builtFor("photo") };
+}
+
 export function windowOff(name: string, settings: ToolSettings = toolSettings()): boolean {
   if (name === "widget_show") return !settings.widgets.enabled;
   if (name === "app_preview") return !settings.app.enabled;

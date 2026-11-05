@@ -25,7 +25,7 @@ import { FileRefError, readFileRef } from "./fileref";
 import { chatTitle } from "./folders";
 import { stateDir } from "./state";
 import { readDoc, saveDoc } from "./store";
-import { staticDir } from "./staticfiles";
+import { editorMissing, staticDir } from "./staticfiles";
 import { cadSPECS } from "./specs/cad";
 import { UNTAKEN, createHandshake } from "./handshake";
 import { MODEL_PART, isModelBind, modelCommands, type ModelDoc } from "../src/lib/panacea/apps/model";
@@ -824,6 +824,7 @@ export function serveCad(app: Express, dist: string): void {
       res.setHeader("X-Content-Type-Options", "nosniff");
       next();
     },
+    editorMissing(path.join(dist, "autora-3d"), "The 3D editor"),
     ...staticDir(path.join(dist, "autora-3d"), { fallthrough: false }),
   );
 }

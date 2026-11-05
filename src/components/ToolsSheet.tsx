@@ -12,7 +12,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { WorkspaceMode } from "../lib/workspace";
-import { IconCode, IconCube, IconFile, IconGame, IconGlobe, IconImage, IconMusic, IconNotebook, IconSlides, IconSparkle, IconStar, IconTable, IconVideo, IconWrench, IconX } from "./Icons";
+import { IconCode, IconCube, IconFile, IconGame, IconGlobe, IconImage, IconMusic, IconNotebook, IconOrg, IconSlides, IconSparkle, IconStar, IconTable, IconVideo, IconWrench, IconX } from "./Icons";
 
 type Kind = "pdf" | "docx" | "xlsx" | "pptx" | "video" | "cad" | "game" | "photo" | "studio" | "panacea" | "flowchart";
 
@@ -27,7 +27,7 @@ type Tool = {
 
 const TOOLS: Tool[] = [
   { kind: "panacea", app: "Canvas", setting: "panacea", what: "Adaptive controls, documents, thinking boards, images and data", icon: (s) => <IconSparkle size={s} /> },
-  { kind: "flowchart", app: "Flowchart", setting: "panacea", what: "Process, decision, start/end nodes and directed connectors", icon: (s) => <IconSparkle size={s} /> },
+  { kind: "flowchart", app: "Flowchart", setting: "panacea", what: "Process, decision, start/end nodes and directed connectors", icon: (s) => <IconOrg size={s} /> },
   { kind: "docx", app: "Documents", setting: "pages", what: "A blank Word document", icon: (s) => <IconNotebook size={s} /> },
   { kind: "xlsx", app: "Spreadsheets", setting: "sheets", what: "A blank workbook", icon: (s) => <IconTable size={s} /> },
   { kind: "pptx", app: "Presentations", setting: "slides", what: "A blank slide", icon: (s) => <IconSlides size={s} /> },
@@ -55,6 +55,8 @@ export function ToolsSheet({ session, onClose, onTrouble, onOpened, onAsk, openM
      null while it loads: unknown is not the same as off, and a row that said
      "switched off" for half a second would be wrong. */
   const [on, setOn] = useState<Record<string, { enabled?: boolean } | undefined> | null>(null);
+  /* Which windows this server has an editor for. A missing one is said to be missing, up front: clicking it would only fail. */
+  const [installed, setInstalled] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<Kind | null>(null);
   const [error, setError] = useState<string | null>(null);
   const modal = useRef<HTMLDivElement>(null);
@@ -68,7 +70,7 @@ export function ToolsSheet({ session, onClose, onTrouble, onOpened, onAsk, openM
     let live = true;
     fetch("/api/settings")
       .then((r) => r.json())
-      .then((s) => { if (live) setOn(s?.tools?.config ?? {}); })
+      .then((s) => { if (live) { setOn(s?.tools?.config ?? {}); setInstalled(s?.tools?.installed ?? {}); } })
       .catch(() => { if (live) setError("Could not load capability settings. Close and reopen Capabilities to try again."); });
     return () => { live = false; };
   }, []);
@@ -164,12 +166,15 @@ export function ToolsSheet({ session, onClose, onTrouble, onOpened, onAsk, openM
           </button>
         </div>
         <div className="modal-body tools-body">
-          <p className="jf-hint">Start work inside Panacea with a blank file or project. Everything stays in one scene.
-            Use the bottom-left icons to jump to work, or Show all work to zoom out and see it all.</p>
+          <p className="jf-hint">Start work inside Panacea with a blank file or project. Everything stays in one scene;
+            once there is work, the buttons at the canvas's bottom-left jump to it, or show all of it at once.</p>
           {on === null && !error && <p className="jf-hint" role="status">Loading capabilities…</p>}
+          {error && <p className="set-warn" role="alert">{error}</p>}
           <div className="tool-tiles">
             {TOOLS.map((tool) => {
-              const off = on !== null && on[tool.setting]?.enabled === false;
+              const missing = installed[tool.setting] === false;
+              const off = missing || (on !== null && on[tool.setting]?.enabled === false);
+              const why = missing ? "Not installed on this server" : "Switched off on the Tools page";
               const opened = tool.kind !== "flowchart" && openModes.includes(tool.setting) && !!onSelect;
               return (
                 <div className="tool-choice" key={tool.kind}>
@@ -177,13 +182,13 @@ export function ToolsSheet({ session, onClose, onTrouble, onOpened, onAsk, openM
                   type="button"
                   className={`tool-tile${off ? " is-off" : ""}${busy === tool.kind ? " is-busy" : ""}`}
                   disabled={on === null || off || busy !== null}
-                  title={off ? `${tool.app} is switched off on the Tools page` : opened ? `Return to ${tool.app}` : `Open ${tool.app} in Panacea`}
+                  title={off ? `${tool.app}: ${why}` : opened ? `Return to ${tool.app}` : `Open ${tool.app} in Panacea`}
                   onClick={() => { if (opened) { onSelect?.(tool.setting); onClose(); } else void open(tool); }}
                 >
                   <span className="tool-tile-icon">{tool.icon(20)}</span>
                   <span className="tool-tile-main">
                     <b>{tool.app}</b>
-                    <em>{off ? "switched off on the Tools page" : opened ? "Return to your open work" : tool.what}</em>
+                    <em>{off ? why : opened ? "Return to your open work" : tool.what}</em>
                   </span>
                   {busy === tool.kind && <span className="attach-spin" aria-hidden="true" />}
                 </button>
@@ -223,7 +228,6 @@ export function ToolsSheet({ session, onClose, onTrouble, onOpened, onAsk, openM
               </span>
             </button>
           </div>
-          {error && <p className="set-warn">{error}</p>}
           <p className="jf-hint tools-more">
             <IconStar size={12} /> Web and Apps &amp; code open in Panacea when you ask to browse a page or build an app.
             Commands run as collapsible cards in the conversation, not in a separate terminal.

@@ -206,7 +206,12 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  A blank canvas is now truly blank. The canvas name and Save bar, and the undo
-  and redo slider, stay out of sight until there is something on the canvas to
-  name, save or take back, and then arrive on their own. Drop or paste a file
-  onto the canvas to put it there; the controls for it appear when you pick it.
+  Smoother first minutes. A window whose editor is not installed on your server
+  (PDF, Video, 3D, Games) now says so instead of showing a blank "Not Found"
+  page, and the Capabilities chooser lists it as not installed. What you open
+  says what to do first, in calm text that goes away by itself. Charts no
+  longer let bars run past the top of their axis, and a dropped file's chart and
+  controls are brought into view. A new flowchart step asks you to name it, and
+  "1 node" reads correctly. On a phone, a window you just opened gets the whole
+  screen until you say something. Enter now sends your message, and a blank
+  screen shows only what you can use.

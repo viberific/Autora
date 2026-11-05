@@ -114,8 +114,10 @@ async function openNewFile(session: string, kind: NewKind): Promise<Opened> {
 export function newFileRoutes(app: Express, opts: {
   exists: (id: string) => boolean;
   incognito: (id: string) => boolean;
-  /** Switched off on the Tools page (or, for the Office kinds, not installed). */
+  /** Switched off on the Tools page. */
   off: (kind: NewKind) => boolean;
+  /** The editor is not built into this server (a different thing to say from "switched off"). */
+  missing?: (kind: NewKind) => boolean;
 }): void {
   app.post("/api/sessions/:session/new", async (req: Request, res: Response) => {
     const session = String(req.params.session);
@@ -124,6 +126,9 @@ export function newFileRoutes(app: Express, opts: {
     if (!isNewKind(kind)) return res.status(400).json({ error: "A new file is a pdf, docx, xlsx or pptx." });
     if (opts.incognito(session)) {
       return res.status(403).json({ error: `An incognito chat has no window, so ${APP_OF[kind]} cannot be opened in it.` });
+    }
+    if (opts.missing?.(kind)) {
+      return res.status(503).json({ error: `${APP_OF[kind]} is not installed on this server, so it cannot be opened here.` });
     }
     if (opts.off(kind)) {
       return res.status(403).json({ error: `${APP_OF[kind]} is switched off on the Tools page, so its window is not opened here.` });

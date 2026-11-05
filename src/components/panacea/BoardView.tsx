@@ -246,6 +246,7 @@ export function BoardView({ surface }: { surface: Surface }) {
                     value={editing.text}
                     maxLength={400}
                     aria-label="The card's words"
+                    placeholder={flow ? "Name this step" : "Write here"}
                     onChange={(e) => setEditing({ ...editing, text: e.target.value })}
                     onBlur={() => finish(true)}
                     onKeyDown={(e) => {

@@ -14,7 +14,7 @@ import { mergePush, readyChannels } from "../push";
 import { mergeProactivity } from "../quiet";
 import { forgetSpeech, speakStream, speechStatus, speak as synthesise } from "../speech";
 import { FONTS, THEMES, applyTimezone, baseUrlFor, endpointPinSaved, fastModelFor, backgroundModelFor, backgroundProviderFor, keyFor, keySource, machineTimezone, maskKey, mergeAppearance, mergeLoop, mergeRetention, mergeSpeech, modelFor, resolveProvider, save, setEndpointPin, setKey, state, stateFilePath, validTimezone } from "../state";
-import { groupStates, toolSettings, updateToolSettings } from "../tools";
+import { groupStates, installedWindows, toolSettings, updateToolSettings } from "../tools";
 import { forgetVendorMoney, setTopUp } from "../vendor-money";
 import { mergeVerify } from "../verify";
 import type { WebPush } from "../webpush";
@@ -191,6 +191,8 @@ export function settingsRoutes(app: Express, deps: {
     },
     tools: {
       config: toolSettings(),
+      /** Which windows have their editor built into this server (false: it cannot be switched on). */
+      installed: installedWindows(),
       groups: await groupStates(),
     },
   });

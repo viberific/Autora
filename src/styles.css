@@ -1100,6 +1100,7 @@ button.hint.voice-note {
   font: inherit; font-size: var(--fs-xs); cursor: pointer; text-align: left;
 }
 button.hint.voice-note:hover { text-decoration: underline; }
+button.hint.voice-note.is-calm { color: var(--text-2); }
 .hint.voice-note code {
   font-family: var(--mono); font-size: var(--fs-2xs);
   background: rgba(var(--warn-rgb), 0.12); border-radius: var(--r-2xs); padding: 1px 4px;
@@ -7219,10 +7220,12 @@ body.is-resizing iframe { pointer-events: none; }
    from the bottom of the screen and a finger-sized row; a desk gets a small
    centred panel over the button that opened it. */
 .composer-tools .attach-btn.is-on { color: var(--accent); }
-.tools-modal { max-width: 420px; }
+.tools-modal { max-width: 660px; max-height: min(88vh, 720px); }
 .tools-body { padding: 10px 10px 12px; }
 .tools-body > .jf-hint { margin: 2px 6px 10px; line-height: 1.5; }
-.tool-tiles { display: flex; flex-direction: column; gap: 2px; }
+/* Two columns on a desk, so every capability is in view at once: a list that scrolls hides what is below it. */
+.tool-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; }
+@media (max-width: 680px) { .tool-tiles { grid-template-columns: 1fr; } }
 .tool-tile {
   display: flex; align-items: center; gap: 11px; width: 100%;
   padding: 9px 10px; border-radius: var(--r-md); text-align: left;
@@ -7241,7 +7244,7 @@ body.is-resizing iframe { pointer-events: none; }
 .tool-tile-main b { font-size: var(--fs-base); font-weight: 550; }
 .tool-tile-main em {
   font-style: normal; font-size: var(--fs-xs); color: var(--text-3);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
 .tool-tile .attach-spin { margin-left: auto; }
 .tools-more { display: flex; gap: 7px; align-items: flex-start; margin: 12px 6px 2px; line-height: 1.5; }
