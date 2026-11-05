@@ -63,6 +63,40 @@ async function main() {
       await page.keyboard.press("Escape");
       await sleep(200);
     });
+
+    await test("a missing editor says so in its frame, and Canvas says what to do first", async () => {
+      const built = fs.existsSync("dist/spectra-editor/index.html");
+      const res = await fetch(`${app.base}/spectra-editor/index.html`);
+      if (!built) {
+        assert.equal(res.status, 503);
+        assert.match(await res.text(), /not installed on this server/);
+      } else assert.equal(res.status, 200);
+      const sid = await app.newSession("Canvas", "agent");
+      await page.goto(`${app.base}/?session=${sid}`);
+      await page.locator('button[aria-label="Panacea capabilities"]').first().click();
+      await page.locator('.tool-tile:has(.tool-tile-main b:text-is("Canvas"))').click();
+      await page.waitForFunction(() => document.body.innerText.includes("Drop a photo or a table"), null, { timeout: 10_000 });
+      assert.ok(!(await page.innerText("body")).includes("mode is now"), "opening a capability does not change the chat's mode");
+    });
+
+    await test("a dropped table is charted on an axis that reaches its largest value, and framed in view", async () => {
+      await page.evaluate(() => {
+        const dt = new DataTransfer();
+        dt.items.add(new File(["month,rent\nJan,1200\nFeb,1200\nMar,1450\n"], "budget.csv", { type: "text/csv" }));
+        const t = document.querySelector(".pa-board") as HTMLElement;
+        for (const type of ["dragenter", "dragover", "drop"]) t.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true, clientX: 400, clientY: 300 }));
+      });
+      await page.waitForSelector(".pa-chart", { timeout: 15_000 });
+      const ticks = await page.locator(".pa-chart").first().locator("text.pa-axis").evaluateAll((els) => els.map((e) => e.textContent ?? ""));
+      assert.ok(ticks.includes("1.5k"), `the top tick is above 1,450 (saw ${ticks.join(", ")})`);
+      await sleep(1500);
+      const board = await page.locator(".pa-board").boundingBox();
+      /* An offered (ghost) panel never moves the person's view; what they asked for is in it. */
+      for (const el of await page.locator(".pa-panel.is-live").all()) {
+        const r = await el.boundingBox();
+        if (r && board) assert.ok(r.x + r.width <= board.x + board.width + 2, "every live panel is within the canvas after the drop");
+      }
+    });
   } finally {
     await browser.close();
     await app.stop();

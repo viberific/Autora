@@ -27,7 +27,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { SpectraEngine, spectraAvailable } from "./spectra/engine";
 import { runCommand, type SpectraContext } from "./spectra/commands";
 import { closeDesk } from "./pdfdesk";
-import { staticDir } from "./staticfiles";
+import { editorMissing, staticDir } from "./staticfiles";
 
 /** A document can be large and its bytes cross as base64, so the body limit is
  *  generous; the app-wide JSON parser's 5 MB would refuse an ordinary scan. */
@@ -365,7 +365,7 @@ export function serveSpectra(app: Express, dist: string): void {
     );
     res.setHeader("X-Content-Type-Options", "nosniff");
     next();
-  }, ...staticDir(path.join(dist, "spectra-editor"), { fallthrough: false }));
+  }, editorMissing(path.join(dist, "spectra-editor"), "The PDF editor"), ...staticDir(path.join(dist, "spectra-editor"), { fallthrough: false }));
 }
 
 /** The desk's copy of the document moved on under the editor -- the agent

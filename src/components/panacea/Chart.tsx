@@ -24,8 +24,13 @@ function ticks(lo: number, hi: number, count = 4): number[] {
   const raw = span / count;
   const p = 10 ** Math.floor(Math.log10(raw));
   const step = [1, 2, 2.5, 5, 10].map((m) => m * p).find((s) => s >= raw) ?? raw;
+  if (!(step > 0) || !Number.isFinite(hi) || !Number.isFinite(lo)) return [0, 1];
   const out: number[] = [];
-  for (let v = Math.floor(lo / step) * step; v <= hi + step * 0.001; v += step) out.push(Math.round(v * 1e6) / 1e6);
+  /* Up to the first tick at or above the top value: an axis that stops short lets the bars run out of the plot. */
+  for (let v = Math.floor(lo / step) * step; ; v += step) {
+    out.push(Math.round(v * 1e6) / 1e6);
+    if (v >= hi - step * 0.001) break;
+  }
   return out;
 }
 

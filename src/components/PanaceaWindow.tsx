@@ -510,6 +510,7 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
   const onFiles = useCallback((files: File[], at: { x: number; y: number }) => {
     if (putPendingSurface()) return;
     void (async () => {
+      let added = false;
       for (const [i, f] of files.slice(0, 4).entries()) {
         try {
           const request = (replace = false) => fetch(`${base}/import?name=${encodeURIComponent(f.name)}${replace ? "&replace=true" : ""}`, { method: "POST", headers: { "Content-Type": f.type || "application/octet-stream" }, body: f });
@@ -545,10 +546,14 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
             await refresh();
           }
           addSurface({ kind: body.kind, name: body.name ?? f.name, artifact: body.artifact, px: body.px, table: body.table, doc: body.doc, at: { x: at.x + i * 48, y: at.y + i * 48 } });
+          added = true;
         } catch (err) {
           setProblem(`${f.name}: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
+      /* What the drop brings with it (the chart, the filter, the offered panel) arrives a moment later and may sit past the
+         edge: frame it all once, because the person just asked for this. */
+      if (added) window.setTimeout(() => board.current?.fit(), 900);
     })();
   }, [base, addSurface, refresh, nativeOpen, onJump, sessionId, putPendingSurface]);
   const loaded = useCallback(async (result: { kind?: string; engine?: string }) => {

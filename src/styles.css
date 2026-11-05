@@ -1100,6 +1100,7 @@ button.hint.voice-note {
   font: inherit; font-size: var(--fs-xs); cursor: pointer; text-align: left;
 }
 button.hint.voice-note:hover { text-decoration: underline; }
+button.hint.voice-note.is-calm { color: var(--text-2); }
 .hint.voice-note code {
   font-family: var(--mono); font-size: var(--fs-2xs);
   background: rgba(var(--warn-rgb), 0.12); border-radius: var(--r-2xs); padding: 1px 4px;

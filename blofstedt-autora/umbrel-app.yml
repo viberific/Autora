@@ -206,11 +206,12 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Easier to start, and honest when something cannot start. Enter now sends your
-  message (Shift+Enter writes a new line; on a phone the arrow sends). The
-  Capabilities chooser shows every capability at once, and one whose editor is
-  not installed on your server says so, instead of failing out of sight below the
-  list. Web, Apps and Explainers tell you to finish the sentence in the box. On
-  a blank screen the Follow switch, the empty context meter and the canvas bar
-  stay out of sight until there is something to follow, and your messages are
-  labelled You. The disk-check offer waits until the disk is almost full.
+  Smoother first minutes. A window whose editor is not installed on your server
+  (PDF, Video, 3D, Games) now says so instead of showing a blank "Not Found"
+  page, and the Capabilities chooser lists it as not installed. What you open
+  says what to do first, in calm text that goes away by itself. Charts no
+  longer let bars run past the top of their axis, and a dropped file's chart and
+  controls are brought into view. A new flowchart step asks you to name it, and
+  "1 node" reads correctly. On a phone, a window you just opened gets the whole
+  screen until you say something. Enter now sends your message, and a blank
+  screen shows only what you can use.

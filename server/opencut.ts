@@ -33,7 +33,7 @@ import { addCommand, logText, type OfficeCommand } from "./commandlog";
 import { pickText, rememberPick, type Pick as PickedWords } from "./picked";
 import { describeVideoChange, fingerprint, type LogSnap } from "./videolog";
 import { stateDir } from "./state";
-import { staticDir } from "./staticfiles";
+import { editorMissing, staticDir } from "./staticfiles";
 import { createHandshake } from "./handshake";
 
 // ------------------------------------------------------------- the store --
@@ -697,7 +697,7 @@ export function serveOpencut(app: Express, dist: string): void {
     );
     res.setHeader("X-Content-Type-Options", "nosniff");
     next();
-  }, ...staticDir(path.join(dist, "opencut-editor"), { fallthrough: false }));
+  }, editorMissing(path.join(dist, "opencut-editor"), "The video editor"), ...staticDir(path.join(dist, "opencut-editor"), { fallthrough: false }));
 }
 
 /** The chat was deleted: nothing of the window is kept for it. */

@@ -34,7 +34,7 @@ import type { ChatImage } from "./llm";
 import { PdfRenderError } from "./pdfrender";
 import { stateDir } from "./state";
 import { readDoc, saveDoc } from "./store";
-import { staticDir } from "./staticfiles";
+import { editorMissing, staticDir } from "./staticfiles";
 import { GAME_OBJECT, isGameBind, writeGame } from "../src/lib/panacea/apps/game";
 import type { Value } from "../src/lib/panacea/atoms";
 
@@ -1431,6 +1431,7 @@ export function serveGame(app: Express, dist: string): void {
       res.setHeader("X-Content-Type-Options", "nosniff");
       next();
     },
+    editorMissing(path.join(dist, "gdevelop-editor"), "The games editor"),
     ...staticDir(path.join(dist, "gdevelop-editor"), { fallthrough: false }),
   );
 }

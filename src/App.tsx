@@ -133,6 +133,21 @@ import {
 import { SureHost } from "./components/SureHost";
 import { AgentThought } from "./components/AgentThought";
 
+/** What to do first in each thing the chooser opens: said under the box, so a blank screen is never a dead end. */
+const OPENED_NEXT: Record<string, string> = {
+  Canvas: "Drop a photo or a table on it, or tell Autora what to make.",
+  Flowchart: "Double-click the page to add a step, or tell Autora the process.",
+  Music: "Pick a first part, or tell Autora what you want to hear.",
+  PDF: "Load a file to work on, or tell Autora what to do with it.",
+  Video: "Add clips to the timeline, or tell Autora what to cut.",
+  Documents: "Start typing, or tell Autora what to write.",
+  Spreadsheets: "Start entering data, or tell Autora what to calculate.",
+  Presentations: "Start on the first slide, or tell Autora the story.",
+  Images: "Open a photo, or tell Autora what to change.",
+  "3D": "Shape the block, or tell Autora what to model.",
+  Games: "Tell Autora the game, or start with a scene.",
+};
+
 /** A phone or tablet keyboard: Enter stays a new line there (the composer). */
 const TOUCH_KEYBOARD = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 
@@ -306,6 +321,16 @@ export function App() {
       words. A phone has no tooltips and no console, so anything reported
       only through `title` is reported to nobody. */
   const [notice, setNotice] = useState<string | null>(null);
+  /** A notice that is a next step, not a problem: drawn calmly, and gone after a while on its own. */
+  const [calmNotice, setCalmNotice] = useState<string | null>(null);
+  const calmTimer = useRef<number | undefined>(undefined);
+  const tell = useCallback((text: string) => {
+    window.clearTimeout(calmTimer.current);
+    setNotice(text);
+    setCalmNotice(text);
+    calmTimer.current = window.setTimeout(() => setNotice((now) => (now === text ? null : now)), 14_000);
+  }, []);
+  useEffect(() => () => window.clearTimeout(calmTimer.current), []);
   const [voiceHelp, setVoiceHelp] = useState(false);
   /** Whether a turn sent now would reach a model: null until asked. The empty
       chat offers setup until it is true, and starting tasks after. */
@@ -1698,6 +1723,11 @@ export function App() {
     }),
     ...(browser?.open ? [{ pane: "browser" as const, since: Number.MAX_SAFE_INTEGER }] : []),
   ];
+  /* A phone with a window open and nothing said yet: the conversation has nothing to show, so its sheet is only the entry strip and
+     the work gets the screen. A tap on the strip, or the first message, opens it. */
+  const [sheetAsked, setSheetAsked] = useState(false);
+  const quietPhone = phoneLayout && openWindows.length > 0 && !sheetAsked && !chatCollapsed
+    && !view.buckets.some((bucket) => bucket.prompt || bucket.attachments.length > 0);
   const officeLooks = OFFICE_PANES.flatMap((o) => {
     const win = windowAt(o.kind);
     return win ? [{ pane: o.pane as "pages" | "sheets" | "slides", working: win.working, name: win.name }] : [];
@@ -2242,7 +2272,7 @@ export function App() {
             it and coming back keeps your place in the thread. */}
         <div className="chat-view pw-full-workspace" role="main" hidden={page !== "chat"}>
 
-        <ConversationFlow collapsed={chatCollapsed && !requiresInput} onToggle={retractChat}
+        <ConversationFlow collapsed={(chatCollapsed || quietPhone) && !requiresInput} onToggle={quietPhone ? () => setSheetAsked(true) : retractChat}
           phone={phoneLayout} width={chatLayout.width} onWidth={chatLayout.setWidth}
           sheet={chatLayout.sheet} onSheet={chatLayout.setSheet} locked={requiresInput} preview={chatPreview} hiddenSteps={hiddenSteps}
           conversation={<>
@@ -2723,12 +2753,12 @@ export function App() {
                             await nativeWorkspaceActions.current.createFlowchart();
                           }}
                           onOpened={(name, app, mode) => {
-                            setNotice(`${name} is open in Panacea · ${app}`);
+                            tell(`${name} is open. ${OPENED_NEXT[app] ?? "Tell Autora what to do next."}`);
                             if (mode) pickWindow(mode);
                           }}
                           onAsk={(text) => {
                             setDraft(text);
-                            setNotice(TOUCH_KEYBOARD ? "Finish the sentence, then tap the arrow." : "Finish the sentence, then press Enter.");
+                            tell(TOUCH_KEYBOARD ? "Finish the sentence, then tap the arrow." : "Finish the sentence, then press Enter.");
                             window.setTimeout(() => composerRef.current?.focus(), 0);
                           }}
                         />
@@ -2763,7 +2793,7 @@ export function App() {
                       )}
                       {notice ? (
                         <button
-                          className="hint voice-note"
+                          className={`hint voice-note${notice === calmNotice ? " is-calm" : ""}`}
                           onClick={() => setNotice(null)}
                           title="Dismiss"
                         >
