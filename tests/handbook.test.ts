@@ -155,9 +155,9 @@ await test("the 3D manual teaches the command log: who did what, history_log sin
   }
 });
 
-await test("the Office manual teaches the workbook's command log: who did what, office_history, revert, no person-only commands", () => {
+await test("the Office manual teaches the workbook's and deck's command log: who did what, office_history, revert, no person-only commands", () => {
   const text = manualText("office");
-  for (const needle of ["Who did what in a workbook", "office_history", "since_revision", "just before command n", "shows in the log as a revert", "no commands that are the person's alone"]) {
+  for (const needle of ["Who did what in a workbook or a deck", "office_history", "since_revision", "app says sheets or slides", "just before command n", "shows in the log as a revert", "no commands that are the person's alone", "Pages has no log yet"]) {
     assert.ok(text.includes(needle), needle);
   }
 });

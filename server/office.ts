@@ -142,22 +142,25 @@ export async function runOfficeTool(name: string, args: Record<string, any>, ctx
 
 // ----------------------------------------------------------- the log --
 
-/** The workbook's command log: who changed what, and going back to before a command (server/commandlog.ts). Sheets only. */
+/** The workbook's or deck's command log: who changed what, and going back to before a command (server/commandlog.ts). */
 function historyTool(args: Record<string, any>, ctx: OfficeContext): OfficeOutcome {
-  if (!ctx.win) return { ok: false, summary: "There is no Sheets window in this chat to keep a log for." };
-  if (ctx.off?.includes("xlsx")) return { ok: false, summary: "Autora Sheets is switched off on the Tools page." };
+  if (!ctx.win) return { ok: false, summary: "There is no Sheets or Slides window in this chat to keep a log for." };
+  const app = String(args.app ?? "");
+  const kind: Kind | undefined = app === "sheets" ? "xlsx" : app === "slides" ? "pptx" : undefined;
+  if (app && !kind) return { ok: false, summary: "app is sheets or slides." };
+  if (kind && ctx.off?.includes(kind)) return { ok: false, summary: `${APP_NAME[kind]} is switched off on the Tools page.` };
   const action = String(args.action ?? "log");
   if (action === "log") {
     const since = Number(args.since_revision);
-    return { ok: true, summary: ctx.win.commandLog(Number.isFinite(since) && since > 0 ? since : 0), preview: "history log" };
+    return { ok: true, summary: ctx.win.commandLog(Number.isFinite(since) && since > 0 ? since : 0, kind), preview: "history log" };
   }
   if (action === "revert") {
     const n = Number(args.n);
     if (!Number.isInteger(n)) return { ok: false, summary: "revert needs n, a command number from the log." };
-    const problem = ctx.win.revert(n);
+    const problem = ctx.win.revert(n, kind);
     return problem
       ? { ok: false, summary: problem }
-      : { ok: true, summary: `The workbook is back to just before command ${n}. That is a new change on top, so it can be taken back; office_history log shows it as a revert.`, preview: `revert ${n}` };
+      : { ok: true, summary: `Back to just before command ${n}. That is a new change on top, so it can be taken back; office_history log shows it as a revert.`, preview: `revert ${n}` };
   }
   return { ok: false, summary: "action is log or revert." };
 }

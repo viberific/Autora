@@ -628,8 +628,9 @@ export function onOfficeCommand(fn: (session: string, entry: OfficeCommand) => v
   commandListeners.push(fn);
 }
 
-/** Only Sheets has a command log so far; Slides and Pages follow (intent/2026-11-04-one-adaptive-engine.md). */
-const logged = (desk: Desk) => desk.kind === "xlsx";
+/** Sheets and Slides have a command log; Pages follows (intent/2026-11-04-one-adaptive-engine.md). */
+const logged = (desk: Desk) => desk.kind === "xlsx" || desk.kind === "pptx";
+const NOUN: Record<OfficeKind, string> = { xlsx: "workbook", pptx: "deck", docx: "document" };
 
 function record(key: DeskKey, desk: Desk, cmd: Omit<OfficeCommand, "n" | "rev">, run?: OfficeCommand | null) {
   if (!logged(desk)) return;
@@ -647,7 +648,12 @@ function record(key: DeskKey, desk: Desk, cmd: Omit<OfficeCommand, "n" | "rev">,
   for (const fn of commandListeners) fn(sessionOf(key), entry);
 }
 
-/** The commands made on a chat's workbook, oldest first; empty when there is none. */
+/** Which logged window the agent means when it names none: a workbook if one is open, else a deck. */
+function logKind(session: string): OfficeKind {
+  return load(keyOf(session, "xlsx"))?.open ? "xlsx" : load(keyOf(session, "pptx"))?.open ? "pptx" : "xlsx";
+}
+
+/** The commands made on a chat's workbook or deck, oldest first; empty when there is none. */
 export function officeCommands(session: string, kind: OfficeKind = "xlsx"): OfficeCommand[] {
   return [...(load(keyOf(session, kind))?.log ?? [])];
 }
@@ -656,16 +662,16 @@ export function officeCommands(session: string, kind: OfficeKind = "xlsx"): Offi
 function revertOfficeCommand(session: string, n: number, who: "agent" | "person", kind: OfficeKind = "xlsx"): string | null {
   const key = keyOf(session, kind);
   const desk = load(key);
-  if (!desk || !logged(desk)) return "There is no workbook open in the window.";
+  if (!desk || !logged(desk)) return `There is no ${NOUN[kind]} open in the window.`;
   const cmd = desk.log?.find((c) => c.n === n);
   if (!cmd) return "That command is not in the log.";
-  if (cmd.before === null) return "That command made the workbook; there is nothing before it to go back to.";
+  if (cmd.before === null) return `That command made the ${NOUN[kind]}; there is nothing before it to go back to.`;
   return restoreOfficeVersion(key, cmd.before, who, `went back to before command ${n} (${cmd.summary.slice(0, 80)})`);
 }
 
 /** The log in words, for the agent. */
 function officeLogText(session: string, sinceRev = 0, kind: OfficeKind = "xlsx"): string {
-  return logText(load(keyOf(session, kind))?.log ?? [], sinceRev);
+  return logText(load(keyOf(session, kind))?.log ?? [], sinceRev, NOUN[kind]);
 }
 
 // ----------------------------------------- the file everyone else sees --
@@ -950,10 +956,10 @@ export interface OfficeHooks {
   show(kind?: OfficeKind): void;
   /** What the person did in a window since the agent was last told, said once; "" when nothing. */
   news(kind?: OfficeKind): string;
-  /** Sheets: the log of changes to the workbook in the window, as the agent reads it (commandlog.ts). */
-  commandLog(sinceRev?: number): string;
-  /** Sheets: the workbook goes back to just before command n. Null when done, else why not. */
-  revert(n: number): string | null;
+  /** Sheets and Slides: the log of changes to the workbook or deck in the window, as the agent reads it (commandlog.ts). */
+  commandLog(sinceRev?: number, kind?: OfficeKind): string;
+  /** Sheets and Slides: the workbook or deck goes back to just before command n. Null when done, else why not. */
+  revert(n: number, kind?: OfficeKind): string | null;
 }
 
 const seen = (desk: Desk) => ({ kind: desk.kind, name: desk.name, data: desk.data, working: desk.working, source: desk.source, outName: desk.outName });
@@ -1032,7 +1038,7 @@ export function officeHooks(session: string): OfficeHooks {
       const said = was && carried ? describeFiles(kind, was.data, next.data) : [];
       record(key, desk, {
         who: "agent", name: was && carried ? "agent_edit" : "open", at: Date.now(), before: beforeV,
-        summary: said.join(" and ") || next.label || (was && carried ? "changed the workbook" : "opened the workbook"),
+        summary: said.join(" and ") || next.label || (was && carried ? `changed the ${NOUN[kind]}` : `opened the ${NOUN[kind]}`),
       });
       if (kind !== "docx") engineFileChanged(key, desk, desk.data);
       persist(key);
@@ -1059,8 +1065,8 @@ export function officeHooks(session: string): OfficeHooks {
       persist(key);
       changed(key);
     },
-    commandLog: (sinceRev) => officeLogText(session, sinceRev),
-    revert: (n) => revertOfficeCommand(session, n, "agent"),
+    commandLog: (sinceRev, kind) => officeLogText(session, sinceRev, kind ?? logKind(session)),
+    revert: (n, kind) => revertOfficeCommand(session, n, "agent", kind ?? logKind(session)),
     news(kind) {
       const key = kind ? keyOf(session, kind) : newest();
       const desk = key ? load(key) : null;
@@ -1333,10 +1339,13 @@ export function officeRoutes(app: Express, opts: { exists: (session: string) => 
     res.json({ ok: true });
   });
 
-  /* The log of what was done to the workbook, by whom (commandlog.ts); and going back to before a command. */
+  /* ?kind=xlsx (the default) or pptx. */
+  const routeKind = (req: Request): OfficeKind => (req.query.kind === "pptx" ? "pptx" : "xlsx");
+
+  /* The log of what was done to the workbook or deck, by whom (commandlog.ts); and going back to before a command. */
   app.get("/api/officedesk/:session/commands", (req, res) => {
     const id = known(req, res);
-    if (id) res.json({ commands: officeCommands(id) });
+    if (id) res.json({ commands: officeCommands(id, routeKind(req)) });
   });
 
   app.post("/api/officedesk/:session/commands/revert", express.json({ limit: "1kb" }), (req, res) => {
@@ -1344,7 +1353,7 @@ export function officeRoutes(app: Express, opts: { exists: (session: string) => 
     if (!id) return;
     const n = Number(req.body?.n);
     if (!Number.isInteger(n)) return res.status(400).json({ error: "n must be a command number from the log." });
-    const problem = revertOfficeCommand(id, n, "person");
+    const problem = revertOfficeCommand(id, n, "person", routeKind(req));
     if (problem) return res.status(404).json({ error: problem });
     res.json({ ok: true });
   });

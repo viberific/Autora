@@ -138,6 +138,40 @@ try {
     assert.equal(listed.commands.length, office.officeCommands(SESSION).length);
   });
 
+  const deck = (...words: string[]) => zipMany([
+    ["ppt/presentation.xml", `<p:presentation><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst><p:sldSz cx="9144000" cy="5143500"/></p:presentation>`],
+    ["ppt/_rels/presentation.xml.rels", `<Relationships><Relationship Id="rId1" Target="slides/slide1.xml"/></Relationships>`],
+    ["ppt/slides/slide1.xml", `<p:sld><p:cSld><p:spTree>${words.map((w) => `<p:sp><p:txBody><a:p><a:r><a:t>${w}</a:t></a:r></a:p></p:txBody></p:sp>`).join("")}</p:spTree></p:cSld></p:sld>`],
+  ]);
+  const openDeck = (data: Buffer, label?: string) => hooks.open({ name: "Pitch.pptx", data, working: null, source: null, outName: "Pitch.pptx", label });
+  const saveDeck = (data: Buffer) => fetch(`${base}/save?kind=pptx`, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: new Uint8Array(data) });
+
+  await test("a deck has its own log, apart from the workbook's, said in words on the slides", async () => {
+    const sheetLog = office.officeCommands(SESSION).length;
+    openDeck(deck("Quarterly review"), "Made the deck");
+    openDeck(deck("Annual review"), "Changed the title");
+    assert.equal((await saveDeck(deck("Annual review", "Thanks"))).status, 200);
+    assert.equal(office.officeCommands(SESSION).length, sheetLog, "the workbook's log is untouched");
+    const log = office.officeCommands(SESSION, "pptx");
+    assert.deepEqual(log.map((c) => [c.name, c.who]), [["open", "agent"], ["agent_edit", "agent"], ["person_edit", "person"]]);
+    assert.match(log[1]!.summary, /Annual|Quarterly/);
+    const text = hooks.commandLog(0, "pptx");
+    assert.match(text, /#3 the person \(person_edit/);
+    assert.match(text, /#1 you \(open/);
+    assert.match(text, /the deck goes back to just before it/);
+  });
+
+  await test("a deck reverts to before a command by the agent or through the route; the right window is chosen", async () => {
+    assert.equal(hooks.revert(3, "pptx"), null);
+    assert.equal(office.officeCommands(SESSION, "pptx").at(-1)!.name, "revert");
+    const res = await fetch(`${base}/commands/revert?kind=pptx`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ n: 2 }) });
+    assert.equal(res.status, 200);
+    assert.match(hooks.revert(1, "pptx") ?? "", /made the deck/);
+    const listed = (await (await fetch(`${base}/commands?kind=pptx`)).json()) as { commands: unknown[] };
+    assert.equal(listed.commands.length, office.officeCommands(SESSION, "pptx").length);
+    assert.match(hooks.commandLog(0), /workbook/, "with a workbook open, no kind means the workbook");
+  });
+
   await test("the log is kept on disk with the desk", async () => {
     const before = office.officeCommands(SESSION).length;
     assert.ok(before >= 5);

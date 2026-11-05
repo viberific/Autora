@@ -175,8 +175,11 @@ P0: a read-only survey, no code, producing `docs/ENGINE-SURVEY.md`. Then P1 on 3
   `emitEvent()`; the agent reads and reverts with `office_history`; the person's routes `GET /commands`, `POST /commands/revert`.
   Built as an adapter over the desk's versions (whole-file snapshots), not a cell-level inverse: reverting to before n also undoes
   everything after n. No command is the person's alone in Sheets (productivity work), so the agent may revert any. Not done: a
-  history list in the Sheets window (the routes exist; the window already lists versions), Slides and Pages (the same log with
-  `logged()` widened in `officedesk.ts`), per-cell inverses.
+  history list in the Sheets window (the routes exist; the window already lists versions), Pages, per-cell inverses.
+- **Command layer, Slides (0.9.344): done.** The same log for a deck (`logged()` widened; `office_history` takes `app`: sheets or slides;
+  routes take `?kind=pptx`; the account is words on slides from `describeChange`). Tested at the server level in `tests/sheetlog.test.ts`;
+  not driven in the Slides editor. Pages is next (its step log lives in Panacea's `doclog.ts`, not the hosted editor: decide whether the
+  hosted Pages gets this same file-diff log or the Panacea one is bridged).
 
 ## Left to do (as of 0.9.341, in the order to take it)
 
@@ -184,7 +187,7 @@ P0: a read-only survey, no code, producing `docs/ENGINE-SURVEY.md`. Then P1 on 3
    briefing line and a handbook sentence each. Add a browser test for the Office shim-to-server pick path. Then the wider P6 idea:
    proactivity from "what the person seems to be doing" (the presence/companion code), not only what is picked.
 2. **Command layers (P4's unfinished half)**, one editor at a time against its own API, each with authority (agent/person), a log with
-   before/after, revert, and `cad.command`-style events: Sheets is done (0.9.343); next Slides, Pages (its step log exists in Panacea's
+   before/after, revert, and `cad.command`-style events: Sheets (0.9.343) and Slides (0.9.344) are done; next Pages (its step log exists in Panacea's
    `doclog.ts`, not in the hosted Pages editor), PDF, Photo, Music, Video, Games. `server/desks.ts` should gain PDF, Office and Video when their state fits.
 3. **P5, cross-window entities** (a chart in a sheet shown on a slide, a photo used in a page): needs step 2 for at least Sheets and Slides.
 4. **Games has no agent hand** (a shared page-side client touching each fork's overlay); Games' fading bar is typechecked but not driven in a browser.

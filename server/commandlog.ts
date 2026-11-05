@@ -1,10 +1,10 @@
 /**
- * The command log of a hosted editor whose document is a file (Sheets first): every change is a command with who made it, a
+ * The command log of a hosted editor whose document is a file (Sheets and Slides): every change is a command with who made it, a
  * line saying what, and the version the document had just before it, so "go back to before this" is one restore. The
  * template is 3D's log (`caddesk.ts`); here the kernel stays the editor's own and the log is an adapter over the desk's
  * versions (docs/ENGINE-SURVEY.md, "adapter, not rewrite").
  *
- * Authority: Sheets is productivity work, so there is no command that is the person's alone; the agent may apply and revert
+ * Authority: Sheets and Slides are productivity work, so there is no command that is the person's alone; the agent may apply and revert
  * any of them. `who` says who did it.
  */
 
@@ -44,10 +44,10 @@ export function openPersonRun(log: OfficeCommand[], dirty: boolean): OfficeComma
 }
 
 /** The log as the agent reads it: since a revision, newest last. */
-export function logText(log: OfficeCommand[], sinceRev = 0): string {
+export function logText(log: OfficeCommand[], sinceRev = 0, noun = "workbook"): string {
   const shown = log.filter((c) => c.rev > sinceRev);
-  if (shown.length === 0) return sinceRev > 0 ? `Nothing has changed in the workbook since revision ${sinceRev}.` : "The workbook has no changes logged yet.";
+  if (shown.length === 0) return sinceRev > 0 ? `Nothing has changed in the ${noun} since revision ${sinceRev}.` : `The ${noun} has no changes logged yet.`;
   const lines = shown.slice(-40).map((c) => `#${c.n} ${c.who === "agent" ? "you" : "the person"} (${c.name}, revision ${c.rev}): ${c.summary}`);
   const more = shown.length - lines.length;
-  return `${more > 0 ? `(${more} earlier not shown)\n` : ""}${lines.join("\n")}\nrevert with the number of the first command to take back: the workbook goes back to just before it.`;
+  return `${more > 0 ? `(${more} earlier not shown)\n` : ""}${lines.join("\n")}\nrevert with the number of the first command to take back: the ${noun} goes back to just before it.`;
 }

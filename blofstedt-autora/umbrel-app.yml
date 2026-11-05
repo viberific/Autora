@@ -206,8 +206,8 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Sheets now keeps a log of every change to a workbook: what you typed and what
-  the assistant did, each in a line about the cells. The assistant can read it to
-  see what you changed while it was away, and can take the workbook back to just
-  before any change ("undo that"). Going back is itself a change you can take
-  back.
+  Slides now keeps a log of every change to a deck, the way Sheets does: what
+  you changed and what the assistant did, each in a line about the words on the
+  slides. The assistant can read it to see what you changed while it was away,
+  and can take the deck back to just before any change. Going back is itself a
+  change you can take back.
