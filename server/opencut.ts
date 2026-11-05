@@ -977,7 +977,7 @@ export async function runVideoTool(name: string, args: Record<string, any>, ctx:
         const out = (await command(ctx.session, "export", { format, quality, audio: args.audio !== false, ...(typeof args.maxHeight === "number" ? { maxHeight: args.maxHeight } : {}) }, 30 * 60_000)) as { file: string; artifact: string; bytes: number };
         const art = getArtifact(out.artifact);
         if (art) ctx.showFile?.({ id: art.id, name: art.name, mime: art.mime, size: art.size });
-        return { ok: true, summary: `Exported ${out.file} (${Math.round(out.bytes / 1024 / 1024 * 10) / 10} MB) as artifact ${out.artifact}; the person can open and download it from the thread.`, preview: `exported ${out.file}` };
+        return { ok: true, summary: `Exported ${art?.name ?? out.file} (${Math.round(out.bytes / 1024 / 1024 * 10) / 10} MB). The file is in Artifacts in this chat's project folder, and shown in the thread to open or download.`, preview: `exported ${out.file}` };
       }
 
       default:
