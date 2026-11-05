@@ -719,7 +719,7 @@ export function deskCommands(session: string): OfficeCommand[] {
 }
 
 /** Go back to just before command n. A new change on top, so it can be undone; it is itself in the log. */
-export function revertDeskCommand(session: string, n: number, cwd: string, who: "agent" | "person"): string | null {
+function revertDeskCommand(session: string, n: number, cwd: string, who: "agent" | "person"): string | null {
   const desk = load(session);
   if (!desk) return "There is no PDF open in the window.";
   const cmd = desk.log?.find((c) => c.n === n);
