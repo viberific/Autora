@@ -34,6 +34,7 @@ import { keepCopy, saveArtifact } from "./artifacts";
 import { chatTitle } from "./folders";
 import { readFileRef, FileRefError } from "./fileref";
 import type { ChatImage } from "./llm";
+import { pickText, rememberPick, type Pick } from "./picked";
 import { stateDir } from "./state";
 import { staticDir } from "./staticfiles";
 
@@ -101,6 +102,8 @@ interface Entry {
   hand: number;
   /** Calls to the command line for this chat, one at a time. */
   line: Promise<unknown>;
+  /** The layer the person is on, and when it was said; not kept on disk. */
+  pick?: Pick;
 }
 
 const entries = new Map<string, Entry>();
@@ -564,6 +567,14 @@ export async function runPhotoTool(session: string, tool: string, args: Record<s
   }
 }
 
+/** For the start of a turn: the layer the person is working on, while that is fresh. Null when none or the window is shut. */
+export function photoPickNote(session: string): string | null {
+  if (!validSession(session)) return null;
+  const e = entries.get(session);
+  const picked = e?.open ? pickText(e.pick) : null;
+  return picked ? `The person is working on this layer of the picture in the Photo window: ${picked}. When they say "this", they mean that.` : null;
+}
+
 /** The picture for the capability briefing. */
 export function photoBriefing(on: boolean): string {
   if (!on) {
@@ -687,6 +698,15 @@ export function photoRoutes(app: Express, opts: {
   });
 
   /* The agent's edit, by hand: the first window to ask does it. */
+  // The layer the person is on in the editor. Not a change to the picture: told to the agent in its next briefing.
+  app.post("/api/photo/:session/pick", express.json({ limit: "2kb" }), (req, res) => {
+    const id = known(req, res);
+    if (!id) return;
+    const e = entryFor(id);
+    if (e.open) e.pick = rememberPick(req.body?.text);
+    res.json({ ok: true });
+  });
+
   app.post("/api/photo/:session/hand/claim", (req, res) => {
     const id = known(req, res);
     if (!id) return;

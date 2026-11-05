@@ -160,6 +160,8 @@ const PDF = [
     "properties are done on the file afterwards, and the result says which. With Visible work off, or no window open, all of it is " +
     "done on the file at once and the window shows the result.",
   "  Saving. Edits are saved as you go. The window's top bar (Autora PDF, the file's name) also has Save: it presses the editor's own Save and says the file is kept in Artifacts. The person saves with it without asking you, and is not waiting on you when they do.",
+  "  What the person has selected in a page (words in its text) is in your briefing for about two minutes after, with the page: when they say " +
+    "\"this\" or \"these\", they mean that, so act on it without asking which.",
 ].join("\n");
 
 const VIDEO = [
@@ -204,6 +206,8 @@ const VIDEO = [
     "last time you read it. There are no panels for colour grade, transitions, stabilising, captions, ducking, fades or looks, because " +
     "the editor has none of them.",
   "  Saving. The project is saved as you go; the window's top bar (Autora Video, the project's name) also has Save, which writes the project now. Projects are the person's across chats, so Save keeps nothing in Artifacts; the video file comes from Export.",
+  "  The clips the person has picked on the timeline are in your briefing for about two minutes after (their type and name): when they say " +
+    "\"this clip\" or \"these\", they mean those, so act on them without asking which.",
 ].join("\n");
 
 const STUDIO = [
@@ -565,6 +569,8 @@ const PHOTO = [
     "experiments. A command with no tile in All tools runs as the editor's command, and its result says so. With Visible work off, " +
     "or no window open, the edit runs at once on the server's copy and the window shows the result.",
   "  Saving. The picture is saved as you go; the window's top bar (Autora Photo, its size and layers), on a desktop too, has Save, which keeps a PNG of it in Artifacts named after the chat (the layered picture stays in the window). photo_export is still yours for other formats.",
+  "  The layer the person is on in the window is in your briefing for about two minutes after it changes: when they say \"this layer\" or " +
+    "\"this\", they mean that one, so act on it without asking which.",
 ].join("\n");
 
 const WIDGETS = [

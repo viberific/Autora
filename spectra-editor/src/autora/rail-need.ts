@@ -69,3 +69,11 @@ export function holdWork(raw: Work, seen: { work: Work; at: number } | null, now
   if (!seen || !lost || now - seen.at >= HOLD_MS) return { work: raw, seen: { work: raw, at: now } };
   return { work: seen.work, seen };
 }
+
+/* ------------------------------------------------------- what is picked now */
+
+/** What the person has selected, as the agent is told it: the words, and the page they are on (null with nothing selected). */
+export function pickWords(selected: string, page: number | null): string {
+  const words = selected.replace(/\s+/g, " ").trim().slice(0, 120);
+  return words ? (page ? `"${words}" (page ${page})` : `"${words}"`) : "";
+}

@@ -25,6 +25,7 @@ import express, { type Express, type Request, type Response } from "express";
 import { getArtifact, saveArtifact, MAX_ARTIFACT_BYTES } from "./artifacts";
 import { outlineLines } from "./compose";
 import { cueForItem, flattenDesk, type Cue, type DeskHooks, type DeskItem, type DeskSnapshot } from "./pdf";
+import { pickText, rememberPick, type Pick } from "./picked";
 import { stateDir } from "./state";
 
 type Desk = DeskSnapshot & {
@@ -52,6 +53,8 @@ type Desk = DeskSnapshot & {
   cues?: Cue[];
   /** Goes up each time there are cues to play, so each plays once. */
   cueSeq?: number;
+  /** The words the person has selected in the page, and when it was said; not kept on disk. */
+  pick?: Pick;
 };
 
 /** One change by the agent, up for review in the window. */
@@ -142,7 +145,7 @@ function persist(session: string) {
         fs.writeFileSync(path.join(DIR, `${session}.pdf`), desk.base, { mode: 0o600 });
         lastBase.set(session, desk.baseRev);
       }
-      const { base: _base, problem: _problem, ...meta } = desk;
+      const { base: _base, problem: _problem, pick: _pick, ...meta } = desk;
       fs.writeFileSync(path.join(DIR, `${session}.json`), JSON.stringify(meta), { mode: 0o600 });
     } catch (err: any) {
       console.warn(`[pdfdesk] ${session}: could not save the window: ${err?.message ?? err}`);
@@ -410,6 +413,8 @@ export function deskBriefing(session: string): string | null {
   } else if (desk.working) {
     lines.push("It was not made with pdf_compose, so changing its words means pdf_edit (objects) or composing a new document.");
   }
+  const picked = pickText(desk.pick);
+  if (picked) lines.push(`The person has selected these words in ${desk.name}: ${picked}. When they say "this" or "these", they mean that.`);
   const mine = desk.items.filter((i) => i.autora).slice(-30);
   if (mine.length) lines.push(`Your objects on it (ids for pdf_edit's change and remove): ${mine.map((i) => `${i.id} = ${label(i, false)}`).join("; ")}.`);
   const others = desk.items.filter((i) => !i.autora);
@@ -733,6 +738,16 @@ export function deskRoutes(app: Express, opts: { exists: (session: string) => bo
     const item = load(id)?.items.find((i) => i.id === target);
     if (!item) return res.json({ ok: true });
     touched(id, target, kind, `${kind === "drag" ? "is moving" : "has selected"} ${label(item)}`, { tell: false });
+    res.json({ ok: true });
+  });
+
+  /* The words the person has selected in the page. Not a change to the file: remembered for a couple of minutes and told to
+     the agent in its next briefing, so "reword this" means what they are looking at. */
+  app.post("/api/pdfdesk/:session/pick", express.json({ limit: "2kb" }), (req, res) => {
+    const id = known(req, res);
+    if (!id) return;
+    const desk = load(id);
+    if (desk?.open) desk.pick = rememberPick(req.body?.text);
     res.json({ ok: true });
   });
 

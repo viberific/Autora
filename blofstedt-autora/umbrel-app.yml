@@ -206,7 +206,8 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Pages, Sheets and Slides now tell the assistant what you have picked. Select
-  some words, a block of cells or a box on a slide and say "make this shorter"
-  or "bold these": the assistant knows what "this" is for the next couple of
-  minutes, without asking which.
+  The PDF, Video and Photo windows now tell the assistant what you have picked.
+  Select some words in a PDF, click a clip on the video timeline, or choose a
+  layer in Photo and say "reword this", "trim this clip" or "blur this layer":
+  the assistant knows what "this" is for the next couple of minutes, without
+  asking which. Pages, Sheets and Slides already did.

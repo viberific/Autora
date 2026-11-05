@@ -8,7 +8,7 @@
  * of the timeline's switches. What used to be a vertical strip of tabs at the left of the editor and most of the timeline's
  * toolbar are these tools and are gone from the page; the agent has every one of them from the chat whatever is shown.
  */
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import {
   AlignLeftIcon, AlignRightIcon, Bookmark02Icon, Copy01Icon, Delete02Icon, Link02Icon, MagnetIcon, PauseIcon, PlayIcon, SearchAddIcon,
   SearchMinusIcon, ScissorIcon, Undo02Icon, Redo02Icon, ViewIcon, VolumeMute02Icon, ClipboardIcon, SquareIcon, ArrowLeft01Icon, ArrowRight01Icon,
@@ -19,6 +19,8 @@ import { VERB, type RailTool } from "../../../src/lib/toolrail";
 import { getActionDefinition, invokeAction, type TAction, type TActionWithOptionalArgs } from "@/actions";
 import { tabs, TAB_KEYS, useAssetsPanelStore, type Tab } from "@/components/editor/panels/assets/assets-panel-store";
 import { useEditor } from "@/editor/use-editor";
+import { announcePick } from "./bridge";
+import { findElement } from "./helpers";
 import { OcRippleIcon } from "@/components/icons";
 import { useTimelineStore } from "@/timeline/timeline-store";
 import { zoomApi } from "@/timeline/components/timeline-toolbar";
@@ -55,6 +57,23 @@ export function VideoRail({ phone, sheet, setSheet }: { phone: boolean; sheet: S
   // clips picked to copy, delete or mute, something on the clipboard, something to take back or put back.
   const hasClips = useEditor((e) => Number(e.timeline.getTotalDuration()) > 0);
   const picked = useEditor((e) => e.selection.getSelectedElements().length) > 0;
+  /* What is picked, in words, said to the window so the agent knows what "this clip" is: names, with where each starts. */
+  const pickedClips = useEditor((e) => {
+    const chosen = e.selection.getSelectedElements();
+    if (!chosen.length) return "";
+    const names = chosen.slice(0, 4).map((c: { elementId: string }) => {
+      try {
+        const { element } = findElement(e, c.elementId);
+        return `${element.type} "${String(element.name ?? "").slice(0, 40)}"`;
+      } catch { return "a clip"; }
+    });
+    return `${chosen.length === 1 ? "the clip" : `${chosen.length} clips`}: ${names.join(", ")}${chosen.length > 4 ? ", ..." : ""}`;
+  });
+  useEffect(() => {
+    // At most once a second, and the last word wins.
+    const t = window.setTimeout(() => announcePick(pickedClips), 400);
+    return () => window.clearTimeout(t);
+  }, [pickedClips]);
   const canUndo = useEditor((e) => e.command.canUndo());
   const canRedo = useEditor((e) => e.command.canRedo());
   const canPaste = useEditor((e) => e.clipboard.hasEntry());

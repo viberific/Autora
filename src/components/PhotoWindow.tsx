@@ -169,6 +169,11 @@ export function PhotoWindow({ sessionId, phone }: { sessionId: string; phone: bo
         let id = "";
         try { id = String((JSON.parse(msg.json) as { id?: unknown }).id ?? ""); } catch { /* not an answer */ }
         handing.current.get(id)?.(msg.json, msg.bytes instanceof ArrayBuffer ? msg.bytes : null);
+      } else if (msg.autoraPhoto === "pick" && typeof msg.json === "string") {
+        // The layer the person is on, for the agent's next briefing.
+        let text = "";
+        try { text = String((JSON.parse(msg.json) as { text?: unknown }).text ?? ""); } catch { /* not ours */ }
+        void fetch(`/api/photo/${encodeURIComponent(sessionId)}/pick`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) }).catch(() => undefined);
       } else if (msg.autoraPhoto === "cursor" && typeof msg.x === "number" && typeof msg.y === "number") {
         // The agent's cursor in the editor, for the few words beside it (AgentThought).
         const point = framePoint(frame.current, { x: msg.x, y: msg.y });
@@ -177,7 +182,7 @@ export function PhotoWindow({ sessionId, phone }: { sessionId: string; phone: bo
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [load, offer, save]);
+  }, [load, offer, save, sessionId]);
 
   // What the agent did: the server says the picture moved on, and who moved it.
   useEffect(

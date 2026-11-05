@@ -162,6 +162,14 @@ await test("the Office manual says what the person has picked reaches the briefi
   }
 });
 
+await test("the PDF, Video and Photo manuals say what the person has picked reaches the briefing, so \"this\" means it", () => {
+  for (const [id, needle] of [["pdf", "selected in a page"], ["video", "picked on the timeline"], ["photo", "layer the person is on"]] as const) {
+    const text = manualText(id);
+    assert.ok(text.includes(needle), `${id}: ${needle}`);
+    assert.ok(text.includes("act on") && text.includes("without asking which"), `${id}: acts without asking`);
+  }
+});
+
 await test("the Office manual says the Slides bar follows what is picked: slide tools always, text tools only with a box picked", () => {
   const office = manualText("office");
   for (const needle of ["Slides does the same", "New slide, Layout and Present are always there", "only while a box or shape on the slide is picked (click it first)"]) {

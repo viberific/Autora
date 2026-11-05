@@ -33,6 +33,7 @@ import { MAX_ARTIFACT_BYTES, getArtifact, saveArtifact } from "./artifacts";
 import { OfficeHost, hostBuilt, wire } from "./officehost";
 import { slideElements } from "./office";
 import { dropPages, latestPages, pageFile, pagesFor, type Locator } from "./officepages";
+import { PICK_FRESH_MS, PICK_MAX } from "./picked";
 import { stateDir } from "./state";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -104,8 +105,7 @@ type Desk = {
 };
 
 /** A pick older than this is no longer what the person is on. */
-export const PICK_FRESH_MS = 2 * 60_000;
-const PICK_MAX = 120;
+export { PICK_FRESH_MS };
 
 /**
  * One thing the agent did in the document, to be shown as a cursor that goes to the place and types the words,

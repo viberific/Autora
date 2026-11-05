@@ -217,6 +217,9 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
         case "autora:opencut:state":
           send("state", { projectId: msg.projectId ?? null, name: msg.name ?? null });
           break;
+        case "autora:opencut:pick":
+          send("pick", { text: String(msg.text ?? "") });
+          break;
         case "autora:opencut:ready":
           up.current = true;
           setTrouble(null);

@@ -68,6 +68,25 @@ const run = (name: string, args: Record<string, any>) => runPdfTool(name, args, 
 const upload = saveArtifact({ origin: "user", name: "lease.pdf", data: await letter() });
 const state = () => desk.deskState(SESSION) as any;
 
+// The words the person has selected in the page reach the briefing, then go.
+await test("a selection in the page is told to the agent for a while, and an empty one clears it", async () => {
+  const express = (await import("express")).default;
+  const app = express();
+  desk.deskRoutes(app, { exists: () => true, cwd: () => dir });
+  const server = await new Promise<import("node:http").Server>((ok) => { const s = app.listen(0, "127.0.0.1", () => ok(s)); });
+  const port = (server.address() as { port: number }).port;
+  const pick = (text: string) => fetch(`http://127.0.0.1:${port}/api/pdfdesk/s-pick/pick`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+  try {
+    const hooks = desk.deskHooks("s-pick");
+    const data = await letter();
+    hooks.open({ name: "lease.pdf", base: data, items: [], working: null, source: null } as any);
+    await pick('"Tenant signature:" (page 1)');
+    assert.match(desk.deskBriefing("s-pick") ?? "", /selected these words in lease\.pdf: "Tenant signature:" \(page 1\)/);
+    await pick("");
+    assert.doesNotMatch(desk.deskBriefing("s-pick") ?? "", /selected these words/);
+  } finally { server.close(); }
+});
+
 let working = "";
 await test("pdf_edit opens the file in the window, with what it placed as the editor's objects", async () => {
   const r = await run("pdf_edit", {

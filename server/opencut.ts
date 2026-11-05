@@ -29,6 +29,7 @@ import { artifactPath, getArtifact, MAX_ARTIFACT_BYTES, saveArtifact } from "./a
 import type { ChatImage } from "./llm";
 import { VIDEO_CLIP, isVideoBind, videoCommands, type VideoState } from "../src/lib/panacea/apps/video";
 import type { Value } from "../src/lib/panacea/atoms";
+import { pickText, rememberPick, type Pick as PickedWords } from "./picked";
 import { stateDir } from "./state";
 import { staticDir } from "./staticfiles";
 import { createHandshake } from "./handshake";
@@ -144,6 +145,8 @@ type Win = {
   projectId: string | null;
   name: string | null;
   since: number;
+  /** The clips the person has picked on the timeline, and when it was said; not kept on disk. */
+  pick?: PickedWords;
 };
 
 const wins = new Map<string, Win>();
@@ -406,6 +409,15 @@ export function opencutRoutes(app: Express, opts: OpencutOptions): void {
     res.json({ ok: true });
   });
 
+  // The clips the person has picked on the timeline. Not a change to the project: told to the agent in its next briefing.
+  app.post("/api/opencut/pick", (req: Request, res: Response) => {
+    const session = known(req, res);
+    if (!session) return;
+    const w = wins.get(session);
+    if (w?.open) w.pick = rememberPick(req.body?.text);
+    res.json({ ok: true });
+  });
+
   app.post("/api/opencut/state", (req: Request, res: Response) => {
     const session = known(req, res);
     if (!session) return;
@@ -548,7 +560,9 @@ export async function videoPanel(session: string, bind: string, value: unknown, 
 export function videoBriefing(session: string): string | null {
   const w = wins.get(session);
   if (!w?.open) return null;
-  return `The video window is open${w.name ? ` on the project "${w.name}"` : ""}. video_look shows the timeline; video_edit changes it.`;
+  const picked = pickText(w.pick);
+  return `The video window is open${w.name ? ` on the project "${w.name}"` : ""}. video_look shows the timeline; video_edit changes it.` +
+    (picked ? ` The person has picked on the timeline: ${picked}. When they say "this" or "these", they mean that.` : "");
 }
 
 // ------------------------------------------------------------------ tools --

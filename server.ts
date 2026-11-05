@@ -169,7 +169,7 @@ import { loadFileRoutes, loadPanaceaFile, type FileLoadGuards } from "./server/l
 import { DESKS } from "./server/desks";
 import { cadRoutes, cadState, onCadCommand, serveCad } from "./server/caddesk";
 import { gameRoutes, gameState, serveGame } from "./server/gamedesk";
-import { photoRoutes, photoState, servePhoto } from "./server/photodesk";
+import { photoPickNote, photoRoutes, photoState, servePhoto } from "./server/photodesk";
 import { studioRoutes, studioState, studioTurnNote, studioVisible } from "./server/studio";
 import { appOfArtifact, appOfFile, appOfTool } from "./src/lib/panacea/flows";
 import { dropPanacea, noteFlow, onPanaceaChange, onPanaceaTouch, panaceaRoutes, panaceaState, panaceaSuggester, panaceaTurnNote, panaceaVisible } from "./server/panacea";
@@ -2421,6 +2421,9 @@ async function systemInstructionFor(
   // And the video window, when a project is open in it.
   const videoDesk = videoBriefing(sessionId);
   if (videoDesk) notes.push(videoDesk);
+  // And the layer the person is on in the photo window.
+  const photoPick = photoPickNote(sessionId);
+  if (photoPick) notes.push(photoPick);
   // And the music window, when a song is open in it.
   const studioDesk = studioTurnNote(sessionId);
   if (studioDesk) notes.push(studioDesk);
