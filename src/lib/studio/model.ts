@@ -881,7 +881,7 @@ export function review(p: Project): string[] {
   const muted = used.filter((t) => t.mute);
   if (muted.length) out.push(`${muted.map((t) => t.name).join(", ")} ${muted.length === 1 ? "is" : "are"} muted, so left out of playback and of the export.`);
   const bars = Math.ceil(contentEnd(p) / p.beatsPerBar);
-  if (bars > 0 && bars < 16) out.push(`The song is ${bars} bars (about ${Math.round((bars * p.beatsPerBar * 60) / p.bpm)} seconds): a loop more than a song. Songs usually run 32 bars or more, in sections (intro, verse, chorus, verse, chorus, outro) where parts come in and drop out.`);
+  if (bars > 0 && bars < 16) out.push(`The song is ${bars} bars (about ${Math.round((bars * p.beatsPerBar * 60) / p.bpm)} seconds): a loop more than a song. If the person asked for something short (a jingle, a promo, a loop, or a length in seconds), that is right: leave it. Otherwise songs usually run 32 bars or more, in sections (intro, verse, chorus, verse, chorus, outro) where parts come in and drop out.`);
   if (used.length >= 2 && !used.some((t) => ["lead", "pluck", "synth", "keys"].includes(t.instrument) && t.clips.some((c) => c.notes.length) && !t.name.toLowerCase().includes("chord"))) out.push("There is no melody or lead line yet, only backing.");
   const flat = used.filter((t) => {
     const v = t.clips.flatMap((c) => c.notes.map((n) => n.vel));
