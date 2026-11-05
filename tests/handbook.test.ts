@@ -155,6 +155,13 @@ await test("the 3D manual teaches the command log: who did what, history_log sin
   }
 });
 
+await test("the Office manual says what the person has picked reaches the briefing, so \"this\" means it", () => {
+  const text = manualText("office");
+  for (const needle of ["is in your briefing for about two minutes", "they mean that, so act on it without asking which"]) {
+    assert.ok(text.includes(needle), needle);
+  }
+});
+
 await test("the Office manual says the Slides bar follows what is picked: slide tools always, text tools only with a box picked", () => {
   const office = manualText("office");
   for (const needle of ["Slides does the same", "New slide, Layout and Present are always there", "only while a box or shape on the slide is picked (click it first)"]) {

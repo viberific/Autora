@@ -147,4 +147,34 @@ test("a deck's cue is the words, without the \"Slide 1:\" the reader puts in fro
   assert.deepEqual(cuesFor("pptx", deck("Quarterly review"), deck("Annual review")), [{ act: "type", text: "Annual review" }]);
 });
 
+// What the person has picked in the editor reaches the agent's next briefing, for a couple of minutes.
+{
+  const express = (await import("express")).default;
+  const { officeRoutes, officeHooks, officeBriefing, PICK_FRESH_MS } = await import("../server/officedesk");
+  const app = express();
+  officeRoutes(app, { exists: () => true });
+  const server = await new Promise<import("node:http").Server>((ok) => { const s = app.listen(0, "127.0.0.1", () => ok(s)); });
+  const port = (server.address() as { port: number }).port;
+  const post = (kind: string, text: string) =>
+    fetch(`http://127.0.0.1:${port}/api/officedesk/pickme/pick?kind=${kind}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+  officeHooks("pickme").open({ name: "Plan.docx", data: docx("One", "Two"), working: null, source: null, outName: "Plan.docx" });
+
+  const brief = () => officeBriefing("pickme") ?? "";
+  assert.ok(!brief().includes("picked"));
+  assert.equal((await post("docx", "the quarterly   numbers")).status, 200);
+  test("a pick is told to the agent, with its spaces tidied", () => assert.match(brief(), /picked these words in Plan\.docx: the quarterly numbers\./));
+  await post("docx", "x".repeat(500));
+  test("a pick is cut to 120 characters", () => assert.match(brief(), /Plan\.docx: x{120}\./));
+  await post("xlsx", "A1:B3");
+  test("a pick for a window that is not open is ignored", () => assert.ok(!brief().includes("A1:B3")));
+  await post("docx", "");
+  test("an empty pick clears it", () => assert.ok(!brief().includes("picked")));
+  await post("docx", "late words");
+  const realNow = Date.now;
+  Date.now = () => realNow() + PICK_FRESH_MS + 1000;
+  test("a pick that is two minutes old is not told", () => assert.ok(!brief().includes("late words")));
+  Date.now = realNow;
+  server.close();
+}
+
 console.log(`${passed} passed`);

@@ -291,7 +291,9 @@ const OFFICE = [
     "picked (click it first), and fade away when nothing is; Undo and Redo only with something to take back or put back. A last button, All tools, that opens every command the " +
     "editor has, one group per old ribbon tab (Insert, Design, Layout, Review, View...), where a desktop can pin any of them to the bar. " +
     "Commands with a drop-down open it beside the bar. The keyboard shortcuts work on a desktop as ever. Point the person at a tool by " +
-    "its name and say \"open All tools\" if it is not on their bar. You have every tool whatever is shown.",
+    "its name and say \"open All tools\" if it is not on their bar. You have every tool whatever is shown. " +
+    "What the person has picked in a window (their words in Pages, the cell range in Sheets, a box on a slide) is in your briefing for about two " +
+    "minutes after: when they say \"this\" or \"these\", they mean that, so act on it without asking which.",
   "  With Visible work on and the document open in its window, office_edit's words are typed there by your hand, live, before the " +
     "call returns: in Pages the words that change are selected and typed over, a new paragraph is typed after the one it follows and a " +
     "removed one selected and deleted, and bold, italic or underline put on or taken off words by selecting them and pressing the " +

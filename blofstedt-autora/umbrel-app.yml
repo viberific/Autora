@@ -206,9 +206,7 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  The Slides tool bar now follows your deck. New slide, layout and present are
-  always there; click a box or shape on the slide and bold, italic, underline,
-  text colour, text size, align and distribute, the format pane, cut and copy
-  appear, and they fade away when nothing is picked. Undo shows only once there
-  is something to take back. With this, every window's tool bar follows the work
-  and fades into the background; All tools still lists everything.
+  Pages, Sheets and Slides now tell the assistant what you have picked. Select
+  some words, a block of cells or a box on a slide and say "make this shorter"
+  or "bold these": the assistant knows what "this" is for the next couple of
+  minutes, without asking which.

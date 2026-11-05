@@ -361,18 +361,20 @@
         doc: !!surface, text: !!surface && (surface.textContent || "").trim().length > 0,
         selected: inside && !sel.isCollapsed, inList: !!at?.closest("li"),
         undo: !!undo && !isOff(undo), redo: !!redo && !isOff(redo),
+        pick: inside && !sel.isCollapsed ? String(sel).replace(/\s+/g, " ").trim().slice(0, 120) : "",
       };
     }
     if (app === "sheets") {
       // The grid is drawn on a canvas; the name box above it says what is picked ("A1", or "A1:B3", "A:A", "3:3" for more than a cell).
       const box = document.querySelector("[data-u-comp='defined-name'] input");
       const undo = find(["undo"]), redo = find(["redo"]);
-      return { doc: !!box, range: !!box && String(box.value || "").includes(":"), undo: !!undo && !isOff(undo), redo: !!redo && !isOff(redo) };
+      return { doc: !!box, range: !!box && String(box.value || "").includes(":"), pick: box ? String(box.value || "").slice(0, 40) : "", undo: !!undo && !isOff(undo), redo: !!redo && !isOff(redo) };
     }
     if (app === "slides") {
       // The slide is drawn on a canvas, but the ribbon's own buttons know what is picked: they are lit when a box or shape is, dim when not.
       const bold = find(["bold"]), undo = find(["undo"]), redo = find(["redo"]);
-      return { doc: !!document.querySelector(".stage-wrap, .slide-list"), selected: !!bold && !isOff(bold), undo: !!undo && !isOff(undo), redo: !!redo && !isOff(redo) };
+      const picked = !!bold && !isOff(bold);
+      return { doc: !!document.querySelector(".stage-wrap, .slide-list"), selected: picked, pick: picked ? "a box or shape on the slide" : "", undo: !!undo && !isOff(undo), redo: !!redo && !isOff(redo) };
     }
     return { doc: true };
   }
@@ -392,11 +394,21 @@
     }
     return out;
   }
+  /** What the person has picked, said to the host when it changes (at most once a second): the agent's briefing carries it. */
+  let sentPick = "", sentAt = 0;
+  function reportPick(c) {
+    const pick = c.doc ? String(c.pick || "") : "";
+    const now = Date.now();
+    if (pick === sentPick || now - sentAt < 1000) return;
+    sentPick = pick; sentAt = now;
+    try { void window.__autora.host("pick", { text: pick }).catch(() => undefined); } catch { /* no host: nobody to tell */ }
+  }
   const needed = (tool, c) => !!c.doc && (RULES[tool.id] ? !!RULES[tool.id](c) : true);
   /** Marks which of the pinned tools the work needs, as many as fit; the CSS fades the rest out. */
   function applyNeed() {
     if (!RULES || !bar) return;
     const c = steady(readContext());
+    reportPick(c);
     let free = room();
     for (const b of bar.querySelectorAll("button[data-tool]")) {
       const yes = needed(byId.get(b.dataset.tool), c) && free > 0;

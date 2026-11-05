@@ -164,6 +164,12 @@ export function OfficeWindow({ sessionId, kind, phone }: { sessionId: string; ki
               reply(true, {});
               break;
             }
+            case "pick": {
+              // What the person has picked in the editor, for the agent's next briefing.
+              void fetch(api("/pick"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: String(payload.text ?? "") }) }).catch(() => undefined);
+              reply(true, {});
+              break;
+            }
             case "ask": {
               // The editor's AI slot is Autora's chat: put the cursor there.
               document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Task"]')?.focus();
