@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.96"
+version: "0.3.97"
 port: 8096
 # umbrelOS only hands a container the GPU when the manifest says so: with this
 # permission it adds /dev/dri plus the render/video groups those nodes belong
@@ -60,20 +60,25 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Subtitle auto-sync now corrects your episodes instead of measuring them and
-  throwing the answer away. Twenty-one of the twenty-five stored fits sat below
-  the confidence gate, so they never moved a line.
+  Episodes are now prepared ahead of the play, the way they were always meant
+  to be. One word in a database query was enough to stop it: the query used a
+  reserved word as a name, so it failed every minute for seven versions and no
+  episode was ever copied in advance. Everything you pressed play on was built
+  from scratch while you waited.
 
 
-  The measurement itself was the real problem: it asked whether a subtitle line
-  was anywhere inside a stretch of speech, and a line is inside one for as long
-  as it is being said, so a correct subtitle and one half a second out scored the
-  same. Measuring the same real episodes again showed the old fitter was 250 to
-  300 ms late on every one of them. A line is now scored against where speech
-  starts, and the answer is the middle of the best window rather than its edge.
+  A play that starts on a freshly built episode also stops being given up on. It
+  used to show "Something went wrong playing this" while the box was still
+  cutting the pieces, so the player now asks the box whether pieces are still
+  coming before it spends its last retry, and it waits a little longer only when
+  the answer is yes. There is a limit of four extra goes and ninety seconds, so a
+  box that has really stopped still says so.
 
 
-  The gate now judges the shape of the score curve rather than its height, so a
-  genuinely mistimed subtitle is corrected and one that is already right is left
-  alone. Every stored measurement is taken once more on the next play. A manual
-  nudge in the player still overrides it.
+  When it does fail, the log now records what hls.js actually reported -- the
+  second failure used to reach you as that one sentence and nothing else, which
+  is why the last two attempts could not be explained afterwards.
+
+
+  Picture size no longer trips between two settings mid-episode: two step-downs
+  could land out of order and put the size you had just left back on screen.
