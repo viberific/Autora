@@ -235,7 +235,9 @@ P0: a read-only survey, no code, producing `docs/ENGINE-SURVEY.md`. Then P1 on 3
   the editor's real preview export (not built in this container), and the window-side Play press. Needs the window open with its
   editor running to start the current game; without it the tool plays the last preview and says it may be older. Next toward the goal
   (see the 2026-11-05 discussion): art and sound for someone with none, the verbs-to-behaviours layer ("slippery", "jump") on `game.*`
-  panels, and the five-minute path written down and tried with a real beginner.
+  panels, and the five-minute path written down and tried with a real beginner. **The full note for the next agent is
+  `intent/2026-11-05-first-game-in-five-minutes.md`; what trying the app as a user found is `docs/TRY-IT-2026-11-05.md`.** (Correction there:
+  the verbs-to-settings layer for movement, `game.speed/jump/gravity/friction`, already exists.)
 
 ## Left to do (as of 0.9.341, in the order to take it)
 

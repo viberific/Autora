@@ -200,6 +200,9 @@ function doing(name: string, args: Record<string, any>): string {
     case "pdf_redact": return "Redacting the PDF";
     case "pdf_replace_text": return "Changing text in the PDF";
     case "pdf_compress": return "Shrinking the PDF";
+    case "office_history": case "pdf_history": case "studio_history": case "video_history": case "photo_history":
+      return args.action === "revert" ? "Taking a change back" : "Checking what has changed";
+    case "game_play": return "Playing the game to test it";
     case "studio_open": return args.new ? `Starting the song${quoted(args.new)}` : "Opening the music window";
     case "studio_look": return "Looking at the song";
     case "studio_song": return args.bpm !== undefined ? "Setting the tempo" : args.key !== undefined ? "Setting the key" : "Changing the song";

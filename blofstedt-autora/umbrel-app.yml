@@ -206,8 +206,7 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  The assistant can now play the game it is making. It starts the game in your
-  Games window, so you see it begin, then plays a copy with the keys it chooses
-  and looks at the screen: does it start, does anything move when a key is
-  pressed, did the game report an error. It tests its own work before telling you
-  it is done, so you do not have to press Play for it.
+  Fixed the "What do you want to do?" message that was drawn on top of the Music,
+  3D and other windows, covering your clips and panels. It now shows only on a
+  truly empty canvas. The assistant's history and game-testing tools also show a
+  plain description while they run, and are listed on the Tools page.

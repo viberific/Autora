@@ -88,6 +88,9 @@ export function thoughtForTool(name: string, args: Record<string, any> = {}): st
     case "game_edit": return count(args.ops) > 1 ? `Making ${noun(count(args.ops), "change")}` : "Changing the game";
     case "game_look": return "Looking at the scene";
     case "photo_edit": return "Editing the picture";
+    case "office_history": case "pdf_history": case "studio_history": case "video_history": case "photo_history":
+      return args.action === "revert" ? "Taking a change back" : "Checking what changed";
+    case "game_play": return "Playing the game";
     case "photo_look": return "Looking at the picture";
     case "app_preview": return str(args.text) ? "Typing in the app" : str(args.target) ? "Pointing at the app" : "Working in the app";
     case "edit_file": return "Editing a file";

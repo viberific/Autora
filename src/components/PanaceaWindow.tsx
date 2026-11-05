@@ -776,7 +776,7 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
           navigationHost={navigationHost}
         >
           {canvas.project && <ProjectStrip project={canvas.project} onChange={changeProject} onPhase={goPhase} />}
-          {empty && doc.ready && !canvas.project && (
+          {empty && hosted.length === 0 && doc.ready && !canvas.project && (
             <div className="pa-empty pa-chrome">
               <h3>What do you want to do?</h3>
               <p>Use the centered Ask Autora bar, or drop a file here. Double-click anywhere for a piece of your own.</p>
