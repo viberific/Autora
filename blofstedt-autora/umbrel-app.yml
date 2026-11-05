@@ -206,8 +206,8 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  The PDF, Video and Photo windows now tell the assistant what you have picked.
-  Select some words in a PDF, click a clip on the video timeline, or choose a
-  layer in Photo and say "reword this", "trim this clip" or "blur this layer":
-  the assistant knows what "this" is for the next couple of minutes, without
-  asking which. Pages, Sheets and Slides already did.
+  Sheets now keeps a log of every change to a workbook: what you typed and what
+  the assistant did, each in a line about the cells. The assistant can read it to
+  see what you changed while it was away, and can take the workbook back to just
+  before any change ("undo that"). Going back is itself a change you can take
+  back.

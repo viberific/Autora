@@ -307,6 +307,11 @@ const OFFICE = [
     "a new slide or box) appears then; the result says what was typed by hand. It takes seconds per change, so send what the change " +
     "needs. A new document (office_create) simply appears. With Visible work off, or no window open, the change simply appears.",
   "  Saving. Edits are saved as you go. The window's top bar (the app, the file's name, Versions) also has Save: it presses the editor's own Ctrl+S, writes the file in Artifacts now and keeps a version named \"Saved by you\". The person saves with it without asking you.",
+  "  Who did what in a workbook. Every change to a workbook in the Sheets window is a command in a log, with who made it (you, or the person typing in the window) and " +
+    "a line saying what, in cells. office_history reads it: call it with since_revision (the revision you last saw) to learn what the person changed while you were not looking, " +
+    "instead of guessing from the cells. office_history with action revert and n takes the workbook back to just before command n (and everything after it); that is a new " +
+    "change on top, so it can be taken back, and it shows in the log as a revert. Sheets has no commands that are the person's alone, so you may revert any, but do not " +
+    "undo what they did unless they ask. Pages and Slides have no log yet.",
 ].join("\n");
 
 const CAD = [

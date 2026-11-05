@@ -806,6 +806,24 @@ export const filesSPECS: ToolSpec[] = [
     },
   },
   {
+    name: "office_history",
+    group: "files",
+    description:
+      "The log of changes to the workbook in the Autora Sheets window: every change is a command with who made it (you, or the person typing in the window) " +
+      "and a line saying what. action \"log\" reads it; since_revision (the revision you last saw) shows only what came after, so you learn what the person " +
+      "changed while you were not looking instead of guessing from the cells. action \"revert\" with n takes the workbook back to just before command n " +
+      "(everything after it too); that is a new change on top, it can be taken back, and it shows in the log as a revert. Sheets has no commands that " +
+      "are the person's alone: you may revert any. Use revert when the person says undo that, or your change was wrong; do not use it to undo what they did unless they ask.",
+    parameters: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["log", "revert"], description: "log (default) or revert." },
+        since_revision: { type: "number", description: "log: only commands made after this revision." },
+        n: { type: "number", description: "revert: the command number to go back to before." },
+      },
+    },
+  },
+  {
     name: "office_pdf",
     group: "files",
     description:

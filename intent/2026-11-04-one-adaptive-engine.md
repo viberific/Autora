@@ -166,13 +166,25 @@ P0: a read-only survey, no code, producing `docs/ENGINE-SURVEY.md`. Then P1 on 3
   `desk.pick`, kept two minutes, told in `officeBriefing`). Server tests are in `tests/officedesk.test.ts`; the shim-to-server path has no browser test yet.
 - **P5**: not started.
 
+- **P6, the rest of step 1 (0.9.342): done.** PDF (selected words and page), Video (picked clips) and Photo (the active layer) report
+  what is picked the same way (`server/picked.ts`, shared by all four desks). The Office shim-to-server browser test is still not written;
+  the Photo (Rust) and frame-side changes are typechecked but not driven in a browser here.
+- **Command layer, Sheets (0.9.343): done.** `server/commandlog.ts` + `officedesk.ts`: every change to a workbook is a command
+  (`open`, `agent_edit`, `person_edit`, `revert`) with who, a line in cells, and the version just before it; the person's typing is
+  one command per run; revert goes back to before command n (a new change, itself logged); `office.command` events through
+  `emitEvent()`; the agent reads and reverts with `office_history`; the person's routes `GET /commands`, `POST /commands/revert`.
+  Built as an adapter over the desk's versions (whole-file snapshots), not a cell-level inverse: reverting to before n also undoes
+  everything after n. No command is the person's alone in Sheets (productivity work), so the agent may revert any. Not done: a
+  history list in the Sheets window (the routes exist; the window already lists versions), Slides and Pages (the same log with
+  `logged()` widened in `officedesk.ts`), per-cell inverses.
+
 ## Left to do (as of 0.9.341, in the order to take it)
 
-1. **P6 rest:** report the pick from PDF (selected text/region), Photo (layer/selection) and Video (selected clip), the same way, with the
+1. **P6 rest (PDF, Photo, Video pick: done in 0.9.342; remaining: the Office browser test and presence-based proactivity).** Was: report the pick from PDF (selected text/region), Photo (layer/selection) and Video (selected clip), the same way, with the
    briefing line and a handbook sentence each. Add a browser test for the Office shim-to-server pick path. Then the wider P6 idea:
    proactivity from "what the person seems to be doing" (the presence/companion code), not only what is picked.
 2. **Command layers (P4's unfinished half)**, one editor at a time against its own API, each with authority (agent/person), a log with
-   before/after, revert, and `cad.command`-style events: Sheets first, then Slides, Pages (its step log exists in Panacea's
+   before/after, revert, and `cad.command`-style events: Sheets is done (0.9.343); next Slides, Pages (its step log exists in Panacea's
    `doclog.ts`, not in the hosted Pages editor), PDF, Photo, Music, Video, Games. `server/desks.ts` should gain PDF, Office and Video when their state fits.
 3. **P5, cross-window entities** (a chart in a sheet shown on a slide, a photo used in a page): needs step 2 for at least Sheets and Slides.
 4. **Games has no agent hand** (a shared page-side client touching each fork's overlay); Games' fading bar is typechecked but not driven in a browser.

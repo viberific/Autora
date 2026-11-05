@@ -129,6 +129,7 @@ export async function runOfficeTool(name: string, args: Record<string, any>, ctx
       case "office_open": return await openTool(args, ctx);
       case "office_create": return await createTool(args, ctx);
       case "office_convert": return await convertTool(args, ctx);
+      case "office_history": return historyTool(args, ctx);
       default: return { ok: false, summary: `There is no Office tool called ${name}.` };
     }
   } catch (err) {
@@ -137,6 +138,28 @@ export async function runOfficeTool(name: string, args: Record<string, any>, ctx
     }
     return { ok: false, summary: `${name} failed: ${String((err as Error)?.message ?? err).split("\n")[0]}` };
   }
+}
+
+// ----------------------------------------------------------- the log --
+
+/** The workbook's command log: who changed what, and going back to before a command (server/commandlog.ts). Sheets only. */
+function historyTool(args: Record<string, any>, ctx: OfficeContext): OfficeOutcome {
+  if (!ctx.win) return { ok: false, summary: "There is no Sheets window in this chat to keep a log for." };
+  if (ctx.off?.includes("xlsx")) return { ok: false, summary: "Autora Sheets is switched off on the Tools page." };
+  const action = String(args.action ?? "log");
+  if (action === "log") {
+    const since = Number(args.since_revision);
+    return { ok: true, summary: ctx.win.commandLog(Number.isFinite(since) && since > 0 ? since : 0), preview: "history log" };
+  }
+  if (action === "revert") {
+    const n = Number(args.n);
+    if (!Number.isInteger(n)) return { ok: false, summary: "revert needs n, a command number from the log." };
+    const problem = ctx.win.revert(n);
+    return problem
+      ? { ok: false, summary: problem }
+      : { ok: true, summary: `The workbook is back to just before command ${n}. That is a new change on top, so it can be taken back; office_history log shows it as a revert.`, preview: `revert ${n}` };
+  }
+  return { ok: false, summary: "action is log or revert." };
 }
 
 // ------------------------------------------------------------- running --

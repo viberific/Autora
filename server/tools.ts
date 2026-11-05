@@ -3763,6 +3763,7 @@ async function runToolUnredacted(
       case "office_pdf":
       case "office_create":
       case "office_convert":
+      case "office_history":
         return await runOfficeTool(spec.name, args, {
           session: ctx.session,
           cwd: terminalDir(),

@@ -301,6 +301,8 @@ export function looksOnly(name: string, args: Record<string, any> = {}): boolean
   // Reading, checking and the guide look; an edit that is only a dry run looks too.
   if (name === "office_read" || name === "office_check" || name === "office_guide" || name === "office_look" || name === "office_open") return true;
   if (name === "office_edit") return args.dry_run === true;
+  // The log is looking; going back to before a command changes the workbook.
+  if (name === "office_history") return String(args.action ?? "log") === "log";
   // Reading the video project is looking; opening one on the window does not change it, starting a new one does.
   if (name === "video_look" || name === "video_catalog" || name === "video_frame") return true;
   if (name === "video_ui") return String(args.action ?? "") === "read";

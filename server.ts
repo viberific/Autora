@@ -174,7 +174,7 @@ import { studioRoutes, studioState, studioTurnNote, studioVisible } from "./serv
 import { appOfArtifact, appOfFile, appOfTool } from "./src/lib/panacea/flows";
 import { dropPanacea, noteFlow, onPanaceaChange, onPanaceaTouch, panaceaRoutes, panaceaState, panaceaSuggester, panaceaTurnNote, panaceaVisible } from "./server/panacea";
 import { joinProjects, windowOff } from "./server/tools";
-import { dropOfficeDesk, onOfficeChange, onOfficePush, onOfficeTouch, officeBriefing, officeData, officeRoutes, officeState, officeHooks, serveOfficeEditors } from "./server/officedesk";
+import { dropOfficeDesk, onOfficeChange, onOfficePush, onOfficeTouch, officeBriefing, officeData, officeRoutes, onOfficeCommand, officeState, officeHooks, serveOfficeEditors } from "./server/officedesk";
 import { renderToPdf, webDir as officeWebDir } from "./server/officerender";
 import {
   type ReviewComment,
@@ -1300,6 +1300,12 @@ onOpencutChange((sessionId) => {
 onCadCommand((sessionId, cmd) => {
   const session = sessions.get(sessionId);
   if (session) emitEvent(session, "cad.command", cmd.who, { ...cmd });
+});
+
+/* Every command made on a chat's workbook (Sheets), by the agent or the person, is an event too (server/commandlog.ts). */
+onOfficeCommand((sessionId, cmd) => {
+  const session = sessions.get(sessionId);
+  if (session) emitEvent(session, "office.command", cmd.who, { ...cmd });
 });
 
 /* Music, 3D, Games and Photo (server/desks.ts): the window opens, and its state changes (by the agent's tools or the person's hands). */

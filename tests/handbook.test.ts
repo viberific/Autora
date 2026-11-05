@@ -155,6 +155,13 @@ await test("the 3D manual teaches the command log: who did what, history_log sin
   }
 });
 
+await test("the Office manual teaches the workbook's command log: who did what, office_history, revert, no person-only commands", () => {
+  const text = manualText("office");
+  for (const needle of ["Who did what in a workbook", "office_history", "since_revision", "just before command n", "shows in the log as a revert", "no commands that are the person's alone"]) {
+    assert.ok(text.includes(needle), needle);
+  }
+});
+
 await test("the Office manual says what the person has picked reaches the briefing, so \"this\" means it", () => {
   const text = manualText("office");
   for (const needle of ["is in your briefing for about two minutes", "they mean that, so act on it without asking which"]) {
