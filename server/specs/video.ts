@@ -189,6 +189,25 @@ export const videoSPECS: ToolSpec[] = [
     },
   },
   {
+    name: "video_history",
+    group: "files",
+    risky: true,
+    description:
+      "The log of changes to the video project in the Video window: every change is a command with who made it (you, or the person cutting in the editor) and a line saying what. " +
+      "action \"log\" reads it, the person's changes since you last looked included; since_revision (the revision you last saw) shows only what came after, so you learn what the person " +
+      "changed while you were not looking instead of guessing from the timeline. action \"revert\" with n takes the timeline back to just before command n (everything after it too), using the " +
+      "editor's own undo until the timeline is the one from before it; it changes nothing if the editor's history does not reach that timeline. A revert is a new change and can be taken back. " +
+      "The cut is the person's: you can take back only your own changes. A revert is refused if command n, or any after it, is the person's own; then say what you would change and let them undo it.",
+    parameters: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["log", "revert"], description: "log (default) or revert." },
+        since_revision: { type: "number", description: "log: only commands made after this revision." },
+        n: { type: "number", description: "revert: the command number to go back to before." },
+      },
+    },
+  },
+  {
     name: "video_ui",
     group: "files",
     risky: true,

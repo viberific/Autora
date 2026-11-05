@@ -3701,6 +3701,7 @@ async function runToolUnredacted(
       case "video_edit":
       case "video_style":
       case "video_project":
+      case "video_history":
       case "video_ui":
       case "video_catalog":
       case "video_frame":

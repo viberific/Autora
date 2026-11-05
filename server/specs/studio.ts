@@ -110,6 +110,7 @@ export const studioSPECS: ToolSpec[] = [
   {
     name: "studio_history",
     group: "files",
+    risky: true,
     description:
       "The log of changes to the song in the Music window: every change is a command with who made it (you, or the person working in the window) and a line saying what. " +
       "action \"log\" reads it; since_revision (the revision you last saw) shows only what came after, so you learn what the person changed while you were not looking instead of " +

@@ -212,6 +212,12 @@ const VIDEO = [
   "  Saving. The project is saved as you go; the window's top bar (Autora Video, the project's name) also has Save, which writes the project now. Projects are the person's across chats, so Save keeps nothing in Artifacts; the video file comes from Export.",
   "  The clips the person has picked on the timeline are in your briefing for about two minutes after (their type and name): when they say " +
     "\"this clip\" or \"these\", they mean those, so act on them without asking which.",
+  "  Who did what in the video. Every change to the timeline is a command in a log, with who made it (you, or the person cutting in the editor) and a line saying what. " +
+    "video_history reads it, and the person's changes since you last looked are in it: call it with since_revision (the revision you last saw) to learn what they cut while you were not looking, " +
+    "instead of guessing from the timeline. video_history with action revert and n takes the timeline back to just before command n (and everything after it), using the editor's own undo until " +
+    "the timeline is the one from before it; if the editor's history does not reach it (it was reloaded) nothing changes and you are told. A revert is a new change and can be taken back (revert it, or redo). " +
+    "The cut is the person's: you may take back only your own changes, and you are refused when command n, or any after it, is theirs; say what you would change and let them undo it. " +
+    "The timeline from before a command is kept for the last 30 commands, and not across a restart.",
 ].join("\n");
 
 const STUDIO = [

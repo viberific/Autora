@@ -162,7 +162,7 @@ import { triggerRoutes } from "./server/routes/triggers";
 import { ratingRoutes } from "./server/rating";
 import { jobRoutes } from "./server/routes/jobs";
 import { keyRoutes } from "./server/routes/keys";
-import { dropOpencut, onOpencutChange, opencutRoutes, opencutState, serveOpencut, videoBriefing } from "./server/opencut";
+import { dropOpencut, onOpencutChange, onVideoCommand, opencutRoutes, opencutState, serveOpencut, videoBriefing } from "./server/opencut";
 import { dropSpectra, serveSpectra, spectraDocumentChanged, spectraRoutes, spectraUpgrade } from "./server/spectra";
 import { newFileRoutes } from "./server/newfile";
 import { loadFileRoutes, loadPanaceaFile, type FileLoadGuards } from "./server/loadfile";
@@ -1306,6 +1306,12 @@ onCadCommand((sessionId, cmd) => {
 onOfficeCommand((sessionId, cmd) => {
   const session = sessions.get(sessionId);
   if (session) emitEvent(session, "office.command", cmd.who, { ...cmd });
+});
+
+/* And every command made on a chat's video project (server/commandlog.ts). */
+onVideoCommand((sessionId, cmd) => {
+  const session = sessions.get(sessionId);
+  if (session) emitEvent(session, "video.command", cmd.who, { ...cmd });
 });
 
 /* And every command made on a chat's song (server/commandlog.ts). */

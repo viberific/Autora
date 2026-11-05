@@ -206,8 +206,8 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  The Music window now keeps a log of every change to your song: what you
-  changed and what the assistant did, each in a line. The assistant can read it
-  to see what you changed while it was away. Music is yours, so the assistant can
-  take back only its own changes, never yours; you can go back to before any
-  change. Going back is itself a change you can take back.
+  The Video window now keeps a log of every change to your project: what you cut
+  and what the assistant did, each in a line about the clips. The assistant can
+  read it to see what you changed while it was away. The cut is yours, so the
+  assistant can take back only its own changes, never yours; you can go back to
+  before any change. Going back is itself a change you can take back.

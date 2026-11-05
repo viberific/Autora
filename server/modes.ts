@@ -307,6 +307,8 @@ export function looksOnly(name: string, args: Record<string, any> = {}): boolean
   if (name === "office_history") return String(args.action ?? "log") === "log";
   // Reading the video project is looking; opening one on the window does not change it, starting a new one does.
   if (name === "video_look" || name === "video_catalog" || name === "video_frame") return true;
+  // The log is looking; going back to before a command changes the timeline.
+  if (name === "video_history") return String(args.action ?? "log") === "log";
   if (name === "video_ui") return String(args.action ?? "") === "read";
   if (name === "video_open") return !String(args.new ?? "").trim();
   // Looking at the picture is looking; opening one on the window does not change it, starting a new one or loading a file does.

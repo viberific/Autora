@@ -29,7 +29,9 @@ import { artifactPath, getArtifact, MAX_ARTIFACT_BYTES, saveArtifact } from "./a
 import type { ChatImage } from "./llm";
 import { VIDEO_CLIP, isVideoBind, videoCommands, type VideoState } from "../src/lib/panacea/apps/video";
 import type { Value } from "../src/lib/panacea/atoms";
+import { addCommand, logText, type OfficeCommand } from "./commandlog";
 import { pickText, rememberPick, type Pick as PickedWords } from "./picked";
+import { describeVideoChange, fingerprint, type LogSnap } from "./videolog";
 import { stateDir } from "./state";
 import { staticDir } from "./staticfiles";
 import { createHandshake } from "./handshake";
@@ -258,6 +260,157 @@ export async function command(session: string, name: string, args: Record<string
   return out.value;
 }
 
+
+// ------------------------------------------------------- the command log --
+
+/*
+ * The editor owns the project (its own undo stack included); the server sees the timeline the editor reports after each step.
+ * So the log is built on those timelines: an agent step that changed the timeline is a command by the agent, and a timeline
+ * that differs from the last one seen, with no agent step in between, is the person's. Going back to before a command is
+ * done by the editor's own undo, until the timeline is the one saved from before it (docs/ENGINE-SURVEY.md, adapter).
+ */
+
+type VideoLog = { log: OfficeCommand[]; lseq: number; before: Map<number, LogSnap>; last: LogSnap | null };
+const vlogs = new Map<string, VideoLog>();
+const vlog = (session: string): VideoLog => {
+  let v = vlogs.get(session);
+  if (!v) vlogs.set(session, (v = { log: [], lseq: 0, before: new Map(), last: null }));
+  return v;
+};
+const isLogSnap = (v: unknown): v is LogSnap => isSnapshot(v) && typeof (v as LogSnap).project?.id === "string";
+
+const videoListeners = new Set<(session: string, entry: OfficeCommand) => void>();
+/** Told of every command made on a chat's video project (the agent's, the person's, a revert), for the event log. */
+export function onVideoCommand(fn: (session: string, entry: OfficeCommand) => void) {
+  videoListeners.add(fn);
+}
+
+const KEPT_BEFORE = 30;
+/** The person's changes seen within this long of their last are one command: dragging a clip is many steps. */
+const RUN_MS = 30_000;
+
+function addVideoCommand(session: string, v: VideoLog, who: "agent" | "person", name: OfficeCommand["name"], summary: string, prior: LogSnap) {
+  const entry = addCommand(v.log, ++v.lseq, { who, name, at: Date.now(), rev: v.lseq, before: v.lseq, summary });
+  v.before.set(entry.n, prior);
+  while (v.before.size > KEPT_BEFORE) v.before.delete(v.before.keys().next().value as number);
+  for (const fn of videoListeners) fn(session, entry);
+}
+
+/** A timeline the editor reported: if it is not the one last seen, the person changed it in between. */
+function notice(session: string, snap: LogSnap) {
+  const v = vlog(session);
+  if (v.last && v.last.project.id !== snap.project.id) {
+    // Another project: its changes are its own log.
+    v.log.length = 0;
+    v.before.clear();
+    v.last = snap;
+    return;
+  }
+  if (v.last && fingerprint(v.last) !== fingerprint(snap)) {
+    const last = v.log[v.log.length - 1];
+    const start = last && last.who === "person" && last.name === "person_edit" && Date.now() - last.at < RUN_MS ? v.before.get(last.n) : undefined;
+    if (last && start) {
+      // The same run of the person's editing: one command, said again from where it began.
+      const lines = describeVideoChange(start, snap);
+      last.summary = (lines.join("; ") || "changed the timeline").slice(0, 400);
+      last.at = Date.now();
+      for (const fn of videoListeners) fn(session, last);
+    } else {
+      addVideoCommand(session, v, "person", "person_edit", describeVideoChange(v.last, snap).join("; ") || "changed the timeline", v.last);
+    }
+  }
+  v.last = snap;
+}
+
+/** The timeline as the editor has it now, or null when there is no editor to ask. */
+async function rawState(session: string): Promise<LogSnap | null> {
+  try {
+    const out = await command(session, "state");
+    return isLogSnap(out) ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Run an editor step for the agent; if it changed the timeline, it is a command by the agent. */
+async function loggedCommand(session: string, name: string, payload: Record<string, unknown>, timeoutMs: number, said: string): Promise<unknown> {
+  const before = await rawState(session);
+  if (before) notice(session, before);
+  const result = await command(session, name, payload, timeoutMs);
+  const viaControls = name.startsWith("ui_") && name !== "ui_read";
+  const after = isLogSnap(result) ? result : viaControls ? await rawState(session) : null;
+  if (before && after && before.project.id === after.project.id) {
+    const v = vlog(session);
+    if (fingerprint(before) !== fingerprint(after)) addVideoCommand(session, v, "agent", "agent_edit", describeVideoChange(before, after).join("; ") || said, before);
+    v.last = after;
+  }
+  return result;
+}
+
+/** The commands made on a chat's video project, oldest first. */
+export function videoLogOf(session: string): OfficeCommand[] {
+  return [...vlog(session).log];
+}
+
+/** The log as the agent reads it: the person's changes since the agent last looked are in it first. */
+async function videoLogText(session: string, sinceRev: number): Promise<string> {
+  const now = await rawState(session);
+  if (now) notice(session, now);
+  return logText(vlog(session).log, sinceRev, "video project");
+}
+
+const MAX_UNDO_STEPS = 60;
+
+/**
+ * Go back to just before command n, by the editor's own undo, until the timeline is the one kept from before it. The
+ * person may go back to before any command; the agent only to before one of its own with none of the person's after it
+ * (the cut is the person's). A revert is a new change and can itself be taken back (by redo). Null when done, else why not.
+ */
+async function revertVideoCommand(session: string, n: number, who: "agent" | "person"): Promise<string | null> {
+  const v = vlog(session);
+  const cmd = v.log.find((c) => c.n === n);
+  if (!cmd) return "That command is not in the log.";
+  if (who === "agent" && v.log.some((c) => c.n >= n && c.who === "person")) {
+    return "That command, or one after it, is the person's own cutting: you do not take it back. Say what you would change and let them undo it in the editor, or ask them.";
+  }
+  const target = v.before.get(n);
+  if (!target) return "The timeline from before that command is no longer kept (only the last 30 are, and none survive a restart).";
+  const now = await rawState(session);
+  if (!now) return "The video editor is not open, so there is nothing to go back in. Open it with video_open.";
+  notice(session, now);
+  if (now.project.id !== target.project.id) return "That command was made on another project; open it to go back there.";
+  const goal = fingerprint(target);
+  if (fingerprint(now) === goal) return "The timeline is already as it was before that command.";
+  // Taking back a revert goes the other way, by redo.
+  const way = cmd.name === "revert" ? "redo" : "undo";
+  let seen = fingerprint(now);
+  let steps = 0;
+  let reached = false;
+  while (steps < MAX_UNDO_STEPS) {
+    const out = await command(session, way);
+    if (!isLogSnap(out)) break;
+    const fp = fingerprint(out);
+    if (fp === seen) break;
+    steps++;
+    seen = fp;
+    if (fp === goal) { reached = true; break; }
+  }
+  if (!reached) {
+    // The editor's history does not pass through that timeline: put back what was moved.
+    const back = way === "undo" ? "redo" : "undo";
+    for (let i = 0; i < steps; i++) await command(session, back);
+    const restored = await rawState(session);
+    if (restored) vlog(session).last = restored;
+    return `The editor's ${way} history does not reach the timeline from before that command (it was reloaded, or changed some other way), so nothing was changed.`;
+  }
+  const done = await rawState(session);
+  if (done) {
+    addVideoCommand(session, v, who, "revert", `went back to before command ${n} (${cmd.summary.slice(0, 80)})`, now);
+    v.last = done;
+  }
+  return null;
+}
+
 /** One-use links the window fetches a file to import from, so the bytes come through the app's own routes. */
 const sources = new Map<string, { file: string; name: string; mime: string; session: string; until: number }>();
 
@@ -418,6 +571,25 @@ export function opencutRoutes(app: Express, opts: OpencutOptions): void {
     res.json({ ok: true });
   });
 
+  // The log of what was done to the video project, by whom (commandlog.ts); and the person going back to before any command.
+  app.get("/api/opencut/commands", async (req: Request, res: Response) => {
+    const session = known(req, res);
+    if (!session) return;
+    const now = await rawState(session);
+    if (now) notice(session, now);
+    res.json({ commands: videoLogOf(session) });
+  });
+
+  app.post("/api/opencut/commands/revert", async (req: Request, res: Response) => {
+    const session = known(req, res);
+    if (!session) return;
+    const n = Number(req.body?.n);
+    if (!Number.isInteger(n)) return res.status(400).json({ error: "n must be a command number from the log." });
+    const problem = await revertVideoCommand(session, n, "person");
+    if (problem) return res.status(404).json({ error: problem });
+    res.json({ ok: true });
+  });
+
   app.post("/api/opencut/state", (req: Request, res: Response) => {
     const session = known(req, res);
     if (!session) return;
@@ -531,6 +703,7 @@ export function serveOpencut(app: Express, dist: string): void {
 /** The chat was deleted: nothing of the window is kept for it. */
 export function dropOpencut(session: string): void {
   lastSnapshot.delete(session);
+  vlogs.delete(session);
   hs.cancelAll(session, "The chat was closed.");
   loadWins();
   if (wins.delete(session)) saveWins();
@@ -708,6 +881,7 @@ export async function runVideoTool(name: string, args: Record<string, any>, ctx:
 
       case "video_look": {
         const snap = (await command(ctx.session, "state")) as Snapshot;
+        if (isLogSnap(snap)) notice(ctx.session, snap);
         const others = listProjects().filter((p) => p.id !== snap.project.id).slice(0, 8);
         return {
           ok: true,
@@ -753,8 +927,25 @@ export async function runVideoTool(name: string, args: Record<string, any>, ctx:
         for (const [k, v] of Object.entries(args)) if (k !== "action" && v !== undefined && v !== null) payload[k] = v;
         if (action === "delete" && typeof args.elementId === "string") payload.elementIds = [args.elementId];
         // `set` is a change to a clip's own properties; the editor calls it set_params.
-        const result = await command(ctx.session, action === "set" ? "set_params" : action, payload, action === "paste" ? 30_000 : 60_000);
+        const result = await loggedCommand(ctx.session, action === "set" ? "set_params" : action, payload, action === "paste" ? 30_000 : 60_000, action.replace(/_/g, " "));
         return { ok: true, summary: `Done (${action}).\n${said(result)}`, preview: action };
+      }
+
+      case "video_history": {
+        const action = String(args.action ?? "log");
+        if (action === "log") {
+          const since = Number(args.since_revision);
+          return { ok: true, summary: await videoLogText(ctx.session, Number.isFinite(since) && since > 0 ? since : 0), preview: "history log" };
+        }
+        if (action === "revert") {
+          const n = Number(args.n);
+          if (!Number.isInteger(n)) return { ok: false, summary: "revert needs n, a command number from the log." };
+          const problem = await revertVideoCommand(ctx.session, n, "agent");
+          return problem
+            ? { ok: false, summary: problem }
+            : { ok: true, summary: `The timeline is back to just before command ${n}. That is a new change on top, so it can be taken back (video_history revert of that revert, or redo); video_history log shows it as a revert.`, preview: `revert ${n}` };
+        }
+        return { ok: false, summary: "action is log or revert." };
       }
 
       case "video_ui": {
@@ -762,7 +953,7 @@ export async function runVideoTool(name: string, args: Record<string, any>, ctx:
         if (!(UI_ACTIONS as readonly string[]).includes(action)) return { ok: false, summary: `action is one of: ${UI_ACTIONS.join(", ")}.` };
         const payload: Record<string, unknown> = {};
         for (const [k, v] of Object.entries(args)) if (k !== "action" && v !== undefined && v !== null) payload[k] = v;
-        const result = await command(ctx.session, `ui_${action}`, payload, 60_000);
+        const result = await loggedCommand(ctx.session, `ui_${action}`, payload, 60_000, `used the editor's controls (${action})`);
         return { ok: true, summary: action === "read" || action === "click" ? controls(result) : `Done (${action}).${result && typeof result === "object" && Object.keys(result).length ? `\n${said(result)}` : ""}`, preview: `${action}${args.label ? ` ${String(args.label).slice(0, 30)}` : args.ref !== undefined ? ` [${args.ref}]` : ""}` };
       }
 
