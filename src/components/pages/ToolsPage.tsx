@@ -8,104 +8,90 @@ type ToolsState = {
   groups: { group: string; available: boolean; enabled: boolean; detail: string }[];
 };
 
-const WINDOWS: { key: WindowKey; name: string; icon: ReactNode; what: string; tools: string }[] = [
+const WINDOWS: { key: WindowKey; name: string; icon: ReactNode; what: string }[] = [
   {
     key: "widgets",
     name: "Explainers",
     icon: <IconSparkle size={18} />,
     what: "Interactive explainers built in the thread: a mechanism you can turn, a graph you can drag.",
-    tools: "widget_show",
   },
   {
     key: "browser",
     name: "Web",
     icon: <IconGlobe size={18} />,
     what: "A real Chromium the agent drives. Watch it, or take over.",
-    tools: "browser_*",
   },
   {
     key: "app",
     name: "Apps & code",
     icon: <IconCode size={18} />,
     what: "Websites and apps the agent builds, live beside the chat to click through, comment on and review.",
-    tools: "app_preview",
   },
   {
     key: "pdf",
     name: "PDF",
     icon: <IconFile size={18} />,
     what: "Write, read, fill, sign, mark up, edit, redact, merge, split and shrink PDFs, beside the chat. Move what the agent placed and add your own.",
-    tools: "pdf_read, pdf_look, pdf_edit, pdf_compose, pdf_pages, pdf_redact, pdf_replace_text, pdf_compress, pdf_history",
   },
   {
     key: "video",
     name: "Video",
     icon: <IconVideo size={18} />,
     what: "Video in OpenCut's editor. The agent imports footage and builds the cut (trims, splits, titles, subtitles) while you watch the timeline. Take over any time.",
-    tools: "video_open, video_look, video_import, video_edit, video_style, video_project, video_ui, video_catalog, video_frame, video_export, video_history",
   },
   {
     key: "studio",
     name: "Music",
     icon: <IconMusic size={18} />,
     what: "Music beside the chat: instruments, drums, piano roll, mixer and WAV export. Ask for chords, a bass line or a beat, or write the tune yourself and have the agent fix timing and balance. The music stays yours.",
-    tools: "studio_open, studio_look, studio_song, studio_track, studio_clip, studio_notes, studio_make, studio_play, studio_export, studio_history",
   },
   {
     key: "panacea",
     name: "Canvas",
     icon: <IconSparkle size={18} />,
     what: "A blank canvas where the controls come to the work: drop a photo or a table, or say what you want to do, and the sliders, charts and switches for it appear, and go when you move on. You and the agent both use them.",
-    tools: "panacea_open, panacea_look, panacea_surface, panacea_place, panacea_set, panacea_arrange, panacea_bespoke, panacea_doc, panacea_export",
   },
   {
     key: "pages",
     name: "Documents",
     icon: <IconFile size={18} />,
     what: "Word documents (.docx) the agent writes, edits and converts. They open beside the chat, and you can type in them too (on a phone, as page pictures you can point at).",
-    tools: "office_* on .docx files",
   },
   {
     key: "sheets",
     name: "Spreadsheets",
     icon: <IconTable size={18} />,
     what: "Spreadsheets (.xlsx) with tables, formulas and charts the agent builds. Edit the cells yourself beside the chat.",
-    tools: "office_* on .xlsx files",
   },
   {
     key: "slides",
     name: "Presentations",
     icon: <IconSlides size={18} />,
     what: "Presentations (.pptx) the agent designs and edits. Change any slide yourself beside the chat.",
-    tools: "office_* on .pptx files",
   },
   {
     key: "terminal",
     name: "Shell commands",
     icon: <IconTerminal size={18} />,
     what: "Non-interactive commands run in the background and keep their streaming output, status and duration in collapsible chat cards. No separate terminal or shared interactive shell.",
-    tools: "terminal, run_background",
   },
   {
     key: "cad",
     name: "3D",
     icon: <IconCube size={18} />,
     what: "3D models built from simple shapes. The agent sketches, extrudes, bevels and cuts, and checks they will print; you push and pull the same model by hand. Exports STL and GLB.",
-    tools: "cad_*",
   },
   {
     key: "game",
     name: "Games",
     icon: <IconGame size={18} />,
     what: "Games in GDevelop's editor beside the chat. The agent does the technical work (wiring, physics, events); the idea, story, look and feel stay yours, and you can change anything by hand. GDevelop's own AI and online services are not included.",
-    tools: "game_*",
   },
   {
     key: "photo",
     name: "Images",
     icon: <IconImage size={18} />,
     what: "Photos in PhotoCraft's editor beside the chat: layers, masks, filters, type, brushes and real PSD files. The agent does the technical work (cut-outs, resizing, retouching, exports); the look and mood stay yours, and you can paint by hand.",
-    tools: "photo_*",
   },
 ];
 
@@ -186,7 +172,6 @@ export function ToolsPage() {
                   </div>
                   <p className="jf-hint">{w.what}</p>
                   {trouble && <p className="set-warn">{trouble}</p>}
-                  <p className="tool-names"><code>{w.tools}</code></p>
                 </section>
               );
             })}

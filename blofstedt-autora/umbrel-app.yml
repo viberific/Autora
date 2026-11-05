@@ -206,7 +206,8 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Fixed the "What do you want to do?" message that was drawn on top of the Music,
-  3D and other windows, covering your clips and panels. It now shows only on a
-  truly empty canvas. The assistant's history and game-testing tools also show a
-  plain description while they run, and are listed on the Tools page.
+  A blank canvas is now just blank: the "What do you want to do?" message is gone,
+  so nothing is drawn over your Music, 3D or other windows, and controls appear
+  only when your work needs them. The Tools page no longer lists internal tool
+  names. The assistant's history and game-testing tools also show a plain
+  description while they run.

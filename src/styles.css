@@ -8184,9 +8184,6 @@ body.is-resizing iframe { pointer-events: none; }
 .pa-summon-list button.is-on { background: var(--s3); }
 .pa-summon .pa-note { padding: 8px; }
 
-.pa-empty { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; max-width: 420px; padding: 0 16px; animation: paArrive var(--dur-3) var(--ease) both; }
-.pa-empty h3 { margin: 0 0 8px; font-size: var(--fs-4xl); font-weight: 600; letter-spacing: -0.02em; color: var(--text); }
-.pa-empty p { margin: 0; font-size: var(--fs-md); line-height: 1.5; color: var(--text-3); }
 .pa-dock { position: absolute; left: 12px; right: 12px; bottom: 12px; display: flex; align-items: flex-end; gap: 10px; pointer-events: none; }
 .pa-dock > * { pointer-events: auto; }
 .pa-dock { transition: opacity var(--dur-2) var(--ease), transform var(--dur-2) var(--ease); }
@@ -8219,7 +8216,7 @@ body.is-resizing iframe { pointer-events: none; }
 .pa-selbar button:hover { background: var(--s4); }
 .pa-toast { position: absolute; top: 12px; right: 12px; padding: 8px 14px; background: var(--s2); border: 1px solid var(--border-strong); border-radius: var(--r-pill); box-shadow: var(--shadow); font-size: var(--fs-sm); color: var(--text); animation: paArrive var(--dur-2) var(--ease) both; }
 @media (prefers-reduced-motion: reduce) {
-  .pa-panel, .pa-surface, .pa-summon, .pa-empty { animation: none; }
+  .pa-panel, .pa-surface, .pa-summon { animation: none; }
 }
 
 /* ==========================================================================

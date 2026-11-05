@@ -720,7 +720,6 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
     if (box) requestAnimationFrame(() => board.current?.frame(box, true));
   }, [phaseNow, live]);
 
-  const empty = !canvas.surfaces.length && !canvas.panels.length;
   const note = doc.notice ?? problem;
   const selectionGrouped = selected.size > 1 && (() => { const ids = [...selected]; const g = canvas.panels.find((p) => p.id === ids[0])?.group; return !!g && ids.every((id) => canvas.panels.find((p) => p.id === id)?.group === g); })();
 
@@ -776,12 +775,6 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
           navigationHost={navigationHost}
         >
           {canvas.project && <ProjectStrip project={canvas.project} onChange={changeProject} onPhase={goPhase} />}
-          {empty && hosted.length === 0 && doc.ready && !canvas.project && (
-            <div className="pa-empty pa-chrome">
-              <h3>What do you want to do?</h3>
-              <p>Use the centered Ask Autora bar, or drop a file here. Double-click anywhere for a piece of your own.</p>
-            </div>
-          )}
           {selected.size > 1 && (
             <div className="pa-selbar pa-chrome" role="toolbar" aria-label="Picked panels">
               <span>{selected.size} picked</span>

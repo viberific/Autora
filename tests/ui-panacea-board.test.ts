@@ -49,7 +49,7 @@ async function main() {
 
     await test("the picker offers a board, and it lands with its panel, asking for a first card", async () => {
       assert.equal((await app.api("POST", `/api/panacea/${s}/open`)).status, 200);
-      await page.waitForSelector(".pa-empty");
+      await page.waitForSelector(".pa-board");
       await workspaceReady(page);
       await page.getByRole("button", { name: "Retract conversation", exact: true }).click();
       const box = (await page.locator(".pa-board").boundingBox())!;

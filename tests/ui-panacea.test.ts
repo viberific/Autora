@@ -69,14 +69,14 @@ async function main() {
       throw new Error(`timed out: ${what}`);
     };
 
-    await test("opening it puts a blank dotted canvas beside the chat that asks what you want to do", async () => {
+    await test("opening it puts a blank dotted canvas beside the chat with nothing on it: no instructions, no controls", async () => {
       assert.equal((await app.api("POST", `/api/panacea/${s}/open`)).status, 200);
       await page.waitForSelector('.panacea-workspace .pa-window');
-      await page.waitForSelector(".pa-empty");
+      await page.waitForSelector(".pa-board");
       await workspaceReady(page);
       await page.getByRole("button", { name: "Retract conversation", exact: true }).click();
-      assert.match(await page.locator(".pa-empty h3").innerText(), /What do you want to do/);
       assert.equal(await page.locator(".pa-panel").count(), 0, "nothing on it until the work needs it");
+      assert.equal(await page.locator(".pa-window").getByText("What do you want to do").count(), 0, "and no standing instructions");
       await shot("1-empty");
     });
 
@@ -95,7 +95,6 @@ async function main() {
       const recipes = d.panels.map((p: { recipe: string }) => p.recipe).sort();
       assert.ok(recipes.includes("data.line") && recipes.includes("data.filter-category"), recipes.join(","));
       assert.ok(d.panels.some((p: { state: string }) => p.state === "ghost"), "one more is offered as a ghost");
-      assert.equal(await page.locator(".pa-empty").count(), 0);
       await shot("2-table");
     });
 
