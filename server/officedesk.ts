@@ -628,12 +628,10 @@ export function onOfficeCommand(fn: (session: string, entry: OfficeCommand) => v
   commandListeners.push(fn);
 }
 
-/** Sheets and Slides have a command log; Pages follows (intent/2026-11-04-one-adaptive-engine.md). */
-const logged = (desk: Desk) => desk.kind === "xlsx" || desk.kind === "pptx";
+/** Sheets, Slides and Pages all have a command log (commandlog.ts); a document's is a file diff, as the others are. */
 const NOUN: Record<OfficeKind, string> = { xlsx: "workbook", pptx: "deck", docx: "document" };
 
 function record(key: DeskKey, desk: Desk, cmd: Omit<OfficeCommand, "n" | "rev">, run?: OfficeCommand | null) {
-  if (!logged(desk)) return;
   desk.log ??= [];
   if (run) {
     // The same run of the person's typing: one command, said again from where it began.
@@ -648,9 +646,9 @@ function record(key: DeskKey, desk: Desk, cmd: Omit<OfficeCommand, "n" | "rev">,
   for (const fn of commandListeners) fn(sessionOf(key), entry);
 }
 
-/** Which logged window the agent means when it names none: a workbook if one is open, else a deck. */
+/** Which window the agent means when it names none: a workbook if one is open, else a deck, else a document. */
 function logKind(session: string): OfficeKind {
-  return load(keyOf(session, "xlsx"))?.open ? "xlsx" : load(keyOf(session, "pptx"))?.open ? "pptx" : "xlsx";
+  return (["xlsx", "pptx", "docx"] as const).find((k) => load(keyOf(session, k))?.open) ?? "xlsx";
 }
 
 /** The commands made on a chat's workbook or deck, oldest first; empty when there is none. */
@@ -662,7 +660,7 @@ export function officeCommands(session: string, kind: OfficeKind = "xlsx"): Offi
 function revertOfficeCommand(session: string, n: number, who: "agent" | "person", kind: OfficeKind = "xlsx"): string | null {
   const key = keyOf(session, kind);
   const desk = load(key);
-  if (!desk || !logged(desk)) return `There is no ${NOUN[kind]} open in the window.`;
+  if (!desk) return `There is no ${NOUN[kind]} open in the window.`;
   const cmd = desk.log?.find((c) => c.n === n);
   if (!cmd) return "That command is not in the log.";
   if (cmd.before === null) return `That command made the ${NOUN[kind]}; there is nothing before it to go back to.`;
@@ -956,9 +954,9 @@ export interface OfficeHooks {
   show(kind?: OfficeKind): void;
   /** What the person did in a window since the agent was last told, said once; "" when nothing. */
   news(kind?: OfficeKind): string;
-  /** Sheets and Slides: the log of changes to the workbook or deck in the window, as the agent reads it (commandlog.ts). */
+  /** Sheets, Slides and Pages: the log of changes to the workbook, deck or document in the window, as the agent reads it (commandlog.ts). */
   commandLog(sinceRev?: number, kind?: OfficeKind): string;
-  /** Sheets and Slides: the workbook or deck goes back to just before command n. Null when done, else why not. */
+  /** Sheets, Slides and Pages: the workbook, deck or document goes back to just before command n. Null when done, else why not. */
   revert(n: number, kind?: OfficeKind): string | null;
 }
 
@@ -1134,7 +1132,7 @@ function personSaved(session: DeskKey, data: Buffer): string | null {
   if (handingKeys.has(session) || Date.now() < (desk.quietUntil ?? 0)) return null;
   if (data.equals(desk.data)) return null;
   const before = desk.data;
-  const run = logged(desk) ? openPersonRun(desk.log ?? [], desk.dirty) : null;
+  const run = openPersonRun(desk.log ?? [], desk.dirty);
   const beforeV = desk.vseq > 0 ? desk.vseq : null;
   desk.data = data;
   const said = describeFiles(desk.kind, before, data);
@@ -1339,8 +1337,8 @@ export function officeRoutes(app: Express, opts: { exists: (session: string) => 
     res.json({ ok: true });
   });
 
-  /* ?kind=xlsx (the default) or pptx. */
-  const routeKind = (req: Request): OfficeKind => (req.query.kind === "pptx" ? "pptx" : "xlsx");
+  /* ?kind=xlsx (the default), pptx or docx. */
+  const routeKind = (req: Request): OfficeKind => (req.query.kind === "pptx" ? "pptx" : req.query.kind === "docx" ? "docx" : "xlsx");
 
   /* The log of what was done to the workbook or deck, by whom (commandlog.ts); and going back to before a command. */
   app.get("/api/officedesk/:session/commands", (req, res) => {

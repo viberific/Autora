@@ -172,6 +172,30 @@ try {
     assert.match(hooks.commandLog(0), /workbook/, "with a workbook open, no kind means the workbook");
   });
 
+  const page = (...paras: string[]) => zipMany([["word/document.xml", `<w:document><w:body>${paras.map((t) => `<w:p><w:r><w:t>${t}</w:t></w:r></w:p>`).join("")}</w:body></w:document>`]]);
+  const openDoc = (data: Buffer, label?: string) => hooks.open({ name: "Memo.docx", data, working: null, source: null, outName: "Memo.docx", label });
+  const saveDoc = (data: Buffer) => fetch(`${base}/save?kind=docx`, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: new Uint8Array(data) });
+
+  await test("a document has its own log, said in words, and reverts like the others", async () => {
+    const others = [office.officeCommands(SESSION).length, office.officeCommands(SESSION, "pptx").length];
+    openDoc(page("Meet on Friday."), "Wrote the memo");
+    openDoc(page("Meet on Monday."), "Changed the day");
+    assert.equal((await saveDoc(page("Meet on Monday at noon."))).status, 200);
+    assert.deepEqual([office.officeCommands(SESSION).length, office.officeCommands(SESSION, "pptx").length], others, "the other logs are untouched");
+    const log = office.officeCommands(SESSION, "docx");
+    assert.deepEqual(log.map((c) => [c.name, c.who]), [["open", "agent"], ["agent_edit", "agent"], ["person_edit", "person"]]);
+    assert.match(log[1]!.summary, /Friday.*Monday/);
+    assert.match(hooks.commandLog(0, "docx"), /the document goes back to just before it/);
+    assert.equal(hooks.revert(3, "docx"), null);
+    assert.equal(office.officeCommands(SESSION, "docx").at(-1)!.name, "revert");
+    assert.equal(office.docxParagraphs(office.officeData(SESSION, "docx")!)!.join(" "), "Meet on Monday.", "back to just before the person typed");
+    const res = await fetch(`${base}/commands/revert?kind=docx`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ n: 2 }) });
+    assert.equal(res.status, 200);
+    assert.match(hooks.revert(1, "docx") ?? "", /made the document/);
+    const listed = (await (await fetch(`${base}/commands?kind=docx`)).json()) as { commands: unknown[] };
+    assert.equal(listed.commands.length, office.officeCommands(SESSION, "docx").length);
+  });
+
   await test("the log is kept on disk with the desk", async () => {
     const before = office.officeCommands(SESSION).length;
     assert.ok(before >= 5);

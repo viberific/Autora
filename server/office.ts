@@ -144,10 +144,10 @@ export async function runOfficeTool(name: string, args: Record<string, any>, ctx
 
 /** The workbook's or deck's command log: who changed what, and going back to before a command (server/commandlog.ts). */
 function historyTool(args: Record<string, any>, ctx: OfficeContext): OfficeOutcome {
-  if (!ctx.win) return { ok: false, summary: "There is no Sheets or Slides window in this chat to keep a log for." };
+  if (!ctx.win) return { ok: false, summary: "There is no Pages, Sheets or Slides window in this chat to keep a log for." };
   const app = String(args.app ?? "");
-  const kind: Kind | undefined = app === "sheets" ? "xlsx" : app === "slides" ? "pptx" : undefined;
-  if (app && !kind) return { ok: false, summary: "app is sheets or slides." };
+  const kind: Kind | undefined = app === "sheets" ? "xlsx" : app === "slides" ? "pptx" : app === "pages" ? "docx" : undefined;
+  if (app && !kind) return { ok: false, summary: "app is sheets, slides or pages." };
   if (kind && ctx.off?.includes(kind)) return { ok: false, summary: `${APP_NAME[kind]} is switched off on the Tools page.` };
   const action = String(args.action ?? "log");
   if (action === "log") {

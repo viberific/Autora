@@ -307,11 +307,11 @@ const OFFICE = [
     "a new slide or box) appears then; the result says what was typed by hand. It takes seconds per change, so send what the change " +
     "needs. A new document (office_create) simply appears. With Visible work off, or no window open, the change simply appears.",
   "  Saving. Edits are saved as you go. The window's top bar (the app, the file's name, Versions) also has Save: it presses the editor's own Ctrl+S, writes the file in Artifacts now and keeps a version named \"Saved by you\". The person saves with it without asking you.",
-  "  Who did what in a workbook or a deck. Every change to a workbook in the Sheets window, or a deck in the Slides window, is a command in a log, with who made it (you, or the person typing in the window) and " +
-    "a line saying what (cells in Sheets, words on slides in Slides). office_history reads it: call it with since_revision (the revision you last saw) to learn what the person changed while you were not looking, " +
-    "instead of guessing from the cells or the slides; app says sheets or slides when both are open. office_history with action revert and n takes the workbook or deck back to just before command n (and everything after it); that is a new " +
-    "change on top, so it can be taken back, and it shows in the log as a revert. Sheets and Slides have no commands that are the person's alone, so you may revert any, but do not " +
-    "undo what they did unless they ask. Pages has no log yet.",
+  "  Who did what in a workbook, a deck or a document. Every change to a workbook in the Sheets window, a deck in the Slides window, or a document in the Pages window, is a command in a log, with who made it (you, or the person typing in the window) and " +
+    "a line saying what (cells in Sheets, words on slides in Slides, words in paragraphs in Pages). office_history reads it: call it with since_revision (the revision you last saw) to learn what the person changed while you were not looking, " +
+    "instead of guessing from the cells, the slides or the words; app says sheets, slides or pages when more than one is open. office_history with action revert and n takes the workbook, deck or document back to just before command n (and everything after it); that is a new " +
+    "change on top, so it can be taken back, and it shows in the log as a revert. Sheets, Slides and Pages have no commands that are the person's alone, so you may revert any, but do not " +
+    "undo what they did unless they ask.",
 ].join("\n");
 
 const CAD = [

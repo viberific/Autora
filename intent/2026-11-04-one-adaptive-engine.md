@@ -175,11 +175,15 @@ P0: a read-only survey, no code, producing `docs/ENGINE-SURVEY.md`. Then P1 on 3
   `emitEvent()`; the agent reads and reverts with `office_history`; the person's routes `GET /commands`, `POST /commands/revert`.
   Built as an adapter over the desk's versions (whole-file snapshots), not a cell-level inverse: reverting to before n also undoes
   everything after n. No command is the person's alone in Sheets (productivity work), so the agent may revert any. Not done: a
-  history list in the Sheets window (the routes exist; the window already lists versions), Pages, per-cell inverses.
+  history list in the Sheets window (the routes exist; the window already lists versions), per-cell inverses.
 - **Command layer, Slides (0.9.344): done.** The same log for a deck (`logged()` widened; `office_history` takes `app`: sheets or slides;
   routes take `?kind=pptx`; the account is words on slides from `describeChange`). Tested at the server level in `tests/sheetlog.test.ts`;
-  not driven in the Slides editor. Pages is next (its step log lives in Panacea's `doclog.ts`, not the hosted editor: decide whether the
-  hosted Pages gets this same file-diff log or the Panacea one is bridged).
+  not driven in the Slides editor. 
+
+- **Command layer, Pages (0.9.345): done, as option 1.** The hosted Pages editor gets the same file-diff log (words in paragraphs from
+  `describeChange`; `office_history` `app: pages`; routes `?kind=docx`). Panacea's own step log (`doclog.ts`: steps, selective undo, ghost
+  suggestions) is NOT bridged to it: they are two logs for two different documents (Panacea's native documents, the hosted .docx), and
+  a bridge is the open follow-up if the person wants one history. All three Office apps now have a command log.
 
 ## Left to do (as of 0.9.341, in the order to take it)
 
@@ -187,7 +191,7 @@ P0: a read-only survey, no code, producing `docs/ENGINE-SURVEY.md`. Then P1 on 3
    briefing line and a handbook sentence each. Add a browser test for the Office shim-to-server pick path. Then the wider P6 idea:
    proactivity from "what the person seems to be doing" (the presence/companion code), not only what is picked.
 2. **Command layers (P4's unfinished half)**, one editor at a time against its own API, each with authority (agent/person), a log with
-   before/after, revert, and `cad.command`-style events: Sheets (0.9.343) and Slides (0.9.344) are done; next Pages (its step log exists in Panacea's
+   before/after, revert, and `cad.command`-style events: Sheets (0.9.343), Slides (0.9.344) and Pages (0.9.345) are done; next PDF, Photo, Music, Video, Games (its step log exists in Panacea's
    `doclog.ts`, not in the hosted Pages editor), PDF, Photo, Music, Video, Games. `server/desks.ts` should gain PDF, Office and Video when their state fits.
 3. **P5, cross-window entities** (a chart in a sheet shown on a slide, a photo used in a page): needs step 2 for at least Sheets and Slides.
 4. **Games has no agent hand** (a shared page-side client touching each fork's overlay); Games' fading bar is typechecked but not driven in a browser.
