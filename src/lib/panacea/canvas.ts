@@ -524,7 +524,7 @@ const show = (v: Value | undefined): string => {
 
 /** The canvas in words, for the agent: what is on it, what each panel is and is bound to, and every value that is not its default. */
 export function describeCanvas(canvas: Canvas, opts: { trees?: boolean; appValue?: (bind: string) => Value | undefined } = {}): string {
-  const lines: string[] = [`Canvas "${canvas.name}": ${canvas.surfaces.length} surface${canvas.surfaces.length === 1 ? "" : "s"}, ${canvas.panels.length} panel${canvas.panels.length === 1 ? "" : "s"}${canvas.focus ? `; the person is working on ${canvas.focus}` : ""}.`];
+  const lines: string[] = [`Canvas "${canvas.name}": ${canvas.surfaces.length} surface${canvas.surfaces.length === 1 ? "" : "s"}, ${canvas.panels.length} panel${canvas.panels.length === 1 ? "" : "s"}${canvas.focus ? `; the person is working on ${canvas.focus}` : ""}. Surfaces are only images, tables, documents and boards on the canvas; a game, song, video, 3D model or photo lives in its own app so it is not counted, and 0 surfaces does not mean there is no work.`];
   for (const s of canvas.surfaces) {
     const changed = paramsOf(s.kind, s.table)
       .filter((p) => JSON.stringify(s.params[p.name]) !== JSON.stringify(p.default))

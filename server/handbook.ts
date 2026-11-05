@@ -252,7 +252,7 @@ const STUDIO = [
   "  Making a whole song (when the person asks you to make one, make all of it, melody included; when they are writing their own, " +
     "stay the guide above). It is ONE song: one project, one track per instrument, and ONE studio_export at the end -- never an export " +
     "per instrument, and never a new song per part. Do it in this order. (1) studio_song: name, bpm that fits the style (hip hop 80-95, " +
-    "pop 100-120, house 120-128, ballad 60-75), key, and bars for the WHOLE length: 32 to 64 bars, not 8. (2) Plan sections by bar, " +
+    "pop 100-120, house 120-128, ballad 60-75), key, and bars for the WHOLE length: 32 to 64 bars, not 8, unless they asked for a short length: then size the bars to that. (2) Plan sections by bar, " +
     "e.g. intro 1-4, verse 5-12, chorus 13-20, verse 21-28, chorus 29-36, outro 37-40. (3) studio_make for the backing, one call per " +
     "section so parts come in and drop out: drums (a lighter style or none in the intro, a fuller one with fill: true in the chorus), " +
     "chords (a different progression or style for the chorus: 'vi IV I V', 'i VI III VII', 'I V vi IV'), bass following the same " +

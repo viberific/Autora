@@ -206,9 +206,8 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Clearer about what it actually did. When a video export finishes, the reply
-  now names the real file and says it is saved in Artifacts, in this chat's
-  project folder, instead of quoting an internal id. On a board, a selected
-  link says plainly that links group ideas and do not make a sequence, so a
-  line between two cards is no longer mistaken for a timeline step. Flowcharts
-  are unchanged, where a connector really does mean a sequence.
+  Stops two kinds of misleading advice. The canvas summary no longer implies
+  there is no work when it reports 0 surfaces: a game, song, video or photo
+  lives in its own app, so it is not counted there. And the music advice no
+  longer tells you a short piece should be 32+ bars when you asked for a
+  short loop, jingle or promo.
