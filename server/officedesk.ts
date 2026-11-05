@@ -622,7 +622,7 @@ function snapshot(session: DeskKey, desk: Desk, label: string, by: "agent" | "pe
 
 // ------------------------------------------------------ the command log --
 
-let commandListeners: Array<(session: string, entry: OfficeCommand) => void> = [];
+const commandListeners: Array<(session: string, entry: OfficeCommand) => void> = [];
 /** Told of every command made on a chat's workbook (the agent's edits, the person's, a revert), for the event log. */
 export function onOfficeCommand(fn: (session: string, entry: OfficeCommand) => void) {
   commandListeners.push(fn);
@@ -653,7 +653,7 @@ export function officeCommands(session: string, kind: OfficeKind = "xlsx"): Offi
 }
 
 /** Go back to just before command n. A new change on top, so it can be undone; it is itself in the log. */
-export function revertOfficeCommand(session: string, n: number, who: "agent" | "person", kind: OfficeKind = "xlsx"): string | null {
+function revertOfficeCommand(session: string, n: number, who: "agent" | "person", kind: OfficeKind = "xlsx"): string | null {
   const key = keyOf(session, kind);
   const desk = load(key);
   if (!desk || !logged(desk)) return "There is no workbook open in the window.";
@@ -664,7 +664,7 @@ export function revertOfficeCommand(session: string, n: number, who: "agent" | "
 }
 
 /** The log in words, for the agent. */
-export function officeLogText(session: string, sinceRev = 0, kind: OfficeKind = "xlsx"): string {
+function officeLogText(session: string, sinceRev = 0, kind: OfficeKind = "xlsx"): string {
   return logText(load(keyOf(session, kind))?.log ?? [], sinceRev);
 }
 

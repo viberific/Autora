@@ -77,7 +77,7 @@ const base = `http://127.0.0.1:${(server.address() as { port: number }).port}/ap
 const events: Array<{ who: string; name: string; n: number; summary: string }> = [];
 office.onOfficeCommand((_s, c) => events.push({ who: c.who, name: c.name, n: c.n, summary: c.summary }));
 const hooks = office.officeHooks(SESSION);
-const save = (data: Buffer) => fetch(`${base}/save?kind=xlsx`, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: data });
+const save = (data: Buffer) => fetch(`${base}/save?kind=xlsx`, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: new Uint8Array(data) });
 const open = (data: Buffer, label?: string) => hooks.open({ name: "Plan.xlsx", data, working: null, source: null, outName: "Plan.xlsx", label });
 
 try {
