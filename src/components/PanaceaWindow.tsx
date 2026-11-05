@@ -724,7 +724,7 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
   /* The bar (canvas name, whether it is saved, Load, Save) is for native work. With none on the canvas it has nothing to say,
      so it is there in place but unseen and out of reach, and arrives with the first piece of work. A problem or a load in
      progress is always said. Files are put on the canvas by dropping or pasting them. */
-  const idleBar = doc.ready && !note && !canvas.surfaces.length && !canvas.panels.length;
+  const idleBar = !note && !canvas.surfaces.length && !canvas.panels.length;
   const selectionGrouped = selected.size > 1 && (() => { const ids = [...selected]; const g = canvas.panels.find((p) => p.id === ids[0])?.group; return !!g && ids.every((id) => canvas.panels.find((p) => p.id === id)?.group === g); })();
 
   return (

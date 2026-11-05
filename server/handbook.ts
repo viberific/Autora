@@ -23,8 +23,8 @@ const OVERVIEW = [
     "Capabilities, Send, Stop) and the TODO list just above. Retract conversation slides the panel to an edge tab (Show conversation); " +
     "the bar, the TODO list and the toggle stay in a slim strip along the foot of the workspace, so you can always type. On a phone it " +
     "is a bottom sheet under the canvas, moved on its left half (the right half only scrolls): Canvas only, Half (the default: messages " +
-    "only) and Full (adds tool steps and memory notes). A question or permission waiting keeps it open. Follow and the eye (Visible " +
-    "work) sit in the top bar. Every surface and engine card lives in one pannable, zoomable scene, not tabs: the right-side icon dock " +
+    "only) and Full (adds tool steps and memory notes). A question or permission waiting keeps it open. The eye (Visible " +
+    "work) sits in the top bar, and Follow joins it once there is work to follow. Enter sends a message, Shift+Enter writes a line. Capabilities lists the editors this server has; one that is not installed is shown as such and cannot be opened. Every surface and engine card lives in one pannable, zoomable scene, not tabs: the icon dock at the canvas's bottom-left " +
     "jumps the camera to one, Zoom out and Show all work [ ] frame them, and all engines stay mounted with their unsaved work. The dock is not " +
     "there on a blank canvas, and Tidy joins it only once there is more than one piece of work: controls appear when the work needs them. A blank canvas shows nothing at all, no instructions: the canvas name and Save bar arrive with the first piece of work, and the undo and redo slider once there is something to take back. Files are put on the canvas by dropping or pasting them; they sit there, and the controls for them come when you pick them. Every " +
     "window moves, resizes and maximises; x closes it. \"Follow\" moves the camera to your work, but not while the person types, drags, " +

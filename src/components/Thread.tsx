@@ -792,7 +792,7 @@ const UserMessage = memo(function UserMessage({ text, receipt, children }: { tex
     <div className={`msg user is-${receipt}`}>
       <span className="avatar"><IconUser size={14} /></span>
       <div className="msg-body">
-        <div className="msg-who">User <Ticks receipt={receipt} /></div>
+        <div className="msg-who">You <Ticks receipt={receipt} /></div>
         {text && <div className="msg-text">{text}</div>}
         {children}
       </div>

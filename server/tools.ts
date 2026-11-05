@@ -389,6 +389,13 @@ function builtFor(id: Capability["id"]): boolean {
   return true;
 }
 
+/** Which Tools page windows this server has an editor for. A window that is not installed cannot be turned on, so the pages say
+    "not installed" rather than "switched off" (the chooser, the new-file and load routes). */
+export function installedWindows(): Record<string, boolean> {
+  const office = builtFor("office");
+  return { pdf: true, video: true, studio: true, pages: office, sheets: office, slides: office, cad: builtFor("cad"), game: builtFor("game"), photo: builtFor("photo") };
+}
+
 export function windowOff(name: string, settings: ToolSettings = toolSettings()): boolean {
   if (name === "widget_show") return !settings.widgets.enabled;
   if (name === "app_preview") return !settings.app.enabled;

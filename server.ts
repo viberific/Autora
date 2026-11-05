@@ -173,7 +173,7 @@ import { onPhotoCommand, photoPickNote, photoRoutes, photoState, servePhoto } fr
 import { onStudioCommand, studioRoutes, studioState, studioTurnNote, studioVisible } from "./server/studio";
 import { appOfArtifact, appOfFile, appOfTool } from "./src/lib/panacea/flows";
 import { dropPanacea, noteFlow, onPanaceaChange, onPanaceaTouch, panaceaRoutes, panaceaState, panaceaSuggester, panaceaTurnNote, panaceaVisible } from "./server/panacea";
-import { joinProjects, windowOff } from "./server/tools";
+import { installedWindows, joinProjects, windowOff } from "./server/tools";
 import { dropOfficeDesk, onOfficeChange, onOfficePush, onOfficeTouch, officeBriefing, officeData, officeRoutes, onOfficeCommand, officeState, officeHooks, serveOfficeEditors } from "./server/officedesk";
 import { renderToPdf, webDir as officeWebDir } from "./server/officerender";
 import {
@@ -6541,6 +6541,7 @@ async function startServer() {
   newFileRoutes(app, {
     exists: (id) => sessions.has(id),
     incognito: (id) => Boolean(sessions.get(id)?.incognito),
+    missing: (kind) => !installedWindows()[kind === "pdf" ? "pdf" : kind === "docx" ? "pages" : kind === "xlsx" ? "sheets" : "slides"],
     off: (kind) => {
       const s = toolSettings();
       if (kind === "pdf") return windowOff("pdf_open", s);

@@ -7,7 +7,7 @@ their editing, import, export, agent or live-hand abilities.
 
 The **Capabilities** chooser starts a blank file/project. **All work lives in one spatial scene**: native images, data,
 documents and boards, plus every retained engine's real work card, inside the same Board and camera. There are no
-Panacea/Music tabs, no work-mode combobox and no nested canvas application. The **fixed right-side icon dock** jumps the
+Panacea/Music tabs, no work-mode combobox and no nested canvas application. The **icon dock at the canvas's bottom-left** jumps the
 camera to actual existing work; **Zoom out** reduces magnification; **Show all work [ ]** fits every native and hosted
 surface without hiding any of them. Hosted card headers can be dragged and pinned. **Follow** may move the camera to
 the agent's work, but never while the person is typing, dragging, pinned or holding a manual camera position.
@@ -15,11 +15,12 @@ Every opened engine stays mounted when the camera changes, so a jump is not a re
 editor state. Web remains a real work surface; Activity is not a separate card. The Tools page
 presents Panacea with capability configuration, not separate applications.
 
-The workspace fills the available area; there is **no left chat column**. The original composer is the single
-**centered Ask Autora entry**, retaining work mode, speech, attachments, notebooks, artifacts, capabilities and
-Send/Stop. The **TODO list is attached above the entry**. Messages float as individual bubbles above it, without a
-history panel or scrim, and older bubbles fade at the top edge. **Retract conversation** preserves the mounted
-complete history and leaves the TODO/entry visible; **Show conversation** brings it back. Questions and permissions
+The workspace fills the available area. The conversation is a panel on its right (its left edge resizes it; on a phone a bottom
+sheet), with the original composer, **Ask Autora**, at its foot, retaining work mode, speech, attachments, notebooks, artifacts,
+capabilities and Send/Stop; Enter sends and Shift+Enter writes a line (on a phone's keyboard Enter is a new line and the arrow sends).
+The **TODO list is attached above the entry**. Messages are individual bubbles above it, and older bubbles fade at the top edge.
+**Retract conversation** keeps the mounted complete history and leaves the TODO/entry visible in a strip along the foot; **Show
+conversation** brings it back. Questions and permissions
 remain immediately actionable. All tool/output/file activity is in the bubbles, **contracted by default** until
 expanded, including live and failed console work. Activity is not a second world surface.
 

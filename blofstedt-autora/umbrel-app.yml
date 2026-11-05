@@ -206,7 +206,11 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  A blank canvas is now truly blank. The canvas name and Save bar, and the undo
-  and redo slider, stay out of sight until there is something on the canvas to
-  name, save or take back, and then arrive on their own. Drop or paste a file
-  onto the canvas to put it there; the controls for it appear when you pick it.
+  Easier to start, and honest when something cannot start. Enter now sends your
+  message (Shift+Enter writes a new line; on a phone the arrow sends). The
+  Capabilities chooser shows every capability at once, and one whose editor is
+  not installed on your server says so, instead of failing out of sight below the
+  list. Web, Apps and Explainers tell you to finish the sentence in the box. On
+  a blank screen the Follow switch, the empty context meter and the canvas bar
+  stay out of sight until there is something to follow, and your messages are
+  labelled You. The disk-check offer waits until the disk is almost full.

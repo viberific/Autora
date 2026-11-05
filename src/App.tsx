@@ -133,6 +133,9 @@ import {
 import { SureHost } from "./components/SureHost";
 import { AgentThought } from "./components/AgentThought";
 
+/** A phone or tablet keyboard: Enter stays a new line there (the composer). */
+const TOUCH_KEYBOARD = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+
 /** How often to re-read the session list, so sessions started elsewhere (or
     from another tab) show up without a reload. */
 const SESSION_POLL_MS = 10_000;
@@ -2162,7 +2165,8 @@ export function App() {
           {page === "chat" && sessionId && (
             <span className="top-work">
               <VisibleWork className="stage-follow" compact />
-              <button
+              {/* Nothing to follow until the agent has worked or a window is open: a lit switch on an empty screen reads as broken. */}
+              {(openWindows.length > 0 || events.some((e) => e.actor === "agent")) && <button
                 type="button"
                 className={`stage-follow${followAgent ? " is-on" : ""}`}
                 onClick={() => setFollow(!followAgent)}
@@ -2170,7 +2174,7 @@ export function App() {
                 title={followAgent ? "Following the agent — stop following" : "Follow the agent's work"}
               >
                 <span className="watch-dot" aria-hidden="true" /> Follow
-              </button>
+              </button>}
             </span>
           )}
 
@@ -2472,7 +2476,7 @@ export function App() {
                           setMentionAtIndex((mentionActive + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
                           return;
                         }
-                        // Enter writes a line elsewhere; with the menu open it picks. Ctrl/Cmd/Alt+Enter still sends.
+                        // With the menu open Enter picks; Ctrl/Cmd/Alt+Enter still sends.
                         if (e.key === "Tab" || (e.key === "Enter" && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey)) {
                           e.preventDefault();
                           pickMention(mentionOffered[mentionActive]);
@@ -2503,12 +2507,16 @@ export function App() {
                           return;
                         }
                       }
-                      // Enter writes a line; it never sends. A message goes with
-                      // the button, with Ctrl/Cmd+Enter, or with Alt+Enter to
-                      // stop the agent first and then send.
-                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey || e.altKey)) {
-                        e.preventDefault();
-                        submit(e.altKey);
+                      /* Enter sends, Shift+Enter writes a line, Alt+Enter stops the agent first and then sends. On a phone's
+                         keyboard (a coarse pointer) Enter stays a new line: the send arrow is right there, and a thumb
+                         reaches Return by accident. Not while an input method is composing (a candidate is being picked). */
+                      if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                        const plain = !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey;
+                        if (plain && TOUCH_KEYBOARD) return;
+                        if (!e.shiftKey) {
+                          e.preventDefault();
+                          submit(e.altKey);
+                        }
                       }
                     }}
                   />
@@ -2718,7 +2726,11 @@ export function App() {
                             setNotice(`${name} is open in Panacea · ${app}`);
                             if (mode) pickWindow(mode);
                           }}
-                          onAsk={(text) => { setDraft(text); window.setTimeout(() => composerRef.current?.focus(), 0); }}
+                          onAsk={(text) => {
+                            setDraft(text);
+                            setNotice(TOUCH_KEYBOARD ? "Finish the sentence, then tap the arrow." : "Finish the sentence, then press Enter.");
+                            window.setTimeout(() => composerRef.current?.focus(), 0);
+                          }}
                         />
                       )}
                       {artifactsOpen && (
@@ -2785,7 +2797,9 @@ export function App() {
                   </div>
                 </div>
                 <p className="composer-hint">
-                  <kbd>Enter</kbd> for a new line · <kbd>Ctrl</kbd> + <kbd>Enter</kbd> to send · <kbd>/</kbd> for commands
+                  {TOUCH_KEYBOARD
+                    ? <>The arrow sends · <kbd>/</kbd> for commands</>
+                    : <><kbd>Enter</kbd> to send · <kbd>Shift</kbd> + <kbd>Enter</kbd> for a new line · <kbd>/</kbd> for commands</>}
                 </p>
               </>
             )}

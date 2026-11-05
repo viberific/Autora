@@ -66,13 +66,14 @@ await test("only a file kind is a kind", () => {
 // ------------------------------------------------------------- the route --
 
 /** The route on a real port, with only the chats and switches this test says. */
-async function withServer(opts: { exists?: (id: string) => boolean; incognito?: (id: string) => boolean; off?: (k: string) => boolean }, run: (post: (body: unknown) => Promise<{ status: number; body: any }>) => Promise<void>) {
+async function withServer(opts: { exists?: (id: string) => boolean; incognito?: (id: string) => boolean; off?: (k: string) => boolean; missing?: (k: string) => boolean }, run: (post: (body: unknown) => Promise<{ status: number; body: any }>) => Promise<void>) {
   const app = express();
   app.use(express.json());
   newFileRoutes(app as never, {
     exists: opts.exists ?? ((id) => id === "s1"),
     incognito: opts.incognito ?? (() => false),
     off: (opts.off ?? (() => false)) as never,
+    ...(opts.missing ? { missing: opts.missing as never } : {}),
   });
   const server = app.listen(0);
   await new Promise((r) => server.once("listening", r));
@@ -120,6 +121,15 @@ await test("an app switched off on the Tools page is refused, and says which", a
     assert.equal(res.status, 403);
     assert.match(String(res.body.error), /Autora Sheets/);
     assert.equal((await post({ kind: "pdf" })).status, 200, "the others still open");
+  });
+});
+
+await test("an app whose editor is not installed is called not installed, not switched off", async () => {
+  await withServer({ missing: (k) => k === "docx" }, async (post) => {
+    const res = await post({ kind: "docx" });
+    assert.equal(res.status, 503);
+    assert.match(String(res.body.error), /not installed/);
+    assert.doesNotMatch(String(res.body.error), /Tools page/, "the person cannot fix it there");
   });
 });
 
