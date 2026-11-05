@@ -167,6 +167,11 @@ non-creative work completely. Ask of every feature: is there creativity in this?
   selector stays on Agent), Build (works straight away) or Plan (read-only).
   Planning is refused, never asked about.
 
+- **Controls appear when the work needs them and go when it does not, in every piece of the software.** Panacea is the one
+  tool. No standing instructions or empty-state text on the canvas, no lists of tool names or other plumbing shown to the
+  person, and no chrome that is not applicable to what they are doing now. A control that does appear matches the interface
+  around it. (Stated by the person on 2026-11-05; the tool bars that fade out are this principle already.)
+
 ## Working with an agent here
 
 - Start non-trivial work in plan mode: name the files that change, the order, the risks and the tests that prove it. Ideas and

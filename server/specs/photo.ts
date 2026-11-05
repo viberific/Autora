@@ -46,6 +46,25 @@ export const photoSPECS: ToolSpec[] = [
     },
   },
   {
+    name: "photo_history",
+    group: "files",
+    risky: true,
+    description:
+      "The log of changes to the picture in the Photo window: every change is a command with who made it (you, or the person painting or editing in the window) and a line saying what. " +
+      "action \"log\" reads it; since_revision (the revision you last saw) shows only what came after, so you learn what the person changed while you were not looking instead of " +
+      "guessing from the layers. action \"revert\" with n puts the picture back as it was just before command n (everything after it too), a new change on top that can be taken back " +
+      "and that shows in the log as a revert. The look of the picture is the person's: you can take back only your own changes. A revert is refused if command n, or any after it, is the " +
+      "person's own; then say what you would change and let them undo it in the window. The pictures from before are kept for the last 10 commands.",
+    parameters: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["log", "revert"], description: "log (default) or revert." },
+        since_revision: { type: "number", description: "log: only commands made after this revision." },
+        n: { type: "number", description: "revert: the command number to go back to before." },
+      },
+    },
+  },
+  {
     name: "photo_info",
     group: "files",
     description:

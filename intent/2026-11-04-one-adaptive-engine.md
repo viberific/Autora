@@ -166,13 +166,86 @@ P0: a read-only survey, no code, producing `docs/ENGINE-SURVEY.md`. Then P1 on 3
   `desk.pick`, kept two minutes, told in `officeBriefing`). Server tests are in `tests/officedesk.test.ts`; the shim-to-server path has no browser test yet.
 - **P5**: not started.
 
+- **P6, the rest of step 1 (0.9.342): done.** PDF (selected words and page), Video (picked clips) and Photo (the active layer) report
+  what is picked the same way (`server/picked.ts`, shared by all four desks). The Office shim-to-server browser test is still not written;
+  the Photo (Rust) and frame-side changes are typechecked but not driven in a browser here.
+- **Command layer, Sheets (0.9.343): done.** `server/commandlog.ts` + `officedesk.ts`: every change to a workbook is a command
+  (`open`, `agent_edit`, `person_edit`, `revert`) with who, a line in cells, and the version just before it; the person's typing is
+  one command per run; revert goes back to before command n (a new change, itself logged); `office.command` events through
+  `emitEvent()`; the agent reads and reverts with `office_history`; the person's routes `GET /commands`, `POST /commands/revert`.
+  Built as an adapter over the desk's versions (whole-file snapshots), not a cell-level inverse: reverting to before n also undoes
+  everything after n. No command is the person's alone in Sheets (productivity work), so the agent may revert any. Not done: a
+  history list in the Sheets window (the routes exist; the window already lists versions), per-cell inverses.
+- **Command layer, Slides (0.9.344): done.** The same log for a deck (`logged()` widened; `office_history` takes `app`: sheets or slides;
+  routes take `?kind=pptx`; the account is words on slides from `describeChange`). Tested at the server level in `tests/sheetlog.test.ts`;
+  not driven in the Slides editor. 
+
+- **Command layer, Pages (0.9.345): done, as option 1.** The hosted Pages editor gets the same file-diff log (words in paragraphs from
+  `describeChange`; `office_history` `app: pages`; routes `?kind=docx`). Panacea's own step log (`doclog.ts`: steps, selective undo, ghost
+  suggestions) is NOT bridged to it: they are two logs for two different documents (Panacea's native documents, the hosted .docx), and
+  a bridge is the open follow-up if the person wants one history. All three Office apps now have a command log.
+
+- **Command layer, PDF (0.9.346): done.** The same log over the PDF desk's version list (`server/pdfdesk.ts`): `open`, `agent_edit`
+  (including the agent's hand's saves), `person_edit` (a run of marking is one command; page changes too), `decline` (the person declines
+  one of the agent's changes) and `revert`; `pdf.command` events; `pdf_history`; routes `GET /commands`, `POST /commands/revert`. The
+  account is the desk's own words ("added note ... on page 1"), not a file diff, so `commandlog.ts` gained `extendRun`. Tested in
+  `tests/pdflog.test.ts`; not driven in Spectra. Same limit as the Office apps: revert goes back to before command n and undoes what
+  followed. Accepting a change is not a command (it changes nothing in the file).
+
+- **Command layer, Music (0.9.347): done, and the first with a person-only rule.** Music's song is plain JSON owned by the server, so
+  the log sits in its one funnel, `commit()` in `server/studio.ts`: every change (the agent's `studio_*` tools, the person's saves from the
+  window, a panel control, a loaded file) is a command with who and a line; the person's saves while they drag are one command (30 s run,
+  said again from where it began with `server/songlog.ts`'s song diff); an unchanged re-save is not logged. The song from before each
+  command is kept for the last 30 (references, not copies; not across a restart), and the log itself is kept on disk beside the song.
+  **Authority:** music is the person's (CLAUDE.md, "creativity involved"): `studio_history` revert is refused to the agent when command n,
+  or any after it, is the person's own, so it can take back only its own changes; the person may go back to before any command
+  (`POST /commands/revert`). `studio.command` events; `studio_history` log/revert; `GET /commands`. Tested in `tests/studiolog.test.ts`;
+  not driven in the Music window. Not done: the window's own Ctrl+Z is separate and not linked to the log.
+
+- **Command layer, Video (0.9.348): done, built differently because the editor owns the project.** The server sees only the timeline
+  the editor reports, so `server/opencut.ts` builds the log from those (`server/videolog.ts`: `fingerprint`, `describeVideoChange`): an
+  agent step that changed the timeline is a command by the agent (`loggedCommand`, which asks for the timeline first); a timeline that
+  differs from the last one seen with no agent step between is the person's (found when the agent next acts or looks, so it is detected
+  late, not live); the person's changes within 30 s are one command. Revert is the editor's OWN undo run until the timeline matches the
+  one kept from before the command (redo for a revert), and it changes nothing when the editor's history does not reach it. Same
+  authority as Music, and **a decision to review**: the agent may take back only its own changes (the cut is the person's), unlike the
+  Office apps and PDF where it may revert any. `video.command` events; `video_history`; `GET /commands`, `POST /commands/revert`
+  (`?session=`). Tested with a fake editor that has an undo stack (`tests/videolog.test.ts`); NOT driven in OpenCut, and what the timeline
+  fingerprint leaves out (clip volume and other params the snapshot does not carry) cannot be told apart.
+
+- **Command layer, Photo (0.9.349): done, and it needed no Rust.** I had assumed it would; it did not, because the server holds the
+  working file (`work.pcraft`) and every change passes through `noteChange()` in `server/photodesk.ts`. Before each change the file is
+  copied aside (`stage`), and the change keeps the copy under its command number: going back to before a command puts that copy back
+  (through the same path the person's saves take, so the window loads it). Copies are files: they survive a restart; newest 10, 300 MB.
+  The words come from `doc.inspect` before and after (`server/photolog.ts`: size, layers added or removed, a layer's visible/opacity/
+  blend/locked/name when the reading has them), so painted pixels read as "changed the picture"; the agent's edits are said by the
+  commands it applied. The person's saves within 30 s are one command; a save of identical bytes is not logged. Authority as Music and
+  Video: the look is the person's, so the agent takes back only its own changes (**the same decision to review**). `photo.command`
+  events; `photo_history`; `GET /commands`, `POST /commands/revert`. Tested with a stand-in command line (`tests/photolog.test.ts`);
+  the `doc.inspect` layer fields beyond size and names are guessed and untested against the real PhotoCraft CLI; not driven in the window.
+
+- **Games: the agent can play its game (0.9.350), the first step of "a first-time maker starts with an idea".** Decision after the
+  command-layer work: a command log for Games would harden a layer a beginner should not be looking at, so it is NOT built; the gap
+  that matters is that the agent built blind. `game_play` (`server/gameplay.ts`, `gamedesk.ts`): the window is asked to press its own
+  Play (`gamedesk.play` message -> `GameWindow` -> the rail's `restart`, so the person watches it start), the editor sends the preview
+  files to the server as it always has, and the server runs a COPY in an isolated headless Chromium (`withBrowserContext`; the game
+  reaches its own files only) with a script of press/hold/wait/click/shot, and returns pictures, the errors it threw, frames drawn and
+  whether the screen changed. Tested end to end in a real browser with a small canvas game and a simulated window
+  (`tests/gameplay.test.ts`, `tests/gameplay-tool.test.ts`). NOT tested: GDevelop's real runtime (its keyboard and canvas handling),
+  the editor's real preview export (not built in this container), and the window-side Play press. Needs the window open with its
+  editor running to start the current game; without it the tool plays the last preview and says it may be older. Next toward the goal
+  (see the 2026-11-05 discussion): art and sound for someone with none, the verbs-to-behaviours layer ("slippery", "jump") on `game.*`
+  panels, and the five-minute path written down and tried with a real beginner. **The full note for the next agent is
+  `intent/2026-11-05-first-game-in-five-minutes.md`; what trying the app as a user found is `docs/TRY-IT-2026-11-05.md`.** (Correction there:
+  the verbs-to-settings layer for movement, `game.speed/jump/gravity/friction`, already exists.)
+
 ## Left to do (as of 0.9.341, in the order to take it)
 
-1. **P6 rest:** report the pick from PDF (selected text/region), Photo (layer/selection) and Video (selected clip), the same way, with the
+1. **P6 rest (PDF, Photo, Video pick: done in 0.9.342; remaining: the Office browser test and presence-based proactivity).** Was: report the pick from PDF (selected text/region), Photo (layer/selection) and Video (selected clip), the same way, with the
    briefing line and a handbook sentence each. Add a browser test for the Office shim-to-server pick path. Then the wider P6 idea:
    proactivity from "what the person seems to be doing" (the presence/companion code), not only what is picked.
 2. **Command layers (P4's unfinished half)**, one editor at a time against its own API, each with authority (agent/person), a log with
-   before/after, revert, and `cad.command`-style events: Sheets first, then Slides, Pages (its step log exists in Panacea's
+   before/after, revert, and `cad.command`-style events: Sheets, Slides, Pages, PDF, Music, Video and Photo (0.9.343 to 0.9.349) are done; next Games (it has no agent hand yet) (its step log exists in Panacea's
    `doclog.ts`, not in the hosted Pages editor), PDF, Photo, Music, Video, Games. `server/desks.ts` should gain PDF, Office and Video when their state fits.
 3. **P5, cross-window entities** (a chart in a sheet shown on a slide, a photo used in a page): needs step 2 for at least Sheets and Slides.
 4. **Games has no agent hand** (a shared page-side client touching each fork's overlay); Games' fading bar is typechecked but not driven in a browser.

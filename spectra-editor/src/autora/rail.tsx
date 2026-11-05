@@ -30,7 +30,7 @@ import { tCommandTitle } from "../renderer/i18n";
 import { getAutoraDetect, setAutoraColor, setAutoraDetect, setAutoraWidth, type Detect, type WidthMode } from "../renderer/autora-style";
 import { DESKTOP_DEFAULT, GRID, ICONS, PHONE_DEFAULT, TOOLS, type Tile } from "./rail-tools";
 import { useFading } from "./fading";
-import { NO_WORK, holdWork, isOn, needed, type Open, type Work } from "./rail-need";
+import { NO_WORK, holdWork, isOn, needed, pickWords, type Open, type Work } from "./rail-need";
 
 /** Whether this frame was opened as the phone's. Read once: a window does not change its mind. */
 export const isPhone = (): boolean => new URLSearchParams(location.search).get("phone") === "1";
@@ -58,6 +58,31 @@ function readWork(): Work {
   };
 }
 
+/** The words selected in a page's text layer, with its page number; empty when the selection is anywhere else. */
+function readPick(): string {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || !sel.anchorNode) return "";
+  const at = sel.anchorNode instanceof Element ? sel.anchorNode : sel.anchorNode.parentElement;
+  if (!at?.closest(".textLayer")) return "";
+  const cell = at.closest<HTMLElement>(".docview-row > .page[data-page-id]");
+  const cells = Array.from(document.querySelectorAll<HTMLElement>(".docview-row > .page[data-page-id]"));
+  const n = cell ? cells.indexOf(cell) + 1 : 0;
+  return pickWords(String(sel), n > 0 ? n : null);
+}
+
+/** Said to the window when it changes (at most once a second): the agent's briefing carries it. */
+let sentPick = "";
+let sentAt = 0;
+function reportPick(): void {
+  if (window.parent === window) return;
+  const pick = readPick();
+  const now = performance.now();
+  if (pick === sentPick || now - sentAt < 1000) return;
+  sentPick = pick;
+  sentAt = now;
+  window.parent.postMessage({ type: "autora:spectra:pick", text: pick }, "*");
+}
+
 function readOpen(): Open {
   const ui = getCommandContext()?.state.ui;
   return {
@@ -77,6 +102,7 @@ function useOpen(): Open {
     const read = () => {
       frame = 0;
       const raw = readOpen();
+      reportPick();
       // What the document has, held steady: the editor's state reads empty for a beat after a save (rail-need.ts `holdWork`).
       const held = holdWork(raw.work, seen, performance.now());
       seen = held.seen;
@@ -89,7 +115,8 @@ function useOpen(): Open {
     const watch = new MutationObserver(poke);
     watch.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["aria-pressed", "data-tool", "class"] });
     const timer = window.setInterval(poke, 800);
-    return () => { watch.disconnect(); window.clearInterval(timer); if (frame) cancelAnimationFrame(frame); };
+    document.addEventListener("selectionchange", poke);
+    return () => { document.removeEventListener("selectionchange", poke); watch.disconnect(); window.clearInterval(timer); if (frame) cancelAnimationFrame(frame); };
   }, []);
   return open;
 }

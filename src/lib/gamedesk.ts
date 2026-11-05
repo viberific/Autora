@@ -45,3 +45,16 @@ export const gameStateNow = (): GameState => state;
 export function onGameState(fn: () => void): () => void {
   return subscribe(fn);
 }
+
+const playListeners = new Set<() => void>();
+
+/** The window listens for the agent asking for the game to be started (game_play). */
+export function onGamePlay(fn: () => void): () => void {
+  playListeners.add(fn);
+  return () => { playListeners.delete(fn); };
+}
+
+/** The agent's request, off the session stream (called from App, where the stream lives). */
+export function emitGamePlay(): void {
+  for (const fn of playListeners) fn();
+}

@@ -162,6 +162,9 @@ export function SpectraWindow({ sessionId, phone }: { sessionId: string; phone: 
         // The agent's cursor in the editor, for the few words beside it (AgentThought).
         const point = framePoint(frame.current, { x: msg.x, y: msg.y });
         if (point) pointerFollow(point);
+      } else if (msg.type === "autora:spectra:pick" && typeof msg.text === "string") {
+        // The words the person has selected in the page, for the agent's next briefing.
+        void fetch(`/api/pdfdesk/${encodeURIComponent(sessionId)}/pick`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: msg.text }) }).catch(() => undefined);
       } else if (msg.type === "autora:spectra:listen" && typeof msg.event === "string") {
         wanted.current.add(msg.event);
       } else if (msg.type === "autora:spectra:error" && typeof msg.message === "string") {
@@ -179,7 +182,7 @@ export function SpectraWindow({ sessionId, phone }: { sessionId: string; phone: 
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [invoke]);
+  }, [invoke, sessionId]);
 
   // The server's pushes for this session, on to the frame that asked for them.
   useEffect(

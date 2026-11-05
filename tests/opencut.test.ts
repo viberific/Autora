@@ -192,6 +192,16 @@ try {
     assert.equal(looksOnly("video_project", { action: "settings" }), false);
   });
 
+  console.log("what the person has picked");
+  await test("the clips picked on the timeline are told to the agent, and cleared", async () => {
+    await post("/api/opencut/open?session=s1");
+    assert.doesNotMatch(oc.videoBriefing("s1") ?? "", /picked on the timeline/);
+    await post("/api/opencut/pick?session=s1", { text: 'the clip: video "Beach"' });
+    assert.match(oc.videoBriefing("s1") ?? "", /picked on the timeline: the clip: video "Beach"\./);
+    await post("/api/opencut/pick?session=s1", { text: "" });
+    assert.doesNotMatch(oc.videoBriefing("s1") ?? "", /picked on the timeline/);
+  });
+
   console.log(`\n${passed} passed`);
 } finally {
   server.close();

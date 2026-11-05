@@ -176,6 +176,7 @@ pub fn tick(app: &PhotocraftApp, ctx: &egui::Context) {
         rail_bar(app, ctx);
     }
     hand_draw(ctx);
+    report_pick(app);
     // The agent's hand is at work: what it changes goes back with its answer, not as the person's change.
     if hand_busy() {
         SYNC.with(|s| s.borrow_mut().seen = None);
@@ -213,6 +214,28 @@ pub fn tick(app: &PhotocraftApp, ctx: &egui::Context) {
             }
         }
         Err(e) => log::error!("autora: could not keep the picture: {e}"),
+    }
+}
+
+thread_local! {
+    /// The layer last told to the page, so only a change is sent.
+    static PICKED: RefCell<String> = RefCell::new(String::new());
+}
+
+/// The layer the person is on, said to the page when it changes: the agent's briefing carries it, so "this layer" means it.
+fn report_pick(app: &PhotocraftApp) {
+    let Some(st) = app.session.active() else { return };
+    let said = st
+        .active_layer
+        .and_then(|id| st.doc.layer(id))
+        .map(|l| format!("\"{}\" (of {} layers)", l.name, st.doc.layers.len()))
+        .unwrap_or_default();
+    let changed = PICKED.with(|p| {
+        let mut p = p.borrow_mut();
+        if *p == said { false } else { *p = said.clone(); true }
+    });
+    if changed {
+        let _ = send_json("pick", &serde_json::json!({ "text": said }).to_string(), None);
     }
 }
 

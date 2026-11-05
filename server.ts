@@ -145,7 +145,7 @@ import { backgroundBriefing, findJob, listJobs, readTail, startJob, stopJob } fr
 import {
   addressIn, DEVICES, isLocalUrl, localAddress, serveFolder, waitForServer,
   type Device, } from "./server/preview";
-import { deskDocument, deskBriefing, deskHooks, deskRoutes, deskState, dropDesk, onDeskChange, onDeskTouch, personBase } from "./server/pdfdesk";
+import { deskDocument, deskBriefing, deskHooks, deskRoutes, deskState, dropDesk, onDeskChange, onDeskCommand, onDeskTouch, personBase } from "./server/pdfdesk";
 import { pdfHandRoutes } from "./server/pdfhand";
 import { officeHandRoutes } from "./server/officehand";
 import { staticDir } from "./server/staticfiles";
@@ -162,19 +162,19 @@ import { triggerRoutes } from "./server/routes/triggers";
 import { ratingRoutes } from "./server/rating";
 import { jobRoutes } from "./server/routes/jobs";
 import { keyRoutes } from "./server/routes/keys";
-import { dropOpencut, onOpencutChange, opencutRoutes, opencutState, serveOpencut, videoBriefing } from "./server/opencut";
+import { dropOpencut, onOpencutChange, onVideoCommand, opencutRoutes, opencutState, serveOpencut, videoBriefing } from "./server/opencut";
 import { dropSpectra, serveSpectra, spectraDocumentChanged, spectraRoutes, spectraUpgrade } from "./server/spectra";
 import { newFileRoutes } from "./server/newfile";
 import { loadFileRoutes, loadPanaceaFile, type FileLoadGuards } from "./server/loadfile";
 import { DESKS } from "./server/desks";
 import { cadRoutes, cadState, onCadCommand, serveCad } from "./server/caddesk";
-import { gameRoutes, gameState, serveGame } from "./server/gamedesk";
-import { photoRoutes, photoState, servePhoto } from "./server/photodesk";
-import { studioRoutes, studioState, studioTurnNote, studioVisible } from "./server/studio";
+import { gameRoutes, gameState, onGamePlayRequest, serveGame } from "./server/gamedesk";
+import { onPhotoCommand, photoPickNote, photoRoutes, photoState, servePhoto } from "./server/photodesk";
+import { onStudioCommand, studioRoutes, studioState, studioTurnNote, studioVisible } from "./server/studio";
 import { appOfArtifact, appOfFile, appOfTool } from "./src/lib/panacea/flows";
 import { dropPanacea, noteFlow, onPanaceaChange, onPanaceaTouch, panaceaRoutes, panaceaState, panaceaSuggester, panaceaTurnNote, panaceaVisible } from "./server/panacea";
 import { joinProjects, windowOff } from "./server/tools";
-import { dropOfficeDesk, onOfficeChange, onOfficePush, onOfficeTouch, officeBriefing, officeData, officeRoutes, officeState, officeHooks, serveOfficeEditors } from "./server/officedesk";
+import { dropOfficeDesk, onOfficeChange, onOfficePush, onOfficeTouch, officeBriefing, officeData, officeRoutes, onOfficeCommand, officeState, officeHooks, serveOfficeEditors } from "./server/officedesk";
 import { renderToPdf, webDir as officeWebDir } from "./server/officerender";
 import {
   type ReviewComment,
@@ -1302,6 +1302,39 @@ onCadCommand((sessionId, cmd) => {
   if (session) emitEvent(session, "cad.command", cmd.who, { ...cmd });
 });
 
+/* Every command made on a chat's workbook (Sheets), by the agent or the person, is an event too (server/commandlog.ts). */
+onOfficeCommand((sessionId, cmd) => {
+  const session = sessions.get(sessionId);
+  if (session) emitEvent(session, "office.command", cmd.who, { ...cmd });
+});
+
+/* The agent wants the game started in its window (game_play): the page presses Play, so the editor makes a preview to play. */
+onGamePlayRequest((sessionId) => sendEphemeral(sessionId, { type: "gamedesk.play", session: sessionId }));
+
+/* And every command made on a chat's picture (server/commandlog.ts). */
+onPhotoCommand((sessionId, cmd) => {
+  const session = sessions.get(sessionId);
+  if (session) emitEvent(session, "photo.command", cmd.who, { ...cmd });
+});
+
+/* And every command made on a chat's video project (server/commandlog.ts). */
+onVideoCommand((sessionId, cmd) => {
+  const session = sessions.get(sessionId);
+  if (session) emitEvent(session, "video.command", cmd.who, { ...cmd });
+});
+
+/* And every command made on a chat's song (server/commandlog.ts). */
+onStudioCommand((sessionId, cmd) => {
+  const session = sessions.get(sessionId);
+  if (session) emitEvent(session, "studio.command", cmd.who, { ...cmd });
+});
+
+/* And every command made on a chat's PDF (server/commandlog.ts). */
+onDeskCommand((sessionId, cmd) => {
+  const session = sessions.get(sessionId);
+  if (session) emitEvent(session, "pdf.command", cmd.who, { ...cmd });
+});
+
 /* Music, 3D, Games and Photo (server/desks.ts): the window opens, and its state changes (by the agent's tools or the person's hands). */
 for (const desk of DESKS) desk.onChange((sessionId) => sendEphemeral(sessionId, { type: desk.message, session: sessionId, state: desk.state(sessionId) }));
 
@@ -2421,6 +2454,9 @@ async function systemInstructionFor(
   // And the video window, when a project is open in it.
   const videoDesk = videoBriefing(sessionId);
   if (videoDesk) notes.push(videoDesk);
+  // And the layer the person is on in the photo window.
+  const photoPick = photoPickNote(sessionId);
+  if (photoPick) notes.push(photoPick);
   // And the music window, when a song is open in it.
   const studioDesk = studioTurnNote(sessionId);
   if (studioDesk) notes.push(studioDesk);

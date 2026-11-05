@@ -155,10 +155,67 @@ await test("the 3D manual teaches the command log: who did what, history_log sin
   }
 });
 
+await test("the Office manual teaches the workbook's and deck's command log: who did what, office_history, revert, no person-only commands", () => {
+  const text = manualText("office");
+  for (const needle of ["Who did what in a workbook, a deck or a document", "office_history", "since_revision", "app says sheets, slides or pages", "just before command n", "shows in the log as a revert", "no commands that are the person's alone", "words in paragraphs in Pages"]) {
+    assert.ok(text.includes(needle), needle);
+  }
+});
+
 await test("the Office manual says what the person has picked reaches the briefing, so \"this\" means it", () => {
   const text = manualText("office");
   for (const needle of ["is in your briefing for about two minutes", "they mean that, so act on it without asking which"]) {
     assert.ok(text.includes(needle), needle);
+  }
+});
+
+await test("the windows overview says the navigation dock and Tidy appear only when the work needs them, and a blank canvas shows nothing", () => {
+  const text = windowsOverview();
+  for (const needle of ["The dock is not there on a blank canvas", "Tidy joins it only once there is more than one piece of work", "A blank canvas shows nothing at all, no instructions", "the canvas name and Save bar arrive with the first piece of work", "the undo and redo slider once there is something to take back"]) {
+    assert.ok(text.includes(needle), needle);
+  }
+});
+
+await test("the Games manual teaches game_play: it plays the game, brings back pictures and errors, and the agent still asks how it feels", () => {
+  const text = manualText("game");
+  for (const needle of ["Playing the game", "game_play", "(press, hold, wait, click, shot)", "the errors the game threw", "with fresh false it plays the last preview", "ask the person how it plays"]) {
+    assert.ok(text.includes(needle), needle);
+  }
+});
+
+await test("the Photo manual teaches the command log and that the look is the person's: only your own changes can be taken back", () => {
+  const text = manualText("photo");
+  for (const needle of ["Who did what in the picture", "photo_history", "since_revision", "just before command n", "shows in the log as a revert", "you may take back only your own changes", "the last 10 commands"]) {
+    assert.ok(text.includes(needle), needle);
+  }
+});
+
+await test("the Video manual teaches the command log and that the cut is the person's: only your own changes can be taken back", () => {
+  const text = manualText("video");
+  for (const needle of ["Who did what in the video", "video_history", "since_revision", "just before command n", "the editor's own undo", "nothing changes and you are told", "you may take back only your own changes", "the last 30 commands"]) {
+    assert.ok(text.includes(needle), needle);
+  }
+});
+
+await test("the Music manual teaches the command log and that music is the person's: only your own changes can be taken back", () => {
+  const text = manualText("studio");
+  for (const needle of ["Who did what in the song", "studio_history", "since_revision", "just before command n", "shows in the log as a revert", "you may take back only your own changes", "the last 30 commands"]) {
+    assert.ok(text.includes(needle), needle);
+  }
+});
+
+await test("the PDF manual teaches the command log: who did what, pdf_history, revert", () => {
+  const text = manualText("pdf");
+  for (const needle of ["Who did what in the PDF", "pdf_history", "since_revision", "just before command n", "shows in the log as a revert", "declining one of your changes"]) {
+    assert.ok(text.includes(needle), needle);
+  }
+});
+
+await test("the PDF, Video and Photo manuals say what the person has picked reaches the briefing, so \"this\" means it", () => {
+  for (const [id, needle] of [["pdf", "selected in a page"], ["video", "picked on the timeline"], ["photo", "layer the person is on"]] as const) {
+    const text = manualText(id);
+    assert.ok(text.includes(needle), `${id}: ${needle}`);
+    assert.ok(text.includes("act on") && text.includes("without asking which"), `${id}: acts without asking`);
   }
 });
 

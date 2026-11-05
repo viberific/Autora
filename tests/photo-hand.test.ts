@@ -159,6 +159,14 @@ await test("with Visible work off, the window is not asked at all", async () => 
   assert.equal(pushes.filter((m) => m.type === "photodesk.hand").length, 0);
 });
 
+await test("the layer the person is on is told to the agent, and cleared", async () => {
+  assert.equal(photo.photoPickNote(session), null);
+  await fetch(`${base}/pick`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: '"Sky" (of 3 layers)' }) });
+  assert.match(photo.photoPickNote(session) ?? "", /working on this layer.*"Sky" \(of 3 layers\)/);
+  await fetch(`${base}/pick`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: "" }) });
+  assert.equal(photo.photoPickNote(session), null);
+});
+
 server.close();
 fs.rmSync(dir, { recursive: true, force: true });
 console.log(`photo-hand: ${passed} passed`);

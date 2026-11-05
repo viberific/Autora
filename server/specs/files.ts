@@ -646,6 +646,24 @@ export const filesSPECS: ToolSpec[] = [
     },
   },
   {
+    name: "pdf_history",
+    group: "files",
+    description:
+      "The log of changes to the PDF in the window: every change is a command with who made it (you, or the person marking the document up in the window; " +
+      "or the person declining one of yours) and a line saying what. action \"log\" reads it; since_revision (the revision you last saw) shows only what came " +
+      "after, so you learn what the person did while you were not looking instead of guessing from the objects. action \"revert\" with n takes the PDF back to " +
+      "just before command n (everything after it too, including pages changed); that is a new change on top, it can be taken back, and it shows in the log as a revert. " +
+      "You may revert any command, but do not undo what the person did unless they ask. This is for the PDF window's objects and pages; a file that is not in the window has no log.",
+    parameters: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["log", "revert"], description: "log (default) or revert." },
+        since_revision: { type: "number", description: "log: only commands made after this revision." },
+        n: { type: "number", description: "revert: the command number to go back to before." },
+      },
+    },
+  },
+  {
     name: "pdf_compress",
     group: "files",
     description:
@@ -803,6 +821,25 @@ export const filesSPECS: ToolSpec[] = [
         grid: { type: "boolean", description: "Draw a ruler in points over the picture." },
       },
       required: ["file"],
+    },
+  },
+  {
+    name: "office_history",
+    group: "files",
+    description:
+      "The log of changes to the workbook in the Autora Sheets window, the deck in the Autora Slides window, or the document in the Autora Pages window: every change is a command with who made it (you, or the person typing in the window) " +
+      "and a line saying what. action \"log\" reads it; since_revision (the revision you last saw) shows only what came after, so you learn what the person " +
+      "changed while you were not looking instead of guessing from the cells, the slides or the paragraphs. action \"revert\" with n takes the workbook, deck or document back to just before command n " +
+      "(everything after it too); that is a new change on top, it can be taken back, and it shows in the log as a revert. Sheets, Slides and Pages have no commands that " +
+      "are the person's alone: you may revert any. Use revert when the person says undo that, or your change was wrong; do not use it to undo what they did unless they ask.",
+    parameters: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["log", "revert"], description: "log (default) or revert." },
+        app: { type: "string", enum: ["sheets", "slides", "pages"], description: "Which window's log. Default: the workbook if one is open, else the deck, else the document." },
+        since_revision: { type: "number", description: "log: only commands made after this revision." },
+        n: { type: "number", description: "revert: the command number to go back to before." },
+      },
     },
   },
   {

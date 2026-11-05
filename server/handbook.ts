@@ -25,7 +25,8 @@ const OVERVIEW = [
     "is a bottom sheet under the canvas, moved on its left half (the right half only scrolls): Canvas only, Half (the default: messages " +
     "only) and Full (adds tool steps and memory notes). A question or permission waiting keeps it open. Follow and the eye (Visible " +
     "work) sit in the top bar. Every surface and engine card lives in one pannable, zoomable scene, not tabs: the right-side icon dock " +
-    "jumps the camera to one, Zoom out and Show all work [ ] frame them, and all engines stay mounted with their unsaved work. Every " +
+    "jumps the camera to one, Zoom out and Show all work [ ] frame them, and all engines stay mounted with their unsaved work. The dock is not " +
+    "there on a blank canvas, and Tidy joins it only once there is more than one piece of work: controls appear when the work needs them. A blank canvas shows nothing at all, no instructions: the canvas name and Save bar arrive with the first piece of work, and the undo and redo slider once there is something to take back. Files are put on the canvas by dropping or pasting them; they sit there, and the controls for them come when you pick them. Every " +
     "window moves, resizes and maximises; x closes it. \"Follow\" moves the camera to your work, but not while the person types, drags, " +
     "pins or holds the camera; a manual jump stops it. Activity stays in the bubbles, contracted by default. A surface opens on the " +
     "first use of its tools or from Capabilities: never ask the person to open a window. A new empty chat has Open Panacea, to start " +
@@ -160,6 +161,12 @@ const PDF = [
     "properties are done on the file afterwards, and the result says which. With Visible work off, or no window open, all of it is " +
     "done on the file at once and the window shows the result.",
   "  Saving. Edits are saved as you go. The window's top bar (Autora PDF, the file's name) also has Save: it presses the editor's own Save and says the file is kept in Artifacts. The person saves with it without asking you, and is not waiting on you when they do.",
+  "  What the person has selected in a page (words in its text) is in your briefing for about two minutes after, with the page: when they say " +
+    "\"this\" or \"these\", they mean that, so act on it without asking which.",
+  "  Who did what in the PDF. Every change to the PDF in the window is a command in a log, with who made it (you, or the person marking it up, or declining one of your changes) and a line saying what. " +
+    "pdf_history reads it: call it with since_revision (the revision you last saw) to learn what the person did while you were not looking, instead of guessing from the objects. " +
+    "pdf_history with action revert and n takes the PDF back to just before command n (and everything after it, pages changed included); that is a new change on top, so it can be " +
+    "taken back, and it shows in the log as a revert. You may revert any command, but do not undo what the person did unless they ask.",
 ].join("\n");
 
 const VIDEO = [
@@ -204,6 +211,14 @@ const VIDEO = [
     "last time you read it. There are no panels for colour grade, transitions, stabilising, captions, ducking, fades or looks, because " +
     "the editor has none of them.",
   "  Saving. The project is saved as you go; the window's top bar (Autora Video, the project's name) also has Save, which writes the project now. Projects are the person's across chats, so Save keeps nothing in Artifacts; the video file comes from Export.",
+  "  The clips the person has picked on the timeline are in your briefing for about two minutes after (their type and name): when they say " +
+    "\"this clip\" or \"these\", they mean those, so act on them without asking which.",
+  "  Who did what in the video. Every change to the timeline is a command in a log, with who made it (you, or the person cutting in the editor) and a line saying what. " +
+    "video_history reads it, and the person's changes since you last looked are in it: call it with since_revision (the revision you last saw) to learn what they cut while you were not looking, " +
+    "instead of guessing from the timeline. video_history with action revert and n takes the timeline back to just before command n (and everything after it), using the editor's own undo until " +
+    "the timeline is the one from before it; if the editor's history does not reach it (it was reloaded) nothing changes and you are told. A revert is a new change and can be taken back (revert it, or redo). " +
+    "The cut is the person's: you may take back only your own changes, and you are refused when command n, or any after it, is theirs; say what you would change and let them undo it. " +
+    "The timeline from before a command is kept for the last 30 commands, and not across a restart.",
 ].join("\n");
 
 const STUDIO = [
@@ -264,6 +279,11 @@ const STUDIO = [
     "on drum hits) and the notes past the hand's limit of 48 a call; your result says which was which. With Visible work off " +
     "(or the window shut) the song simply changes, the clips you touched lit for a moment.",
   "  Saving. The song is saved as you go; the window's top bar (beside the song's name, before Export) also has Save (and Ctrl+S), which writes it now and keeps a copy in Artifacts as <song name>.song.json. Export makes the WAV.",
+  "  Who did what in the song. Every change to the song in the Music window is a command in a log, with who made it (you, or the person working in the window) and a line saying what. " +
+    "studio_history reads it: call it with since_revision (the revision you last saw) to learn what the person changed while you were not looking, instead of guessing from the notes. " +
+    "studio_history with action revert and n takes the song back to just before command n (and everything after it); that is a new change on top, so the person can take it back, and it shows in the log as a revert. " +
+    "Music is the person's: you may take back only your own changes. If command n, or any after it, is the person's own work you are refused; say what you would change and let them undo it in the window. " +
+    "The song from before a command is kept for the last 30 commands, and not across a restart.",
 ].join("\n");
 
 const OFFICE = [
@@ -303,6 +323,11 @@ const OFFICE = [
     "a new slide or box) appears then; the result says what was typed by hand. It takes seconds per change, so send what the change " +
     "needs. A new document (office_create) simply appears. With Visible work off, or no window open, the change simply appears.",
   "  Saving. Edits are saved as you go. The window's top bar (the app, the file's name, Versions) also has Save: it presses the editor's own Ctrl+S, writes the file in Artifacts now and keeps a version named \"Saved by you\". The person saves with it without asking you.",
+  "  Who did what in a workbook, a deck or a document. Every change to a workbook in the Sheets window, a deck in the Slides window, or a document in the Pages window, is a command in a log, with who made it (you, or the person typing in the window) and " +
+    "a line saying what (cells in Sheets, words on slides in Slides, words in paragraphs in Pages). office_history reads it: call it with since_revision (the revision you last saw) to learn what the person changed while you were not looking, " +
+    "instead of guessing from the cells, the slides or the words; app says sheets, slides or pages when more than one is open. office_history with action revert and n takes the workbook, deck or document back to just before command n (and everything after it); that is a new " +
+    "change on top, so it can be taken back, and it shows in the log as a revert. Sheets, Slides and Pages have no commands that are the person's alone, so you may revert any, but do not " +
+    "undo what they did unless they ask.",
 ].join("\n");
 
 const CAD = [
@@ -406,6 +431,11 @@ const GAME = [
     "they decide, and you use exactly their words. There are no panels for camera, health, score, sound, particles or the like: they " +
     "are events you write, with no setting for a panel to move.",
   "  Saving. The game is saved as you go; the window's top bar (Autora Games, the game's name), on a desktop too, has Save, which keeps the GDevelop project in Artifacts as a .json named after the chat.",
+  "  Playing the game. game_play starts the game in the window (the person sees it begin) and runs a copy in a browser of its own, with the keys, clicks and waits you give as a script " +
+    "(press, hold, wait, click, shot), and brings back pictures of the screen, the errors the game threw, whether the screen changed, and how many frames it drew. Use it after you build " +
+    "or change something and before you say it works: does it start, does it throw, does anything move when the keys are pressed. It needs the window open with its editor running to start the " +
+    "current game; with fresh false it plays the last preview, and says when that is an earlier version. You cannot hear the game, and a picture cannot show how it feels: ask the person how it plays " +
+    "before you say it is right. The person who has never made a game should not have to press Play for you: test it yourself first.",
 ].join("\n");
 
 const PANACEA = [
@@ -565,6 +595,13 @@ const PHOTO = [
     "experiments. A command with no tile in All tools runs as the editor's command, and its result says so. With Visible work off, " +
     "or no window open, the edit runs at once on the server's copy and the window shows the result.",
   "  Saving. The picture is saved as you go; the window's top bar (Autora Photo, its size and layers), on a desktop too, has Save, which keeps a PNG of it in Artifacts named after the chat (the layered picture stays in the window). photo_export is still yours for other formats.",
+  "  The layer the person is on in the window is in your briefing for about two minutes after it changes: when they say \"this layer\" or " +
+    "\"this\", they mean that one, so act on it without asking which.",
+  "  Who did what in the picture. Every change to the picture is a command in a log, with who made it (you, or the person painting or editing in the window) and a line saying what. " +
+    "photo_history reads it: call it with since_revision (the revision you last saw) to learn what the person changed while you were not looking, instead of guessing from the layers. " +
+    "photo_history with action revert and n puts the picture back as it was just before command n (and everything after it); that is a new change on top, so it can be taken back, and it shows " +
+    "in the log as a revert. The look of the picture is the person's: you may take back only your own changes, and you are refused when command n, or any after it, is theirs; say what you would " +
+    "change and let them undo it in the window. The pictures from before are kept for the last 10 commands (up to 300 MB), and they survive a restart.",
 ].join("\n");
 
 const WIDGETS = [

@@ -16,7 +16,7 @@ import { PanaceaWorkspace } from "./components/PanaceaWorkspace";
 import type { NativeWorkspaceActions, WorkspaceMode } from "./lib/workspace";
 import { useWorkspaceFocus, workspaceToolKey } from "./lib/workspaceFocus";
 import { emitCadHand, resetCad, setCadState, useCadState } from "./lib/caddesk";
-import { resetGame, setGameState, useGameState } from "./lib/gamedesk";
+import { emitGamePlay, resetGame, setGameState, useGameState } from "./lib/gamedesk";
 import { emitPhotoHand, resetPhoto, setPhotoState, usePhotoState } from "./lib/photodesk";
 import { emitStudioCommand, resetStudio, setStudioState, useStudioState } from "./lib/studio";
 import { emitPanaceaCommand, resetPanacea, setPanaceaState, usePanaceaState } from "./lib/panacea";
@@ -521,6 +521,7 @@ export function App() {
       onPdfHand: emitDeskHand,
       onCadDesk: setCadState,
       onGameDesk: setGameState,
+      onGamePlay: emitGamePlay,
       onPhotoDesk: setPhotoState,
       onPhotoHand: emitPhotoHand,
       onStudioDesk: setStudioState,

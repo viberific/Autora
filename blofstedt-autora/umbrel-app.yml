@@ -206,7 +206,7 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Pages, Sheets and Slides now tell the assistant what you have picked. Select
-  some words, a block of cells or a box on a slide and say "make this shorter"
-  or "bold these": the assistant knows what "this" is for the next couple of
-  minutes, without asking which.
+  A blank canvas is now truly blank. The canvas name and Save bar, and the undo
+  and redo slider, stay out of sight until there is something on the canvas to
+  name, save or take back, and then arrive on their own. Drop or paste a file
+  onto the canvas to put it there; the controls for it appear when you pick it.

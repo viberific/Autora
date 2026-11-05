@@ -76,6 +76,42 @@ export const gameSPECS: ToolSpec[] = [
     },
   },
   {
+    name: "game_play",
+    group: "files",
+    description:
+      "Play the game and see it: it is started in the game window (the person watches it start), then run in a headless browser of its own with the keys, clicks and waits you give, and " +
+      "you get pictures of the screen, the errors the game threw, how many frames it drew, and whether the screen changed. Use it after you build or change something, before you say it works: " +
+      "does it start, does it throw, does anything move when the keys are pressed. You cannot hear it, and a still does not show how it feels to play: ask the person how it plays. " +
+      "`script` is a list of steps, played in order: {press: key, ms?} taps a key (held ms, default 120); {hold: [keys], ms} holds up to four keys together; {wait: ms}; {click: [x, y]} on the " +
+      "game's screen in pixels; {shot: label} takes a picture. Keys are a letter or digit, or ArrowLeft, ArrowRight, ArrowUp, ArrowDown, Space, Enter, Escape, Tab, Shift, Control, Alt, Backspace. " +
+      "With no shot in the script you get one after it starts and one at the end. At most 60 steps, 8 pictures, and 30 seconds of waiting and holding together. " +
+      "`fresh` (the default) starts the game from the current project, which needs the window open with its editor running; fresh false plays the last preview the editor made, " +
+      "which may be an earlier version (it says so).",
+    parameters: {
+      type: "object",
+      properties: {
+        script: {
+          type: "array",
+          description: "What the player does, in order. Leave out for a look at how it starts.",
+          items: {
+            type: "object",
+            properties: {
+              press: { type: "string", description: "A key to tap." },
+              hold: { type: "array", items: { type: "string" }, description: "Keys to hold together (up to four)." },
+              ms: { type: "number", description: "For press and hold: how long the key is down, in milliseconds." },
+              wait: { type: "number", description: "Milliseconds to let the game run." },
+              click: { type: "array", items: { type: "number" }, description: "[x, y] in pixels on the game's screen." },
+              shot: { type: "string", description: "Take a picture, with this label." },
+            },
+          },
+        },
+        fresh: { type: "boolean", description: "Start the game from the current project first (default true)." },
+        width: { type: "number", description: "The game screen's width in pixels. Default 800." },
+        height: { type: "number", description: "The game screen's height in pixels. Default 600." },
+      },
+    },
+  },
+  {
     name: "game_check",
     group: "files",
     description:

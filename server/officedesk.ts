@@ -33,6 +33,8 @@ import { MAX_ARTIFACT_BYTES, getArtifact, saveArtifact } from "./artifacts";
 import { OfficeHost, hostBuilt, wire } from "./officehost";
 import { slideElements } from "./office";
 import { dropPages, latestPages, pageFile, pagesFor, type Locator } from "./officepages";
+import { addCommand, logText, openPersonRun, type OfficeCommand } from "./commandlog";
+import { PICK_FRESH_MS, PICK_MAX } from "./picked";
 import { stateDir } from "./state";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -99,13 +101,16 @@ type Desk = {
   cueAt?: number;
   /** Until when a save from the editor is ignored: it may be the agent's hand's typing, trailing (officehand.ts). */
   quietUntil?: number;
+  /** Sheets: every change as a command (who, what, the version just before), oldest first. See commandlog.ts. */
+  log?: OfficeCommand[];
+  /** The number the next command gets. */
+  lseq?: number;
   /** What the person has picked in the editor (words, a cell range, a box), and when it was said. Never kept on disk. */
   pick?: { text: string; at: number };
 };
 
 /** A pick older than this is no longer what the person is on. */
-export const PICK_FRESH_MS = 2 * 60_000;
-const PICK_MAX = 120;
+export { PICK_FRESH_MS };
 
 /**
  * One thing the agent did in the document, to be shown as a cursor that goes to the place and types the words,
@@ -544,6 +549,7 @@ function load(session: DeskKey): Desk | null {
       rev: Number(meta.rev) || 1, loadRev: Number(meta.loadRev) || 1, since: Number(meta.since) || Date.now(),
       news: Array.isArray(meta.news) ? meta.news.map(String) : [], problem: null,
       versions: Array.isArray(meta.versions) ? meta.versions : [], vseq: Number(meta.vseq) || 0, dirty: meta.dirty === true,
+      log: Array.isArray(meta.log) ? meta.log : undefined, lseq: Number(meta.lseq) || undefined,
     };
     desks.set(session, desk);
     return desk;
@@ -612,6 +618,58 @@ function snapshot(session: DeskKey, desk: Desk, label: string, by: "agent" | "pe
     const old = desk.versions.shift();
     if (old) fs.rmSync(versionFile(session, old.n, desk.kind), { force: true });
   }
+}
+
+// ------------------------------------------------------ the command log --
+
+const commandListeners: Array<(session: string, entry: OfficeCommand) => void> = [];
+/** Told of every command made on a chat's workbook (the agent's edits, the person's, a revert), for the event log. */
+export function onOfficeCommand(fn: (session: string, entry: OfficeCommand) => void) {
+  commandListeners.push(fn);
+}
+
+/** Sheets, Slides and Pages all have a command log (commandlog.ts); a document's is a file diff, as the others are. */
+const NOUN: Record<OfficeKind, string> = { xlsx: "workbook", pptx: "deck", docx: "document" };
+
+function record(key: DeskKey, desk: Desk, cmd: Omit<OfficeCommand, "n" | "rev">, run?: OfficeCommand | null) {
+  desk.log ??= [];
+  if (run) {
+    // The same run of the person's typing: one command, said again from where it began.
+    run.summary = cmd.summary || run.summary;
+    run.at = cmd.at;
+    run.rev = desk.rev;
+    for (const fn of commandListeners) fn(sessionOf(key), run);
+    return;
+  }
+  desk.lseq = (desk.lseq ?? 0) + 1;
+  const entry = addCommand(desk.log, desk.lseq, { ...cmd, rev: desk.rev });
+  for (const fn of commandListeners) fn(sessionOf(key), entry);
+}
+
+/** Which window the agent means when it names none: a workbook if one is open, else a deck, else a document. */
+function logKind(session: string): OfficeKind {
+  return (["xlsx", "pptx", "docx"] as const).find((k) => load(keyOf(session, k))?.open) ?? "xlsx";
+}
+
+/** The commands made on a chat's workbook or deck, oldest first; empty when there is none. */
+export function officeCommands(session: string, kind: OfficeKind = "xlsx"): OfficeCommand[] {
+  return [...(load(keyOf(session, kind))?.log ?? [])];
+}
+
+/** Go back to just before command n. A new change on top, so it can be undone; it is itself in the log. */
+function revertOfficeCommand(session: string, n: number, who: "agent" | "person", kind: OfficeKind = "xlsx"): string | null {
+  const key = keyOf(session, kind);
+  const desk = load(key);
+  if (!desk) return `There is no ${NOUN[kind]} open in the window.`;
+  const cmd = desk.log?.find((c) => c.n === n);
+  if (!cmd) return "That command is not in the log.";
+  if (cmd.before === null) return `That command made the ${NOUN[kind]}; there is nothing before it to go back to.`;
+  return restoreOfficeVersion(key, cmd.before, who, `went back to before command ${n} (${cmd.summary.slice(0, 80)})`);
+}
+
+/** The log in words, for the agent. */
+function officeLogText(session: string, sinceRev = 0, kind: OfficeKind = "xlsx"): string {
+  return logText(load(keyOf(session, kind))?.log ?? [], sinceRev, NOUN[kind]);
 }
 
 // ----------------------------------------- the file everyone else sees --
@@ -896,6 +954,10 @@ export interface OfficeHooks {
   show(kind?: OfficeKind): void;
   /** What the person did in a window since the agent was last told, said once; "" when nothing. */
   news(kind?: OfficeKind): string;
+  /** Sheets, Slides and Pages: the log of changes to the workbook, deck or document in the window, as the agent reads it (commandlog.ts). */
+  commandLog(sinceRev?: number, kind?: OfficeKind): string;
+  /** Sheets, Slides and Pages: the workbook, deck or document goes back to just before command n. Null when done, else why not. */
+  revert(n: number, kind?: OfficeKind): string | null;
 }
 
 const seen = (desk: Desk) => ({ kind: desk.kind, name: desk.name, data: desk.data, working: desk.working, source: desk.source, outName: desk.outName });
@@ -941,6 +1003,7 @@ export function officeHooks(session: string): OfficeHooks {
         since: carried && was ? was.since : Date.now(),
         news: was?.news ?? [], problem: null,
         versions: carried && was ? was.versions : [], vseq: carried && was ? was.vseq : 0, dirty: false,
+        log: carried && was ? was.log : undefined, lseq: carried && was ? was.lseq : undefined,
       };
       if (was && carried) {
         // What the person did so far is kept as a version before the agent's change goes on top.
@@ -967,7 +1030,14 @@ export function officeHooks(session: string): OfficeHooks {
         desk.cueAt = Date.now();
       }
       desks.set(key, desk);
+      // What was there just before this change: the version the command is taken back to (null for a document just begun).
+      const beforeV = was && carried && desk.vseq > 0 ? desk.vseq : null;
       snapshot(key, desk, next.label ?? (was && carried ? "Changed by the agent" : "Opened"), "agent");
+      const said = was && carried ? describeFiles(kind, was.data, next.data) : [];
+      record(key, desk, {
+        who: "agent", name: was && carried ? "agent_edit" : "open", at: Date.now(), before: beforeV,
+        summary: said.join(" and ") || next.label || (was && carried ? `changed the ${NOUN[kind]}` : `opened the ${NOUN[kind]}`),
+      });
       if (kind !== "docx") engineFileChanged(key, desk, desk.data);
       persist(key);
       changed(key);
@@ -993,6 +1063,8 @@ export function officeHooks(session: string): OfficeHooks {
       persist(key);
       changed(key);
     },
+    commandLog: (sinceRev, kind) => officeLogText(session, sinceRev, kind ?? logKind(session)),
+    revert: (n, kind) => revertOfficeCommand(session, n, "agent", kind ?? logKind(session)),
     news(kind) {
       const key = kind ? keyOf(session, kind) : newest();
       const desk = key ? load(key) : null;
@@ -1060,6 +1132,8 @@ function personSaved(session: DeskKey, data: Buffer): string | null {
   if (handingKeys.has(session) || Date.now() < (desk.quietUntil ?? 0)) return null;
   if (data.equals(desk.data)) return null;
   const before = desk.data;
+  const run = openPersonRun(desk.log ?? [], desk.dirty);
+  const beforeV = desk.vseq > 0 ? desk.vseq : null;
   desk.data = data;
   const said = describeFiles(desk.kind, before, data);
   if (said.length) {
@@ -1070,6 +1144,17 @@ function personSaved(session: DeskKey, data: Buffer): string | null {
   }
   desk.dirty = true;
   desk.rev++;
+  if (said.length) {
+    // A run of typing is one command: its account is redone from the version it began at, when that is still kept.
+    let account = said.join(" and ");
+    if (run?.before != null) {
+      try {
+        const start = fs.readFileSync(versionFile(session, run.before, desk.kind));
+        account = describeFiles(desk.kind, start, data).join(" and ") || account;
+      } catch { /* the first version is gone: the latest save's account stands */ }
+    }
+    record(session, desk, { who: "person", name: "person_edit", at: Date.now(), before: beforeV, summary: account }, run);
+  }
   persist(session);
   changed(session);
   rewrite(session);
@@ -1077,7 +1162,7 @@ function personSaved(session: DeskKey, data: Buffer): string | null {
 }
 
 /** Go back to an earlier version of the document: the present one is kept too, so nothing is lost. */
-function restoreOfficeVersion(session: DeskKey, n: number): string | null {
+function restoreOfficeVersion(session: DeskKey, n: number, who: "agent" | "person" = "person", note?: string): string | null {
   const desk = load(session);
   if (!desk) return "There is no document open in the window.";
   const v = desk.versions.find((x) => x.n === n);
@@ -1093,8 +1178,10 @@ function restoreOfficeVersion(session: DeskKey, n: number): string | null {
   desk.rev++;
   desk.loadRev++;
   if (desk.kind !== "docx") engineFileChanged(session, desk);
-  desk.news.push(`went back to version ${v.n} (${v.label})`);
-  snapshot(session, desk, `Went back to version ${v.n}`, "person");
+  if (who === "person") desk.news.push(`went back to version ${v.n} (${v.label})`);
+  const beforeV = desk.vseq > 0 ? desk.vseq : null;
+  snapshot(session, desk, `Went back to version ${v.n}`, who);
+  record(session, desk, { who, name: "revert", at: Date.now(), before: beforeV, summary: note ?? `went back to version ${v.n} (${v.label})` });
   persist(session);
   changed(session);
   rewrite(session);
@@ -1247,6 +1334,25 @@ export function officeRoutes(app: Express, opts: { exists: (session: string) => 
     if (!key) return;
     const problem = restoreOfficeVersion(key, Number(req.body?.n));
     if (problem) return res.status(400).json({ error: problem });
+    res.json({ ok: true });
+  });
+
+  /* ?kind=xlsx (the default), pptx or docx. */
+  const routeKind = (req: Request): OfficeKind => (req.query.kind === "pptx" ? "pptx" : req.query.kind === "docx" ? "docx" : "xlsx");
+
+  /* The log of what was done to the workbook or deck, by whom (commandlog.ts); and going back to before a command. */
+  app.get("/api/officedesk/:session/commands", (req, res) => {
+    const id = known(req, res);
+    if (id) res.json({ commands: officeCommands(id, routeKind(req)) });
+  });
+
+  app.post("/api/officedesk/:session/commands/revert", express.json({ limit: "1kb" }), (req, res) => {
+    const id = known(req, res);
+    if (!id) return;
+    const n = Number(req.body?.n);
+    if (!Number.isInteger(n)) return res.status(400).json({ error: "n must be a command number from the log." });
+    const problem = revertOfficeCommand(id, n, "person", routeKind(req));
+    if (problem) return res.status(404).json({ error: problem });
     res.json({ ok: true });
   });
 

@@ -88,6 +88,25 @@ export async function runPdfTool(name: string, args: Record<string, any>, ctx: P
   return news ? { ...outcome, summary: `${outcome.summary} ${news}` } : outcome;
 }
 
+/** The PDF window's command log: who changed what, and going back to before a command (server/commandlog.ts). */
+function historyTool(args: Record<string, any>, ctx: PdfContext): PdfOutcome {
+  if (!ctx.desk) return { ok: false, summary: "There is no PDF window in this chat to keep a log for." };
+  const action = String(args.action ?? "log");
+  if (action === "log") {
+    const since = Number(args.since_revision);
+    return { ok: true, summary: ctx.desk.commandLog(Number.isFinite(since) && since > 0 ? since : 0), preview: "history log" };
+  }
+  if (action === "revert") {
+    const n = Number(args.n);
+    if (!Number.isInteger(n)) return { ok: false, summary: "revert needs n, a command number from the log." };
+    const problem = ctx.desk.revert(n, ctx.cwd);
+    return problem
+      ? { ok: false, summary: problem }
+      : { ok: true, summary: `The PDF is back to just before command ${n}. That is a new change on top, so it can be taken back; pdf_history log shows it as a revert.`, preview: `revert ${n}` };
+  }
+  return { ok: false, summary: "action is log or revert." };
+}
+
 async function runOne(name: string, args: Record<string, any>, ctx: PdfContext): Promise<PdfOutcome> {
   try {
     switch (name) {
@@ -99,6 +118,7 @@ async function runOne(name: string, args: Record<string, any>, ctx: PdfContext):
       case "pdf_redact": return await redactTool(args, ctx);
       case "pdf_replace_text": return await replaceTextTool(args, ctx);
       case "pdf_compress": return await compressTool(args, ctx);
+      case "pdf_history": return historyTool(args, ctx);
       default: return { ok: false, summary: `There is no PDF tool called ${name}.` };
     }
   } catch (err) {
@@ -1355,6 +1375,10 @@ export interface DeskHooks {
   show(): void;
   /** What the person did in the window since the agent was last told, said once; "" when nothing. */
   news(): string;
+  /** The log of changes to the PDF in the window, as the agent reads it (commandlog.ts). */
+  commandLog(sinceRev?: number): string;
+  /** The PDF goes back to just before command n. Null when done, else why not. */
+  revert(n: number, cwd: string): string | null;
 }
 
 const deskId = () => `agent_${crypto.randomBytes(5).toString("hex")}`;

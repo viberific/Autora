@@ -920,6 +920,10 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
         />
       )}
       {(() => {
+        /* The controls for moving around the work are there when there is work to move around: none on a blank canvas, and
+           Tidy only once there is more than one thing to put in rows. (CLAUDE.md: controls appear when the work needs them.) */
+        const pieces = canvas.surfaces.length + hosted.length;
+        if (pieces === 0) return null;
         const dock = <nav className="pw-jump-dock pa-chrome" aria-label="Jump to work">
         {canvas.surfaces.map((surface) => <button type="button" key={surface.id} data-jump={surface.id} title={`Jump to ${surface.title}`}
           aria-label={`Jump to ${surface.title}`} onClick={() => { handle.current?.jump(surface.id); onFocus(surface.id); onJumpWork?.("panacea"); }}>
@@ -929,7 +933,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
           onClick={() => { handle.current?.jump(work.id); onJumpWork?.(work.mode); }}>{workIcon(work.mode)}</button>)}
         <button type="button" aria-label="Zoom out" title="Zoom out" onClick={() => { handle.current?.zoomOut(); onJumpWork?.(followTarget ?? "panacea"); }}>−</button>
         <button type="button" aria-label="Show all work" title="Show all work" onClick={() => { interacted.current = true; fit(); onJumpWork?.(followTarget ?? "panacea"); }}><IconMaximize size={16} /></button>
-        <button type="button" aria-label="Tidy the layout" title="Tidy: windows and surfaces in rows, none over another" onClick={() => { tidyUp(); onJumpWork?.(followTarget ?? "panacea"); }}><IconTidy size={16} /></button>
+        {pieces > 1 && <button type="button" aria-label="Tidy the layout" title="Tidy: windows and surfaces in rows, none over another" onClick={() => { tidyUp(); onJumpWork?.(followTarget ?? "panacea"); }}><IconTidy size={16} /></button>}
         </nav>;
         return navigationHost ? createPortal(dock, navigationHost) : dock;
       })()}

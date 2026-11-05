@@ -298,18 +298,30 @@ export function looksOnly(name: string, args: Record<string, any> = {}): boolean
   // Reading a PDF is looking; pulling its attachments out saves new files.
   if (name === "pdf_read") return !(Array.isArray(args.extract) ? args.extract.length : args.extract);
   if (name === "pdf_look") return true;
+  // The log is looking; going back to before a command changes the PDF.
+  if (name === "pdf_history") return String(args.action ?? "log") === "log";
   // Reading, checking and the guide look; an edit that is only a dry run looks too.
   if (name === "office_read" || name === "office_check" || name === "office_guide" || name === "office_look" || name === "office_open") return true;
   if (name === "office_edit") return args.dry_run === true;
+  // The log is looking; going back to before a command changes the workbook.
+  if (name === "office_history") return String(args.action ?? "log") === "log";
   // Reading the video project is looking; opening one on the window does not change it, starting a new one does.
   if (name === "video_look" || name === "video_catalog" || name === "video_frame") return true;
+  // The log is looking; going back to before a command changes the timeline.
+  if (name === "video_history") return String(args.action ?? "log") === "log";
   if (name === "video_ui") return String(args.action ?? "") === "read";
   if (name === "video_open") return !String(args.new ?? "").trim();
   // Looking at the picture is looking; opening one on the window does not change it, starting a new one or loading a file does.
   if (name === "photo_look" || name === "photo_info" || name === "photo_commands") return true;
   if (name === "photo_open") return !args.file && !args.new;
+  // Playing the game changes nothing in the project: it starts the game in the window and runs a copy to look at.
+  if (name === "game_play") return true;
+  // The log is looking; putting the picture back as it was before a command changes it.
+  if (name === "photo_history") return String(args.action ?? "log") === "log";
   // The same for the music window; playing and stopping change nothing in the song.
   if (name === "studio_look" || name === "studio_play") return true;
+  // The log is looking; going back to before a command changes the song.
+  if (name === "studio_history") return String(args.action ?? "log") === "log";
   if (name === "studio_open") return !String(args.new ?? "").trim();
   // Looking at the canvas or its library is looking; opening it does not change it, starting a new one does.
   if (name === "panacea_look") return true;

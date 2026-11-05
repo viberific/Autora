@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import type { Page } from "playwright-core";
 
-/** Establish the real scene/entry contract before testing an engine's own controls. */
-export async function workspaceReady(page: Page): Promise<void> {
+/**
+ * Establish the real scene/entry contract before testing an engine's own controls. On a blank canvas (`blank`) there is no
+ * work to move around, so there are no navigation controls either: controls appear when the work needs them (CLAUDE.md).
+ */
+export async function workspaceReady(page: Page, options: { blank?: boolean } = {}): Promise<void> {
   const workspace = page.getByRole("region", { name: "Panacea workspace", exact: true });
   await workspace.waitFor();
   assert.equal(await workspace.count(), 1, "work belongs to one workspace");
@@ -10,6 +13,10 @@ export async function workspaceReady(page: Page): Promise<void> {
   assert.equal(await page.getByRole("separator", { name: "Resize the conversation" }).count(), 0, "no left conversation pane");
   assert.equal(await page.getByRole("textbox", { name: "Ask Autora", exact: true }).count(), 1, "engine work keeps the same main entry");
   const navigation = page.getByRole("navigation", { name: "Jump to work", exact: true });
+  if (options.blank) {
+    assert.equal(await navigation.count(), 0, "a blank canvas has no controls for moving around work");
+    return;
+  }
   assert.equal(await navigation.count(), 1);
   assert.ok(await navigation.evaluate((node) => !node.closest(".pa-world")), "work navigation is unscaled viewport chrome");
 }

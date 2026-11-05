@@ -71,6 +71,11 @@ export function announce(msg: Record<string, unknown>): void {
   if (inWindow) window.parent.postMessage({ type: "autora:opencut:state", ...msg }, "*");
 }
 
+/** The editor tells the window which clips are picked on the timeline (empty when none), for the agent's next briefing. */
+export function announcePick(text: string): void {
+  if (inWindow) window.parent.postMessage({ type: "autora:opencut:pick", text }, "*");
+}
+
 /** Hand a finished file (an export) to the window to keep. */
 export function deliver(name: string, mime: string, data: ArrayBuffer): Promise<{ artifact: string }> {
   return ask("autora:opencut:deliver", { name, mime, data });

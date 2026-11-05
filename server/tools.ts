@@ -2030,7 +2030,7 @@ const LONG_TOOLS = new Set([
   "video_export", "video_import", "studio_export", "cad_export", "cad_doc_set",
   "pdf_compose", "pdf_edit", "pdf_compress", "pdf_pages",
   "office_create", "office_edit", "office_convert", "office_pdf",
-  "game_import", "notebook", "schedule",
+  "game_import", "game_play", "notebook", "schedule",
 ]);
 
 /**
@@ -3678,6 +3678,7 @@ async function runToolUnredacted(
       case "pdf_redact":
       case "pdf_replace_text":
       case "pdf_compress":
+      case "pdf_history":
         return await runPdfTool(spec.name, args, {
           session: ctx.session,
           cwd: terminalDir(),
@@ -3700,6 +3701,7 @@ async function runToolUnredacted(
       case "video_edit":
       case "video_style":
       case "video_project":
+      case "video_history":
       case "video_ui":
       case "video_catalog":
       case "video_frame":
@@ -3726,6 +3728,7 @@ async function runToolUnredacted(
       case "studio_notes":
       case "studio_make":
       case "studio_play":
+      case "studio_history":
       case "studio_export":
         if (ctx.memory.incognito) {
           return { ok: false, summary: "Not available in an incognito chat: the music window keeps its song on disk." };
@@ -3763,6 +3766,7 @@ async function runToolUnredacted(
       case "office_pdf":
       case "office_create":
       case "office_convert":
+      case "office_history":
         return await runOfficeTool(spec.name, args, {
           session: ctx.session,
           cwd: terminalDir(),
@@ -3946,16 +3950,23 @@ async function runToolUnredacted(
       case "game_catalog":
       case "game_template":
       case "game_import":
+      case "game_play":
         if (ctx.memory.incognito) {
           return { ok: false, summary: "Not available in an incognito chat: the game window keeps its game on disk." };
         }
-        return await runGameTool(ctx.session, spec.name, args, { cwd: terminalDir() });
+        return await runGameTool(ctx.session, spec.name, args, {
+          cwd: terminalDir(),
+          showImage: (data, alt) => ctx.showImage(ctx.putBlob(data, "image/png"), alt, null),
+          cancelled: ctx.cancelled,
+          onCancel: ctx.onCancel,
+        });
 
       case "photo_open":
       case "photo_look":
       case "photo_info":
       case "photo_commands":
       case "photo_edit":
+      case "photo_history":
       case "photo_export":
         if (ctx.memory.incognito) {
           return { ok: false, summary: "Not available in an incognito chat: the photo window keeps its picture on disk." };
