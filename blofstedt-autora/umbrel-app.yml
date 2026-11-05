@@ -206,12 +206,9 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Smoother first minutes. A window whose editor is not installed on your server
-  (PDF, Video, 3D, Games) now says so instead of showing a blank "Not Found"
-  page, and the Capabilities chooser lists it as not installed. What you open
-  says what to do first, in calm text that goes away by itself. Charts no
-  longer let bars run past the top of their axis, and a dropped file's chart and
-  controls are brought into view. A new flowchart step asks you to name it, and
-  "1 node" reads correctly. On a phone, a window you just opened gets the whole
-  screen until you say something. Enter now sends your message, and a blank
-  screen shows only what you can use.
+  Clearer about what it actually did. When a video export finishes, the reply
+  now names the real file and says it is saved in Artifacts, in this chat's
+  project folder, instead of quoting an internal id. On a board, a selected
+  link says plainly that links group ideas and do not make a sequence, so a
+  line between two cards is no longer mistaken for a timeline step. Flowcharts
+  are unchanged, where a connector really does mean a sequence.
