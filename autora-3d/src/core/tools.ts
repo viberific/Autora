@@ -20,9 +20,12 @@ export interface ToolSpec {
   readOnly?: boolean;
   /** True when only the live app can do it (it needs a screen). */
   uiOnly?: boolean;
+  /** Who may make this command: `agent` (the default) or `person`, the person's own hand, which the agent is never given. */
+  authority?: 'agent' | 'person';
 }
 
 const point = { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' } }, required: ['x', 'y'], description: 'A point on the ground plane, mm.' };
+const point3 = { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number', description: 'Height above the ground (default 0).' } }, required: ['x', 'y'], description: 'A point in the model, mm: x, y on the ground and z up.' };
 const ids = { type: 'array', items: { type: 'string' }, minItems: 1, description: 'Shape ids.' };
 const face = {
   description: 'A face: "top", "bottom", or {"kind":"wall","index":n}. shape_faces lists them with their indices.',
@@ -156,6 +159,77 @@ export const TOOL_SPECS: ToolSpec[] = [
     }),
   },
   {
+    name: 'sculpt_blend',
+    description:
+      'Make ONE smooth, organic shape by blending simple parts into a soft surface: the way to model an animal, a creature, a hand, a bottle, a cloud. Give parts: spheres, tapered capsules (a limb or neck: at, to, radius at each end) and ellipsoids (a body or head: radii along x, y, z). Where parts overlap they melt together over `smooth` mm. Positions are in mm on the ground (x, y) and up (z); parts may overlap and may sit anywhere. Give half of a symmetric creature and set mirror ({axis, at}) to reflect it. Build the big masses first (body, chest, hips, head), then limbs overlapping into them; look with scene_get / a view and adjust the numbers, or use sculpt_smooth. The result is a mesh shape: move, turn, resize, recolour and export work; it has no outline, faces or holes. A person can refine it by hand in the window.',
+    inputSchema: obj(
+      {
+        parts: {
+          type: 'array',
+          description: 'The parts to blend (1 to 64; mirroring doubles them).',
+          items: obj(
+            {
+              kind: { type: 'string', enum: ['sphere', 'capsule', 'ellipsoid'] },
+              at: { ...point3, description: 'Sphere or ellipsoid centre, or a capsule\'s first end, mm.' },
+              to: { ...point3, description: 'A capsule\'s other end.' },
+              radius: { type: 'number', description: 'Sphere radius, or a capsule\'s radius at `at`.' },
+              radius2: { type: 'number', description: 'A capsule\'s radius at `to` (default: the same).' },
+              radii: { ...point3, description: 'An ellipsoid\'s half-sizes along x, y and z.' },
+            },
+            ['kind', 'at']
+          ),
+        },
+        smooth: { type: 'number', description: 'How wide the soft joins are, mm. Default: 0.6 x the smallest part radius. 0 leaves creases.' },
+        detail: { type: 'number', description: 'Fineness: grid cells along the longest side (8 to 120, default 72). Higher is smoother and slower.' },
+        mirror: obj({ axis: { type: 'string', enum: ['x', 'y', 'z'] }, at: { type: 'number', description: 'Where the mirror plane is on that axis. Default: the middle of the parts.' } }, ['axis']),
+        name: { type: 'string' },
+        color: color,
+        material,
+      },
+      ['parts']
+    ),
+  },
+  {
+    name: 'sculpt_loft',
+    description:
+      'Make ONE smooth tube along a path through cross-sections that change size: a leg, a neck, a tail, a horn, a tentacle, a vase. Each section is a centre (mm) and an elliptical size; the path is a smooth curve through the centres and the ends are closed. radius is the half-size in the first direction (up for a path that runs sideways; along x for one that runs up or down) and radius2 the other (default: the same, a round tube). Result is a mesh shape, like sculpt_blend.',
+    inputSchema: obj(
+      {
+        sections: {
+          type: 'array',
+          description: 'Two to 48 sections in order along the path.',
+          items: obj({ at: point3, radius: { type: 'number' }, radius2: { type: 'number' } }, ['at', 'radius']),
+        },
+        sides: { type: 'number', description: 'Points round each section (6 to 64, default 24).' },
+        steps: { type: 'number', description: 'Extra smooth steps between sections (1 to 12, default 4).' },
+        name: { type: 'string' },
+        color: color,
+        material,
+      },
+      ['sections']
+    ),
+  },
+  {
+    name: 'sculpt_smooth',
+    description:
+      'Smooth a mesh shape (from sculpt_blend, sculpt_loft or mesh_import): evens out lumps and stair-steps without shrinking it. subdivide splits every triangle in four first (0 to 2) so a coarse mesh has more to work with. A gentle pass or two; it softens detail, so do it before adding fine features.',
+    inputSchema: obj(
+      {
+        id: { type: 'string' },
+        passes: { type: 'number', description: 'Rounds of smoothing, 0 to 20 (default 2).' },
+        strength: { type: 'number', description: '0 to 1, how far each round moves points (default 0.5).' },
+        subdivide: { type: 'number', description: '0, 1 or 2 (default 0).' },
+      },
+      ['id']
+    ),
+  },
+  {
+    name: 'sculpt_apply',
+    description: 'The person\'s brush stroke on a mesh shape: its surface points after the stroke. Not for the agent: shaping a form by hand is the person\'s.',
+    inputSchema: obj({ id: { type: 'string' }, positions: { type: 'array', items: { type: 'number' }, description: 'Every surface point after the stroke, [x, y, height] triples in mm.' } }, ['id', 'positions']),
+    authority: 'person',
+  },
+  {
     name: 'shape_resize',
     description: 'Set a shape\'s overall width (x), depth (y) and/or height (z). Corners and bevels stay valid. A mesh from a file is scaled to match.',
     inputSchema: obj({ id: { type: 'string' }, width: { type: 'number' }, depth: { type: 'number' }, height: { type: 'number' } }, ['id']),
@@ -257,6 +331,12 @@ export const TOOL_SPECS: ToolSpec[] = [
   { name: 'doc_get', description: 'The whole document as JSON (shapes, groups, repeats): save it, or hand it back to doc_set later.', inputSchema: obj({}), readOnly: true },
   { name: 'doc_set', description: 'Replace the whole model with a document from doc_get.', inputSchema: obj({ doc: { type: 'object' } }, ['doc']) },
   { name: 'doc_clear', description: 'Remove every shape.', inputSchema: obj({}) },
+  {
+    name: 'history_log',
+    description: 'What has been done to the model, oldest first: each command with who made it (you, or the person in the window), a short account and the revision after it. Use since_revision (the revision you last saw) to see what the person changed while you were not looking.',
+    inputSchema: obj({ last: { type: 'integer', description: 'How many of the latest commands (default 20, at most 100).' }, since_revision: { type: 'integer', description: 'Only commands after this revision.' } }),
+    readOnly: true,
+  },
   { name: 'history_undo', description: 'Undo the last change.', inputSchema: obj({}) },
   { name: 'history_redo', description: 'Redo the last undone change.', inputSchema: obj({}) },
   {
@@ -332,6 +412,14 @@ export function runDocTool(ctx: ToolContext, name: string, rawArgs: unknown): To
       return done(ops.turnShapes(doc, a as ops.TurnArgs));
     case 'mesh_import':
       return done(ops.importMesh(doc, ids, a as ops.ImportMeshArgs));
+    case 'sculpt_apply':
+      return done(ops.applySculpt(doc, a as unknown as ops.ApplySculptArgs));
+    case 'sculpt_blend':
+      return done(ops.sculptBlend(doc, ids, a as unknown as ops.BlendArgs));
+    case 'sculpt_loft':
+      return done(ops.sculptLoft(doc, ids, a as unknown as ops.LoftArgs));
+    case 'sculpt_smooth':
+      return done(ops.smoothShape(doc, a as unknown as ops.SmoothArgs));
     case 'shape_resize':
       return done(ops.resizeShape(doc, a as { id: string }));
     case 'face_set':

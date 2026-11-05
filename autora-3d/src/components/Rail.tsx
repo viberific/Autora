@@ -18,6 +18,7 @@ import {
   LayoutGrid,
   Layers3,
   Library,
+  Brush,
   LogIn,
   LogOut,
   Move,
@@ -46,7 +47,8 @@ import {
 } from 'lucide-react';
 import { SHAPE_LABELS, ShapeKind } from '../utils/primitives';
 import Sidebar from './Sidebar';
-import { EdgePanel, FacePanel, SizePositionPanel, selectionMode, type TopBarProps } from './TopBar';
+import { useFading } from '../hooks/useFading';
+import { EdgePanel, FacePanel, SculptPanel, SizePositionPanel, sculptable, selectionMode, type TopBarProps } from './TopBar';
 
 const SHAPE_ICONS: Record<ShapeKind, LucideIcon> = {
   box: Square,
@@ -176,6 +178,7 @@ export default function Rail(props: RailProps) {
     { id: 'size', label: 'Size & position', group: 'Shape', icon: Move, color: C.insert, phone: true, desktop: true, on: openId === 'size', disabled: n < 1, hint: picked, run: toggleOpen('size') },
     { id: 'props', label: 'Properties', group: 'Shape', icon: SlidersHorizontal, color: C.select, on: openId === 'props', disabled: !(props.selected.length === 1 && !props.group), hint: picked, run: toggleOpen('props') },
     { id: 'material', label: 'Material', group: 'Shape', icon: Palette, color: C.text, desktop: true, on: openId === 'material', disabled: !(props.selected.length === 1 && !props.group), hint: picked, run: toggleOpen('material') },
+    { id: 'sculpt', label: 'Sculpt', group: 'Shape', icon: Brush, color: C.draw, phone: true, desktop: true, on: openId === 'sculpt', disabled: !(props.selected.length === 1 && sculptable(props.selected[0])), hint: 'Select a mesh shape', run: toggleOpen('sculpt') },
     { id: 'edges', label: 'Pick edges', group: 'Shape', icon: SquareDashed, color: C.shape, on: openId === 'edges', disabled: mode !== 'edge', hint: 'Tap an edge of a shape', run: toggleOpen('edges') },
     { id: 'face', label: 'Push & pull', group: 'Shape', icon: Layers3, color: C.note, on: openId === 'face', disabled: mode !== 'face', hint: 'Tap a face of a shape', run: toggleOpen('face') },
     { id: 'save', label: props.object?.state === 'editing' ? `Save to “${props.object.item}”` : 'Save to library', group: 'Library', icon: BookmarkPlus, color: C.gold, disabled: !props.canSave && props.object?.state !== 'editing', hint: 'Select a group or a shape', run: props.onSaveToLibrary },
@@ -198,6 +201,21 @@ export default function Rail(props: RailProps) {
     try { localStorage.setItem(PINS, JSON.stringify(next)); } catch { /* still works this session */ }
   };
   const ids = phone ? tools.filter((t) => t.phone).map((t) => t.id) : pins.filter((id) => byId.has(id));
+
+  /**
+   * The bar shows what the moment needs, not every tool at once: with nothing made it is Shape and Draw (and the Library, once
+   * something is saved in it); a tool that has nothing to act on yet (Move with no pick, Join with one shape, Sculpt on an
+   * outline) is not there until it does. A tool in use, or whose card is open, always stays. All tools still lists every one.
+   */
+  const needed = (t: Tool): boolean => {
+    if (t.on || t.id === openId) return true;
+    if (t.id === 'shapes' || t.id === 'draw') return true;
+    if (t.id === 'library') return props.library.length > 0;
+    if (t.id === 'file') return props.bodyCount > 0;
+    return !t.disabled;
+  };
+  const wanted = ids.filter((id) => needed(byId.get(id)!));
+  const shown = useFading(wanted.slice(0, room));
 
   // The window's own size is the room: its height on a desktop (the bar is a column), its width on a phone (a row).
   useLayoutEffect(() => {
@@ -280,6 +298,7 @@ export default function Rail(props: RailProps) {
       case 'file': return <Sidebar {...sidebar} section="export" />;
       case 'edges': return <EdgePanel {...props} />;
       case 'face': return <FacePanel {...props} />;
+      case 'sculpt': return <SculptPanel {...props} />;
       default: return null;
     }
   })();
@@ -314,7 +333,7 @@ export default function Rail(props: RailProps) {
             : 'fixed right-2.5 top-1/2 -translate-y-1/2 z-40 flex flex-col items-center gap-[3px] p-[5px] rounded-full bg-slate-800/90 backdrop-blur border border-white/10 shadow-2xl shadow-black/50 max-h-[calc(100%-1.5rem)] overflow-hidden'
         }
       >
-        {ids.slice(0, room).map((id) => {
+        {shown.map(({ id, leaving }) => {
           const t = byId.get(id)!;
           const Icon = t.icon;
           return (
@@ -324,10 +343,11 @@ export default function Rail(props: RailProps) {
               aria-label={t.label}
               aria-pressed={t.on || undefined}
               title={nameOf(t)}
-              disabled={t.disabled}
+              disabled={t.disabled || leaving}
+              tabIndex={leaving ? -1 : undefined}
               onClick={() => press(t)}
               style={{ ['--tc' as string]: t.color, background: t.on ? t.color : `color-mix(in srgb, ${t.color} 16%, transparent)`, color: t.on ? '#fff' : t.color, boxShadow: t.on ? `0 6px 18px color-mix(in srgb, ${t.color} 45%, transparent)` : undefined }}
-              className={`shrink-0 rounded-full flex items-center justify-center transition-colors disabled:opacity-35 disabled:pointer-events-none ${phone ? 'h-10 w-10' : 'h-[34px] w-[34px]'}`}
+              className={`shrink-0 rounded-full flex items-center justify-center transition-all duration-200 disabled:opacity-35 disabled:pointer-events-none ${leaving ? 'opacity-0 scale-60 pointer-events-none' : 'animate-rail-in'} ${phone ? 'h-10 w-10' : 'h-[34px] w-[34px]'}`}
             >
               <Icon size={phone ? 20 : 18} strokeWidth={1.75} />
             </button>

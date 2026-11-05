@@ -253,7 +253,7 @@ export const panaceaSPECS: ToolSpec[] = [
       "{op:\"format\", id, set:{block:\"h2\", align:\"center\", bold:true, list:\"bullets\", ink:\"#c2410c\"}} formats one block (always allowed); " +
       "{op:\"style\", set:{font:\"Georgia\", size:12, leading:1.6}} sets the whole document's type (always allowed); " +
       "{op:\"insert\", after:<id, or leave out for the start>, markdown:\"## Title\\n\\nText\"} adds blocks; {op:\"replace\", id, text} rewrites a block's words; " +
-      "{op:\"delete\", id}; {op:\"mode\", mode:\"agent\"|\"guide\"}. Insert, replace and delete write or remove words, so they work only while the document is " +
+      "{op:\"delete\", id}; {op:\"mode\", mode:\"agent\"|\"guide\"}; {op:\"suggest\", id, text, reason} proposes rewording one block, or {op:\"suggest\", id, remove:true, reason} proposing to remove it: it changes nothing, and shows on the document's bar for the person to accept or wave away (allowed in any document, a rewording about as long as the block, never new writing). Insert, replace and delete write or remove words, so they work only while the document is " +
       "yours to write (mode agent): that is productivity work (a form, a report, minutes, a letter) or what the person asked you to write. A story, a poem or anything " +
       "creative is theirs: format and structure it, ask questions, critique, brainstorm, and suggest changes in the chat; do not write it. Switching a document to " +
       "agent says so to the person, and they can switch it back from the bar on the document. Every change is a step they can undo. Returns the blocks as they are now.",

@@ -287,6 +287,27 @@ async function main() {
       await page.waitForSelector(".pa-doc-mode:has-text('You write')");
     });
 
+    await test("the agent suggests a rewording, the bar offers it, accepting is the person's edit; History takes one step back on its own", async () => {
+      const { blocksOf, stateOf } = await import("../src/lib/panacea/document");
+      const block = blocksOf(stateOf((await docSurface()).doc).doc).find((b) => /First line/.test(b.text))!;
+      app.script = [{ tools: [{ name: "panacea_doc", args: { ops: [{ op: "suggest", id: block.id, text: "The first line, tightened.", reason: "shorter" }] } }] }, { text: "Suggested." }];
+      await app.turn(s, "Any wording you would change?");
+      await page.waitForSelector(".pa-doc-chip:has-text('Suggestions (1)')");
+      assert.ok(!/tightened/.test(await editor.innerText()), "nothing changed until accepted");
+      await page.click(".pa-doc-chip:has-text('Suggestions (1)')");
+      assert.match(await page.locator(".pa-doc-list").innerText(), /The first line, tightened\.[\s\S]*shorter/);
+      await shot("6-suggestion");
+      await page.click(".pa-doc-list >> text=Accept");
+      await until("the words are in the page", async () => /The first line, tightened\./.test(await editor.innerText()));
+      await until("and the suggestion is gone", async () => (await page.locator(".pa-doc-chip:has-text('Suggestions')").count()) === 0);
+      await page.click(".pa-doc-chip:has-text('History')");
+      await page.waitForSelector(".pa-doc-list li:has-text('accepted a suggestion: shorter')");
+      assert.match(await page.locator(".pa-doc-list li").first().innerText(), /You: accepted a suggestion/);
+      await shot("7-history");
+      await page.locator(".pa-doc-list li", { hasText: "accepted a suggestion" }).getByRole("button", { name: "Take back" }).click();
+      await until("the first line is as it was", async () => !/tightened/.test(await editor.innerText()) && /First line/.test(await editor.innerText()));
+    });
+
     await test("nothing went wrong in the page", async () => {
       assert.deepEqual(errors, []);
     });

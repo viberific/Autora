@@ -72,13 +72,18 @@ async function main() {
     page.on("framenavigated", (f) => { if (f.url().includes("/autora-photo/")) editorLoads += 1; });
     // What the editor tells the window: its hand's cursor moving, and its answer.
     await page.addInitScript(() => {
-      (window as unknown as { __photoSaid: string[] }).__photoSaid = [];
+      (window as unknown as { __photoSaid: string[]; __photoRail: string[] }).__photoSaid = [];
+      (window as unknown as { __photoRail: string[] }).__photoRail = [];
       window.addEventListener("message", (e) => {
-        const kind = (e.data as { autoraPhoto?: unknown } | null)?.autoraPhoto;
+        const data = e.data as { autoraPhoto?: unknown; name?: unknown } | null;
+        const kind = data?.autoraPhoto;
         if (typeof kind === "string") (window as unknown as { __photoSaid: string[] }).__photoSaid.push(kind);
+        // The bar is drawn on the editor's canvas, so the editor says which items it shows (a comma list of ids) when they change.
+        if (kind === "rail" && typeof data?.name === "string") (window as unknown as { __photoRail: string[] }).__photoRail.push(data.name);
       });
     });
     const said = () => page.evaluate(() => (window as unknown as { __photoSaid: string[] }).__photoSaid.slice());
+    const rail = async () => (await page.evaluate(() => (window as unknown as { __photoRail: string[] }).__photoRail.slice())).at(-1)?.split(",").filter(Boolean) ?? [];
     await page.goto(`${app.base}/?session=${s}`);
     const pane = page.locator(".app-pane[data-pane=photo]");
 
@@ -87,6 +92,15 @@ async function main() {
       assert.equal(await page.locator("iframe[title='Panacea · Images']").count(), 1);
       const box = (await pane.boundingBox())!;
       await waitFor("the white canvas to be drawn", async () => (await whitePixels(page, { x: box.x, y: box.y, width: box.width, height: box.height })) > 20_000, 90_000);
+    });
+
+    await test("the bar is what the picture needs: the tools a picture is for, the painting aids while a paint tool is up, and nothing to take back yet", async () => {
+      await waitFor("the bar to say what it shows", async () => (await rail()).length > 0, 20_000);
+      const ids = await rail();
+      for (const id of ["t:Move", "t:RectMarquee", "t:Crop", "t:Brush", "t:Eraser", "s:layers"]) assert.ok(ids.includes(id), `${id} is on the bar: ${ids}`);
+      // The editor starts with the Brush, so the painting aids (Colour, Eyedropper) are up; the specialist tools and Undo wait.
+      for (const id of ["s:colour", "t:Eyedropper"]) assert.ok(ids.includes(id), `${id} comes with painting: ${ids}`);
+      for (const id of ["t:Lasso", "t:MagicWand", "t:PaintBucket", "t:Type", "c:edit.undo", "c:edit.redo"]) assert.ok(!ids.includes(id), `${id} waits until it is wanted: ${ids}`);
     });
 
     await test("a stroke painted by hand is saved by itself and is marked as the person's", async () => {
@@ -102,6 +116,8 @@ async function main() {
         const st = (await app.api("GET", `/api/photo/${s}`)).body;
         return st.by === "person" && (st.rev ?? 0) > rev;
       }, 20_000);
+      // There is something to take back now, so Undo has come onto the bar.
+      await waitFor("Undo to join the bar", async () => (await rail()).includes("c:edit.undo"), 10_000);
     });
 
     await test("with Visible work on, the agent's edit is done in the open editor by its hand, without a reload", async () => {
@@ -173,6 +189,14 @@ async function main() {
          be a phone at two or three to one reports a canvas the page cannot click, so this is the phone's size and not its density. */
       const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
       const phone = await ctx.newPage();
+      // The bar has no tools until the picture is open, so what it shows is awaited (the editor says it; see `rail` above).
+      await phone.addInitScript(() => {
+        (window as unknown as { __photoRail: string[] }).__photoRail = [];
+        window.addEventListener("message", (e) => {
+          const data = e.data as { autoraPhoto?: unknown; name?: unknown } | null;
+          if (data?.autoraPhoto === "rail" && typeof data.name === "string") (window as unknown as { __photoRail: string[] }).__photoRail.push(data.name);
+        });
+      });
       await phone.goto(`${app.base}/?session=${s}`);
       await phone.waitForSelector('.pw-engine[data-engine="photo"] .pdf-window', { timeout: 20_000 });
       assert.equal(await phone.locator(".pdf-bar .pdf-pill").count(), 0, "round buttons, not text pills");
@@ -200,6 +224,8 @@ async function main() {
         }, png);
       };
       await waitFor("the bar", async () => (await lit(box.height - 80, box.height - 4)) > 3000, 60_000);
+      await waitFor("Layers to be on the bar", async () => (await phone.evaluate(() => (window as unknown as { __photoRail: string[] }).__photoRail.at(-1) ?? "")).includes("s:layers"), 60_000);
+      await sleep(500);
       const before = await lit(box.height - 230, box.height - 90);
       // The bar's Layers button: the sixth of the round buttons (Move, Select, Crop, Brush, Eraser, Layers), 40 wide with 2 between.
       await phone.mouse.move(box.x + 236, box.y + box.height - 28);

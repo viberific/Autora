@@ -1,0 +1,428 @@
+diff --git a/autora-3d/src/App.tsx b/autora-3d/src/App.tsx
+index afdc738..5881fc8 100644
+--- a/autora-3d/src/App.tsx
++++ b/autora-3d/src/App.tsx
+@@ -1125,6 +1125,7 @@ export default function App() {
+                   onFaceValue={handleFaceValue}
+                   onToggleMove={() => setMoveOn((v) => !v)}
+                   sculpt={sculpting}
++                  onSculpt={(id, positions) => void runOp((d) => ops.applySculpt(d, { id, positions }))}
+                 />
+ 
+                 {displayBodies.length === 0 && (
+diff --git a/autora-3d/src/components/ModelViewer3D.tsx b/autora-3d/src/components/ModelViewer3D.tsx
+index 80c5c43..17ba6c2 100644
+--- a/autora-3d/src/components/ModelViewer3D.tsx
++++ b/autora-3d/src/components/ModelViewer3D.tsx
+@@ -14,7 +14,7 @@ import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
+ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
+ import { BevelStyle, Body3D, EdgeSel, FaceSel, MATERIAL_PRESETS, DrawForm, DrawSession, Frame, Point2D, RepeatSession, ShapeGroup } from '../types';
+ import { withGroupMates } from '../utils/groups';
+-import { Brush, SculptMesh, boundsOf } from '../utils/sculpt';
++import { Brush, SculptMesh } from '../utils/sculpt';
+ import { buildBodyGeometry, buildBodyShape, featureEdges, getInteriorAnchor } from '../utils/bodyGeometry';
+ import { bottomRange, faceMeasure, moveBottom, offsetWall, sameFace, wallBase } from '../utils/faces';
+ import { EdgePath, defaultBevelSize, maxBevelSize, edgeKey, edgeSize, edgeStyle, edgesAroundFace, edgesOfKind, listEdges, primaryEdge, toggleEdge } from '../utils/edges';
+@@ -162,6 +162,8 @@ export interface ModelViewer3DProps {
+   onToggleMove?: () => void;
+   /** Sculpting: while set, a press on this mesh shape works the surface with the brush instead of picking or moving it. */
+   sculpt?: { bodyId: string; brush: Brush } | null;
++  /** A finished brush stroke: the shape's surface points after it (the person's own command, `sculpt_apply`). */
++  onSculpt?: (id: string, positions: number[]) => void;
+ }
+ 
+ const ACCENT = '#8b7cf6';
+@@ -402,6 +404,7 @@ export default function ModelViewer3D({
+   onToggleMove,
+   onFaceValue,
+   sculpt,
++  onSculpt,
+ }: ModelViewer3DProps) {
+   const mountRef = useRef<HTMLDivElement | null>(null);
+   /** The circle that shows how far the sculpt brush reaches; moved by the stroke code, not by React. */
+@@ -501,6 +504,7 @@ export default function ModelViewer3D({
+     onToggleMove,
+     onFaceValue,
+     sculpt,
++    onSculpt,
+   };
+ 
+   // ---- Scene setup (once) -------------------------------------------------
+@@ -1481,9 +1485,7 @@ export default function ModelViewer3D({
+       controls.enabled = true;
+       if (renderer.domElement.hasPointerCapture(e.pointerId)) renderer.domElement.releasePointerCapture(e.pointerId);
+       if (st.changed && !cancelled) {
+-        const positions = st.sm.positions();
+-        const { points, height } = boundsOf(positions);
+-        live.current.onUpdateBody(st.id, { mesh: { positions, indices: st.sm.indices }, points, basePoints: points, extrusionHeight: height });
++        live.current.onSculpt?.(st.id, st.sm.positions());
+       } else {
+         // Nothing to keep: the shape is drawn again from what it was.
+         const entry = entriesRef.current.get(st.id);
+diff --git a/autora-3d/src/core/agent.ts b/autora-3d/src/core/agent.ts
+index 2283eb4..40163fa 100644
+--- a/autora-3d/src/core/agent.ts
++++ b/autora-3d/src/core/agent.ts
+@@ -7,6 +7,7 @@ import { glbBytes } from '../utils/glb';
+ import { objText, stlBytes, toBase64 } from '../utils/serialize';
+ import { initManifold } from '../utils/manifoldBoolean';
+ import { Doc, IdGen, emptyDoc, parseDoc, settle } from './doc';
++import type { CommandEntry, Who } from './commands';
+ import { AgentError } from './errors';
+ import { ShapeSummary, summarize } from './inspect';
+ import { TOOL_SPECS, mentionedShapes, runDocTool, toolByName } from './tools';
+@@ -21,6 +22,8 @@ export interface AgentHost {
+   redo(): boolean;
+   /** Increases on every change, so a caller can notice that someone else (a person at the screen) edited. */
+   revision(): number;
++  /** The commands made on the model so far, oldest first (the headless Engine keeps them). */
++  commandLog?(): CommandEntry[];
+   /** Things only a screen can do. Absent when headless. */
+   ui?: (name: string, args: Record<string, any>) => unknown | Promise<unknown>;
+ }
+@@ -40,8 +43,14 @@ export interface ToolResponse {
+ export interface ExecuteOptions {
+   /** Refuse unless the model is still at this revision (so a stale plan cannot overwrite a person's edit). */
+   ifRevision?: number;
++  /** Who is calling. The default is the agent, which is refused the person's own commands (a brush stroke). */
++  who?: Who;
+ }
+ 
++const personsOwn = (name: string) => toolByName(name)?.authority === 'person';
++const refusal = (name: string) =>
++  new AgentError(`${name} is the person's own hand, not a tool for you: shaping a form by hand is theirs to do.`, 'Suggest what to change and tell them where the tool is (the Sculpt tool in the 3D window).');
++
+ const READ_ONLY = new Set(TOOL_SPECS.filter((t) => t.readOnly).map((t) => t.name));
+ 
+ /** Runs one tool call (or a batch) against a host. Never throws: a bad request comes back as { ok: false, error, hint }. */
+@@ -59,7 +68,9 @@ export async function execute(host: AgentHost, name: string, args: unknown = {},
+     const spec = toolByName(name);
+     if (!spec) throw new AgentError(`Unknown tool "${name}".`, `Tools: ${TOOL_SPECS.map((t) => t.name).join(', ')}`);
+ 
+-    if (name === 'batch') return await runBatch(host, args as any);
++    if (personsOwn(name) && options.who !== 'person') throw refusal(name);
++
++    if (name === 'batch') return await runBatch(host, args as any, options.who);
+ 
+     if (spec.uiOnly) {
+       if (!host.ui) throw new AgentError(`"${name}" needs the live app (it needs a screen).`, 'The headless engine has no view.');
+@@ -96,6 +107,13 @@ function runOne(host: AgentHost, doc: Doc, ids: IdGen, name: string, args: unkno
+     }
+     case 'doc_clear':
+       return { doc: emptyDoc(), result: { cleared: doc.bodies.length }, changed: true };
++    case 'history_log': {
++      const log = host.commandLog?.() ?? [];
++      const last = Math.max(1, Math.min(100, Math.round(Number(a.last ?? 20)) || 20));
++      const since = a.since_revision === undefined ? -1 : Number(a.since_revision);
++      const entries = log.filter((r) => r.revision > since).slice(-last);
++      return { doc, result: { commands: entries, total: log.length }, changed: false };
++    }
+     case 'history_undo': {
+       const ok = host.undo();
+       if (!ok) throw new AgentError('Nothing to undo.');
+@@ -133,7 +151,7 @@ function runOne(host: AgentHost, doc: Doc, ids: IdGen, name: string, args: unkno
+   }
+ }
+ 
+-async function runBatch(host: AgentHost, a: { commands?: { tool: string; args?: unknown }[]; atomic?: boolean }): Promise<ToolResponse> {
++async function runBatch(host: AgentHost, a: { commands?: { tool: string; args?: unknown }[]; atomic?: boolean }, who?: Who): Promise<ToolResponse> {
+   const commands = a.commands;
+   if (!Array.isArray(commands) || !commands.length) throw new AgentError('commands must be a non-empty list of { tool, args }.');
+   const atomic = a.atomic !== false;
+@@ -145,6 +163,11 @@ async function runBatch(host: AgentHost, a: { commands?: { tool: string; args?:
+   for (let i = 0; i < commands.length; i++) {
+     const c = commands[i];
+     const spec = toolByName(c.tool);
++    if (spec && personsOwn(c.tool) && who !== 'person') {
++      if (atomic) throw new AgentError(`Command ${i} (${c.tool}): ${refusal(c.tool).message} Nothing was changed.`);
++      results.push({ ok: false, error: refusal(c.tool).message });
++      continue;
++    }
+     if (!spec || c.tool === 'batch' || spec.uiOnly || c.tool === 'history_undo' || c.tool === 'history_redo') {
+       const why = c.tool === 'batch' ? 'batches cannot be nested' : spec?.uiOnly ? 'screen commands cannot be batched' : c.tool.startsWith('history') ? 'undo and redo cannot be batched' : `unknown tool "${c.tool}"`;
+       if (atomic) throw new AgentError(`Command ${i} (${c.tool}): ${why}. Nothing was changed.`);
+diff --git a/autora-3d/src/core/commands.ts b/autora-3d/src/core/commands.ts
+new file mode 100644
+index 0000000..01fc8c2
+--- /dev/null
++++ b/autora-3d/src/core/commands.ts
+@@ -0,0 +1,79 @@
++/**
++ * @license
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++// The command layer: every change to the model is a named command made by someone, with who may make it, what it did and the
++// model on either side of it. The log is what undo, replay and a history scrubber read; because documents are immutable, a
++// command's inverse is the document before it, so reverting needs no per-command undo code.
++
++import type { Body3D } from '../types';
++import type { Doc } from './doc';
++
++/** Who a command is for. An `agent` command may be called by the agent; a `person` command is the person's own hand (a brush stroke) and is refused to the agent. */
++export type Who = 'agent' | 'person';
++
++export interface CommandRecord {
++  /** Order in this log, from 1. */
++  n: number;
++  /** The tool's name, or `person_edit` for a change the person made in the window. */
++  name: string;
++  who: Who;
++  ok: boolean;
++  changed: boolean;
++  /** The model's revision after the command. */
++  revision: number;
++  at: number;
++  /** A short account of what it did, for the log and the agent. Never the whole arguments. */
++  summary: string;
++  /** The model before and after: its inverse and its effect. Kept in the engine, not sent anywhere. */
++  before?: Doc;
++  after?: Doc;
++}
++
++/** A record without the two documents: what is sent to the page and written to the event log. */
++export type CommandEntry = Omit<CommandRecord, 'before' | 'after'>;
++
++export const MAX_LOG = 200;
++
++const MAX_SUMMARY = 160;
++const clip = (s: string) => (s.length > MAX_SUMMARY ? `${s.slice(0, MAX_SUMMARY - 1)}…` : s);
++
++/** Arguments that carry a file or a whole model: named nowhere in a summary. */
++const BULKY = new Set(['data', 'text', 'doc']);
++
++/** A short account of a call's arguments: which shapes and the few plain values, never a big blob (a mesh, a file). */
++export function summarizeArgs(name: string, args: unknown): string {
++  if (!args || typeof args !== 'object') return name;
++  const parts: string[] = [];
++  for (const [key, value] of Object.entries(args as Record<string, unknown>)) {
++    if (value === undefined || value === null || BULKY.has(key)) continue;
++    if (typeof value === 'string') parts.push(`${key} ${value.length > 40 ? `${value.slice(0, 40)}…` : value}`);
++    else if (typeof value === 'number' || typeof value === 'boolean') parts.push(`${key} ${value}`);
++    else if (Array.isArray(value)) parts.push(`${key} ×${value.length}`);
++    else parts.push(key);
++    if (parts.length >= 5) break;
++  }
++  return clip(parts.length ? `${name} (${parts.join(', ')})` : name);
++}
++
++const meshOf = (b?: Body3D) => b?.mesh;
++
++/** What the person did, in words, from the model before and after (the window sends whole models, not commands). */
++export function describeEdit(before: Doc, after: Doc): string {
++  const was = new Map(before.bodies.map((b) => [b.id, b]));
++  const is = new Map(after.bodies.map((b) => [b.id, b]));
++  const added = after.bodies.filter((b) => !was.has(b.id) && !b.repeatOf);
++  const removed = before.bodies.filter((b) => !is.has(b.id) && !b.repeatOf);
++  const changed = after.bodies.filter((b) => was.has(b.id) && was.get(b.id) !== b && !b.repeatOf);
++  const sculpted = changed.filter((b) => meshOf(b) && meshOf(was.get(b.id)) !== meshOf(b) && meshOf(was.get(b.id))?.indices === meshOf(b)?.indices);
++  const rest = changed.filter((b) => !sculpted.includes(b));
++  const names = (list: Body3D[]) => list.slice(0, 3).map((b) => b.name).join(', ') + (list.length > 3 ? ` +${list.length - 3}` : '');
++  const out: string[] = [];
++  if (added.length) out.push(`added ${names(added)}`);
++  if (removed.length) out.push(`removed ${names(removed)}`);
++  if (sculpted.length) out.push(`sculpted ${names(sculpted)}`);
++  if (rest.length) out.push(`changed ${names(rest)}`);
++  if (!out.length) out.push(before.groups !== after.groups || before.library !== after.library ? 'changed groups or the library' : 'changed the model');
++  return clip(out.join('; '));
++}
+diff --git a/autora-3d/src/core/engine.ts b/autora-3d/src/core/engine.ts
+index 9e1e10b..b1dc264 100644
+--- a/autora-3d/src/core/engine.ts
++++ b/autora-3d/src/core/engine.ts
+@@ -4,6 +4,7 @@
+  */
+ 
+ import { AgentHost, ExecuteOptions, ToolResponse, execute } from './agent';
++import { CommandEntry, CommandRecord, MAX_LOG, Who, describeEdit, summarizeArgs } from './commands';
+ import { Doc, IdGen, counterIds, emptyDoc, settle } from './doc';
+ import { TOOL_SPECS, ToolSpec } from './tools';
+ 
+@@ -23,6 +24,9 @@ export class Engine implements AgentHost {
+   private rev = 0;
+   private ids: IdGen;
+   private listeners = new Set<(doc: Doc, revision: number) => void>();
++  private log: CommandRecord[] = [];
++  private count = 0;
++  private watchers = new Set<(entry: CommandEntry) => void>();
+ 
+   constructor(doc: Doc = emptyDoc()) {
+     this.doc = settle(doc);
+@@ -30,7 +34,7 @@ export class Engine implements AgentHost {
+   }
+ 
+   /** The tools an agent may call, as JSON-Schema specs (for MCP, or an LLM's tool list). */
+-  static readonly tools: ToolSpec[] = TOOL_SPECS.filter((t) => !t.uiOnly);
++  static readonly tools: ToolSpec[] = TOOL_SPECS.filter((t) => !t.uiOnly && t.authority !== 'person');
+ 
+   get tools(): ToolSpec[] {
+     return Engine.tools;
+@@ -40,14 +44,17 @@ export class Engine implements AgentHost {
+   revision = () => this.rev;
+   newIds = () => this.ids;
+ 
+-  setDoc = (doc: Doc) => {
++  /** Commits a model. With `who` the change is also logged as a command of that name (the window sends whole models, so it is described from the difference). */
++  setDoc = (doc: Doc, who?: Who) => {
+     if (doc === this.doc) return;
++    const before = this.doc;
+     this.past.push(this.doc);
+     if (this.past.length > 200) this.past.shift();
+     this.future = [];
+     this.doc = settle(doc);
+     this.ids = counterIds(this.doc, this.rev + 1);
+     this.rev++;
++    if (who) this.record({ name: who === 'person' ? 'person_edit' : 'agent_edit', who, ok: true, changed: true, summary: describeEdit(before, this.doc), before, after: this.doc });
+     this.listeners.forEach((fn) => fn(this.doc, this.rev));
+   };
+ 
+@@ -72,8 +79,52 @@ export class Engine implements AgentHost {
+   };
+ 
+   /** Runs a tool. Never throws: errors come back as { ok: false, error, hint }. */
+-  execute(name: string, args: unknown = {}, options?: ExecuteOptions): Promise<ToolResponse> {
+-    return execute(this, name, args, options);
++  async execute(name: string, args: unknown = {}, options?: ExecuteOptions): Promise<ToolResponse> {
++    const before = this.doc;
++    const res = await execute(this, name, args, options);
++    // Reading is not a command; history_undo and history_redo are recorded too, so the log says how the model got where it is.
++    const readOnly = Engine.tools.find((t) => t.name === name)?.readOnly || TOOL_SPECS.find((t) => t.name === name)?.readOnly;
++    if (!readOnly) {
++      this.record({
++        name,
++        who: options?.who ?? 'agent',
++        ok: res.ok,
++        changed: res.changed || this.doc !== before,
++        summary: res.ok ? summarizeArgs(name, args) : `${summarizeArgs(name, args)}: ${res.error ?? 'failed'}`.slice(0, 160),
++        ...(this.doc !== before ? { before, after: this.doc } : {}),
++      });
++    }
++    return res;
++  }
++
++  /** The commands made so far, oldest first, without the models they carry. */
++  commandLog = (): CommandEntry[] => this.log.map(({ before: _b, after: _a, ...entry }) => entry);
++
++  /** Be told of every command as it is logged. Returns the way to stop. */
++  onCommand = (fn: (entry: CommandEntry) => void): (() => void) => {
++    this.watchers.add(fn);
++    return () => this.watchers.delete(fn);
++  };
++
++  /**
++   * Puts the model back as it was before command `n` (a new change on top, so it can itself be undone; the log keeps the whole
++   * story). False when that command did not change anything or is no longer kept.
++   */
++  revertTo = (n: number, who: Who = 'person'): boolean => {
++    const rec = this.log.find((r) => r.n === n);
++    if (!rec?.before) return false;
++    const before = this.doc;
++    this.setDoc(rec.before);
++    if (this.doc !== before) this.record({ name: 'history_revert', who, ok: true, changed: true, summary: `back to before command ${n} (${rec.name})`, before, after: this.doc });
++    return true;
++  };
++
++  private record(r: Omit<CommandRecord, 'n' | 'revision' | 'at'>) {
++    const rec: CommandRecord = { ...r, n: ++this.count, revision: this.rev, at: Date.now() };
++    this.log.push(rec);
++    if (this.log.length > MAX_LOG) this.log.shift();
++    const { before: _b, after: _a, ...entry } = rec;
++    this.watchers.forEach((fn) => fn(entry));
+   }
+ 
+   /** Be told whenever the model changes. Returns the way to stop. */
+diff --git a/autora-3d/src/core/index.ts b/autora-3d/src/core/index.ts
+index 0739d1d..9c74f70 100644
+--- a/autora-3d/src/core/index.ts
++++ b/autora-3d/src/core/index.ts
+@@ -11,6 +11,7 @@ export { TOOL_SPECS, toolByName } from './tools';
+ export type { ToolSpec } from './tools';
+ export { counterIds, emptyDoc, parseDoc, settle, starterDoc } from './doc';
+ export type { Doc, IdGen } from './doc';
++export type { CommandEntry, Who } from './commands';
+ export { AgentError } from './errors';
+ export { initManifold, manifoldReady } from '../utils/manifoldBoolean';
+ export type { ShapeSummary, SceneSummary } from './inspect';
+diff --git a/autora-3d/src/core/ops.ts b/autora-3d/src/core/ops.ts
+index fe4db48..54d4b7a 100644
+--- a/autora-3d/src/core/ops.ts
++++ b/autora-3d/src/core/ops.ts
+@@ -6,6 +6,7 @@
+ import { Body3D, DrawSession, EdgeSel, FaceSel, Frame, LibraryItem, MaterialType, Point2D, RepeatLink, RepeatSession, ShapeGroup, SWATCHES } from '../types';
+ import { BodyTransform, resizeBody, scaleMeshHeight, selectionBounds, transformBody } from '../utils/transform';
+ import { MeshError, meshFormatOf, placeMesh, readMesh, type MeshFormat, type RawMesh } from '../utils/meshImport';
++import { boundsOf } from '../utils/sculpt';
+ import { BlendPart, OrganicError, Section, Vec, blendMesh, loftMesh, mirrored, smoothMesh, subdivide } from '../utils/organic';
+ import { cutShape, getPolygonSignedArea } from '../utils/geometry';
+ import { joinBodies } from '../utils/join';
+@@ -1214,3 +1215,22 @@ export function smoothShape(doc: Doc, a: SmoothArgs) {
+     result: { id: b.id, triangles: mesh.indices.length / 3 },
+   };
+ }
++
++export interface ApplySculptArgs {
++  id: string;
++  /** Every surface point after the stroke, `[x, y, height]` triples (mm), in the order the shape keeps them. */
++  positions: number[];
++}
++
++/** The person's brush stroke: puts the sculpted surface into a mesh shape and keeps its footprint and height true to it. */
++export function applySculpt(doc: Doc, a: ApplySculptArgs) {
++  const b = editable(doc, a.id);
++  if (!b.mesh) return fail(`"${b.id}" has no mesh surface to sculpt.`);
++  if (!Array.isArray(a.positions) || a.positions.length !== b.mesh.positions.length) return fail('positions must hold one [x, y, height] triple for every point the surface already has.');
++  if (a.positions.some((n) => typeof n !== 'number' || !Number.isFinite(n))) return fail('positions must all be finite numbers.');
++  const { points, height } = boundsOf(a.positions);
++  return {
++    doc: replace(doc, b.id, { mesh: { positions: a.positions, indices: b.mesh.indices }, points, basePoints: points, extrusionHeight: height }),
++    result: { id: b.id },
++  };
++}
+diff --git a/autora-3d/src/core/tools.ts b/autora-3d/src/core/tools.ts
+index 64c3ff2..0c8dbe4 100644
+--- a/autora-3d/src/core/tools.ts
++++ b/autora-3d/src/core/tools.ts
+@@ -20,6 +20,8 @@ export interface ToolSpec {
+   readOnly?: boolean;
+   /** True when only the live app can do it (it needs a screen). */
+   uiOnly?: boolean;
++  /** Who may make this command: `agent` (the default) or `person`, the person's own hand, which the agent is never given. */
++  authority?: 'agent' | 'person';
+ }
+ 
+ const point = { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' } }, required: ['x', 'y'], description: 'A point on the ground plane, mm.' };
+@@ -221,6 +223,12 @@ export const TOOL_SPECS: ToolSpec[] = [
+       ['id']
+     ),
+   },
++  {
++    name: 'sculpt_apply',
++    description: 'The person\'s brush stroke on a mesh shape: its surface points after the stroke. Not for the agent: shaping a form by hand is the person\'s.',
++    inputSchema: obj({ id: { type: 'string' }, positions: { type: 'array', items: { type: 'number' }, description: 'Every surface point after the stroke, [x, y, height] triples in mm.' } }, ['id', 'positions']),
++    authority: 'person',
++  },
+   {
+     name: 'shape_resize',
+     description: 'Set a shape\'s overall width (x), depth (y) and/or height (z). Corners and bevels stay valid. A mesh from a file is scaled to match.',
+@@ -323,6 +331,12 @@ export const TOOL_SPECS: ToolSpec[] = [
+   { name: 'doc_get', description: 'The whole document as JSON (shapes, groups, repeats): save it, or hand it back to doc_set later.', inputSchema: obj({}), readOnly: true },
+   { name: 'doc_set', description: 'Replace the whole model with a document from doc_get.', inputSchema: obj({ doc: { type: 'object' } }, ['doc']) },
+   { name: 'doc_clear', description: 'Remove every shape.', inputSchema: obj({}) },
++  {
++    name: 'history_log',
++    description: 'What has been done to the model, oldest first: each command with who made it (you, or the person in the window), a short account and the revision after it. Use since_revision (the revision you last saw) to see what the person changed while you were not looking.',
++    inputSchema: obj({ last: { type: 'integer', description: 'How many of the latest commands (default 20, at most 100).' }, since_revision: { type: 'integer', description: 'Only commands after this revision.' } }),
++    readOnly: true,
++  },
+   { name: 'history_undo', description: 'Undo the last change.', inputSchema: obj({}) },
+   { name: 'history_redo', description: 'Redo the last undone change.', inputSchema: obj({}) },
+   {
+@@ -398,6 +412,8 @@ export function runDocTool(ctx: ToolContext, name: string, rawArgs: unknown): To
+       return done(ops.turnShapes(doc, a as ops.TurnArgs));
+     case 'mesh_import':
+       return done(ops.importMesh(doc, ids, a as ops.ImportMeshArgs));
++    case 'sculpt_apply':
++      return done(ops.applySculpt(doc, a as unknown as ops.ApplySculptArgs));
+     case 'sculpt_blend':
+       return done(ops.sculptBlend(doc, ids, a as unknown as ops.BlendArgs));
+     case 'sculpt_loft':

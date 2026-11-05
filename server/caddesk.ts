@@ -16,7 +16,6 @@
  * geometry kernel), built by the autora-3d sub-project, and the server is typechecked without it. Without the build the
  * tools are simply not offered (`cadAvailable`).
  */
-import crypto from "node:crypto";
 import express, { type Express, type Request, type Response } from "express";
 import fs from "node:fs";
 import path from "node:path";
@@ -28,6 +27,7 @@ import { stateDir } from "./state";
 import { readDoc, saveDoc } from "./store";
 import { staticDir } from "./staticfiles";
 import { cadSPECS } from "./specs/cad";
+import { UNTAKEN, createHandshake } from "./handshake";
 import { MODEL_PART, isModelBind, modelCommands, type ModelDoc } from "../src/lib/panacea/apps/model";
 import type { Value } from "../src/lib/panacea/atoms";
 
@@ -35,9 +35,24 @@ import type { Value } from "../src/lib/panacea/atoms";
 interface CadEngine {
   execute(name: string, args?: unknown, options?: { ifRevision?: number }): Promise<CadResponse>;
   getDoc(): CadDoc;
-  setDoc(doc: CadDoc): void;
+  setDoc(doc: CadDoc, who?: "agent" | "person"): void;
+  commandLog(): CadCommand[];
+  onCommand(fn: (entry: CadCommand) => void): () => void;
+  revertTo(n: number, who?: "agent" | "person"): boolean;
   subscribe(fn: (doc: CadDoc, revision: number) => void): () => void;
   toJSON(): CadDoc;
+}
+
+/** One command of the model's log: what was made, by whom, in a line (the models either side stay in the engine). */
+interface CadCommand {
+  n: number;
+  name: string;
+  who: "agent" | "person";
+  ok: boolean;
+  changed: boolean;
+  revision: number;
+  at: number;
+  summary: string;
 }
 
 interface CadResponse {
@@ -98,6 +113,7 @@ interface Entry {
 
 const entries = new Map<string, Entry>();
 const listeners = new Set<(session: string) => void>();
+const commandListeners = new Set<(session: string, entry: CadCommand) => void>();
 
 const validSession = (id: string) => /^[A-Za-z0-9_-]{1,80}$/.test(id);
 
@@ -180,6 +196,9 @@ async function engineOf(session: string): Promise<CadEngine> {
   const engine = new c.Engine(doc);
   entry.engine = engine;
   entry.shapes = countShapes(engine.getDoc());
+  engine.onCommand((cmd) => {
+    for (const fn of commandListeners) fn(session, cmd);
+  });
   engine.subscribe((next) => {
     entry.rev++;
     entry.shapes = countShapes(next);
@@ -214,6 +233,17 @@ export function cadState(session: string): CadState {
 /** Told after every change to a chat's window or model, so the page can be told. */
 export function onCadChange(fn: (session: string) => void) {
   listeners.add(fn);
+}
+
+/** Told of every command made on a chat's model (the agent's calls and the person's edits), for the event log. */
+export function onCadCommand(fn: (session: string, entry: CadCommand) => void) {
+  commandListeners.add(fn);
+}
+
+/** The commands made on a chat's model so far, oldest first. */
+async function cadCommands(session: string): Promise<CadCommand[]> {
+  if (!validSession(session)) return [];
+  return (await engineOf(session)).commandLog();
 }
 
 /** The chat is gone: let go of its model, and of the file it was kept in. */
@@ -256,50 +286,36 @@ const MOST = 24_000;
 
 /** Calls that only read: nothing to watch, so never by hand. */
 const READS = new Set([
-  "scene_get", "shape_get", "shape_faces", "shape_edges", "shape_measure", "library_list", "library_thumbnail", "library_export", "doc_get", "export",
+  "scene_get", "shape_get", "shape_faces", "shape_edges", "shape_measure", "library_list", "library_thumbnail", "library_export", "doc_get", "export", "history_log",
 ]);
 /** Calls the window has no control for: done here, and the agent is told so. */
 const NO_CONTROL: Record<string, string> = {
   doc_set: "the window has no control that puts in a whole model",
   library_import: "the window has no control that imports library objects",
   mesh_import: "the window has no control that reads a mesh file",
+  sculpt_blend: "the window has no control that blends parts into a form",
+  sculpt_loft: "the window has no control that lofts sections into a tube",
+  sculpt_smooth: "the window has no control that smooths a surface",
 };
 /** Undo and redo: done in the window with its own buttons, on the history the model already has. */
 const HISTORY = new Set(["history_undo", "history_redo"]);
 /** How long a window has to take the call before it is done here instead: nobody watching counts as Visible work off. */
 const CLAIM_MS = 4000;
 
-let pushTo: (session: string, message: Record<string, unknown>) => void = () => undefined;
 let visible: () => boolean = () => false;
 let watched: (session: string) => boolean = () => true;
 
 type HandReply = { did?: string[]; skipped?: string; doc?: unknown };
-type Handing = { session: string; claimed: boolean; goal: unknown; need: string[]; resolve: (r: HandReply | null) => void };
-const handing = new Map<string, Handing>();
+/** The offers to the window (server/handshake.ts). */
+const hs = createHandshake();
 
 /**
  * Hand one call to the open window and wait for what its hand did; null when no window took it. `goal` is the model as the
  * call leaves it, which the window is given when it takes the call, so its hand knows what each number should end up as.
  */
 async function handToWindow(session: string, name: string, args: Record<string, unknown>, goal: unknown, need: string[] = []): Promise<HandReply | null> {
-  const id = crypto.randomBytes(6).toString("hex");
-  return await new Promise<HandReply | null>((resolve) => {
-    const entry: Handing = { session, claimed: false, goal, need, resolve: () => undefined };
-    const send = () => pushTo(session, { type: "cad.hand", session, id, name, args });
-    const again = setInterval(() => { if (!entry.claimed) send(); }, 1000);
-    const done = (r: HandReply | null) => {
-      clearInterval(again);
-      clearTimeout(unclaimed);
-      clearTimeout(slow);
-      handing.delete(id);
-      resolve(r);
-    };
-    entry.resolve = done;
-    handing.set(id, entry);
-    send();
-    const unclaimed = setTimeout(() => { if (!entry.claimed) done(null); }, CLAIM_MS);
-    const slow = setTimeout(() => done(null), 150_000);
-  });
+  const out = await hs.offer<HandReply>(session, { type: "cad.hand", session, name, args }, { claimMs: CLAIM_MS, totalMs: 150_000, onTimeout: () => UNTAKEN, info: { goal, need } });
+  return out.taken ? out.value : null;
 }
 
 /** The shapes and groups of the model a call names: the window waits for them before its hand starts. */
@@ -586,7 +602,9 @@ export function cadBriefing(on: boolean): string {
   return (
     "- Autora 3D (the 3D modelling window): available. Tools: the cad_* family -- start with cad_scene_get; cad_export gives " +
     "STL to print or GLB for games. cad_mesh_import brings in a GLB, OBJ or STL file as a real surface (an animal, a face, a scan: " +
-    "the extruded shapes cannot make those, so for organic forms find a free CC0 mesh and import it). " +
+    "the extruded shapes cannot make those, so for organic forms build them or import a free CC0 mesh). " +
+    "cad_sculpt_blend makes ONE smooth organic shape by melting spheres, tapered capsules and ellipsoids together (an animal's body, neck, head and legs; mirror reflects half of it), " +
+    "cad_sculpt_loft a smooth tube through changing cross-sections (a leg, tail, horn), and cad_sculpt_smooth evens out any mesh shape. " +
     "Shapes are flat outlines pushed up to a height, in millimetres, x right, y away, z up. Model what the person asks to " +
     "make, print or design with these, not code. The window opens beside the chat on first use and the person can work " +
     "in it too: call cad_scene_get again before relying on what you saw earlier. Check a part with cad_shape_measure " +
@@ -610,7 +628,7 @@ export function cadRoutes(app: Express, opts: {
   /** Whether a page has the chat open: with none, no call waits for a window to take it. */
   watched?: (session: string) => boolean;
 }) {
-  if (opts.push) pushTo = opts.push;
+  if (opts.push) hs.setPush(opts.push);
   if (opts.visible) visible = opts.visible;
   if (opts.watched) watched = opts.watched;
   const known = (req: Request, res: Response): string | null => {
@@ -671,8 +689,36 @@ export function cadRoutes(app: Express, opts: {
       if (entry.handing) return res.json({ rev: entry.rev });
       // Stays "person" until the agent's next tool call says otherwise: that is who made the latest change.
       entry.by = "person";
-      engine.setDoc(doc);
+      engine.setDoc(doc, "person");
       res.json({ rev: entry.rev });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  /* The log of what was made on the model, by whom (docs/ENGINE-SURVEY.md, the command layer). */
+  app.get("/api/cad/:session/commands", async (req, res) => {
+    const id = known(req, res);
+    if (!id) return;
+    try {
+      res.json({ commands: await cadCommands(id) });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  /* The person goes back to before a command (the window's history list). A new change on top, so it can be undone. */
+  app.post("/api/cad/:session/revert", async (req, res) => {
+    const id = known(req, res);
+    if (!id) return;
+    if (opts.off()) return res.status(403).json({ error: "Autora 3D is switched off on the Tools page." });
+    const n = Number(req.body?.n);
+    if (!Number.isInteger(n)) return res.status(400).json({ error: "n must be a command number from the log." });
+    try {
+      const engine = await engineOf(id);
+      entryFor(id).by = "person";
+      if (!engine.revertTo(n, "person")) return res.status(404).json({ error: "That command changed nothing or is no longer kept." });
+      res.json({ rev: entryFor(id).rev });
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
@@ -708,23 +754,21 @@ export function cadRoutes(app: Express, opts: {
   app.post("/api/cad/:session/hand/claim", (req, res) => {
     const id = known(req, res);
     if (!id) return;
-    const h = handing.get(String(req.query.id ?? ""));
-    const won = Boolean(h && h.session === id && !h.claimed);
-    if (won && h) h.claimed = true;
-    res.json(won && h ? { won, goal: h.goal, need: h.need } : { won });
+    const c = hs.claim(id, String(req.query.id ?? ""));
+    const info = c.info as { goal?: unknown; need?: string[] } | undefined;
+    res.json(c.won ? { won: true, goal: info?.goal, need: info?.need } : { won: false });
   });
 
   app.post("/api/cad/:session/hand/reply", bigJson, (req, res) => {
     const id = known(req, res);
     if (!id) return;
-    const h = handing.get(String(req.query.id ?? ""));
-    if (!h || h.session !== id || !h.claimed) return res.status(404).json({ error: "No such call." });
     const b = req.body as { did?: unknown; skipped?: unknown; doc?: unknown } | null;
-    h.resolve({
+    const said: HandReply = {
       did: Array.isArray(b?.did) ? b.did.filter((x): x is string => typeof x === "string").slice(0, 40).map((x) => x.slice(0, 160)) : [],
       skipped: typeof b?.skipped === "string" ? b.skipped.slice(0, 200) : undefined,
       doc: b?.doc,
-    });
+    };
+    if (!hs.reply(id, String(req.query.id ?? ""), said)) return res.status(404).json({ error: "No such call." });
     res.json({ ok: true });
   });
 

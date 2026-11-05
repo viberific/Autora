@@ -67,6 +67,12 @@
     #autora-rail button.rb.on { color: #fff; background: var(--tc); box-shadow: 0 6px 18px color-mix(in srgb, var(--tc) 45%, transparent); }
     #autora-rail button.rb:disabled { opacity: .35; cursor: default; }
     #autora-rail button.rb svg, .ar-tile svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    /* The bar follows the work (RULES below): a tool the document has nothing for collapses out of its place and fades, and the others slide;
+       it comes back the same way. Hidden, it is out of the tab order and cannot be pressed. */
+    #autora-rail button.rb { transition: background .15s, box-shadow .15s, opacity .25s, transform .25s, height .25s, width .25s, margin .25s; }
+    html.autora-desktop #autora-rail button.rb[data-need="0"] { height: 0; margin: -1.5px 0; opacity: 0; transform: scale(.6); pointer-events: none; visibility: hidden; transition: background .15s, opacity .25s, transform .25s, height .25s, margin .25s, visibility 0s .25s; }
+    html.autora-phone #autora-rail button.rb[data-need="0"] { width: 0; margin: 0 -1px; opacity: 0; transform: scale(.6); pointer-events: none; visibility: hidden; transition: background .15s, opacity .25s, transform .25s, width .25s, margin .25s, visibility 0s .25s; }
+    @media (prefers-reduced-motion: reduce) { #autora-rail button.rb { transition: none !important; } }
     #autora-rail .div { flex: none; background: rgba(255,255,255,.13); }
     html.autora-desktop #autora-rail .div { width: 20px; height: 1px; margin: 2px 0; }
     html.autora-phone #autora-rail .div { width: 1px; height: 24px; margin: 0 2px; }
@@ -277,6 +283,8 @@
     await showTab("home");
     for (const x of found) { TOOLS.push(x); byId.set(x.id, x); }
     refresh();
+    // Every command is read and the Home tab is back: tools can be pressed and their state read (tests wait for this).
+    root.setAttribute("data-rail-scanned", "1");
   }
 
   const anchored = () => root.classList.contains("rail-ribbon");
@@ -308,6 +316,107 @@
     if (!anchored() || (e.target instanceof Element && e.target.closest("#autora-rail, #autora-grid"))) return;
     setTimeout(() => { setAnchor(false); if (curTab !== "home") void showTab("home"); }, 400);
   }, true);
+
+  /* ------------------------------------------------------- the bar follows the work */
+  /*
+   * What the work needs on the bar now (docs/TOOL-RAIL.md, "The bar follows the work"). A tool with a rule is there when its rule says so;
+   * one without is always there (once a document is open: with none, the bar has no tools). Everything stays in All tools. An app with no
+   * RULES keeps the bar it has always had (all three have them now).
+   */
+  const RULES = {
+    docs: {
+      // Words that are picked: what can be done to them.
+      strike: (c) => c.selected, highlight: (c) => c.selected, color: (c) => c.selected, larger: (c) => c.selected, smaller: (c) => c.selected,
+      clearfmt: (c) => c.selected, painter: (c) => c.selected, cut: (c) => c.selected, copy: (c) => c.selected,
+      // A paragraph with words in it: how it sits and is spaced; a list item or picked paragraphs: how far in.
+      left: (c) => c.text, centre: (c) => c.text, right: (c) => c.text, justify: (c) => c.text, spacing: (c) => c.text,
+      indent: (c) => c.inList || c.selected, outdent: (c) => c.inList || c.selected,
+      // The editor's own word on whether there is anything to take back or put back.
+      undo: (c) => c.undo, redo: (c) => c.redo,
+    },
+    slides: {
+      // Something on the slide picked (the editor's own Bold is lit): what can be done to it, and how it sits among the others.
+      bold: (c) => c.selected, italic: (c) => c.selected, underline: (c) => c.selected, strike: (c) => c.selected, color: (c) => c.selected,
+      larger: (c) => c.selected, smaller: (c) => c.selected, clearfmt: (c) => c.selected, para: (c) => c.selected, arrange: (c) => c.selected,
+      formatpane: (c) => c.selected, cut: (c) => c.selected, copy: (c) => c.selected,
+      undo: (c) => c.undo, redo: (c) => c.redo,
+    },
+    sheets: {
+      // A block of cells picked: how it sits, wraps, joins, is bordered and written as numbers, and what can be done to it as data.
+      left: (c) => c.range, centre: (c) => c.range, right: (c) => c.range, wrap: (c) => c.range, merge: (c) => c.range, borders: (c) => c.range,
+      currency: (c) => c.range, percent: (c) => c.range, thousands: (c) => c.range, moredec: (c) => c.range, lessdec: (c) => c.range,
+      strike: (c) => c.range, sort: (c) => c.range, cond: (c) => c.range, astable: (c) => c.range, styles: (c) => c.range,
+      undo: (c) => c.undo, redo: (c) => c.redo,
+    },
+  }[app];
+  /** What the open document has, read off the editor's page (a few times a second, with the bar's other state). */
+  function readContext() {
+    if (app === "docs") {
+      const surface = document.querySelector('.ProseMirror[contenteditable="true"]') || document.querySelector(".ProseMirror");
+      const sel = window.getSelection();
+      const inside = !!(surface && sel && sel.anchorNode && surface.contains(sel.anchorNode));
+      const at = inside ? (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement) : null;
+      const undo = find(["undo"]), redo = find(["redo"]);
+      return {
+        doc: !!surface, text: !!surface && (surface.textContent || "").trim().length > 0,
+        selected: inside && !sel.isCollapsed, inList: !!at?.closest("li"),
+        undo: !!undo && !isOff(undo), redo: !!redo && !isOff(redo),
+        pick: inside && !sel.isCollapsed ? String(sel).replace(/\s+/g, " ").trim().slice(0, 120) : "",
+      };
+    }
+    if (app === "sheets") {
+      // The grid is drawn on a canvas; the name box above it says what is picked ("A1", or "A1:B3", "A:A", "3:3" for more than a cell).
+      const box = document.querySelector("[data-u-comp='defined-name'] input");
+      const undo = find(["undo"]), redo = find(["redo"]);
+      return { doc: !!box, range: !!box && String(box.value || "").includes(":"), pick: box ? String(box.value || "").slice(0, 40) : "", undo: !!undo && !isOff(undo), redo: !!redo && !isOff(redo) };
+    }
+    if (app === "slides") {
+      // The slide is drawn on a canvas, but the ribbon's own buttons know what is picked: they are lit when a box or shape is, dim when not.
+      const bold = find(["bold"]), undo = find(["undo"]), redo = find(["redo"]);
+      const picked = !!bold && !isOff(bold);
+      return { doc: !!document.querySelector(".stage-wrap, .slide-list"), selected: picked, pick: picked ? "a box or shape on the slide" : "", undo: !!undo && !isOff(undo), redo: !!redo && !isOff(redo) };
+    }
+    return { doc: true };
+  }
+  /*
+   * The editor reads "no document", "no words" or "nothing picked" for a beat while it re-renders; each is held for a while before the bar
+   * believes it (a document or words for two seconds, a Slides pick for under one), so tools do not blink out and back.
+   */
+  const HOLD = { doc: 2000, text: 2000, selected: app === "slides" ? 800 : 0 };
+  const lastTrue = {};
+  function steady(raw) {
+    const now = Date.now();
+    const out = { ...raw };
+    for (const [key, ms] of Object.entries(HOLD)) {
+      if (!ms || !(key in raw)) continue;
+      if (raw[key]) lastTrue[key] = now;
+      else if (lastTrue[key] && now - lastTrue[key] < ms) out[key] = true;
+    }
+    return out;
+  }
+  /** What the person has picked, said to the host when it changes (at most once a second): the agent's briefing carries it. */
+  let sentPick = "", sentAt = 0;
+  function reportPick(c) {
+    const pick = c.doc ? String(c.pick || "") : "";
+    const now = Date.now();
+    if (pick === sentPick || now - sentAt < 1000) return;
+    sentPick = pick; sentAt = now;
+    try { void window.__autora.host("pick", { text: pick }).catch(() => undefined); } catch { /* no host: nobody to tell */ }
+  }
+  const needed = (tool, c) => !!c.doc && (RULES[tool.id] ? !!RULES[tool.id](c) : true);
+  /** Marks which of the pinned tools the work needs, as many as fit; the CSS fades the rest out. */
+  function applyNeed() {
+    if (!RULES || !bar) return;
+    const c = steady(readContext());
+    reportPick(c);
+    let free = room();
+    for (const b of bar.querySelectorAll("button[data-tool]")) {
+      const yes = needed(byId.get(b.dataset.tool), c) && free > 0;
+      if (yes) free--;
+      const want = yes ? "1" : "0";
+      if (b.dataset.need !== want) b.dataset.need = want;
+    }
+  }
 
   /* ------------------------------------------------------------------ the bar and the grid */
   const svg = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true">${(window.__autoraIcons || {})[name] || (window.__autoraIcons || {}).plus || ""}</svg>`;
@@ -349,7 +458,7 @@
   function drawBar() {
     if (!bar) return;
     bar.textContent = "";
-    for (const id of shownIds().slice(0, room())) {
+    for (const id of RULES ? shownIds() : shownIds().slice(0, room())) {
       const tool = byId.get(id);
       const b = document.createElement("button");
       b.type = "button";
@@ -362,8 +471,11 @@
       b.innerHTML = iconOf(tool);
       swallow(b);
       b.addEventListener("click", () => void run(tool));
+      if (RULES) b.dataset.need = "1";
       bar.appendChild(b);
     }
+    // Marked before the first frame is drawn, so nothing fades that was never in; a transition runs on each change from there.
+    if (RULES) applyNeed();
     const div = document.createElement("i");
     div.className = "div";
     bar.appendChild(div);
@@ -384,6 +496,7 @@
   /** Which tools are lit or dimmed: read from the editor's own buttons, a few times a second (only while its Home tab is the one open). */
   function paint() {
     if (curTab !== "home") return;
+    applyNeed();
     if (bar) {
       for (const b of bar.querySelectorAll("button[data-tool]")) {
         const s = state(byId.get(b.dataset.tool));

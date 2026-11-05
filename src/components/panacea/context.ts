@@ -31,6 +31,8 @@ export interface PanaceaApi {
   setMode: (surface: string, mode: DocMode) => void;
   /** The chat, for the routes a bespoke piece or an export calls. */
   sessionId: string;
+  /** Load the canvas again: after the server changed it on the person's behalf (a suggestion accepted, a step taken back). */
+  refresh: () => void;
 }
 
 export const PanaceaCtx = createContext<PanaceaApi | null>(null);

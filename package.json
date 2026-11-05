@@ -1,7 +1,7 @@
 {
   "name": "autora",
   "private": true,
-  "version": "0.9.326",
+  "version": "0.9.341",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
@@ -30,6 +30,7 @@
     "prosemirror-model": "^1.25.12",
     "prosemirror-schema-list": "^1.5.1",
     "prosemirror-state": "^1.4.4",
+    "prosemirror-transform": "^1.12.4",
     "prosemirror-view": "^1.42.8",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

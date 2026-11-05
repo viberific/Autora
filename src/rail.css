@@ -23,6 +23,10 @@
 .rail-btn.is-on { color: #fff; background: var(--tc); box-shadow: 0 6px 18px color-mix(in srgb, var(--tc) 45%, transparent); }
 .rail-btn:disabled { opacity: 0.35; cursor: default; }
 .rail-btn.is-grid { --tc: var(--text-2); background: color-mix(in srgb, var(--text-2) 12%, transparent); }
+.rail-btn { animation: rail-in var(--dur-2) var(--ease); }
+.rail-btn.is-leaving { opacity: 0; transform: scale(0.6); pointer-events: none; transition: opacity var(--dur-2) var(--ease), transform var(--dur-2) var(--ease), background var(--dur-1) var(--ease); }
+@keyframes rail-in { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .rail-btn { animation: none; } .rail-btn.is-leaving { transform: none; } }
 .rail-btn:focus-visible, .rail-tile:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 2px; }
 .rail-div { flex: none; background: var(--border-strong); }
 .rail-bar.is-desktop .rail-div { width: 20px; height: 1px; margin: 2px 0; }

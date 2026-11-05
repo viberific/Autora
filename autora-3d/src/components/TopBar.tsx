@@ -6,10 +6,11 @@
 import React from 'react';
 import { Box, Link2, Redo2, Trash2, Undo2, X } from 'lucide-react';
 import { BevelStyle, Body3D, EdgeSel, FaceSel } from '../types';
+import { BRUSH_KINDS, MIN_RADIUS, type Brush } from '../utils/sculpt';
 import { describeEdges, edgesOfKind, isWholeGroup, type EdgeGroup } from '../utils/edges';
 import { selectionBounds } from '../utils/transform';
 import Sidebar from './Sidebar';
-import { IconButton, NumberBox, StepButton, signed } from './controls';
+import { IconButton, NumberBox, Segmented, StepButton, signed } from './controls';
 
 type SidebarProps = React.ComponentProps<typeof Sidebar>;
 
@@ -44,6 +45,11 @@ export interface TopBarProps {
   onEditObject: () => void;
   onSeparateObject: () => void;
   sidebar: Omit<SidebarProps, 'section'>;
+  /** The sculpt brush: what it does, how far it reaches, how hard, and its mirror. */
+  brush: Brush;
+  onBrush: (patch: Partial<Brush>) => void;
+  /** Splits every triangle of the picked mesh shape in four, so the brush has finer surface to work with. */
+  onFiner: () => void;
 }
 
 const Chip = ({ children, sub }: { children: React.ReactNode; sub?: string }) => (
@@ -187,6 +193,57 @@ export function FacePanel(props: TopBarProps) {
           </StepButton>
         ))}
         <span className="text-xs text-slate-400 ml-1">mm</span>
+      </div>
+    </div>
+  );
+}
+
+/** A mesh shape can be sculpted: it has a surface of its own and is not standing on a wall. */
+export const sculptable = (b?: Body3D) => !!b?.mesh && !b.frame && !b.repeatOf && !b.instanceOf;
+
+/** The sculpt brush: pick what it does, how far it reaches and how hard, then paint on the shape in the view. */
+export function SculptPanel({ selected, brush, onBrush, onFiner }: Pick<TopBarProps, 'selected' | 'brush' | 'onBrush' | 'onFiner'>) {
+  const body = selected.length === 1 ? selected[0] : null;
+  if (!body || !sculptable(body)) {
+    return <p className="p-4 text-xs text-slate-400 w-[min(19rem,calc(100vw-1.5rem))]">Select a mesh shape to sculpt it: one made by the agent&apos;s Blend or Loft, or brought in with Load. Shapes drawn as outlines have no surface to sculpt.</p>;
+  }
+  const triangles = body.mesh!.indices.length / 3;
+  const longest = Math.max(...body.points.map((p) => p.x)) - Math.min(...body.points.map((p) => p.x));
+  const maxRadius = Math.max(MIN_RADIUS * 5, Math.round(Math.max(longest, body.extrusionHeight) * 0.5));
+  const slider = (label: string, value: number, min: number, max: number, step: number, set: (n: number) => void, unit: string) => (
+    <label className="flex items-center gap-3 text-xs text-slate-300">
+      <span className="w-14 shrink-0">{label}</span>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => set(Number(e.target.value))} className="flex-1 min-w-0 accent-accent-500" aria-label={label} />
+      <span className="w-12 text-right tabular-nums text-slate-400">{unit === '%' ? Math.round(value * 100) : Math.round(value)} {unit}</span>
+    </label>
+  );
+  return (
+    <div className="p-4 flex flex-col gap-3 w-[min(19rem,calc(100vw-1.5rem))]">
+      <Chip sub={`${body.name} · ${triangles.toLocaleString()} triangles`}>Sculpt</Chip>
+      <div className="grid grid-cols-2 gap-1.5" role="group" aria-label="Brush">
+        {BRUSH_KINDS.map((k) => (
+          <button key={k.kind} type="button" aria-pressed={brush.kind === k.kind} title={k.hint} onClick={() => onBrush({ kind: k.kind })} className={`h-9 rounded-full text-xs font-medium transition-colors ${brush.kind === k.kind ? 'bg-accent-500 text-white' : 'bg-white/6 text-slate-300 hover:bg-white/12'}`}>
+            {k.label}
+          </button>
+        ))}
+      </div>
+      {brush.kind === 'build' && (
+        <label className="flex items-center gap-2 text-xs text-slate-300">
+          <input type="checkbox" checked={brush.carve} onChange={(e) => onBrush({ carve: e.target.checked })} className="accent-accent-500" />
+          Carve in instead of building out <span className="text-slate-500">(or hold Shift)</span>
+        </label>
+      )}
+      {slider('Size', Math.min(brush.radius, maxRadius), MIN_RADIUS, maxRadius, 1, (n) => onBrush({ radius: n }), 'mm')}
+      {slider('Strength', brush.strength, 0.05, 1, 0.05, (n) => onBrush({ strength: n }), '%')}
+      <div className="flex items-center gap-3 text-xs text-slate-300">
+        <span className="w-14 shrink-0" title="L–R mirrors left to right across the shape's middle (the x direction); F–B mirrors front to back (y)">Mirror</span>
+        <Segmented id="mirror" label="Mirror" value={brush.symmetry} options={[{ value: 'off', label: 'Off' }, { value: 'x', label: 'L–R' }, { value: 'y', label: 'F–B' }]} onChange={(v) => onBrush({ symmetry: v })} />
+      </div>
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={onFiner} disabled={triangles > 40000} title={triangles > 40000 ? 'Already very fine' : 'Split every triangle in four so the brush can make smaller detail'} className="h-8 px-3.5 rounded-full text-xs font-medium bg-white/6 text-slate-200 hover:bg-white/12 disabled:opacity-40 disabled:hover:bg-white/6">
+          Finer surface
+        </button>
+        <span className="text-[11px] text-slate-400">Paint on the shape; drag empty space to turn the view.</span>
       </div>
     </div>
   );

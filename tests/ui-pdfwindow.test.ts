@@ -137,6 +137,24 @@ async function main() {
       assert.equal(await counter.inputValue(), "1", "the engine's page count reached the editor");
     });
 
+    await test("the bar is the tools a document is for; a specialist tool joins once it is reached for, and All tools still has everything", async () => {
+      const ids = () => editor.evaluate(() => [...document.querySelectorAll('.autora-rail [data-phone]:not(.is-leaving)')].map((b) => b.getAttribute("data-phone")).filter((x) => x !== "grid"));
+      const until = async (what: string, fn: () => Promise<boolean>) => { for (let i = 0; i < 40; i++) { if (await fn()) return; await sleep(150); } throw new Error(`timed out: ${what}`); };
+      await until("the bar has its tools", async () => (await ids()).length > 0);
+      const base = await ids();
+      for (const id of ["select", "text", "highlight", "draw", "shape", "note", "redact", "sign", "edit"]) assert.ok(base.includes(id), `${id} is on the bar: ${base}`);
+      for (const id of ["stamp", "callout", "measure", "link", "addimage", "inkhighlight"]) assert.ok(!base.includes(id), `${id} waits until it is wanted: ${base}`);
+      const press = (sel: string) => editor.evaluate((q) => document.querySelector<HTMLElement>(q)!.click(), sel);
+      await press('.autora-rail [data-phone="grid"]');
+      await editor.waitForSelector('[data-tile="stamp"]');
+      assert.ok((await editor.locator("[data-tile]").count()) >= 38, "every tool is in All tools");
+      await press('[data-tile="stamp"]');
+      await until("Stamps has joined the bar", async () => (await ids()).includes("stamp"));
+      await press('.autora-rail [data-phone="select"]');
+      await sleep(600);
+      assert.ok((await ids()).includes("stamp"), "and stays once reached for");
+    });
+
     await test("with Visible work on, the agent's next edit is done in the open editor by its hand, live, and saved there", async () => {
       await editorIn(page);
       const before = editorLoads;

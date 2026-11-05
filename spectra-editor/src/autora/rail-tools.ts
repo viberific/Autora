@@ -4,10 +4,9 @@
  * Colours are SecurePDF's (blue, emerald, amber, purple, indigo, sky, gold, rose, cyan); a tool Autora adds takes the
  * nearest one of its group. A tile is one of three things: a canvas mode (`tools.<mode>`, which also opens the tool that
  * owns it), a whole tool (`tools.open.<id>`, the ones with a pane in the dock) or a plain command (`command`). The ids
- * are Spectra's own (commands/registry.ts, commands/tools.ts), so a typo is a failed type check, not a dead button.
+ * are Spectra's own (commands/registry.ts, commands/tools.ts); rail.tsx checks every one when it starts, so a typo is a console
+ * error, not a dead button. (This file imports nothing from the editor, so tests can read it.)
  */
-import type { CommandId } from "../renderer/commands/registry";
-
 export interface Tile {
   id: string;
   label: string;
@@ -17,8 +16,8 @@ export interface Tile {
   mode?: string;
   /** The tool this opens. */
   tool?: string;
-  /** A command that is neither of those. */
-  command?: CommandId;
+  /** A command that is neither of those: one of Spectra's (commands/registry.ts), which rail.tsx checks when it starts. */
+  command?: string;
 }
 
 const BLUE = "#2563eb", EMERALD = "#059669", AMBER = "#f59e0b", PURPLE = "#9333ea", INDIGO = "#4f46e5", SKY = "#0284c7", GOLD = "#d97706", ROSE = "#e11d48", CYAN = "#0891b2";

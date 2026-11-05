@@ -14,6 +14,7 @@
  *
  * Pure text.
  */
+import { CAPABILITIES, capabilityOf } from "./capabilities";
 
 const OVERVIEW = [
   "How Autora's windows work (all of these tools are yours from the first message; none needs loading):",
@@ -114,7 +115,12 @@ const PDF = [
     "pdf_compress shrinks. Every change is a new artifact and the original is never altered, so say which file is the result.",
   "  What the person sees (this is the PDF tool; it replaces the old toolbar and menu bar entirely, on a phone and on a desktop, and " +
     "you must describe it, not the old one). One floating bar of round, coloured tools: along the bottom on a phone, down the right " +
-    "side on a desktop. The bar shows only the tools that fit and never scrolls. A phone shows Select (blue), Text (green), Highlight " +
+    "side on a desktop. The bar follows the work: with no document open it has no tools, only All tools; with one it shows the tools a " +
+    "document is for (Select, Text, Highlight, Draw, Shapes, Note, Redact, Sign and Edit text), and Erase comes only when there are unsaved " +
+    "marks, Fill fields only when the pages in view have form fields, Organize only when there is more than one page. The other pinned " +
+    "tools (Pen highlight, Stamps, Callout, Add image, Link, Measure...) wait in All tools until the person reaches for one, and then " +
+    "stay on the bar; a tool that is not needed fades out and fades back in when it is, so do not tell the person to press a tool that is " +
+    "not there: say \"open All tools\" and name it. The bar shows only the tools that fit and never scrolls. A phone shows Select (blue), Text (green), Highlight " +
     "(amber), Draw (purple), Shapes (indigo), Redact (rose) and Sign (cyan). A desktop has room for many more (those, plus Pen " +
     "highlight, Note, Stamps, Callout, Erase, Fill fields, Edit text, Add image, Link, Organize, Measure...) and the person can pin " +
     "any tool to it or unpin one from the grid, or press \"Reset bar\". The last button (a grid of four squares, \"All tools\") " +
@@ -164,12 +170,14 @@ const VIDEO = [
     "keyframes, speed), change tracks, scenes and size with video_project. Read the timeline with video_look and see a moment with " +
     "video_frame before you say it is done. video_catalog lists what exists (effects, masks, graphics, stickers) so nothing is guessed. " +
     "When no typed tool covers something, video_ui reads the editor's screen and clicks and types in it as a person would. video_export " +
-    "renders a file and can take a while; only when asked. Leave the editor alone while the person holds it. The story, pacing, music " +
+    "renders a file (MP4 by default, or WebM with format) and can take a while; only when asked. Leave the editor alone while the person holds it. The story, pacing, music " +
     "and look are theirs. What the person sees (there is no strip of tabs at the left, no row of timeline buttons and, on a phone, no " +
     "Media / Edit / Export row any more): the preview, the timeline with only its curves, scenes and zoom slider above it, the properties, " +
-    "and a round, coloured tool bar (down the right side on a desktop, along the bottom on a phone) that shows only as many tools as fit: " +
-    "Media, Text, Effects, Captions, Play, Split, Duplicate, Delete, Snapping, Zoom, Undo and Redo on a desktop (Media, Edit, Play, Split, " +
-    "Duplicate, Delete, Undo on a phone). The last button, All tools, opens every tool: the panels (Media, Sounds, Text, Stickers, " +
+    "and a round, coloured tool bar (down the right side on a desktop, along the bottom on a phone) that follows the work and shows only as many " +
+    "tools as fit. Media and Text are always there; Effects, Captions, Play, Split, Snapping, Zoom and (on a phone) Export come once the timeline has " +
+    "clips; Duplicate, Delete and (on a phone) Edit only while clips are picked; Undo only once there is something to take back and Redo once " +
+    "something has been taken back. A tool that is not needed fades out and fades back in when it is, so do not tell the person to press a tool " +
+    "that is not there: pick the clip first, or say \"open All tools\" and name it. The last button, All tools, opens every tool: the panels (Media, Sounds, Text, Stickers, " +
     "Effects, Transitions, Captions, Adjustment, Settings), playback, the clip edits (cut left and right, copy, paste, extract audio, " +
     "mute, show or hide, select all), the timeline (snapping, ripple, bookmark, zoom) and history; a desktop can pin any of them. Each " +
     "is a button you can click with video_ui by its name. The keyboard shortcuts work on a desktop as ever. Point the person at a tool by " +
@@ -212,8 +220,9 @@ const STUDIO = [
     "only when they ask you to. Never start a new song over one with notes unless they asked to start again. What the person sees " +
     "(there is no old toolbar, tab strip or add-track row any more): a slim transport row (play, back to the start, the position, " +
     "undo, redo), the arrangement, and a round, coloured tool bar (down the right side on a desktop, along the bottom on a phone) " +
-    "that shows only as many tools as fit: Add track, Split, Duplicate, Delete, Song (tempo, key and bars, in a small tray), Mixer " +
-    "and Zoom, with Piano roll, Loop and Metronome too on a desktop, where they can pin any tool to the bar. The last button, " +
+    "that shows only what the song needs, and as many as fit: an empty song has Add track and Song (tempo, key and bars, in a small tray); " +
+    "once there is a track Mixer and Zoom join, with Loop and Metronome on a desktop; and Split, Duplicate, Delete and the Piano roll fade in " +
+    "while a clip is picked and fade out when nothing is. They can pin any tool to the bar on a desktop. The last button, " +
     "All tools, opens every tool in a window in the middle, with Ask Autora suggestions under them. Nothing is missing from a phone, " +
     "it is one tap further; point the person at a tool by its name and say \"open All tools\" if it is not on their bar. Split, " +
     "Duplicate and Delete work on the open clip. Everything the bar does you can do with the studio_* tools, whatever is shown. " +
@@ -268,12 +277,23 @@ const OFFICE = [
     "PowerPoint or Google Docs, Sheets or Slides means these: say which Autora app you used. The words of a story or a speech the " +
     "person is writing are theirs; layout, formulas, formatting and structure are yours.",
     "What the person sees in all three (there is no ribbon, no tab strip and no phone \"More\" button any more): a round, coloured tool bar " +
-    "down the right side on a desktop and along the bottom on a phone, showing only as many tools as fit (Pages: undo, redo, bold, italic, " +
-    "underline, highlight, text colour, bullets, numbering, align; Sheets: bold, italic, fill, number formats, insert row and column, " +
-    "AutoSum; Slides: new slide, layout, present, bold, italic, text size), and a last button, All tools, that opens every command the " +
+    "down the right side on a desktop and along the bottom on a phone, showing only as many tools as fit. In Pages the bar follows the " +
+    "document: Bold, Italic, Underline, Bullets and Numbering are always there; the alignment tools (Align left, Centre...) once the " +
+    "document has words; Highlight, Text colour, Bigger text, Clear formatting and Cut or Copy only while words are picked; Indent and Outdent " +
+    "in a list or with words picked; Undo only once there is something to take back and Redo once something has been taken back; a tool that is not " +
+    "needed fades out and back in when it is, so do not tell the person to press a tool that is not there: pick the words first, or say " +
+    "\"open All tools\" and name it. Sheets follows what is picked the same way: Bold, Italic, Underline, Fill colour, Text colour, Insert row, " +
+    "Insert column and AutoSum are always there; Align left, Centre, Wrap text, Merge cells, Borders, the number formats (Currency, Percent, " +
+    "Thousands, decimals), Sort & filter, Conditional formatting and Format as table only while a block of cells is picked (a range, a column " +
+    "or a row, not a single cell); Undo and Redo only with something to take back or put back; to bring them, pick the block first (type its " +
+    "address in the name box) or say \"open All tools\". Slides does the same: New slide, Layout and Present are always there; Bold, Italic, " +
+    "Underline, Text colour, text size, Clear formatting, Align & distribute, the Format pane, Cut and Copy only while a box or shape on the slide is " +
+    "picked (click it first), and fade away when nothing is; Undo and Redo only with something to take back or put back. A last button, All tools, that opens every command the " +
     "editor has, one group per old ribbon tab (Insert, Design, Layout, Review, View...), where a desktop can pin any of them to the bar. " +
     "Commands with a drop-down open it beside the bar. The keyboard shortcuts work on a desktop as ever. Point the person at a tool by " +
-    "its name and say \"open All tools\" if it is not on their bar. You have every tool whatever is shown.",
+    "its name and say \"open All tools\" if it is not on their bar. You have every tool whatever is shown. " +
+    "What the person has picked in a window (their words in Pages, the cell range in Sheets, a box on a slide) is in your briefing for about two " +
+    "minutes after: when they say \"this\" or \"these\", they mean that, so act on it without asking which.",
   "  With Visible work on and the document open in its window, office_edit's words are typed there by your hand, live, before the " +
     "call returns: in Pages the words that change are selected and typed over, a new paragraph is typed after the one it follows and a " +
     "removed one selected and deleted, and bold, italic or underline put on or taken off words by selecting them and pressing the " +
@@ -324,10 +344,27 @@ const CAD = [
     "something your hand may let go of the pick, close a card, fit the model in view, scroll in or out, or look from another " +
     "side, so the person's view can move. Then the finished model goes in, keeping the ids the window gave what the hand made. " +
     "Your result says \"Done by hand in the 3D window\" with each step, and \"Not by hand\" with why for what was not: the " +
-    "window has no control for cad_doc_set, cad_library_import, cad_mesh_import (it reads a file), cad_library_rename on a phone or a new outline in cad_shape_set, Draw's " +
+    "window has no control for cad_doc_set, cad_library_import, cad_mesh_import (it reads a file), cad_sculpt_blend, cad_sculpt_loft, cad_sculpt_smooth, cad_library_rename on a phone or a new outline in cad_shape_set, Draw's " +
     "Cut goes all the way through (a shallower pocket goes in with the finished model), and the curve of a drawn shape's closing " +
     "side; anything the hand could not reach. Calls that only read are not shown. With Visible work off, or nobody watching, " +
     "every call changes the model at speed and the window shows it.",
+  "  Organic forms. When the person wants something alive or soft (a horse, a face, a creature, a bottle), build it rather than extruding outlines. " +
+    "cad_sculpt_blend melts parts into ONE smooth shape: spheres, tapered capsules (a limb or neck: at, to, radius and radius2 at the ends) and ellipsoids (a body or head: radii along x, y, z), in mm with x, y on the ground and z up. " +
+    "Overlapping parts join softly over smooth mm (default about 0.6 x the smallest radius; 0 leaves creases); detail (8 to 120, default 72) is the fineness; mirror ({axis, at}) reflects what you gave across a plane, so a creature is described from one side. " +
+    "Work big to small: body, chest and hips first, then neck, head, limbs overlapping into them, then small features; look at the result (a view, cad_scene_get) and rebuild with changed numbers rather than patching. A realistic animal needs proportion: legs are long, joints taper, the chest is deeper than the hips. " +
+    "cad_sculpt_loft makes a smooth tube along sections (centre, radius, radius2) for legs, a neck, a tail or a horn; cad_sculpt_smooth (id, passes, strength, subdivide 0 to 2) evens out any mesh shape without shrinking it. " +
+    "All three make a mesh shape, so move, turn, resize, recolour, group and export work and outline edits do not. The window has no controls for them yet, so with Visible work on they say \"Not by hand\". " +
+    "This is creative work: show the person your plan (the parts, the sizes) and ask what they want different before you refine; they decide the character of the form, you do the numbers.",
+  "  The tool bar is contextual. It shows only what the moment needs: with nothing made it is Shape and Draw (and Library once an object is saved), with a shape picked it adds Move, Size & position, Material, Hide, Delete and the rest that apply, Sculpt only for a mesh shape, Join and Subtract only with two or more picked, and Export & file once there is something to export. A tool with nothing to act on is not on the bar, so do not tell the person to press one that is not there: tell them what to pick first, or point to All tools (the grid icon at the bottom of the bar), which lists every tool and says what each needs. " +
+  "  Who did what. Every change to the model is a command in a log, with who made it (you, or the person in the window) and a short account. cad_history_log reads it: call it with since_revision (the revision you last saw) to learn what the person changed while you were not looking, instead of guessing from the shapes. Some commands are the person's own hand and are not given to you at all (a brush stroke); if you try one you are refused, so suggest it and say where the tool is. The person can go back to before any command; that is a new change on top, so it can be undone and it shows in the log as history_revert. " +
+  "  Sculpting by hand. The Sculpt tool (brush icon, Shape group; only with one mesh shape picked) opens a panel with four brushes: Grab " +
+    "(drag a part of the surface along), Build (raise it where the person paints; Carve or Shift cuts in), Smooth and Flatten, a Size in mm, a Strength, " +
+    "Mirror (Off, L-R or F-B across the shape's middle) and Finer surface (splits every triangle in four so the brush can make smaller detail). " +
+    "While it is open, pressing on that shape paints on it and dragging empty space turns the view; a stroke is one undo step. This is the person's hand: " +
+    "you have no brush tool, on purpose, because the shaping of a form is theirs. What you do is the technical background: start the form (cad_sculpt_blend or cad_sculpt_loft), " +
+    "make the surface finer or smoother when they ask (cad_sculpt_smooth with subdivide), tell them where the tool is, suggest what to work on (\"the neck could be thicker where it meets the chest\"), " +
+    "and when they say they have been sculpting, call cad_scene_get again before you rely on the shape: its triangles and size may have changed. Do not rebuild a shape they have sculpted. " +
+    "Only mesh shapes can be sculpted: a drawn outline, a shape on a wall, a repeat's copy or a library object's part has no surface of its own.",
   "  Meshes. Extruded outlines cannot make organic forms (an animal, a face, a scan): for those, cad_mesh_import brings in a GLB (or glTF), " +
     "OBJ or STL as ONE shape, the real surface, from a file you name (an artifact id or a path; the bytes never go through the " +
     "conversation). A free CC0 model from Poly Pizza, Quaternius or Sketchfab, or one made in Blender, fits; size sets its longest side in mm " +
@@ -350,8 +387,9 @@ const GAME = [
     "settings are yours; the idea, story, characters, world, look and feel are theirs. For \"make it slippery\" or \"jump\", make the " +
     "behavior and leave each value where they can change it. What the person sees (GDevelop's own tab strip, toolbar, Share and Home " +
     "are away): the scene alone, and a round, coloured tool bar (down the right side on a desktop, along the bottom on a phone) that shows " +
-    "only as many tools as fit: Play, Add object, Objects, Properties, Abilities, Undo and Delete on a phone, with Layers, Scenes and Redo " +
-    "too on a desktop, where they can pin any tool to the bar. Play runs the game inside the window (a box with Restart, Full screen and " +
+    "only what the moment needs, and as many as fit: Play, Add object, Objects and Properties from the start; Abilities and Delete only " +
+    "once an object is picked or placed, Undo and Redo only when there is something to take back or put back, Restart only while it plays " +
+    "(a tool with nothing to act on fades out and fades back in when it has), with Layers and Scenes too on a desktop, where they can pin any tool to the bar. Play runs the game inside the window (a box with Restart, Full screen and " +
     "Stop), never in a pop-up. Add object opens the editor's New object dialog, which starts on objects from scratch (there is no Asset " +
     "Store: nothing is fetched). Abilities is the picked object's behaviors (jump, move, physics). The last button, All tools, opens every " +
     "tool in groups (Play, Build, Make it do things, Scenes, View, Edit, Game, Share, Advanced): scene settings and variables, 2D/3D view, " +
@@ -434,6 +472,12 @@ const PANACEA = [
     "it to what is selected (panacea_set \"@doc.bold\" does the same, to the person's selection). Read it with panacea_look doc:\"<id>\" " +
     "(the outline, then every block with an id) and change it with panacea_doc by those ids: format (always allowed), style for the " +
     "whole document's font, size and line height (always allowed), and insert, replace and delete, which write or remove words. " +
+    "A document also keeps a history: every change is a step with who made it (you or the person) and a line saying what, and the person " +
+    "can take any one step back on its own, the later ones kept (the History button on the document's bar). When you want to change words that " +
+    "are the person's, you do not write them: {op:\"suggest\", id, text, reason} proposes rewording one block, or {op:\"suggest\", id, remove:true, reason} " +
+    "proposes removing it. A suggestion changes nothing; it waits on the bar (Suggestions) for the person to Accept, which is their own edit, or Dismiss. " +
+    "It is a rewording about as long as the block, never new writing, so say what is weak and why, and let them decide: panacea_look shows what is " +
+    "still waiting, and you do not repeat it. " +
     "Whose words are they? The bar on the document says: \"You write\" (guide, the default) or \"Autora writes\" (agent), and the person " +
     "can flip it any time. In guide you format and structure and may not write: a story, a poem, an essay, anything creative is theirs, " +
     "so brainstorm, ask, critique and suggest in the chat. In agent you write, every change a step they can undo: that is productivity " +
@@ -506,8 +550,11 @@ const PHOTO = [
     "colour management) is yours; the look, mood, composition and what the picture is of are theirs: suggest and ask, and leave values " +
     "where they can change them. What the person sees (the editor's own menu bar, toolbox, options bar, status bar and panel dock are " +
     "away: no menu bar, no toolbox): the picture alone, and a round, coloured tool bar (down the right side on a desktop, along the bottom " +
-    "on a phone) that shows only as many tools as fit: Move, Select, Crop, Brush, Eraser, Layers and Undo on a phone, with Lasso, Magic " +
-    "wand, Fill, Type, Eyedropper, Colour and Redo too on a desktop, where they can pin any tool or command to the bar. Layers, Brush " +
+    "on a phone) that follows the picture: with no picture open it has no tools; with one it shows Move, Select, Crop, Brush, Eraser and Layers, " +
+    "Undo only once there is something to take back and Redo only once something has been taken back, and Brush settings and Colour while a " +
+    "paint tool is in use. Lasso, Magic wand, Fill, Type and Eyedropper (a desktop pins them) wait in All tools until the person reaches for one " +
+    "and then stay on the bar; a tool that is not needed fades out and fades back in when it is, so do not tell the person to press a tool " +
+    "that is not there: say \"open All tools\" and name it. The bar shows only as many as fit, and on a desktop they can pin any tool or command to it. Layers, Brush " +
     "settings and Colour open as a small card beside the bar. The last button, All tools, opens every one of the editor's tools in groups " +
     "(Select, Paint, Retouch, Type and shapes...), the three cards, and every live command of the menus under its menu's name (File, Edit, " +
     "Image, Layer, Filter...), with a search box. Name a tool by its button and say \"open All tools\" if it is not on their bar. The " +
@@ -538,21 +585,16 @@ export function manualId(tool: string): ManualId | null {
   if (tool.startsWith("browser_") || tool === "web_search" || tool === "http_request") return "browser";
   if (tool === "app_preview") return "creator";
   if (tool === "terminal" || tool === "run_background") return "terminal";
-  if (tool.startsWith("pdf_")) return "pdf";
-  if (tool.startsWith("video_")) return "video";
-  if (tool.startsWith("studio_")) return "studio";
+  const hosted = capabilityOf(tool);
+  if (hosted) return hosted.id;
   if (tool.startsWith("panacea_")) return "panacea";
-  if (tool.startsWith("office_")) return "office";
-  if (tool.startsWith("cad_")) return "cad";
-  if (tool.startsWith("game_")) return "game";
-  if (tool.startsWith("photo_")) return "photo";
   if (tool === "widget_show") return "widgets";
   return null;
 }
 
 const WORK_MODES: Partial<Record<ManualId, string>> = {
-  browser: "Web", creator: "Apps & code", pdf: "PDF", video: "Video", studio: "Music",
-  office: "Documents, Spreadsheets or Presentations", cad: "3D", game: "Games", photo: "Images", widgets: "Explainers",
+  browser: "Web", creator: "Apps & code", widgets: "Explainers",
+  ...Object.fromEntries(CAPABILITIES.map((c) => [c.id, c.workMode])),
 };
 
 export const manualText = (id: ManualId): string => {

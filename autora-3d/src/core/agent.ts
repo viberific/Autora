@@ -7,6 +7,7 @@ import { glbBytes } from '../utils/glb';
 import { objText, stlBytes, toBase64 } from '../utils/serialize';
 import { initManifold } from '../utils/manifoldBoolean';
 import { Doc, IdGen, emptyDoc, parseDoc, settle } from './doc';
+import type { CommandEntry, Who } from './commands';
 import { AgentError } from './errors';
 import { ShapeSummary, summarize } from './inspect';
 import { TOOL_SPECS, mentionedShapes, runDocTool, toolByName } from './tools';
@@ -21,6 +22,8 @@ export interface AgentHost {
   redo(): boolean;
   /** Increases on every change, so a caller can notice that someone else (a person at the screen) edited. */
   revision(): number;
+  /** The commands made on the model so far, oldest first (the headless Engine keeps them). */
+  commandLog?(): CommandEntry[];
   /** Things only a screen can do. Absent when headless. */
   ui?: (name: string, args: Record<string, any>) => unknown | Promise<unknown>;
 }
@@ -40,7 +43,13 @@ export interface ToolResponse {
 export interface ExecuteOptions {
   /** Refuse unless the model is still at this revision (so a stale plan cannot overwrite a person's edit). */
   ifRevision?: number;
+  /** Who is calling. The default is the agent, which is refused the person's own commands (a brush stroke). */
+  who?: Who;
 }
+
+const personsOwn = (name: string) => toolByName(name)?.authority === 'person';
+const refusal = (name: string) =>
+  new AgentError(`${name} is the person's own hand, not a tool for you: shaping a form by hand is theirs to do.`, 'Suggest what to change and tell them where the tool is (the Sculpt tool in the 3D window).');
 
 const READ_ONLY = new Set(TOOL_SPECS.filter((t) => t.readOnly).map((t) => t.name));
 
@@ -59,7 +68,9 @@ export async function execute(host: AgentHost, name: string, args: unknown = {},
     const spec = toolByName(name);
     if (!spec) throw new AgentError(`Unknown tool "${name}".`, `Tools: ${TOOL_SPECS.map((t) => t.name).join(', ')}`);
 
-    if (name === 'batch') return await runBatch(host, args as any);
+    if (personsOwn(name) && options.who !== 'person') throw refusal(name);
+
+    if (name === 'batch') return await runBatch(host, args as any, options.who);
 
     if (spec.uiOnly) {
       if (!host.ui) throw new AgentError(`"${name}" needs the live app (it needs a screen).`, 'The headless engine has no view.');
@@ -96,6 +107,13 @@ function runOne(host: AgentHost, doc: Doc, ids: IdGen, name: string, args: unkno
     }
     case 'doc_clear':
       return { doc: emptyDoc(), result: { cleared: doc.bodies.length }, changed: true };
+    case 'history_log': {
+      const log = host.commandLog?.() ?? [];
+      const last = Math.max(1, Math.min(100, Math.round(Number(a.last ?? 20)) || 20));
+      const since = a.since_revision === undefined ? -1 : Number(a.since_revision);
+      const entries = log.filter((r) => r.revision > since).slice(-last);
+      return { doc, result: { commands: entries, total: log.length }, changed: false };
+    }
     case 'history_undo': {
       const ok = host.undo();
       if (!ok) throw new AgentError('Nothing to undo.');
@@ -133,7 +151,7 @@ function runOne(host: AgentHost, doc: Doc, ids: IdGen, name: string, args: unkno
   }
 }
 
-async function runBatch(host: AgentHost, a: { commands?: { tool: string; args?: unknown }[]; atomic?: boolean }): Promise<ToolResponse> {
+async function runBatch(host: AgentHost, a: { commands?: { tool: string; args?: unknown }[]; atomic?: boolean }, who?: Who): Promise<ToolResponse> {
   const commands = a.commands;
   if (!Array.isArray(commands) || !commands.length) throw new AgentError('commands must be a non-empty list of { tool, args }.');
   const atomic = a.atomic !== false;
@@ -145,6 +163,11 @@ async function runBatch(host: AgentHost, a: { commands?: { tool: string; args?: 
   for (let i = 0; i < commands.length; i++) {
     const c = commands[i];
     const spec = toolByName(c.tool);
+    if (spec && personsOwn(c.tool) && who !== 'person') {
+      if (atomic) throw new AgentError(`Command ${i} (${c.tool}): ${refusal(c.tool).message} Nothing was changed.`);
+      results.push({ ok: false, error: refusal(c.tool).message });
+      continue;
+    }
     if (!spec || c.tool === 'batch' || spec.uiOnly || c.tool === 'history_undo' || c.tool === 'history_redo') {
       const why = c.tool === 'batch' ? 'batches cannot be nested' : spec?.uiOnly ? 'screen commands cannot be batched' : c.tool.startsWith('history') ? 'undo and redo cannot be batched' : `unknown tool "${c.tool}"`;
       if (atomic) throw new AgentError(`Command ${i} (${c.tool}): ${why}. Nothing was changed.`);

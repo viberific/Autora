@@ -51,6 +51,13 @@ export function VideoRail({ phone, sheet, setSheet }: { phone: boolean; sheet: S
   const toggleRipple = useTimelineStore((s) => s.toggleRippleEditing);
   const playing = useEditor((e) => e.playback.getIsPlaying());
   const bookmarked = useEditor((e) => e.scenes.isBookmarked({ time: e.playback.getCurrentTime() }));
+  // What the work has, which is what the bar follows (`needed` on each tool, src/lib/toolrail.ts): clips to play, cut and zoom over,
+  // clips picked to copy, delete or mute, something on the clipboard, something to take back or put back.
+  const hasClips = useEditor((e) => Number(e.timeline.getTotalDuration()) > 0);
+  const picked = useEditor((e) => e.selection.getSelectedElements().length) > 0;
+  const canUndo = useEditor((e) => e.command.canUndo());
+  const canRedo = useEditor((e) => e.command.canRedo());
+  const canPaste = useEditor((e) => e.clipboard.hasEntry());
   const act = (action: TActionWithOptionalArgs) => () => invokeAction(action);
 
   const panelTools: Tool[] = TAB_KEYS.map((key) => {
@@ -59,6 +66,8 @@ export function VideoRail({ phone, sheet, setSheet }: { phone: boolean; sheet: S
     return {
       id: key, label: tabs[key].label, group: "Add to the video", icon: <Icon className="size-5" />, color: PANEL_COLOUR[key],
       phone: phoneSheet, desktop: ["media", "text", "effects", "captions"].includes(key),
+      // Effects and captions are put on clips, and captions come from their sound: nothing for them to do on an empty timeline.
+      needed: key === "effects" || key === "captions" ? hasClips : true,
       on: phoneSheet ? sheet === "media" : !phone && activeTab === key,
       about: phone ? "Open the media" : `Show ${tabs[key].label.toLowerCase()} on the left`,
       run: () => (phone ? (key === "media" ? setSheet((now) => (now === "media" ? null : "media")) : (setActiveTab(key), setSheet("media"))) : setActiveTab(key)),
@@ -67,29 +76,29 @@ export function VideoRail({ phone, sheet, setSheet }: { phone: boolean; sheet: S
 
   const tools: Tool[] = [
     ...panelTools,
-    ...(phone ? [{ id: "edit", label: "Edit", group: "Add to the video", icon: ico(Copy01Icon), color: VERB.select, phone: true, on: sheet === "edit", about: "The picked clip's properties", run: () => setSheet((now: Sheet) => (now === "edit" ? null : "edit")) } as Tool] : []),
-    { id: "play", label: playing ? "Pause" : "Play", group: "Playback", icon: ico(playing ? PauseIcon : PlayIcon), color: VERB.text, phone: true, desktop: true, on: playing, about: about("Play or pause", "toggle-play"), run: act("toggle-play") },
-    { id: "start", label: "To the start", group: "Playback", icon: ico(ArrowLeft01Icon), color: VERB.text, about: about("Go to the start", "goto-start"), run: act("goto-start") },
-    { id: "end", label: "To the end", group: "Playback", icon: ico(ArrowRight01Icon), color: VERB.text, about: about("Go to the end", "goto-end"), run: act("goto-end") },
-    { id: "split", label: "Split", group: "Edit clips", icon: ico(ScissorIcon), color: VERB.shape, phone: true, desktop: true, about: about("Cut the clip at the playhead", "split"), run: act("split") },
-    { id: "splitleft", label: "Cut left", group: "Edit clips", icon: ico(AlignLeftIcon), color: VERB.shape, about: about("Split and remove everything before the playhead", "split-left"), run: act("split-left") },
-    { id: "splitright", label: "Cut right", group: "Edit clips", icon: ico(AlignRightIcon), color: VERB.shape, about: about("Split and remove everything after the playhead", "split-right"), run: act("split-right") },
-    { id: "duplicate", label: "Duplicate", group: "Edit clips", icon: ico(Copy01Icon), color: VERB.text, phone: true, desktop: true, about: about("Copy the clip straight after itself", "duplicate-selected"), run: act("duplicate-selected") },
-    { id: "copy", label: "Copy", group: "Edit clips", icon: ico(Copy01Icon), color: "#94a3b8", about: about("Copy the picked clips", "copy-selected"), run: act("copy-selected") },
-    { id: "paste", label: "Paste", group: "Edit clips", icon: ico(ClipboardIcon), color: "#94a3b8", about: about("Paste at the playhead", "paste-copied"), run: act("paste-copied") },
-    { id: "audio", label: "Extract audio", group: "Edit clips", icon: ico(Link02Icon), color: VERB.insert, about: "Separate a clip's sound, or put it back", run: act("toggle-source-audio") },
-    { id: "mute", label: "Mute", group: "Edit clips", icon: ico(VolumeMute02Icon), color: VERB.highlight, about: about("Mute or unmute the picked clips", "toggle-elements-muted-selected"), run: act("toggle-elements-muted-selected") },
-    { id: "hide", label: "Show / hide", group: "Edit clips", icon: ico(ViewIcon), color: VERB.highlight, about: about("Show or hide the picked clips", "toggle-elements-visibility-selected"), run: act("toggle-elements-visibility-selected") },
-    { id: "selectall", label: "Select all", group: "Edit clips", icon: ico(SquareIcon), color: VERB.select, about: about("Pick every clip", "select-all"), run: act("select-all") },
-    { id: "delete", label: "Delete", group: "Edit clips", icon: ico(Delete02Icon), color: VERB.remove, phone: true, desktop: true, about: about("Remove the picked clips", "delete-selected"), run: act("delete-selected") },
-    { id: "snapping", label: "Snapping", group: "Timeline", icon: ico(MagnetIcon), color: VERB.note, desktop: true, on: snapping, about: about("Clips snap to each other and the playhead", "toggle-snapping"), run: () => toggleSnapping() },
-    { id: "ripple", label: "Ripple", group: "Timeline", icon: <OcRippleIcon size={20} />, color: VERB.note, on: ripple, about: "Closing a gap moves what follows", run: () => toggleRipple() },
-    { id: "bookmark", label: "Bookmark", group: "Timeline", icon: ico(Bookmark02Icon), color: VERB.stamp, on: bookmarked, about: about("Mark this moment", "toggle-bookmark"), run: act("toggle-bookmark") },
-    { id: "zoomout", label: "Zoom out", group: "Timeline", icon: ico(SearchMinusIcon), color: VERB.insert, phone: false, desktop: !phone, about: "Show more of the timeline", run: () => zoomApi.by?.("out") },
-    { id: "zoomin", label: "Zoom in", group: "Timeline", icon: ico(SearchAddIcon), color: VERB.insert, phone: false, desktop: !phone, about: "Show less of the timeline", run: () => zoomApi.by?.("in") },
-    { id: "undo", label: "Undo", group: "History", icon: ico(Undo02Icon), color: "#94a3b8", phone: true, desktop: true, about: about("Take back the last change", "undo"), run: act("undo") },
-    { id: "redo", label: "Redo", group: "History", icon: ico(Redo02Icon), color: "#94a3b8", desktop: true, about: about("Put it back", "redo"), run: act("redo") },
-    ...(phone ? [{ id: "export", label: "Export", group: "Project", icon: ico(PlayIcon), color: VERB.shape, about: "Render the video", run: () => document.querySelector<HTMLElement>("[data-autora-export] button")?.click() } as Tool] : []),
+    ...(phone ? [{ id: "edit", label: "Edit", group: "Add to the video", icon: ico(Copy01Icon), color: VERB.select, phone: true, on: sheet === "edit", needed: picked || sheet === "edit", about: "The picked clip's properties", run: () => setSheet((now: Sheet) => (now === "edit" ? null : "edit")) } as Tool] : []),
+    { id: "play", needed: hasClips || playing, label: playing ? "Pause" : "Play", group: "Playback", icon: ico(playing ? PauseIcon : PlayIcon), color: VERB.text, phone: true, desktop: true, on: playing, about: about("Play or pause", "toggle-play"), run: act("toggle-play") },
+    { id: "start", needed: hasClips, label: "To the start", group: "Playback", icon: ico(ArrowLeft01Icon), color: VERB.text, about: about("Go to the start", "goto-start"), run: act("goto-start") },
+    { id: "end", needed: hasClips, label: "To the end", group: "Playback", icon: ico(ArrowRight01Icon), color: VERB.text, about: about("Go to the end", "goto-end"), run: act("goto-end") },
+    { id: "split", needed: hasClips, label: "Split", group: "Edit clips", icon: ico(ScissorIcon), color: VERB.shape, phone: true, desktop: true, about: about("Cut the clip at the playhead", "split"), run: act("split") },
+    { id: "splitleft", needed: hasClips, label: "Cut left", group: "Edit clips", icon: ico(AlignLeftIcon), color: VERB.shape, about: about("Split and remove everything before the playhead", "split-left"), run: act("split-left") },
+    { id: "splitright", needed: hasClips, label: "Cut right", group: "Edit clips", icon: ico(AlignRightIcon), color: VERB.shape, about: about("Split and remove everything after the playhead", "split-right"), run: act("split-right") },
+    { id: "duplicate", needed: picked, label: "Duplicate", group: "Edit clips", icon: ico(Copy01Icon), color: VERB.text, phone: true, desktop: true, about: about("Copy the clip straight after itself", "duplicate-selected"), run: act("duplicate-selected") },
+    { id: "copy", needed: picked, label: "Copy", group: "Edit clips", icon: ico(Copy01Icon), color: "#94a3b8", about: about("Copy the picked clips", "copy-selected"), run: act("copy-selected") },
+    { id: "paste", needed: canPaste, label: "Paste", group: "Edit clips", icon: ico(ClipboardIcon), color: "#94a3b8", about: about("Paste at the playhead", "paste-copied"), run: act("paste-copied") },
+    { id: "audio", needed: picked, label: "Extract audio", group: "Edit clips", icon: ico(Link02Icon), color: VERB.insert, about: "Separate a clip's sound, or put it back", run: act("toggle-source-audio") },
+    { id: "mute", needed: picked, label: "Mute", group: "Edit clips", icon: ico(VolumeMute02Icon), color: VERB.highlight, about: about("Mute or unmute the picked clips", "toggle-elements-muted-selected"), run: act("toggle-elements-muted-selected") },
+    { id: "hide", needed: picked, label: "Show / hide", group: "Edit clips", icon: ico(ViewIcon), color: VERB.highlight, about: about("Show or hide the picked clips", "toggle-elements-visibility-selected"), run: act("toggle-elements-visibility-selected") },
+    { id: "selectall", needed: hasClips, label: "Select all", group: "Edit clips", icon: ico(SquareIcon), color: VERB.select, about: about("Pick every clip", "select-all"), run: act("select-all") },
+    { id: "delete", needed: picked, label: "Delete", group: "Edit clips", icon: ico(Delete02Icon), color: VERB.remove, phone: true, desktop: true, about: about("Remove the picked clips", "delete-selected"), run: act("delete-selected") },
+    { id: "snapping", needed: hasClips, label: "Snapping", group: "Timeline", icon: ico(MagnetIcon), color: VERB.note, desktop: true, on: snapping, about: about("Clips snap to each other and the playhead", "toggle-snapping"), run: () => toggleSnapping() },
+    { id: "ripple", needed: hasClips, label: "Ripple", group: "Timeline", icon: <OcRippleIcon size={20} />, color: VERB.note, on: ripple, about: "Closing a gap moves what follows", run: () => toggleRipple() },
+    { id: "bookmark", needed: hasClips, label: "Bookmark", group: "Timeline", icon: ico(Bookmark02Icon), color: VERB.stamp, on: bookmarked, about: about("Mark this moment", "toggle-bookmark"), run: act("toggle-bookmark") },
+    { id: "zoomout", needed: hasClips, label: "Zoom out", group: "Timeline", icon: ico(SearchMinusIcon), color: VERB.insert, phone: false, desktop: !phone, about: "Show more of the timeline", run: () => zoomApi.by?.("out") },
+    { id: "zoomin", needed: hasClips, label: "Zoom in", group: "Timeline", icon: ico(SearchAddIcon), color: VERB.insert, phone: false, desktop: !phone, about: "Show less of the timeline", run: () => zoomApi.by?.("in") },
+    { id: "undo", needed: canUndo, label: "Undo", group: "History", icon: ico(Undo02Icon), color: "#94a3b8", phone: true, desktop: true, about: about("Take back the last change", "undo"), run: act("undo") },
+    { id: "redo", needed: canRedo, label: "Redo", group: "History", icon: ico(Redo02Icon), color: "#94a3b8", desktop: true, about: about("Put it back", "redo"), run: act("redo") },
+    ...(phone ? [{ id: "export", needed: hasClips, label: "Export", group: "Project", icon: ico(PlayIcon), color: VERB.shape, about: "Render the video", run: () => document.querySelector<HTMLElement>("[data-autora-export] button")?.click() } as Tool] : []),
   ];
   // Panel tools beyond Media share the sheet on a phone, so a phone's bar leaves them to the grid.
   /* The app and this editor each have their own copy of React's types, which TypeScript sees as two different ReactNodes. */

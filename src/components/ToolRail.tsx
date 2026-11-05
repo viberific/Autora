@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { usePins, type RailTool } from "../lib/toolrail";
+import { useFading, usePins, type RailTool } from "../lib/toolrail";
 import { IconGrid, IconPin, IconX } from "./Icons";
 
 /* The desktop bar is the size of the rest of Autora's chrome (the menu's icons, the header's buttons): 34px buttons
@@ -38,6 +38,9 @@ export function ToolRail({
   const ids = phone ? tools.filter((t) => t.phone).map((t) => t.id) : pins.pins.filter((id) => byId.has(id));
   const kind = phone ? "phone" : "desktop";
 
+  // What the work needs now, which is what the bar shows; the rest wait in All tools, and fade as they go.
+  const wanted = ids.filter((id) => byId.get(id)!.needed !== false);
+
   // The window's own size is the room: height on a desktop (the bar is a column), width on a phone (a row).
   useLayoutEffect(() => {
     const host = bar.current?.parentElement;
@@ -66,6 +69,7 @@ export function ToolRail({
     return () => window.removeEventListener("keydown", key);
   }, [grid]);
 
+  const shown = useFading(wanted.slice(0, room));
   const style = (t: RailTool) => ({ "--tc": t.color }) as CSSProperties;
   const groups: string[] = [];
   for (const t of tools) if (!groups.includes(t.group)) groups.push(t.group);
@@ -74,13 +78,13 @@ export function ToolRail({
   return (
     <>
       <nav ref={bar} className={`rail-bar is-${kind}`} aria-label={`${app} tools`}>
-        {ids.slice(0, room).map((id) => {
+        {shown.map(({ id, leaving }) => {
           const t = byId.get(id)!;
           return (
             <button
-              key={id} type="button" className={`rail-btn${t.on ? " is-on" : ""}`} style={style(t)}
+              key={id} type="button" className={`rail-btn${t.on ? " is-on" : ""}${leaving ? " is-leaving" : ""}`} style={style(t)}
               aria-label={t.label} aria-pressed={t.on ?? undefined} title={t.about ? `${t.label}: ${t.about}` : t.label}
-              disabled={t.disabled} onPointerDown={(e) => e.preventDefault()} onClick={() => press(t)}
+              disabled={t.disabled || leaving} tabIndex={leaving ? -1 : undefined} onPointerDown={(e) => e.preventDefault()} onClick={() => press(t)}
             >
               {t.icon}
             </button>

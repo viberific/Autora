@@ -99,7 +99,13 @@ type Desk = {
   cueAt?: number;
   /** Until when a save from the editor is ignored: it may be the agent's hand's typing, trailing (officehand.ts). */
   quietUntil?: number;
+  /** What the person has picked in the editor (words, a cell range, a box), and when it was said. Never kept on disk. */
+  pick?: { text: string; at: number };
 };
+
+/** A pick older than this is no longer what the person is on. */
+export const PICK_FRESH_MS = 2 * 60_000;
+const PICK_MAX = 120;
 
 /**
  * One thing the agent did in the document, to be shown as a cursor that goes to the place and types the words,
@@ -557,7 +563,7 @@ function persist(session: DeskKey) {
     try {
       fs.mkdirSync(DIR, { recursive: true, mode: 0o700 });
       fs.writeFileSync(path.join(DIR, `${session}.${extOf(desk.kind)}`), desk.data, { mode: 0o600 });
-      const { data: _data, problem: _problem, quietUntil: _quiet, ...meta } = desk;
+      const { data: _data, problem: _problem, quietUntil: _quiet, pick: _pick, ...meta } = desk;
       fs.writeFileSync(path.join(DIR, `${session}.json`), JSON.stringify(meta), { mode: 0o600 });
     } catch (err: any) {
       console.warn(`[worddesk] ${session}: could not save the window: ${err?.message ?? err}`);
@@ -1026,6 +1032,10 @@ export function officeBriefing(session: string): string | null {
           : "The person can look at it and edit it as you work, and what they change is saved as they go. office_edit on it replaces the window's copy (the window reloads, so what they were looking at moves); " +
             "office_read, office_look and office_check read it as it is now."),
     );
+    if (desk.pick?.text && Date.now() - desk.pick.at < PICK_FRESH_MS) {
+      const what = desk.kind === "xlsx" ? "the cells" : desk.kind === "pptx" ? "" : "these words";
+      lines.push(`The person has picked ${what ? `${what} ` : ""}in ${desk.name}: ${desk.pick.text}.`);
+    }
     if (desk.news.length) {
       lines.push(newsLine(desk));
       desk.news = [];
@@ -1213,6 +1223,20 @@ export function officeRoutes(app: Express, opts: { exists: (session: string) => 
     // The agent's own hand typing there (and its trailing saves) is not the person at work.
     const desk = key ? load(key) : null;
     if (key && desk && !handingKeys.has(key) && Date.now() >= (desk.quietUntil ?? 0)) touched(key, "document", "edit", "is working in the document", { tell: false });
+    res.json({ ok: true });
+  });
+
+  /* What the person has picked in the editor (words, cells, a box). Not a change to the file: remembered for a couple of minutes
+     and told to the agent in its next briefing, so "make this bigger" means what they are looking at. */
+  app.post("/api/officedesk/:session/pick", express.json({ limit: "2kb" }), (req, res) => {
+    const id = known(req, res);
+    if (!id) return;
+    const said = String(req.query.kind ?? "");
+    const key = KIND.includes(said as OfficeKind) ? keyOf(id, said as OfficeKind) : null;
+    const desk = key ? load(key) : null;
+    if (!desk || !desk.open) return res.json({ ok: true });
+    const text = String(req.body?.text ?? "").replace(/\s+/g, " ").trim().slice(0, PICK_MAX);
+    desk.pick = text ? { text, at: Date.now() } : undefined;
     res.json({ ok: true });
   });
 

@@ -266,17 +266,38 @@ async function onPage(page: number, x: number, y: number, h = 0): Promise<(px: n
   };
 }
 
-/** The tool, picked as a person picks it: its button on the bar, or All tools and its tile. */
+/** Waits until a button has stopped moving (the bar grows and shrinks as the work needs tools), so the press lands where it was aimed. */
+async function settled(el: HTMLElement): Promise<void> {
+  let last = "";
+  let same = 0;
+  for (let i = 0; i < 25 && same < 3; i++) {
+    const r = el.getBoundingClientRect();
+    const now = `${Math.round(r.left)},${Math.round(r.top)}`;
+    same = now === last ? same + 1 : 0;
+    last = now;
+    await tick(60);
+  }
+}
+
+/**
+ * The tool, picked as a person picks it: its button on the bar, or All tools and its tile. The bar follows the work, so a person
+ * about to press a tool waits while it is still empty (the document is arriving) and for its buttons to stop moving; so does this.
+ */
 async function pickTool(id: string): Promise<void> {
-  const onBar = document.querySelector(`.autora-rail [data-phone="${id}"]`);
+  const button = () => document.querySelector(`.autora-rail [data-phone="${id}"]`);
+  const arriving = () => !document.querySelector('.autora-rail [data-phone]:not([data-phone="grid"])');
+  if (arriving()) await waitFor(() => (arriving() ? null : true), 4000);
+  const onBar = button();
   if (shown(onBar)) {
     if (onBar.getAttribute("aria-pressed") === "true") return;
+    await settled(onBar);
     const p = centre(onBar);
     await click(p.x, p.y);
     return;
   }
   const grid = document.querySelector('.autora-rail [data-phone="grid"]');
   if (!shown(grid)) throw new Skip(`the ${id} tool is not on screen`);
+  await settled(grid);
   const g = centre(grid);
   await click(g.x, g.y);
   const tile = await waitFor(() => { const t = document.querySelector(`[data-tile="${id}"]`); return shown(t) ? t : null; });

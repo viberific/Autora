@@ -141,6 +141,90 @@ await test("the Video manual says which edits are done in the window by hand wit
   }
 });
 
+await test("the 3D manual teaches organic forms: blend, loft, smooth, and that the person decides the form", () => {
+  const cad = manualText("cad");
+  for (const needle of ["cad_sculpt_blend", "cad_sculpt_loft", "cad_sculpt_smooth", "tapered capsules", "mirror", "Work big to small", "they decide the character of the form"]) {
+    assert.ok(cad.includes(needle), `the 3D manual lacks "${needle}"`);
+  }
+});
+
+await test("the 3D manual teaches the command log: who did what, history_log since a revision, and the person's own commands", () => {
+  const cad = manualText("cad");
+  for (const needle of ["Who did what", "cad_history_log", "since_revision", "the person's own hand and are not given to you", "history_revert"]) {
+    assert.ok(cad.includes(needle), `the 3D manual lacks "${needle}"`);
+  }
+});
+
+await test("the Office manual says what the person has picked reaches the briefing, so \"this\" means it", () => {
+  const text = manualText("office");
+  for (const needle of ["is in your briefing for about two minutes", "they mean that, so act on it without asking which"]) {
+    assert.ok(text.includes(needle), needle);
+  }
+});
+
+await test("the Office manual says the Slides bar follows what is picked: slide tools always, text tools only with a box picked", () => {
+  const office = manualText("office");
+  for (const needle of ["Slides does the same", "New slide, Layout and Present are always there", "only while a box or shape on the slide is picked (click it first)"]) {
+    assert.ok(office.includes(needle), `the Office manual lacks "${needle}"`);
+  }
+});
+
+await test("the Office manual says the Sheets bar follows what is picked: block tools only with a range, the essentials with a cell", () => {
+  const office = manualText("office");
+  for (const needle of ["Sheets follows what is picked the same way", "Insert row, Insert column and AutoSum are always there", "only while a block of cells is picked (a range, a column or a row, not a single cell)", "type its address in the name box"]) {
+    assert.ok(office.includes(needle), `the Office manual lacks "${needle}"`);
+  }
+});
+
+await test("the Office manual says the Pages bar follows the document: text tools only while words are picked, Undo only with something to take back", () => {
+  const office = manualText("office");
+  for (const needle of ["In Pages the bar follows the document", "Highlight, Text colour, Bigger text, Clear formatting and Cut or Copy only while words are picked", "Undo only once there is something to take back", "pick the words first, or say"]) {
+    assert.ok(office.includes(needle), `the Office manual lacks "${needle}"`);
+  }
+});
+
+await test("the Video manual says the bar follows the work: clip tools only with clips picked, Undo only with something to take back", () => {
+  const video = manualText("video");
+  for (const needle of ["follows the work and shows only as many tools as fit", "Media and Text are always there", "Duplicate, Delete and (on a phone) Edit only while clips are picked", "Undo only once there is something to take back", "pick the clip first, or say"]) {
+    assert.ok(video.includes(needle), `the Video manual lacks "${needle}"`);
+  }
+});
+
+await test("the Photo manual says the bar follows the picture: Undo only with something to take back, specialist tools wait in All tools", () => {
+  const photo = manualText("photo");
+  for (const needle of ["that follows the picture", "with no picture open it has no tools", "Undo only once there is something to take back", "wait in All tools until the person reaches for one", "say \"open All tools\" and name it"]) {
+    assert.ok(photo.includes(needle), `the Photo manual lacks "${needle}"`);
+  }
+});
+
+await test("the PDF manual says the bar follows the work: no tools without a document, specialist tools wait in All tools until reached for", () => {
+  const pdf = manualText("pdf");
+  for (const needle of ["The bar follows the work", "with no document open it has no tools, only All tools", "Erase comes only when there are unsaved marks", "wait in All tools until the person reaches for one", "say \"open All tools\" and name it"]) {
+    assert.ok(pdf.includes(needle), `the PDF manual lacks "${needle}"`);
+  }
+});
+
+await test("the Music and Games manuals say the tool bar shows only what the work needs, and that tools fade in and out", () => {
+  const music = manualText("studio");
+  for (const needle of ["shows only what the song needs", "an empty song has Add track and Song", "fade in while a clip is picked and fade out when nothing is"]) assert.ok(music.includes(needle), `the Music manual lacks "${needle}"`);
+  const game = manualText("game");
+  for (const needle of ["only what the moment needs", "Abilities and Delete only once an object is picked", "fades out and fades back in when it has"]) assert.ok(game.includes(needle), `the Games manual lacks "${needle}"`);
+});
+
+await test("the 3D manual says the tool bar is contextual and where to find every tool", () => {
+  const cad = manualText("cad");
+  for (const needle of ["The tool bar is contextual", "with nothing made it is Shape and Draw", "Sculpt only for a mesh shape", "All tools (the grid icon"]) {
+    assert.ok(cad.includes(needle), `the 3D manual lacks "${needle}"`);
+  }
+});
+
+await test("the 3D manual teaches the sculpt tool as the person's hand, and not to rebuild what they sculpted", () => {
+  const cad = manualText("cad");
+  for (const needle of ["Sculpting by hand", "Grab", "Carve or Shift", "Finer surface", "one undo step", "you have no brush tool, on purpose", "Do not rebuild a shape they have sculpted"]) {
+    assert.ok(cad.includes(needle), `the 3D manual lacks "${needle}"`);
+  }
+});
+
 await test("the 3D manual teaches mesh import: the tool, the formats, what a mesh cannot do, and Load adding one", () => {
   const cad = manualText("cad");
   for (const needle of ["cad_mesh_import", "GLB (or glTF), OBJ or STL", "bytes never go through the conversation", "size sets its longest side", "no outline, faces, bevels or holes", "Load in the window's top bar takes a .glb", "without replacing it"]) {
@@ -173,6 +257,13 @@ await test("the Music manual says that with Visible work on the studio tools are
   const music = manualText("studio");
   for (const needle of ["With Visible work on", "by your hand, live", "Song tray", "Add track", "piano roll", "drum grid", "finished song goes in", "With Visible work off"]) {
     assert.ok(music.includes(needle), `the Music manual lacks "${needle}"`);
+  }
+});
+
+await test("the Panacea manual teaches a document's history and suggestions: proposed, never applied, the person accepts", () => {
+  const p = manualText("panacea");
+  for (const needle of ["keeps a history", "take any one step back on its own", "{op:\"suggest\"", "A suggestion changes nothing", "their own edit", "never new writing"]) {
+    assert.ok(p.includes(needle), `the Panacea manual lacks "${needle}"`);
   }
 });
 

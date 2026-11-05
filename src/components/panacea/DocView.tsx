@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { baseKeymap, toggleMark } from "prosemirror-commands";
 import { inputRules, textblockTypeInputRule, wrappingInputRule } from "prosemirror-inputrules";
 import { keymap } from "prosemirror-keymap";
@@ -86,7 +86,7 @@ export function DocView({ surface }: { surface: Surface }) {
         const cur = latest.current;
         if (!cur.doc) return;
         if (tr.docChanged) {
-          const sent = docStateOf(next, cur.doc.mode);
+          const sent = docStateOf(next, cur.doc.mode, cur.doc.suggestions);
           text.current = JSON.stringify(sent.json);
           known.current = signature(text.current, sent);
           apiRef.current.writeDoc(cur.id, sent, true);
@@ -95,7 +95,7 @@ export function DocView({ surface }: { surface: Surface }) {
           if (cur.doc.sel?.anchor !== anchor || cur.doc.sel?.head !== head || cur.doc.marks) {
             const moved = { sel: { anchor, head } };
             known.current = signature(text.current, moved);
-            apiRef.current.writeDoc(cur.id, { json: cur.doc.json, ...moved, mode: cur.doc.mode }, false);
+            apiRef.current.writeDoc(cur.id, { json: cur.doc.json, ...moved, mode: cur.doc.mode, ...(cur.doc.suggestions ? { suggestions: cur.doc.suggestions } : {}) }, false);
           }
         }
       },
@@ -138,6 +138,7 @@ export function DocView({ surface }: { surface: Surface }) {
         </button>
         <span>{mode === "agent" ? "Every change is a step you can undo" : "Autora formats and structures; the words are yours"}</span>
       </div>
+      <DocSide surface={surface} />
       <div className="pa-doc-scroll">
         <div
           ref={host}
@@ -145,6 +146,79 @@ export function DocView({ surface }: { surface: Surface }) {
           style={{ fontFamily: FAMILY[String(p.font)] ?? FAMILY.Inter, fontSize: `${Number(p.size) || 11}pt`, lineHeight: Number(p.leading) || 1.5 }}
         />
       </div>
+    </div>
+  );
+}
+
+interface LogRow { n: number; who: "agent" | "person"; at: number; summary: string }
+
+/**
+ * What Autora has proposed (accept or wave away: accepting is the person's own edit) and the document's history (who changed
+ * what, with any one step taken back on its own, the later ones kept). The server keeps both (server/panacea.ts); this only asks.
+ */
+function DocSide({ surface }: { surface: Surface }) {
+  const api = usePanacea();
+  const [open, setOpen] = useState<"suggestions" | "history" | null>(null);
+  const [rows, setRows] = useState<LogRow[]>([]);
+  const [problem, setProblem] = useState<string | null>(null);
+  const suggestions = surface.doc?.suggestions ?? [];
+  const base = `/api/panacea/${encodeURIComponent(api.sessionId)}/doc/${encodeURIComponent(surface.id)}`;
+
+  const load = useCallback(() => {
+    void fetch(`${base}/log`).then((r) => (r.ok ? r.json() : null)).then((j: { ops?: LogRow[] } | null) => setRows(j?.ops ?? [])).catch(() => setRows([]));
+  }, [base]);
+  useEffect(() => { if (open === "history") load(); }, [open, load, surface.doc?.json]);
+
+  const post = async (tail: string, body: unknown) => {
+    setProblem(null);
+    const res = await fetch(`${base}/${tail}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
+    if (!res || !res.ok) setProblem(((await res?.json().catch(() => null)) as { error?: string } | null)?.error ?? "That did not work.");
+    api.refresh();
+  };
+
+  if (!suggestions.length && !rows.length && open === null) {
+    return <div className="pa-doc-side"><button type="button" className="pa-doc-chip" onClick={() => setOpen("history")}>History</button></div>;
+  }
+  return (
+    <div className="pa-doc-side">
+      <div className="pa-doc-chips">
+        {suggestions.length > 0 && (
+          <button type="button" className="pa-doc-chip" aria-pressed={open === "suggestions"} onClick={() => setOpen(open === "suggestions" ? null : "suggestions")}>
+            Suggestions ({suggestions.length})
+          </button>
+        )}
+        <button type="button" className="pa-doc-chip" aria-pressed={open === "history"} onClick={() => setOpen(open === "history" ? null : "history")}>History</button>
+      </div>
+      {problem && <p className="pa-doc-problem" role="alert">{problem}</p>}
+      {open === "suggestions" && (
+        <ul className="pa-doc-list" aria-label="Suggestions from Autora">
+          {suggestions.map((s) => (
+            <li key={s.id}>
+              <div className="pa-doc-was">{s.was}</div>
+              {s.kind === "replace" ? <div className="pa-doc-now">{s.text}</div> : <div className="pa-doc-now">Remove this block</div>}
+              <div className="pa-doc-why">{s.reason}</div>
+              <div className="pa-doc-acts">
+                <button type="button" className="pa-doc-chip" onClick={() => void post("suggestion", { id: s.id, action: "accept" })}>Accept</button>
+                <button type="button" className="pa-doc-chip" onClick={() => void post("suggestion", { id: s.id, action: "dismiss" })}>Dismiss</button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {open === "history" && (
+        <ul className="pa-doc-list" aria-label="History of this document">
+          {rows.length === 0 && <li className="pa-doc-why">Nothing has changed since it was made.</li>}
+          {[...rows].reverse().map((r) => (
+            <li key={r.n}>
+              <div className="pa-doc-now">{r.who === "agent" ? "Autora" : "You"}: {r.summary}</div>
+              <div className="pa-doc-acts">
+                <time className="pa-doc-why" dateTime={new Date(r.at).toISOString()}>{new Date(r.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time>
+                <button type="button" className="pa-doc-chip" title="Take this step out; the later ones stay" onClick={() => void post("undo", { n: r.n })}>Take back</button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

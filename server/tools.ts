@@ -192,10 +192,12 @@ import { studioSPECS } from "./specs/studio";
 import { panaceaSPECS } from "./specs/panacea";
 import { cadSPECS } from "./specs/cad";
 import { gameSPECS } from "./specs/game";
-import { gameAvailable, gameBriefing, gameState, loadGame, runGameTool } from "./gamedesk";
-import { cadAvailable, cadBriefing, cadState, loadModel, runCadTool } from "./caddesk";
+import { DESKS } from "./desks";
+import { capabilityOf, type Capability } from "./capabilities";
+import { gameAvailable, gameState, loadGame, runGameTool } from "./gamedesk";
+import { cadAvailable, cadState, loadModel, runCadTool } from "./caddesk";
 import { photoSPECS } from "./specs/photo";
-import { photoAvailable, photoBriefing, runPhotoTool } from "./photodesk";
+import { photoAvailable, runPhotoTool } from "./photodesk";
 import { killTree, processPressure } from "./processes";
 
 // ------------------------------------------------------------- the registry --
@@ -378,21 +380,24 @@ export async function groupStates(): Promise<GroupState[]> {
 }
 
 /** A tool that lives in a built-in window the Tools page has switched off. */
+/** Whether this server has the editor for a hosted capability built in: PDF, Video and Music always do. */
+function builtFor(id: Capability["id"]): boolean {
+  if (id === "cad") return cadAvailable();
+  if (id === "game") return gameAvailable();
+  if (id === "photo") return photoAvailable();
+  if (id === "office") return Boolean(officeDir());
+  return true;
+}
+
 export function windowOff(name: string, settings: ToolSettings = toolSettings()): boolean {
   if (name === "widget_show") return !settings.widgets.enabled;
   if (name === "app_preview") return !settings.app.enabled;
-  if (name.startsWith("pdf_")) return !settings.pdf.enabled;
-  if (name.startsWith("video_")) return !settings.video.enabled;
-  if (name.startsWith("studio_")) return !settings.studio.enabled;
   if (name.startsWith("panacea_")) return !settings.panacea.enabled;
-  // Built by autora-3d/ (npm run build); a server without it does not offer tools that cannot work.
-  if (name.startsWith("cad_")) return !cadAvailable() || !settings.cad.enabled;
-  // Built by gdevelop-editor/ (npm run build): the same.
-  if (name.startsWith("game_")) return !gameAvailable() || !settings.game.enabled;
-  // Built by scripts/build-photo.mjs (PhotoCraft's editor and command line): the same.
-  if (name.startsWith("photo_")) return !photoAvailable() || !settings.photo.enabled;
-  // Built by scripts/build-office.mjs; a server without the build does not offer tools that cannot work.
-  if (name.startsWith("office_")) return !officeDir() || !(settings.pages.enabled || settings.sheets.enabled || settings.slides.enabled);
+  // The hosted editors (server/capabilities.ts): off when every one of their Tools page switches is, or when this server was
+  // built without the editor, since it does not offer tools that cannot work (autora-3d/, gdevelop-editor/, scripts/build-photo.mjs,
+  // scripts/build-office.mjs).
+  const hosted = capabilityOf(name);
+  if (hosted) return !builtFor(hosted.id) || !hosted.windows.some((w) => settings[w].enabled);
   return false;
 }
 
@@ -4098,9 +4103,8 @@ export async function capabilityBriefing(): Promise<string> {
   lines.push(studioBriefing(windows.studio.enabled));
   lines.push(panaceaBriefing(windows.panacea.enabled));
   // Only a server that has the modeller built in says anything about it.
-  if (cadAvailable()) lines.push(cadBriefing(windows.cad.enabled));
-  if (gameAvailable()) lines.push(gameBriefing(windows.game.enabled));
-  if (photoAvailable()) lines.push(photoBriefing(windows.photo.enabled));
+  // (Music's line stays above, before Panacea's, where the model has always read it.)
+  for (const desk of DESKS) if (desk.id !== "studio" && desk.available()) lines.push(desk.briefing(windows[desk.id].enabled));
   lines.push(windows.widgets.enabled
     ? "- Explainer widgets: always available. Tool: widget_show. When someone " +
       "asks how something works -- a physical process, a mechanism, an " +

@@ -24,6 +24,37 @@ import type { ParamSpec } from "./surfaces";
 /** Who writes the words. In `guide` the agent formats and structures but writes none; in `agent` it writes, and it is undoable. */
 export type DocMode = "guide" | "agent";
 
+/**
+ * A wording Autora proposes and the person accepts or waves away (a "ghost" edit): a rewording of one block, or removing it, with
+ * the reason. It changes nothing until accepted, and accepting is the person's own edit. It is a rewording of what is there, never
+ * new writing: no suggestion adds a block, and a reworded block is not much longer than the original (`suggestionProblem`).
+ */
+export interface Suggestion {
+  id: string;
+  block: string;
+  kind: "replace" | "delete";
+  /** The new words (replace). */
+  text?: string;
+  /** The block's words when this was suggested: a suggestion about words that have since changed is stale and not applied. */
+  was: string;
+  reason: string;
+  at: number;
+}
+
+export const MAX_SUGGESTIONS = 20;
+
+/** Why a suggestion cannot be made, or null. A rewording is about as long as what it rewords; new writing is not a suggestion. */
+export function suggestionProblem(was: string, kind: string, text: unknown, reason: unknown): string | null {
+  if (kind !== "replace" && kind !== "delete") return "A suggestion rewords a block (text) or proposes removing it (remove: true); it cannot add one.";
+  if (typeof reason !== "string" || reason.trim().length < 3 || reason.length > 200) return "Give the reason, in a few words (up to 200 characters): the person decides by it.";
+  if (kind === "replace") {
+    if (typeof text !== "string" || !text.trim()) return "A rewording needs `text`: the block's words as you would have them.";
+    if (text.length > Math.max(160, Math.round(was.length * 1.5))) return "That is more than a rewording: a suggestion is about as long as the block it rewords. Say what is weak in a comment-sized reason instead, and let them write it.";
+    if (text === was) return "That is what it already says.";
+  }
+  return null;
+}
+
 /** A document surface's state: the tree as JSON, where the person's caret was, and who writes. */
 export interface DocState {
   json: unknown;
@@ -31,6 +62,8 @@ export interface DocState {
   /** With a caret and nothing selected, the marks the next typed text takes (Bold pressed, say); present only while set. */
   marks?: unknown[];
   mode: DocMode;
+  /** Wordings Autora has proposed and the person has not yet answered. */
+  suggestions?: Suggestion[];
 }
 
 const DOC_FONTS = ["Inter", "Georgia", "Source Serif", "IBM Plex Sans", "JetBrains Mono"];
@@ -228,7 +261,8 @@ export function readDocState(raw: unknown): DocState | null {
     const head = sel && Number.isFinite(sel.head) ? Number(sel.head) : undefined;
     const marks = Array.isArray(r.marks) ? r.marks.slice(0, 8) : undefined;
     marks?.forEach((m) => Mark.fromJSON(schema, m));
-    return docStateOf(build(doc, anchor !== undefined && head !== undefined ? { anchor, head } : undefined, marks), r.mode === "agent" ? "agent" : "guide");
+    const suggestions = readSuggestions(r.suggestions);
+    return docStateOf(build(doc, anchor !== undefined && head !== undefined ? { anchor, head } : undefined, marks), r.mode === "agent" ? "agent" : "guide", suggestions);
   } catch {
     return null;
   }
@@ -238,12 +272,23 @@ export function stateOf(d: DocState): EditorState {
   return build(PMNode.fromJSON(schema, d.json), d.sel, d.marks);
 }
 
-export function docStateOf(state: EditorState, mode: DocMode): DocState {
+/** Suggestions as they arrive from disk or the page: only well-formed ones, at most the limit. */
+function readSuggestions(raw: unknown): Suggestion[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const ok = raw
+    .filter((x): x is Suggestion => !!x && typeof x === "object" && typeof (x as Suggestion).id === "string" && typeof (x as Suggestion).block === "string" && ((x as Suggestion).kind === "replace" || (x as Suggestion).kind === "delete") && typeof (x as Suggestion).was === "string" && typeof (x as Suggestion).reason === "string")
+    .map((x) => ({ id: x.id.slice(0, 40), block: x.block.slice(0, 40), kind: x.kind, ...(typeof x.text === "string" ? { text: x.text.slice(0, 4000) } : {}), was: x.was.slice(0, 4000), reason: x.reason.slice(0, 200), at: Number(x.at) || 0 }))
+    .slice(0, MAX_SUGGESTIONS);
+  return ok.length ? ok : undefined;
+}
+
+export function docStateOf(state: EditorState, mode: DocMode, suggestions?: Suggestion[]): DocState {
   return {
     json: state.doc.toJSON(),
     sel: { anchor: state.selection.anchor, head: state.selection.head },
     ...(state.storedMarks ? { marks: state.storedMarks.map((m) => m.toJSON()) } : {}),
     mode,
+    ...(suggestions?.length ? { suggestions } : {}),
   };
 }
 

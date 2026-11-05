@@ -166,10 +166,11 @@ import { dropOpencut, onOpencutChange, opencutRoutes, opencutState, serveOpencut
 import { dropSpectra, serveSpectra, spectraDocumentChanged, spectraRoutes, spectraUpgrade } from "./server/spectra";
 import { newFileRoutes } from "./server/newfile";
 import { loadFileRoutes, loadPanaceaFile, type FileLoadGuards } from "./server/loadfile";
-import { cadRoutes, cadState, dropCad, onCadChange, serveCad } from "./server/caddesk";
-import { dropGame, gameRoutes, gameState, onGameChange, serveGame } from "./server/gamedesk";
-import { dropPhoto, onPhotoChange, photoRoutes, photoState, servePhoto } from "./server/photodesk";
-import { dropStudio, onStudioChange, studioRoutes, studioState, studioTurnNote, studioVisible } from "./server/studio";
+import { DESKS } from "./server/desks";
+import { cadRoutes, cadState, onCadCommand, serveCad } from "./server/caddesk";
+import { gameRoutes, gameState, serveGame } from "./server/gamedesk";
+import { photoRoutes, photoState, servePhoto } from "./server/photodesk";
+import { studioRoutes, studioState, studioTurnNote, studioVisible } from "./server/studio";
 import { appOfArtifact, appOfFile, appOfTool } from "./src/lib/panacea/flows";
 import { dropPanacea, noteFlow, onPanaceaChange, onPanaceaTouch, panaceaRoutes, panaceaState, panaceaSuggester, panaceaTurnNote, panaceaVisible } from "./server/panacea";
 import { joinProjects, windowOff } from "./server/tools";
@@ -482,10 +483,7 @@ function forgetSession(id: string) {
   if (gone) void previewStop(gone, false).catch(() => undefined);
   dropOpencut(id);
   forgetPresence(id);
-  dropCad(id);
-  dropGame(id);
-  dropPhoto(id);
-  dropStudio(id);
+  for (const desk of DESKS) desk.drop(id);
   dropPanacea(id);
   presenceSent.delete(id);
   for (const timers of [presenceTimers]) {
@@ -1293,22 +1291,19 @@ onOpencutChange((sessionId) => {
 });
 
 /* Autora Games, the same way: the window opens, and the game changes (by the agent's tools or the person's hands). */
-onGameChange((sessionId) => {
-  sendEphemeral(sessionId, { type: "gamedesk", session: sessionId, state: gameState(sessionId) });
-});
 /* Autora Photo, the same way: the window opens, and the picture changes (by the agent's tools or the person's hands). */
-onPhotoChange((sessionId) => {
-  sendEphemeral(sessionId, { type: "photodesk", session: sessionId, state: photoState(sessionId) });
-});
 /* Autora 3D, the same way: the window opens, and the model changes (by the agent's tools or the person's hands). */
-onCadChange((sessionId) => {
-  sendEphemeral(sessionId, { type: "caddesk", session: sessionId, state: cadState(sessionId) });
-});
 
 /* Autora Music, the same way: the window opens, and the song changes (by the agent's tools or the person's hands). */
-onStudioChange((sessionId) => {
-  sendEphemeral(sessionId, { type: "studiodesk", session: sessionId, state: studioState(sessionId) });
+
+/* Every command made on a chat's 3D model, by the agent or the person, is an event: the log is the product (README.md). */
+onCadCommand((sessionId, cmd) => {
+  const session = sessions.get(sessionId);
+  if (session) emitEvent(session, "cad.command", cmd.who, { ...cmd });
 });
+
+/* Music, 3D, Games and Photo (server/desks.ts): the window opens, and its state changes (by the agent's tools or the person's hands). */
+for (const desk of DESKS) desk.onChange((sessionId) => sendEphemeral(sessionId, { type: desk.message, session: sessionId, state: desk.state(sessionId) }));
 
 /* Panacea, the same way; and what the person does on the canvas is heard like a touch on any shared surface. */
 onPanaceaChange((sessionId) => {

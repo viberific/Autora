@@ -26,6 +26,7 @@
  */
 import { execFile } from "node:child_process";
 import crypto from "node:crypto";
+import { createHandshake } from "./handshake";
 import express, { type Express, type Request, type Response } from "express";
 import fs from "node:fs";
 import path from "node:path";
@@ -275,49 +276,29 @@ function noteChange(session: string, by: "agent" | "person", doc?: Inspected) {
    back the picture and what each command did. No window to claim it (none open, or the editor not started) means nobody
    is watching: the edit runs here, at speed, as with Visible work off. */
 
-let pushed: (session: string, message: Record<string, unknown>) => void = () => undefined;
 let visible: () => boolean = () => false;
 
 type HandResult = { command?: string; ok?: boolean; error?: string; how?: string };
 type Handed = { results: HandResult[]; bytes: Buffer | null; error?: string };
-type HandPending = { session: string; claimed: boolean; resolve: (v: Handed) => void; reject: (e: Error) => void; timer?: NodeJS.Timeout };
-const hands = new Map<string, HandPending>();
+/** The offers to the window (server/handshake.ts). */
+const hs = createHandshake();
 
 /** How long a window has to take the edit before it is done here instead. */
 const CLAIM_MS = 4_000;
 /** A person's pace: seconds per command (find it, open it, set it, OK), and some for a filter that runs a while. */
 const handTime = (n: number) => 30_000 + n * 20_000;
 
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
 /** The edit, done in the window by the agent's hand; null when no window took it. */
 async function byHand(session: string, commands: Array<{ command: string; params?: unknown }>): Promise<Handed | null> {
   if (!visible() || !entryFor(session).open) return null;
-  const id = crypto.randomBytes(6).toString("hex");
-  const entry: HandPending = { session, claimed: false, resolve: () => undefined, reject: () => undefined };
-  const done = new Promise<Handed>((resolve, reject) => {
-    entry.resolve = resolve;
-    entry.reject = reject;
+  // A window that has only just mounted lets the first one go by: it is sent again until one takes it, or nobody does.
+  const out = await hs.offer<Handed>(session, { type: "photodesk.hand", session, commands: commands.map((c) => ({ id: c.command, params: c.params ?? {} })) }, {
+    claimMs: CLAIM_MS,
+    replyMs: handTime(commands.length),
+    // Slow is not failed: the hand may be in the middle of it, and what it did stays in the window.
+    timeoutError: "The edit in the window took longer than expected. That means it was slow, not that it failed: what was done is in the window. Look with photo_info before you repeat any of it.",
   });
-  hands.set(id, entry);
-  const message = { type: "photodesk.hand", session, id, commands: commands.map((c) => ({ id: c.command, params: c.params ?? {} })) };
-  try {
-    // A window that has only just mounted lets the first one go by: it is sent again until one takes it, or nobody does.
-    for (let waited = 0; !entry.claimed && waited < CLAIM_MS; waited += 1_000) {
-      pushed(session, message);
-      await Promise.race([sleep(1_000), done.then(() => undefined, () => undefined)]);
-    }
-    if (!entry.claimed) return null;
-    entry.timer = setTimeout(() => {
-      hands.delete(id);
-      // Slow is not failed: the hand may be in the middle of it, and what it did stays in the window.
-      entry.reject(new Error("The edit in the window took longer than expected. That means it was slow, not that it failed: what was done is in the window. Look with photo_info before you repeat any of it."));
-    }, handTime(commands.length));
-    return await done;
-  } finally {
-    if (entry.timer) clearTimeout(entry.timer);
-    hands.delete(id);
-  }
+  return out.taken ? out.value : null;
 }
 
 /** Keep a picture that came from the window: it must be a PhotoCraft file, so the command line opens it first. */
@@ -610,7 +591,7 @@ export function photoRoutes(app: Express, opts: {
   /** Whether Visible work is on: then the agent's edits are done in the window, by hand. */
   visible?: () => boolean;
 }) {
-  if (opts.push) pushed = opts.push;
+  if (opts.push) hs.setPush(opts.push);
   if (opts.visible) visible = opts.visible;
   const known = (req: Request, res: Response): string | null => {
     const id = String(req.params.session);
@@ -709,18 +690,13 @@ export function photoRoutes(app: Express, opts: {
   app.post("/api/photo/:session/hand/claim", (req, res) => {
     const id = known(req, res);
     if (!id) return;
-    const p = hands.get(String(req.query.id ?? ""));
-    const won = Boolean(p && p.session === id && !p.claimed);
-    if (won && p) p.claimed = true;
-    res.json({ won });
+    res.json({ won: hs.claim(id, String(req.query.id ?? "")).won });
   });
 
   /* ...and its answer: the picture as the body, what each command did in X-Photo-Hand. */
   app.post("/api/photo/:session/hand/reply", rawDoc, (req, res) => {
     const id = known(req, res);
     if (!id) return;
-    const p = hands.get(String(req.query.id ?? ""));
-    if (!p || p.session !== id || !p.claimed) return res.status(404).json({ error: "No such edit." });
     let said: { results?: unknown; error?: unknown } = {};
     try {
       said = JSON.parse(decodeURIComponent(String(req.get("X-Photo-Hand") ?? "")));
@@ -734,7 +710,8 @@ export function photoRoutes(app: Express, opts: {
       how: r?.how === "direct" ? "direct" : "ui",
     }));
     const body = req.body as Buffer;
-    p.resolve({ results, bytes: Buffer.isBuffer(body) && body.length > 0 ? body : null, error: typeof said.error === "string" ? said.error.slice(0, 600) : undefined });
+    const handed: Handed = { results, bytes: Buffer.isBuffer(body) && body.length > 0 ? body : null, error: typeof said.error === "string" ? said.error.slice(0, 600) : undefined };
+    if (!hs.reply(id, String(req.query.id ?? ""), handed)) return res.status(404).json({ error: "No such edit." });
     res.json({ ok: true });
   });
 
