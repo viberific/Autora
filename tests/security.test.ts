@@ -281,6 +281,8 @@ await test("the Logs page blanks secrets too, and a redactor that logs cannot re
   const lines = logs.readLogs({ component: "test" }).lines;
   const last = lines[lines.length - 1];
   assert.equal(last.message, "token is [REDACTED_DEEPSEEK_API_KEY]");
+  // A limit that is not a number still returns lines (it once read as NaN and returned none).
+  assert.ok(logs.readLogs({ component: "test", limit: Number("abc") }).lines.length > 0);
   logs.setLogRedactor(null);
 });
 

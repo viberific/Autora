@@ -211,4 +211,5 @@ releaseNotes: >-
   always was. When you and the agent both change a file, the merged file
   keeps its Windows line endings and the agent's removal of a final newline.
   And the automation status counts only the scheduled runs going right now,
-  not every one since the app started.
+  not every one since the app started. The Logs page shows lines again when
+  asked for a number of them it cannot read.
