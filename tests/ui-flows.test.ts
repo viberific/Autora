@@ -161,6 +161,8 @@ async function main() {
       await page.goto(`${app.base}/?session=${s}`);
       const pill = page.locator(".mode-sel-pill");
       await pill.waitFor();
+      // The chat's own mode, once the chat has arrived (the pill draws before it does, under a slow server).
+      await page.waitForFunction(() => /Build/.test(document.querySelector(".mode-sel-pill")?.getAttribute("aria-label") ?? ""), null, { timeout: 10_000 }).catch(() => undefined);
       assert.match((await pill.getAttribute("aria-label")) ?? "", /Build/);
       const box = await pill.boundingBox();
       assert.ok(box && box.height >= 32, "a thumb-sized target");

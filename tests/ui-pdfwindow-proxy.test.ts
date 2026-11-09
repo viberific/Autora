@@ -121,6 +121,8 @@ async function main() {
          through the window that holds it, which is the app's own page. */
       assert.ok(passedOn.some((u) => u.startsWith("/spectra-editor/index.html")), "the editor's page came through");
       assert.ok(!passedOn.some((u) => u.startsWith("/spectra-editor/assets/")), "and it is the whole of the editor: nothing else to fetch");
+      // pdf.js asks for its data (fonts, maps) as it draws, a moment after the first paint on a busy machine.
+      for (let i = 0; i < 50 && !passedOn.some((u) => u.startsWith("/spectra-editor/pdfjs/")); i++) await sleep(100);
       assert.ok(passedOn.some((u) => u.startsWith("/spectra-editor/pdfjs/")), "pdf.js's own data came through the window that holds the frame");
       assert.deepEqual(refused, [], "nothing the editor asked for was turned away");
     });
