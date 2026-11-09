@@ -1,7 +1,7 @@
 /* The conversation. On a desktop it is a glass window floating over the world area (the canvas keeps the whole region
    under it): it opens at the bottom left, a gap from every edge, and the person moves it by its top bar, resizes it
    from any edge or corner, and brings it near the left or right side to have it pulled onto that side and held there
-   (ConversationFlow.tsx, chatLayout.ts). On a phone it is a sheet under the canvas (below). */
+   (ConversationFlow.tsx, chatLayout.ts). On a phone it is a glass sheet over the foot of the canvas (below). */
 .chat-view.pw-full-workspace {
   position: relative;
   flex-direction: column;
@@ -419,48 +419,69 @@ body:has(.conversation-flow[data-moving]) iframe {
 }
 
 @media (max-width: 680px) {
-  /* A phone: the same region, under the canvas instead of beside it. Retracted it is the entry bar alone
-     (canvas only); half leaves the upper part of the screen to the canvas; full owns the screen but keeps
-     the handle, which drops back to the canvas. */
-  .chat-view.pw-full-workspace {
-    flex-direction: column;
-  }
-
-  /* Under the canvas, not over it: the sheet comes after the canvas. */
+  /* A phone: a glass sheet floating over the foot of the canvas, a gap in from its edges, with the canvas running on
+     under it (the work is framed above it: lib/frameCoordinates.ts). Retracted it is the entry bar alone (canvas
+     only); half leaves the upper part of the screen clear; full owns the screen but keeps the handle, which drops
+     back to the canvas. The canvas is never resized by it. */
   .chat-view.pw-full-workspace > .pw-scene-stack {
     order: 1;
   }
 
   .conversation-flow {
-    order: 2;
-    flex: 0 0 55%;
-    min-height: min(100%, 320px);
-    padding-left: 0;
-    padding-bottom: env(safe-area-inset-bottom);
-    border-top: 1px solid var(--glass-line);
-    border-radius: var(--r-xl) var(--r-xl) 0 0;
-    background: var(--glass-sheen), rgba(var(--s1-rgb), 0.92);
-    box-shadow: var(--glass-shine);
+    position: absolute;
+    z-index: var(--z-pop);
+    left: 8px;
+    right: 8px;
+    bottom: calc(8px + env(safe-area-inset-bottom));
+    height: 55%;
+    min-height: min(calc(100% - 16px), 320px);
+    border: 1px solid var(--glass-line);
+    border-radius: var(--r-xl);
+    box-shadow: var(--glass-shadow), var(--glass-shine);
+  }
+
+  /* The frost is ::before's, as on a desktop: a filter on the sheet would pin a full-screen card in the thread inside it. */
+  .conversation-flow.is-sheet::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: var(--glass-sheen), var(--glass-strong);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    pointer-events: none;
+  }
+
+  .conversation-flow.is-sheet:has(.pdf-window.is-full, .app-window.is-full, .cell.widget.is-expanded, .cell.shot.is-max) {
+    z-index: var(--z-over);
   }
 
   .conversation-flow.is-sheet.is-collapsed {
-    flex: 0 0 auto;
+    height: auto;
     min-height: 0;
   }
 
-  /* Full: the sheet lies over the canvas, which keeps the room it had so it does not jump when the sheet drops. */
+  /* Full: the whole screen, edge to edge, and read on: nothing of the work shows through the words. */
   .conversation-flow.is-sheet.is-full {
-    position: absolute;
     inset: 0;
-    z-index: var(--z-pop);
+    height: auto;
+    min-height: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    border: 0;
     border-radius: 0;
-    border-top: 0;
-    /* Over the canvas, it is read on: nothing of the work shows through the words. */
-    background: var(--s1);
+    box-shadow: none;
   }
 
-  .chat-view.pw-full-workspace:has(.conversation-flow.is-full) > .pw-scene-stack {
-    flex: 0 0 45%;
+  .conversation-flow.is-sheet.is-full::before {
+    background: var(--s1);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  /* The board's bottom row (its history slider) stands above the sheet, not under it. */
+  .chat-view.pw-full-workspace .pa-dock {
+    bottom: calc(12px + var(--flow-sheet-h, 0px));
   }
 
   /* No grip line: the whole sheet drags (see ConversationFlow.tsx). The handle stays as the keyboard and screen
@@ -511,21 +532,10 @@ body:has(.conversation-flow[data-moving]) iframe {
     min-height: 0;
   }
 
-  /* While it moves, the sheet lies over the bottom of the canvas at the height ConversationFlow gives it, and the
-     canvas holds still at --flow-canvas-h (the room above the lowest height the move passes through). The canvas,
-     and the editors in it, is laid out once when the sheet settles instead of on every frame of the move. */
+  /* While it moves it is as tall as ConversationFlow says, measured up from its foot (a full sheet is otherwise
+     held by its top edge too). The canvas under it holds still throughout. */
   .conversation-flow.is-sheet[data-gliding] {
-    position: absolute;
     top: auto;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    z-index: var(--z-pop);
-  }
-
-  .chat-view.pw-full-workspace:has(.conversation-flow[data-gliding]) > .pw-scene-stack {
-    flex: 0 0 var(--flow-canvas-h, 45%);
-    contain: layout paint;
   }
 
   .conversation-flow.is-sheet.is-collapsed[data-gliding] .conversation-flow__conversation {

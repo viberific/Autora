@@ -18,7 +18,7 @@ presents Panacea with capability configuration, not separate applications.
 The workspace fills the available area. On a desktop the conversation is a frosted glass window floating over it, opening at
 the bottom left a gap in from the edges: its top bar moves it (**Move conversation**; a double click puts it back), every edge and
 corner resizes it (**Resize conversation**), and brought near the left or right side it is pulled onto that side and held there
-(on a phone it is a bottom sheet). The original composer, **Ask Autora**, is at its foot, retaining work mode, speech, attachments, notebooks, artifacts,
+(on a phone it is a glass sheet floating over the foot of the canvas, which runs on under it and is never resized by it). The original composer, **Ask Autora**, is at its foot, retaining work mode, speech, attachments, notebooks, artifacts,
 capabilities and Send/Stop; Enter sends and Shift+Enter writes a line (on a phone's keyboard Enter is a new line and the arrow sends).
 The **TODO list is attached above the entry**. Messages are individual bubbles above it, and older bubbles fade at the top edge.
 The desktop window is never retracted; a phone's sheet retracts to its entry strip and keeps the mounted complete history. Questions and permissions

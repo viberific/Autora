@@ -6,6 +6,7 @@ import { KINDS } from "../../lib/panacea/kinds";
 import type { Recipe } from "../../lib/panacea/library";
 import { IconCode, IconCube, IconFile, IconGame, IconGlobe, IconImage, IconMusic, IconSparkle, IconTable, IconVideo, IconX, IconMaximize, IconTidy } from "../Icons";
 import { PanelCard, type PanelActions } from "./PanelCard";
+import { SHEET_MOVED } from "./chatLayout";
 import { SurfaceView } from "./Surfaces";
 import { Summon } from "./Summon";
 import type { Edit, Editor } from "./useCanvas";
@@ -219,7 +220,8 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     };
     measure();
     window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
+    window.addEventListener(SHEET_MOVED, measure);
+    return () => { window.removeEventListener("resize", measure); window.removeEventListener(SHEET_MOVED, measure); };
   }, [quiet, loaded, phone]);
   useEffect(() => { canvasRef.current = canvas; }, [canvas]);
   const boxesOf = useCallback((): WorkBox[] => {
@@ -285,13 +287,16 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
   useEffect(() => {
     const el = root.current;
     if (!el) return;
-    const observer = new ResizeObserver(() => {
+    const refit = () => {
       if (el.clientWidth <= 40 || el.clientHeight <= 40) return;
       if (!ready) return;
       if (!fitted.current || (!interacted.current && !handsBusy() && enginePins.size === 0 && !canvasRef.current.panels.some((panel) => panel.pinned || panel.touched))) fit();
-    });
+    };
+    const observer = new ResizeObserver(refit);
     observer.observe(el);
-    return () => observer.disconnect();
+    // A phone's sheet lies over the board and so never resizes it: it says when the room above it has changed.
+    window.addEventListener(SHEET_MOVED, refit);
+    return () => { observer.disconnect(); window.removeEventListener(SHEET_MOVED, refit); };
   }, [fit, handsBusy, ready, enginePins.size]);
 
   // A new surface the agent added off screen comes into view.
@@ -300,7 +305,8 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     if (canvas.surfaces.length > surfaceCount.current && root.current && !handsBusy()) {
       if (!interacted.current && !canvas.panels.some((panel) => panel.pinned || panel.touched)) { fit(); surfaceCount.current = canvas.surfaces.length; return; }
       const s = canvas.surfaces.at(-1)!;
-      const r = root.current.getBoundingClientRect();
+      // What can be seen of the board: the conversation lies over part of it (a phone's sheet over its foot).
+      const r = workViewport(root.current);
       const v = viewRef.current;
       const inView = s.x >= v.x && s.y >= v.y && s.x + s.w <= v.x + r.width / v.zoom && s.y + s.h <= v.y + r.height / v.zoom;
       if (!inView && r.width > 40 && r.height > 40 && !canvas.panels.some((panel) => panel.pinned)) setView({ ...v, x: s.x - 48 / v.zoom, y: s.y - 48 / v.zoom }, true);
@@ -325,7 +331,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
         h: el.querySelector<HTMLElement>(`[data-panel="${CSS.escape(panel.id)}"]`)?.offsetHeight || panel.h || 240,
       }));
       const current = viewRef.current;
-      const next = revealWorkView(current, boxes, { width: el.clientWidth, height: el.clientHeight });
+      const next = revealWorkView(current, boxes, { width: el.clientWidth, height: workViewport(el).height });
       if (next !== current) setView(next, true);
     };
     // Heights are untransformed; positions come from the model, never a gliding screen rectangle.
@@ -430,13 +436,14 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
       const inset = insetOf(root.current!, room);
       const v = viewRef.current;
       // What is in view and clear of the work rail, so a new piece of work is not put down under it.
-      return { x: v.x + (inset + 16) / v.zoom, y: v.y + 16 / v.zoom, w: (r.width - inset - 32) / v.zoom, h: (r.height - 90) / v.zoom };
+      return { x: v.x + (inset + 16) / v.zoom, y: v.y + 16 / v.zoom, w: (r.width - inset - 32) / v.zoom, h: (room.height - 90) / v.zoom };
     },
     summonHere: () => {
       const r = root.current!.getBoundingClientRect();
+      const h = workViewport(root.current!).height;
       const cx = r.left + r.width / 2;
-      const cy = r.top + r.height / 3;
-      setSummon({ sx: r.width / 2, sy: r.height / 3, at: toWorld(cx, cy) });
+      const cy = r.top + h / 3;
+      setSummon({ sx: r.width / 2, sy: h / 3, at: toWorld(cx, cy) });
     },
   };
   useEffect(() => {
@@ -667,7 +674,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
       const text = e.clipboardData?.getData("text/plain") ?? "";
       const files = [...(e.clipboardData?.files ?? [])];
       const r = el.getBoundingClientRect();
-      const at = toWorld(r.left + r.width / 2, r.top + r.height / 2);
+      const at = toWorld(r.left + r.width / 2, r.top + workViewport(el).height / 2);
       if (files.length) { e.preventDefault(); onFiles(files, at); }
       else if (text.includes("\n") && /[\t,;]/.test(text)) { e.preventDefault(); onPaste(text, at); }
     };
@@ -817,7 +824,8 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     const el = root.current;
     let last = -1, still = 0, frames = 0;
     const settle = () => {
-      const h = el ? Math.round(el.getBoundingClientRect().height) : 0;
+      // The room above the sheet, not the board's own height: the sheet lies over the board and never resizes it.
+      const h = el ? Math.round(workViewport(el).height) : 0;
       still = h === last ? still + 1 : 0;
       last = h;
       if (still >= 3 || ++frames > 60) toggle(); else requestAnimationFrame(settle);

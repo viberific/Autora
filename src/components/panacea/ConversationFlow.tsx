@@ -1,7 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import {
   FLOAT_GAP, FLOAT_STEP, clampFloat, defaultFloat, magnet, nudgeFloat, resizeFloat,
-  type Edge, type FloatBox, type PreviewLine, type Room, type Sheet,
+  SHEET_MOVED, type Edge, type FloatBox, type PreviewLine, type Room, type Sheet,
 } from "./chatLayout";
 import { AutoraMark } from "../AutoraMark";
 import { IconUser } from "../Icons";
@@ -17,7 +17,7 @@ interface ConversationFlowProps {
   collapsed?: boolean;
   /** A phone: opens or retracts the sheet. */
   onToggle?: () => void;
-  /** A phone: the conversation is a bottom sheet under the canvas instead of a window floating over it. */
+  /** A phone: the conversation is a glass sheet over the foot of the canvas instead of a window anywhere over it. */
   phone?: boolean;
   /** Where the desktop window stands and how big it is (null: never moved, so the default at the bottom left), and the
       way to change it (called when a drag, a resize or a key press settles; null puts it back). */
@@ -63,7 +63,7 @@ const EDGES: readonly Edge[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 
 /** Hosts the live Thread and native composer without taking ownership of either: a glass window floating over the
     world on a desktop (moved by its top bar, resized from any edge, pulled onto the left or right side when brought
-    near it), a bottom sheet under the canvas on a phone. */
+    near it), a glass sheet floating over the foot of the canvas on a phone. */
 export function ConversationFlow({
   conversation,
   entry,
@@ -204,7 +204,7 @@ export function ConversationFlow({
   const level = shut ? 0 : sheet === "full" ? 2 : 1;
   // The sheet glides between heights. The new level is laid out at once; the root's own height is then animated from
   // where it was, so the conversation slides rather than snaps. While it moves (a glide or a finger) the sheet lies
-  // over a canvas held at one size (`data-gliding` and --flow-canvas-h, ConversationFlow.css), so only the sheet is
+  // over a canvas that never changes size (`data-gliding`, ConversationFlow.css), so only the sheet is
   // laid out each frame: resizing the canvas and the editors in it every frame is what made the sheet stutter.
   const lastBox = useRef<DOMRect | null>(null);
   const restBox = useRef<number | null>(null);
@@ -213,16 +213,30 @@ export function ConversationFlow({
   const geometry = useRef<SheetGeometry | null>(null);
   /** Redraws the faded top edge of the message list; it waits while the sheet moves (see the effect that sets it). */
   const refreshEdge = useRef<() => void>(() => undefined);
-  /** The sheet starts to move: hold the canvas at the room left above the lowest height it will pass through. */
-  const startMoving = (root: HTMLElement, lowest: number) => {
+  /** The sheet starts to move: measure its surroundings once, for every frame of the move. */
+  const startMoving = (root: HTMLElement) => {
     const parent = root.parentElement;
     const parentH = parent?.getBoundingClientRect().height ?? 0;
-    parent?.style.setProperty("--flow-canvas-h", `${Math.max(0, parentH - lowest)}px`);
     const half = Math.max(parentH * 0.55, Math.min(parentH, 320));
     const entry = root.querySelector<HTMLElement>(".conversation-flow__entry-area")?.offsetHeight ?? 90;
     geometry.current = { parentH, half, min: Math.min(restBox.current ?? (HANDLE_H + entry + SHEET_PAD), half) };
     gliding.current = true;
     root.dataset.gliding = "";
+  };
+  /** The sheet lies over the canvas, so the board never changes size with it: once the sheet is at rest the board is
+      told how much of its foot is covered (--flow-sheet-h keeps its bottom row above the sheet) and that the room
+      above has changed (SHEET_MOVED: it frames the work again). */
+  const settledAt = useRef(-1);
+  const settled = (root: HTMLElement, moved = false) => {
+    const parent = root.parentElement;
+    if (!parent) return;
+    const cover = Math.round(Math.max(0, parent.getBoundingClientRect().bottom - root.getBoundingClientRect().top));
+    // After a move the board is always told, even back at the height it last heard of: it framed work in the room
+    // there was while the sheet was on its way.
+    if (!moved && cover === settledAt.current) return;
+    settledAt.current = cover;
+    parent.style.setProperty("--flow-sheet-h", `${cover}px`);
+    window.dispatchEvent(new Event(SHEET_MOVED));
   };
   const stopMoving = (root: HTMLElement) => {
     gliding.current = false;
@@ -230,6 +244,7 @@ export function ConversationFlow({
     root.style.removeProperty("height");
     geometry.current = null;
     refreshEdge.current();
+    settled(root, true);
   };
   /** Animates the root from a box it was in to the one it is in now. Returns a way to stop it. */
   const glide = (root: HTMLElement, from: { height: number }, to: { height: number }) => {
@@ -238,7 +253,7 @@ export function ConversationFlow({
     const style = getComputedStyle(root);
     const duration = (parseFloat(style.getPropertyValue("--dur-3")) || 0.4) * 1000;
     const easing = style.getPropertyValue("--ease").trim() || "ease";
-    startMoving(root, Math.min(from.height, to.height));
+    startMoving(root);
     const run = root.animate([{ height: `${from.height}px` }, { height: `${to.height}px` }], { duration, easing });
     follow();
     const done = () => {
@@ -298,13 +313,20 @@ export function ConversationFlow({
   useEffect(() => {
     const root = rootRef.current;
     if (!root || !phone || typeof ResizeObserver === "undefined") return;
+    const parent = root.parentElement;
     const watch = new ResizeObserver(() => {
       if (gliding.current) return;
       lastBox.current = root.getBoundingClientRect();
       if (root.classList.contains("is-collapsed")) restBox.current = lastBox.current.height;
+      settled(root);
     });
     watch.observe(root);
-    return () => watch.disconnect();
+    return () => {
+      watch.disconnect();
+      settledAt.current = -1;
+      parent?.style.removeProperty("--flow-sheet-h");
+      window.dispatchEvent(new Event(SHEET_MOVED));
+    };
   }, [phone]);
   useLayoutEffect(() => {
     const root = rootRef.current;
@@ -357,7 +379,7 @@ export function ConversationFlow({
       const box = root.getBoundingClientRect();
       for (const run of root.getAnimations()) run.cancel();
       state.startH = box.height;
-      startMoving(root, heights[0]);
+      startMoving(root);
       follow();
     }
     const h = Math.max(heights[0], Math.min(state.parentH, state.startH - (y - state.y)));

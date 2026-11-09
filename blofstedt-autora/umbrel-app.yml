@@ -213,4 +213,5 @@ releaseNotes: >-
   corner to resize it, and bring it near the left or right side to have it
   snap there. It remembers where you put it; double-click its bar to put it
   back. The button that hid the chat is gone, so the message box is always
-  there.
+  there. On a phone the chat is a glass sheet floating over the foot of the
+  canvas, and your work is framed above it.

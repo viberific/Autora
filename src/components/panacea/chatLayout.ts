@@ -18,6 +18,10 @@ export interface Room { w: number; h: number }
 /** Which edges of the window a resize handle moves: n, s, e, w or a corner. */
 export type Edge = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 
+/** Sent to the window when a phone's sheet has settled at a new height. The sheet lies over the canvas, so the board
+    does not change size when it moves: this is how it learns the room above the sheet has. */
+export const SHEET_MOVED = "autora:conversation-sheet";
+
 /** The two open heights of the phone's bottom sheet. Closed (peek) is the retracted conversation. */
 export type Sheet = "half" | "full";
 

@@ -24,7 +24,7 @@ const OVERVIEW = [
     "left or right side is pulled onto that side and held there. It is never retracted on desktop, so there is always somewhere to type: " +
     "the Ask Autora bar is at its foot (work mode, voice, attachments, notebooks, artifacts, Capabilities, Send, Stop) with the TODO " +
     "list just above. Work under the window is out of view, so frame work clear of it. On a phone it " +
-    "is a bottom sheet under the canvas, moved on its left half (the right half only scrolls): Canvas only, Half (the default: messages " +
+    "is a glass bottom sheet floating over the foot of the canvas (work is framed above it), moved on its left half (the right half only scrolls): Canvas only, Half (the default: messages " +
     "only) and Full (adds tool steps and memory notes). A question or permission waiting keeps it open. The eye (Visible " +
     "work) sits in the top bar, and Follow joins it once there is work to follow. Enter sends a message, Shift+Enter writes a line. Capabilities lists the editors this server has; one that is not installed is shown as such and cannot be opened. Every surface and engine card lives in one pannable, zoomable scene, not tabs: the icon dock at the canvas's bottom-left " +
     "jumps the camera to one, Zoom out and Show all work [ ] frame them, and all engines stay mounted with their unsaved work. The dock is not " +

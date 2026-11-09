@@ -184,7 +184,7 @@ test("on a desktop it floats over the world as glass, keeps the history mounted,
   assert.match(css, /\.chat-view\.pw-full-workspace > \.pw-scene-stack\s*\{[^}]*position: relative;[^}]*flex: 1 1 0;/);
   // The frost is on ::before: a filter on the window would pin a maximised card or widget in the thread inside it.
   for (const rule of css.matchAll(/([^{}]+)\{([^}]*backdrop-filter: (?!none)[^}]*)\}/g)) {
-    assert.match(rule[1].trim(), /^\.conversation-flow\.is-float::before$/, `only the window's ::before frosts (${rule[1].trim()})`);
+    assert.match(rule[1].replace(/\/\*[\s\S]*?\*\//g, "").trim(), /^\.conversation-flow\.is-(?:float|sheet)::before$/, `only the window's and the sheet's ::before frost (${rule[1].trim()})`);
   }
   assert.match(css, /\.conversation-flow\.is-float:has\(\.pdf-window\.is-full, \.app-window\.is-full, \.cell\.widget\.is-expanded, \.cell\.shot\.is-max\)\s*\{\s*z-index: var\(--z-over\);/);
   // The magnet: a short glide onto the side, and the side lights while it is held there.
