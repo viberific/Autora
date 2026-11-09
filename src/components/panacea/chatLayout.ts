@@ -5,9 +5,9 @@ import { useCallback, useState } from "react";
 export const FLOAT_GAP = 16;
 export const FLOAT_SNAP = 56;
 export const FLOAT_MIN_W = 360;
-export const FLOAT_MIN_H = 280;
-export const FLOAT_DEFAULT_W = 400;
-export const FLOAT_DEFAULT_H = 640;
+const FLOAT_MIN_H = 280;
+const FLOAT_DEFAULT_W = 400;
+const FLOAT_DEFAULT_H = 640;
 /** How far an arrow key moves or resizes the window (four times this with Shift). */
 export const FLOAT_STEP = 16;
 
