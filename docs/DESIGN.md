@@ -48,7 +48,7 @@ Everything comes from a token, so every theme can change it.
   `--danger-light`, and `--on-live` / `--on-warn` for text on them.
 - Behind a dialog or drawer: `--scrim` and `--scrim-blur`. Elevation: `--shadow-sm`, `--shadow`, `--shadow-lg`.
 - Glass: the app is frosted glass over a slow wash of the theme's light (`body::before`). `--glass` (a pane floating over
-  moving work), `--glass-strong` (a pane text is read on), `--glass-soft` (standing chrome: the menu, the header, a page),
+  moving work), `--glass-strong` (a pane text is read on), `--glass-soft` (standing chrome: the menu, the header, a page), `--glass-thin` under `--glass-veil` (the conversation's pane: thin, frosted, pale),
   with `--glass-sheen` layered over each, `--glass-line` / `--glass-line-strong` for their edges, `--glass-shine` (the lit
   top edge, an inset shadow), `--glass-blur`, `--glass-shadow` and `--glass-shadow-lift` (while it is being moved). Blur is
   spent only where something passes behind a pane. A pane holding `position: fixed` content (the thread, a surface) never

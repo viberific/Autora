@@ -50,10 +50,20 @@
   inset: 0;
   z-index: -1;
   border-radius: inherit;
-  background: var(--glass-sheen), var(--glass);
+  background: var(--glass-sheen), var(--glass-veil), var(--glass-thin);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   pointer-events: none;
+}
+
+/* Nothing said yet: the pane is only its message box. The history is there (mounted, for the first message) but
+   takes no room. The window keeps the size it will open to, so its handles still set it. */
+.conversation-flow.is-empty:not(.is-full) .conversation-flow__conversation {
+  display: none;
+}
+
+.conversation-flow.is-float.is-empty .conversation-flow__column {
+  padding-top: 28px;
 }
 
 /* A maximised card or expanded widget inside the thread goes above the rest of the app, as it does elsewhere. */
@@ -305,7 +315,7 @@ body:has(.conversation-flow[data-moving]) iframe {
   padding: 11px 14px;
   border: 1px solid var(--glass-line);
   border-radius: var(--r-lg);
-  background: rgba(var(--s1-rgb), 0.55);
+  background: rgba(var(--s1-rgb), 0.42);
   box-shadow: var(--glass-shine);
   align-self: flex-start;
   min-width: 0;
@@ -373,7 +383,7 @@ body:has(.conversation-flow[data-moving]) iframe {
 }
 
 .conversation-flow__entry .composer-box {
-  background: rgba(var(--s1-rgb), 0.6);
+  background: rgba(var(--s1-rgb), 0.45);
   border-color: var(--glass-line);
   box-shadow: var(--glass-shine), var(--shadow);
 }
@@ -447,7 +457,7 @@ body:has(.conversation-flow[data-moving]) iframe {
     inset: 0;
     z-index: -1;
     border-radius: inherit;
-    background: var(--glass-sheen), var(--glass-strong);
+    background: var(--glass-sheen), var(--glass-veil), var(--glass-thin);
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
     pointer-events: none;
@@ -462,15 +472,10 @@ body:has(.conversation-flow[data-moving]) iframe {
     min-height: 0;
   }
 
-  /* Nothing said yet: the sheet is as tall as what it holds (the way in to Panacea and the message box), not half a
-     screen of empty glass over the canvas. */
-  .conversation-flow.is-sheet.is-half:has(.pw-launch):not([data-gliding]) {
+  /* Nothing said yet: the sheet is only its message box, not half a screen of empty glass over the canvas. */
+  .conversation-flow.is-sheet.is-empty:not(.is-full):not([data-gliding]) {
     height: auto;
     min-height: 0;
-  }
-
-  .conversation-flow.is-sheet.is-half:has(.pw-launch) .conversation-flow__conversation {
-    flex: 0 0 auto;
   }
 
   /* The desktop's thread starts under its window's drag bar; a sheet has only its thin handle strip above. */

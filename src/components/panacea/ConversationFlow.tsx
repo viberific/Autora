@@ -13,6 +13,8 @@ interface ConversationFlowProps {
   todos?: ReactNode;
   workNavigation?: ReactNode;
   conversationLabel?: string;
+  /** Nothing has been said yet: the pane is only as tall as its message box, with no empty glass above it. */
+  empty?: boolean;
   /** A phone's sheet is retracted to its entry strip (Canvas only). A desktop window is never retracted. */
   collapsed?: boolean;
   /** A phone: opens or retracts the sheet. */
@@ -75,6 +77,7 @@ export function ConversationFlow({
   phone = false,
   float = null,
   onFloat,
+  empty = false,
   sheet = "half",
   onSheet,
   locked = false,
@@ -132,11 +135,15 @@ export function ConversationFlow({
     if (next?.snap === "right") parent.style.setProperty("--flow-held-right", `${next.w + FLOAT_GAP}px`);
     else parent.style.removeProperty("--flow-held-right");
   };
+  const emptyRef = useRef(empty);
+  emptyRef.current = empty;
   const place = (root: HTMLElement, next: FloatBox) => {
+    const at = roomRef.current;
     root.style.left = `${next.x}px`;
-    root.style.top = `${next.y}px`;
     root.style.width = `${next.w}px`;
-    root.style.height = `${next.h}px`;
+    // With nothing said the window is only its message box, standing where the foot of the whole window would be.
+    if (emptyRef.current && at) root.style.bottom = `${at.h - next.y - next.h}px`;
+    else { root.style.top = `${next.y}px`; root.style.height = `${next.h}px`; }
     if (next.snap) root.dataset.snap = next.snap; else delete root.dataset.snap;
     clear(root, next);
   };
@@ -563,14 +570,15 @@ export function ConversationFlow({
       {workNavigation}
     </div>
   );
-  const floatStyle: CSSProperties | undefined = phone || !box ? undefined
+  const floatStyle: CSSProperties | undefined = phone || !box || !room ? undefined
+    : empty ? { left: box.x, bottom: room.h - box.y - box.h, width: box.w, top: "auto", height: "auto" }
     : { left: box.x, top: box.y, width: box.w, height: box.h, bottom: "auto" };
 
   return (
     <>
     <div
       ref={rootRef}
-      className={`conversation-flow${shut ? " is-collapsed" : ""}${phone ? " is-sheet" : " is-float"}${phone && !shut ? ` is-${sheet}` : ""}`}
+      className={`conversation-flow${shut ? " is-collapsed" : ""}${empty ? " is-empty" : ""}${phone ? " is-sheet" : " is-float"}${phone && !shut ? ` is-${sheet}` : ""}`}
       style={floatStyle}
       data-snap={!phone && box?.snap ? box.snap : undefined}
     >

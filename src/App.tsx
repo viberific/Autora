@@ -1787,6 +1787,8 @@ export function App() {
   // What the phone's retracted sheet shows of the conversation: the last two things said.
   const chatPreview = useMemo(() => previewOf(view.transcript, 3), [view.transcript]);
   const hiddenSteps = useMemo(() => hiddenStepCount(view.buckets[view.buckets.length - 1]?.cells ?? []), [view.buckets]);
+  // Nothing said yet (and nothing waiting to be answered): the conversation is only its message box.
+  const chatEmpty = !requiresInput && !view.busy && outbox.length === 0 && view.transcript.length === 0 && !view.buckets.some((bucket) => bucket.prompt || bucket.attachments.length > 0);
   const retractChat = useCallback(() => {
     if (requiresInput) { setNotice("A question or permission needs your answer before work can continue."); return; }
     setChatCollapsed((collapsed) => !collapsed);
@@ -2279,17 +2281,9 @@ export function App() {
 
         <ConversationFlow collapsed={phoneLayout && (chatCollapsed || quietPhone || fullPhone) && !requiresInput}
           onToggle={!phoneLayout ? undefined : fullPhone ? () => setWindowFull(false) : quietPhone ? () => setSheetAsked(true) : retractChat}
-          phone={phoneLayout} float={chatLayout.float} onFloat={chatLayout.setFloat}
+          phone={phoneLayout} float={chatLayout.float} onFloat={chatLayout.setFloat} empty={chatEmpty}
           sheet={chatLayout.sheet} onSheet={chatLayout.setSheet} locked={requiresInput} preview={chatPreview} hiddenSteps={hiddenSteps}
           conversation={<>
-          {openWindows.length === 0 && !view.buckets.some((bucket) => bucket.prompt || bucket.attachments.length > 0) && (
-            <div className="pw-launch">
-              <button type="button" className="btn ghost" onClick={() => void openPanaceaChooser()}
-                disabled={workspaceOpening} aria-expanded={toolsOpen}>
-                <IconWrench size={16} /> {workspaceOpening ? "Opening…" : "Open Panacea"}
-              </button>
-            </div>
-          )}
           <Thread
             workspaceHosted
             chatOnly={false}

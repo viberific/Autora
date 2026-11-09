@@ -26,7 +26,7 @@ async function main() {
       const show = async () => { if (phone) await sheet.press("ArrowUp"); };
       const session = await app.newSession("Spatial workspace", "build");
       await page.goto(`${app.base}/?session=${session}`);
-      await page.getByRole("button", { name: "Open Panacea", exact: true }).press("Enter");
+      await page.getByRole("button", { name: "Panacea capabilities", exact: true }).press("Enter");
       const chooser = page.getByRole("dialog", { name: "Panacea capabilities" });
       await chooser.waitFor();
       await chooser.getByRole("button", { name: /Canvas/ }).click();

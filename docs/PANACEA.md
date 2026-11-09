@@ -27,7 +27,7 @@ expanded, including live and failed console work. Activity is not a second world
 
 Canvas fitting waits until the surface is actually visible (hidden engines have no usable viewport), observes phone /
 desktop resizing, and calculates reveals from model coordinates rather than animated rectangles. **Show all work**
-frames every native surface, its controls and hosted engine cards without relocating any of them. Empty chats offer **Open Panacea**, and the composer's wrench opens its
+frames every native surface, its controls and hosted engine cards without relocating any of them. An empty chat is only its message box, and the composer's wrench opens Panacea's
 capability chooser without spending an agent turn. Automatic pan and control revelation pause while
 the person is typing or dragging; pinned panels are not auto-revealed or shifted to make room for suggestions.
 

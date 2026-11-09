@@ -33,7 +33,7 @@ const OVERVIEW = [
     "for work); on a phone it also drops the conversation to its strip and the jump dock steps aside, and Back to the conversation " +
     "gives both back. \"Follow\" moves the camera to your work, but not while the person types, drags, " +
     "pins or holds the camera; a manual jump stops it. Activity stays in the bubbles, contracted by default. A surface opens on the " +
-    "first use of its tools or from Capabilities: never ask the person to open a window. A new empty chat has Open Panacea, to start " +
+    "first use of its tools or from Capabilities: never ask the person to open a window. A new empty chat is only its message box; the wrench in it (Capabilities) starts work " +
     "without a message. Terminal commands have no window: they are collapsible cards in the conversation.",
   "- Shared hands. In every window the person can work on the same thing at the same time. What they change is told to you on your " +
     "next look, so read the current state (the *_look / *_get / read tool of that window) before relying on what you saw earlier, " +
