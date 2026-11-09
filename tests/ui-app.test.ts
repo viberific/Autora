@@ -53,7 +53,8 @@ async function main() {
 
     console.log("opening");
     await test("the app opens beside the conversation and fits inside its window", async () => {
-      // In Panacea the app is a window on the board, and the conversation is docked to its left.
+      // In Panacea the app is a window on the board, and the conversation floats over the board at its bottom left: the
+      // camera frames the app beside it, not under it.
       const chat = await page.locator(".conversation-flow").first().boundingBox();
       const pane = await page.locator('.app-pane[data-pane="app"]').boundingBox();
       assert.ok(chat && pane && pane.x >= chat.x + chat.width - 2, `beside the conversation, not under it (${JSON.stringify({ pane, chat })})`);

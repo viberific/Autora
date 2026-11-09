@@ -1,5 +1,8 @@
-import { useEffect, useId, useLayoutEffect, useRef, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
-import { PANEL_DEFAULT, PANEL_MAX, PANEL_MIN, PANEL_STEP, clampPanelWidth, type PreviewLine, type Sheet } from "./chatLayout";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
+import {
+  FLOAT_GAP, FLOAT_STEP, clampFloat, defaultFloat, magnet, resizeFloat,
+  type Edge, type FloatBox, type PreviewLine, type Room, type Sheet,
+} from "./chatLayout";
 import { AutoraMark } from "../AutoraMark";
 import { IconUser } from "../Icons";
 import "./ConversationFlow.css";
@@ -10,13 +13,16 @@ interface ConversationFlowProps {
   todos?: ReactNode;
   workNavigation?: ReactNode;
   conversationLabel?: string;
+  /** A phone's sheet is retracted to its entry strip (Canvas only). A desktop window is never retracted. */
   collapsed?: boolean;
+  /** A phone: opens or retracts the sheet. */
   onToggle?: () => void;
-  /** A phone: the conversation is a bottom sheet under the canvas instead of a panel beside it. */
+  /** A phone: the conversation is a bottom sheet under the canvas instead of a window floating over it. */
   phone?: boolean;
-  /** Desktop panel width in pixels, and the way to change it (called when a drag or key press settles). */
-  width?: number;
-  onWidth?: (width: number) => void;
+  /** Where the desktop window stands and how big it is (null: never moved, so the default at the bottom left), and the
+      way to change it (called when a drag, a resize or a key press settles; null puts it back). */
+  float?: FloatBox | null;
+  onFloat?: (box: FloatBox | null) => void;
   /** Phone sheet height when open, and the way to change it. */
   sheet?: Sheet;
   onSheet?: (sheet: Sheet) => void;
@@ -52,18 +58,12 @@ function onSheetSide(root: HTMLElement, x: number) {
   return x - box.left <= box.width / 2;
 }
 
-/** The one glyph for showing and retracting the conversation: a speech bubble, the same open or retracted. */
-function ConversationIcon() {
-  return (
-    <svg className="conversation-flow__icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
-      strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
-      <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z" />
-    </svg>
-  );
-}
+/** The window's resize handles: four edges and four corners. */
+const EDGES: readonly Edge[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 
-/** Hosts the live Thread and native composer without taking ownership of either: docked beside the canvas on a
-    desktop, a bottom sheet under it on a phone. The canvas is resized around it, never covered. */
+/** Hosts the live Thread and native composer without taking ownership of either: a glass window floating over the
+    world on a desktop (moved by its top bar, resized from any edge, pulled onto the left or right side when brought
+    near it), a bottom sheet under the canvas on a phone. */
 export function ConversationFlow({
   conversation,
   entry,
@@ -73,8 +73,8 @@ export function ConversationFlow({
   collapsed = false,
   onToggle,
   phone = false,
-  width = PANEL_DEFAULT,
-  onWidth,
+  float = null,
+  onFloat,
   sheet = "half",
   onSheet,
   locked = false,
@@ -84,60 +84,122 @@ export function ConversationFlow({
   const conversationId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const historyRef = useRef<HTMLElement>(null);
-  const toggleRef = useRef<HTMLButtonElement>(null);
-  const edgeRef = useRef<HTMLButtonElement>(null);
-  // Where focus goes once the toggle that was pressed has been hidden by the change it made.
-  const restoreFocus = useRef<"toggle" | "edge" | null>(null);
+  const handleRef = useRef<HTMLDivElement>(null);
+  // Only a phone's sheet retracts: a desktop window is always open.
+  const shut = phone && collapsed;
+  // A retracted sheet hides the history: focus inside it moves to the sheet's handle rather than being lost.
   useEffect(() => {
     const history = historyRef.current;
-    if (!history) return;
-    const wanted = restoreFocus.current;
-    restoreFocus.current = null;
-    if (collapsed && (wanted === "edge" || history.contains(document.activeElement))) {
-      (phone ? toggleRef : edgeRef).current?.focus({ preventScroll: true });
-    } else if (!collapsed && wanted === "toggle") toggleRef.current?.focus({ preventScroll: true });
-  }, [collapsed, phone]);
+    if (shut && history?.contains(document.activeElement)) handleRef.current?.focus({ preventScroll: true });
+  }, [shut]);
 
-  // Desktop width: a drag writes the variable straight onto the panel (no re-render per pixel) and settles once.
-  const drag = useRef<{ x: number; start: number; live: number } | null>(null);
-  const roomNow = () => (typeof window === "undefined" ? Infinity : window.innerWidth);
-  const startResize = (event: PointerEvent<HTMLDivElement>) => {
+  // Desktop window. Its room is the world area it floats over (the parent), measured as it changes; the box is the
+  // person's, kept inside that room. A drag or a resize writes the box straight onto the window (no re-render per
+  // pixel) and settles once, through onFloat.
+  const [room, setRoom] = useState<Room | null>(null);
+  useLayoutEffect(() => {
+    const parent = rootRef.current?.parentElement;
+    if (phone || !parent) return;
+    const measure = () => {
+      const box = parent.getBoundingClientRect();
+      // A hidden page has no size: keep the last room rather than squeezing the window to nothing.
+      if (box.width > 0 && box.height > 0) setRoom((was) => was && was.w === Math.round(box.width) && was.h === Math.round(box.height) ? was : { w: Math.round(box.width), h: Math.round(box.height) });
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const watch = new ResizeObserver(measure);
+    watch.observe(parent);
+    return () => watch.disconnect();
+  }, [phone]);
+  const box = room ? clampFloat(float ?? defaultFloat(room), room) : null;
+  const boxRef = useRef(box);
+  boxRef.current = box;
+  const roomRef = useRef(room);
+  roomRef.current = room;
+  /** A window held to a side and reaching the foot of the world keeps the board's bottom row (its history slider) out
+      from under it: the room it takes is given to the world as --flow-clear-left or --flow-clear-right (and the work
+      rail's, --flow-held-right). */
+  const clear = (root: HTMLElement, next: FloatBox | null) => {
+    const parent = root.parentElement;
+    const at = roomRef.current;
+    if (!parent) return;
+    const low = !!next && !!at && next.y + next.h >= at.h - 120;
+    for (const side of ["left", "right"] as const) {
+      if (low && next!.snap === side) parent.style.setProperty(`--flow-clear-${side}`, `${next!.w + FLOAT_GAP}px`);
+      else parent.style.removeProperty(`--flow-clear-${side}`);
+    }
+    // The work rail stands on the right: a window held there, at any height, moves it to the window's left.
+    if (next?.snap === "right") parent.style.setProperty("--flow-held-right", `${next.w + FLOAT_GAP}px`);
+    else parent.style.removeProperty("--flow-held-right");
+  };
+  const place = (root: HTMLElement, next: FloatBox) => {
+    root.style.left = `${next.x}px`;
+    root.style.top = `${next.y}px`;
+    root.style.width = `${next.w}px`;
+    root.style.height = `${next.h}px`;
+    if (next.snap) root.dataset.snap = next.snap; else delete root.dataset.snap;
+    clear(root, next);
+  };
+  useLayoutEffect(() => {
     const root = rootRef.current;
-    if (!root || event.button !== 0) return;
+    if (!root || phone) return;
+    clear(root, box);
+    return () => clear(root, null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- clear only reads refs and the DOM; the box is its value
+  }, [phone, box?.x, box?.y, box?.w, box?.h, box?.snap]);
+  const gesture = useRef<{ kind: "move" | Edge; x: number; y: number; start: FloatBox; live: FloatBox } | null>(null);
+  const beginGesture = (kind: "move" | Edge) => (event: PointerEvent<HTMLElement>) => {
+    const root = rootRef.current;
+    const start = boxRef.current;
+    if (!root || !start || event.button !== 0) return;
+    event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
-    const start = root.getBoundingClientRect().width;
-    drag.current = { x: event.clientX, start, live: start };
+    gesture.current = { kind, x: event.clientX, y: event.clientY, start, live: start };
+    root.dataset.moving = kind === "move" ? "move" : "size";
   };
-  const moveResize = (event: PointerEvent<HTMLDivElement>) => {
-    const state = drag.current;
-    if (!state) return;
-    // The panel is on the left and its edge on its right: dragging the edge right makes it wider.
-    state.live = clampPanelWidth(state.start + (event.clientX - state.x), roomNow());
-    rootRef.current?.style.setProperty("--flow-panel-w", `${state.live}px`);
+  const moveGesture = (event: PointerEvent<HTMLElement>) => {
+    const state = gesture.current;
+    const root = rootRef.current;
+    const at = roomRef.current;
+    if (!state || !root || !at) return;
+    const dx = event.clientX - state.x;
+    const dy = event.clientY - state.y;
+    // Moved, it is free until the magnet takes it: near a side it is pulled onto that side and held there.
+    const next = state.kind === "move"
+      ? magnet({ ...state.start, x: state.start.x + dx, y: state.start.y + dy, snap: null }, at)
+      : resizeFloat(state.start, state.kind, dx, dy, at);
+    state.live = next;
+    place(root, next);
   };
-  const endResize = (event: PointerEvent<HTMLDivElement>) => {
-    const state = drag.current;
-    drag.current = null;
+  const endGesture = (event: PointerEvent<HTMLElement>) => {
+    const state = gesture.current;
+    gesture.current = null;
+    const root = rootRef.current;
+    if (root) delete root.dataset.moving;
     if (!state) return;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-    onWidth?.(state.live);
+    const moved = state.live.x !== state.start.x || state.live.y !== state.start.y || state.live.w !== state.start.w || state.live.h !== state.start.h;
+    if (moved) onFloat?.(state.live);
   };
-  const keyResize = (event: KeyboardEvent<HTMLDivElement>) => {
-    const step = event.shiftKey ? PANEL_STEP * 4 : PANEL_STEP;
-    // The panel's edge is on its right: moving it right makes the panel wider.
-    const next = event.key === "ArrowRight" ? width + step
-      : event.key === "ArrowLeft" ? width - step
-      : event.key === "Home" ? PANEL_MIN
-      : event.key === "End" ? PANEL_MAX
-      : null;
-    if (next == null) return;
+  /** The arrow keys on the window's grip move it, and on its corner resize it; Home and End put it on the left or right. */
+  const keyFloat = (kind: "move" | "se") => (event: KeyboardEvent<HTMLElement>) => {
+    const current = boxRef.current;
+    const at = roomRef.current;
+    if (!current || !at) return;
+    const step = event.shiftKey ? FLOAT_STEP * 4 : FLOAT_STEP;
+    const dx = event.key === "ArrowRight" ? step : event.key === "ArrowLeft" ? -step : 0;
+    const dy = event.key === "ArrowDown" ? step : event.key === "ArrowUp" ? -step : 0;
+    let next: FloatBox | null = null;
+    if (kind === "move" && (event.key === "Home" || event.key === "End")) next = clampFloat({ ...current, snap: event.key === "Home" ? "left" : "right" }, at);
+    else if (dx || dy) next = kind === "move" ? magnet({ ...current, x: current.x + dx, y: current.y + dy, snap: null }, at) : resizeFloat(current, "se", dx, dy, at);
+    if (!next) return;
     event.preventDefault();
-    onWidth?.(clampPanelWidth(next, roomNow()));
+    onFloat?.(next);
   };
 
   // Phone sheet: Canvas only (the retracted conversation), half, full. A tap steps up and wraps to the canvas;
   // a drag or the arrow keys move one level. Lowering to the canvas goes through the same refusal as Retract.
-  const level = collapsed ? 0 : sheet === "full" ? 2 : 1;
+  const level = shut ? 0 : sheet === "full" ? 2 : 1;
   // The sheet glides between heights. The new level is laid out at once; the root's own height is then animated from
   // where it was, so the conversation slides rather than snaps. While it moves (a glide or a finger) the sheet lies
   // over a canvas held at one size (`data-gliding` and --flow-canvas-h, ConversationFlow.css), so only the sheet is
@@ -257,7 +319,7 @@ export function ConversationFlow({
     const next = Math.max(0, Math.min(2, target));
     if (next === level) return;
     if (next === 0) { onToggle?.(); return; }
-    if (collapsed) onToggle?.();
+    if (shut) onToggle?.();
     onSheet?.(next === 2 ? "full" : "half");
   };
   const cycle = () => setLevel(level === 2 ? (locked ? 1 : 0) : level + 1);
@@ -472,15 +534,26 @@ export function ConversationFlow({
     };
   }, []);
 
+  const navigation = workNavigation != null && (
+    <div className="conversation-flow__work-navigation" role="group" aria-label="Workspace navigation">
+      {workNavigation}
+    </div>
+  );
+  const floatStyle: CSSProperties | undefined = phone || !box ? undefined
+    : { left: box.x, top: box.y, width: box.w, height: box.h, bottom: "auto" };
+
   return (
+    <>
     <div
       ref={rootRef}
-      className={`conversation-flow${collapsed ? " is-collapsed" : ""}${phone ? " is-sheet" : " is-panel"}${phone && !collapsed ? ` is-${sheet}` : ""}`}
-      style={{ "--flow-panel-w": `${width}px` } as CSSProperties}
+      className={`conversation-flow${shut ? " is-collapsed" : ""}${phone ? " is-sheet" : " is-float"}${phone && !shut ? ` is-${sheet}` : ""}`}
+      style={floatStyle}
+      data-snap={!phone && box?.snap ? box.snap : undefined}
     >
       {phone ? (
         <div
           className="conversation-flow__handle"
+          ref={handleRef}
           role="slider"
           tabIndex={0}
           aria-orientation="vertical"
@@ -504,38 +577,38 @@ export function ConversationFlow({
         </div>
       ) : (
         <>
-          {!collapsed && (
-            <div
-              className="conversation-flow__resize"
-              role="separator"
-              tabIndex={0}
-              aria-orientation="vertical"
-              aria-label="Resize conversation panel"
-              aria-valuemin={PANEL_MIN}
-              aria-valuemax={PANEL_MAX}
-              aria-valuenow={width}
-              onKeyDown={keyResize}
-              onPointerDown={startResize}
-              onPointerMove={moveResize}
-              onPointerUp={endResize}
-              onPointerCancel={endResize}
-              onDoubleClick={() => onWidth?.(PANEL_DEFAULT)}
-            />
-          )}
-          {onToggle && (
+          <div
+            className="conversation-flow__bar"
+            onPointerDown={beginGesture("move")}
+            onPointerMove={moveGesture}
+            onPointerUp={endGesture}
+            onPointerCancel={endGesture}
+            onDoubleClick={() => onFloat?.(null)}
+          >
             <button
-              className="conversation-flow__edge"
+              className="conversation-flow__grip"
               type="button"
-              ref={edgeRef}
-              onClick={() => { restoreFocus.current = "toggle"; onToggle(); }}
-              aria-expanded={!collapsed}
-              aria-controls={conversationId}
-              aria-label="Show conversation"
-              tabIndex={collapsed ? 0 : -1}
+              aria-label="Move conversation"
+              aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown Home End"
+              onKeyDown={keyFloat("move")}
             >
-              <ConversationIcon />
+              <span aria-hidden="true" />
             </button>
-          )}
+          </div>
+          {EDGES.map((edge) => (
+            <div
+              key={edge}
+              className="conversation-flow__size"
+              data-edge={edge}
+              {...(edge === "se"
+                ? { role: "separator", tabIndex: 0, "aria-label": "Resize conversation", "aria-valuenow": box?.w, onKeyDown: keyFloat("se") }
+                : { "aria-hidden": true })}
+              onPointerDown={beginGesture(edge)}
+              onPointerMove={moveGesture}
+              onPointerUp={endGesture}
+              onPointerCancel={endGesture}
+            />
+          ))}
         </>
       )}
       <div className="conversation-flow__column">
@@ -544,32 +617,19 @@ export function ConversationFlow({
           id={conversationId}
           ref={historyRef}
           aria-label={conversationLabel}
-          aria-hidden={collapsed || undefined}
-          {...(collapsed ? { inert: "" } : {})}
+          aria-hidden={shut || undefined}
+          {...(shut ? { inert: "" } : {})}
         >
           {conversation}
         </section>
         <div className="conversation-flow__entry-area">
-          {onToggle && (
-            <button
-              className="conversation-flow__toggle"
-              type="button"
-              ref={toggleRef}
-              onClick={() => { if (!phone) restoreFocus.current = "edge"; onToggle(); }}
-              aria-expanded={!collapsed}
-              aria-controls={conversationId}
-              aria-label={collapsed ? "Show conversation" : "Retract conversation"}
-            >
-              <ConversationIcon />
-            </button>
-          )}
           {phone && onToggle && preview && preview.length > 0 && (
             <button
               className="conversation-flow__preview"
               type="button"
-              onClick={() => { restoreFocus.current = "toggle"; onToggle(); }}
+              onClick={onToggle}
               aria-controls={conversationId}
-              tabIndex={collapsed ? 0 : -1}
+              tabIndex={shut ? 0 : -1}
               aria-label={`Open the conversation. ${preview.map((line) => `${line.who}: ${line.text}`).join(" ")}`}
             >
               {preview.map((line, index) => (
@@ -589,11 +649,9 @@ export function ConversationFlow({
           <div className="conversation-flow__entry">{entry}</div>
         </div>
       </div>
-      {workNavigation != null && (
-        <div className="conversation-flow__work-navigation" role="group" aria-label="Workspace navigation">
-          {workNavigation}
-        </div>
-      )}
+      {phone && navigation}
     </div>
+    {!phone && navigation}
+    </>
   );
 }

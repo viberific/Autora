@@ -18,10 +18,12 @@ import { CAPABILITIES, capabilityOf } from "./capabilities";
 
 const OVERVIEW = [
   "How Autora's windows work (all of these tools are yours from the first message; none needs loading):",
-  "- The layout. Panacea is the main area and the conversation is docked beside it, never over it: on desktop a panel on the " +
-    "left, beside the app rail (its right edge resizes it), with the Ask Autora bar at its foot (work mode, voice, attachments, notebooks, artifacts, " +
-    "Capabilities, Send, Stop) and the TODO list just above. Retract conversation slides the panel to an edge tab (Show conversation); " +
-    "the bar, the TODO list and the toggle stay in a slim strip along the foot of the workspace, so you can always type. On a phone it " +
+  "- The layout. Panacea is the main area and fills the whole region; on desktop the conversation is a frosted glass window floating " +
+    "over it, opening at the bottom left with a gap from every edge. The person moves it by its top bar (Move conversation; a double " +
+    "click puts it back at the bottom left), resizes it from any edge or corner (Resize conversation), and a window brought near the " +
+    "left or right side is pulled onto that side and held there. It is never retracted on desktop, so there is always somewhere to type: " +
+    "the Ask Autora bar is at its foot (work mode, voice, attachments, notebooks, artifacts, Capabilities, Send, Stop) with the TODO " +
+    "list just above. Work under the window is out of view, so frame work clear of it. On a phone it " +
     "is a bottom sheet under the canvas, moved on its left half (the right half only scrolls): Canvas only, Half (the default: messages " +
     "only) and Full (adds tool steps and memory notes). A question or permission waiting keeps it open. The eye (Visible " +
     "work) sits in the top bar, and Follow joins it once there is work to follow. Enter sends a message, Shift+Enter writes a line. Capabilities lists the editors this server has; one that is not installed is shown as such and cannot be opened. Every surface and engine card lives in one pannable, zoomable scene, not tabs: the icon dock at the canvas's bottom-left " +

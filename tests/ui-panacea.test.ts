@@ -11,7 +11,7 @@ import fs from "node:fs";
 import zlib from "node:zlib";
 import { chromium, type Page } from "playwright-core";
 import { sleep, startApp } from "./e2e-harness";
-import { workspaceReady } from "./ui-workspace-ready";
+import { shrinkConversation, workspaceReady } from "./ui-workspace-ready";
 import { CHROME } from "./chrome";
 
 let passed = 0;
@@ -75,7 +75,7 @@ async function main() {
       await page.waitForSelector('.panacea-workspace .pa-window');
       await page.waitForSelector(".pa-board");
       await workspaceReady(page, { blank: true });
-      await page.getByRole("button", { name: "Retract conversation", exact: true }).click();
+      await shrinkConversation(page);
       assert.equal(await page.locator(".pa-panel").count(), 0, "nothing on it until the work needs it");
       assert.equal(await page.locator(".pa-window").getByText("What do you want to do").count(), 0, "and no standing instructions");
       await shot("1-empty");

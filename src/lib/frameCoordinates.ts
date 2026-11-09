@@ -41,10 +41,14 @@ export function isWorkVisible(element: Element, opts: { whole?: boolean } = {}):
      so it hides only what it actually covers: workViewport's band (the whole height beside it) is for placing the
      camera, and taken as what can be seen it hid a phone's picker and most panels from the agent's hand. */
   const b = board.getBoundingClientRect();
-  const entry = document.querySelector(".conversation-flow__entry-area")?.getBoundingClientRect();
+  /* A phone's sheet runs along the foot of the board: what is above its entry is in view. A desktop's floating window
+     is a box over the board like the navigation, so it hides only what it covers. */
+  const float = floatingConversation();
+  const entry = float ? undefined : document.querySelector(".conversation-flow__entry-area")?.getBoundingClientRect();
   const bottom = entry && entry.height > 0 && entry.top < b.bottom && entry.bottom > b.top ? Math.min(b.bottom, entry.top - 8) : b.bottom;
   const room = { left: b.left, top: b.top, width: b.width, height: Math.max(0, bottom - b.top) };
   const nav = document.querySelector(".conversation-flow__work-navigation")?.getBoundingClientRect();
+  const under = (box: DOMRect | undefined, r: DOMRect) => !!box && box.width > 0 && r.right > box.left && r.left < box.right && r.bottom > box.top && r.top < box.bottom;
   /* An editor's whole frame is "on screen" when most of it is, its middle clear of the jump buttons: a window a person
      can see and work in, though an edge runs under the buttons or off the board. */
   if (whole) {
@@ -52,18 +56,26 @@ export function isWorkVisible(element: Element, opts: { whole?: boolean } = {}):
     const h = Math.max(0, Math.min(rect.bottom, room.top + room.height) - Math.max(rect.top, room.top));
     const cx = rect.left + rect.width / 2;
     const cy = rect.top + rect.height / 2;
-    const middleClear = !nav || nav.width === 0 || cx < nav.left || cx > nav.right || cy < nav.top || cy > nav.bottom;
+    const clearOf = (box: DOMRect | undefined) => !box || box.width === 0 || cx < box.left || cx > box.right || cy < box.top || cy > box.bottom;
+    const middleClear = clearOf(nav) && clearOf(float);
     return rect.width > 0 && rect.height > 0 && (w * h) / (rect.width * rect.height) >= 0.5 && middleClear;
   }
   if (!workRectVisible(rect, room)) return false;
-  return !nav || nav.width === 0 || rect.right <= nav.left || rect.left >= nav.right || rect.bottom <= nav.top || rect.top >= nav.bottom;
+  return !under(nav, rect) && !under(float, rect);
+}
+
+/** The conversation's floating window on a desktop, where it is on screen; none on a phone, where it is a sheet. */
+function floatingConversation(): DOMRect | undefined {
+  const box = document.querySelector(".conversation-flow.is-float")?.getBoundingClientRect();
+  return box && box.width > 0 && box.height > 0 ? box : undefined;
 }
 
 export function workViewport(board: Element, opts: { clearDock?: boolean } = {}): { left: number; top: number; width: number; height: number } {
   const rect = board.getBoundingClientRect();
-  const entry = document.querySelector(".conversation-flow__entry-area")?.getBoundingClientRect();
+  const float = floatingConversation();
+  const entry = float ? undefined : document.querySelector(".conversation-flow__entry-area")?.getBoundingClientRect();
   const navigation = document.querySelector(".conversation-flow__work-navigation")?.getBoundingClientRect();
-  // The conversation is docked beside or under the canvas, so its entry only costs room where it really overlaps.
+  // A phone's sheet is under the canvas, so its entry only costs room where it really overlaps.
   const overlaps = (other: DOMRect) => other.left < rect.right && other.right > rect.left && other.top < rect.bottom && other.bottom > rect.top;
   let bottom = entry && entry.height > 0 && overlaps(entry) ? Math.min(rect.bottom, entry.top - 8) : rect.bottom;
   // The board's own bottom row (the history slider): on a phone a window is kept clear of it, not drawn under it.
@@ -77,9 +89,11 @@ export function workViewport(board: Element, opts: { clearDock?: boolean } = {})
      on the left), its right edge on a phone. Whichever side it is on, that side's band is kept clear of it. */
   let left = rect.left;
   let right = rect.right;
-  if (navigation && navigation.width > 0 && overlaps(navigation)) {
-    if (navigation.left + navigation.width / 2 < rect.left + rect.width / 2) left = Math.max(rect.left, navigation.right + 8);
-    else right = Math.min(rect.right, navigation.left - 8);
+  /* The desktop's floating conversation is kept clear the same way: the band beside it on whichever side it stands. */
+  for (const band of [navigation, float]) {
+    if (!band || band.width === 0 || !overlaps(band)) continue;
+    if (band.left + band.width / 2 < rect.left + rect.width / 2) left = Math.max(left, band.right + 8);
+    else right = Math.min(right, band.left - 8);
   }
   return { left, top: rect.top, width: Math.max(0, right - left), height: Math.max(0, bottom - rect.top) };
 }

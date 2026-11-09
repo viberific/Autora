@@ -2277,9 +2277,9 @@ export function App() {
             it and coming back keeps your place in the thread. */}
         <div className="chat-view pw-full-workspace" role="main" hidden={page !== "chat"}>
 
-        <ConversationFlow collapsed={(chatCollapsed || quietPhone || fullPhone) && !requiresInput}
-          onToggle={fullPhone ? () => setWindowFull(false) : quietPhone ? () => setSheetAsked(true) : retractChat}
-          phone={phoneLayout} width={chatLayout.width} onWidth={chatLayout.setWidth}
+        <ConversationFlow collapsed={phoneLayout && (chatCollapsed || quietPhone || fullPhone) && !requiresInput}
+          onToggle={!phoneLayout ? undefined : fullPhone ? () => setWindowFull(false) : quietPhone ? () => setSheetAsked(true) : retractChat}
+          phone={phoneLayout} float={chatLayout.float} onFloat={chatLayout.setFloat}
           sheet={chatLayout.sheet} onSheet={chatLayout.setSheet} locked={requiresInput} preview={chatPreview} hiddenSteps={hiddenSteps}
           conversation={<>
           {openWindows.length === 0 && !view.buckets.some((bucket) => bucket.prompt || bucket.attachments.length > 0) && (
@@ -2325,7 +2325,7 @@ export function App() {
             loading={status.state === "connecting"}
             // The thread stays mounted under the other pages: told which of them is
             // on screen, so a row that was answered elsewhere catches up.
-            showing={page === "chat" && (!chatCollapsed || requiresInput)}
+            showing={page === "chat" && (!phoneLayout || !chatCollapsed || requiresInput)}
             // Anything pinned to the corners of the conversation. Empty
             // unless it is asked for in Settings -> Appearance.
             dock={dockEl}

@@ -122,12 +122,26 @@
   --agent-accent: var(--accent);
   --agent-accent-rgb: var(--accent-rgb);
 
-  --scrim: rgba(var(--bg-rgb), 0.66);
-  --scrim-blur: blur(3px);
+  --scrim: rgba(var(--bg-rgb), 0.5);
+  --scrim-blur: blur(10px) saturate(140%);
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow: 0 4px 16px -4px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.3);
   --shadow-lg: 0 20px 48px -12px rgba(0, 0, 0, 0.7), 0 2px 8px rgba(0, 0, 0, 0.4);
+
+  /* Glass: the frosted, translucent surfaces the app is built from (docs/DESIGN.md). Each is mixed from the theme's
+     own surfaces, so every theme frosts in its own tint. --glass is a floating pane over moving work, --glass-strong a
+     pane that text is read on, --glass-soft the app's standing chrome over the background's light. */
+  --glass: rgba(var(--s2-rgb), 0.5);
+  --glass-strong: rgba(var(--s1-rgb), 0.8);
+  --glass-soft: rgba(var(--s1-rgb), 0.55);
+  --glass-sheen: linear-gradient(155deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.015) 42%, rgba(255, 255, 255, 0.03));
+  --glass-line: rgba(255, 255, 255, 0.1);
+  --glass-line-strong: rgba(255, 255, 255, 0.17);
+  --glass-shine: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --glass-blur: blur(24px) saturate(170%);
+  --glass-shadow: 0 24px 64px -20px rgba(0, 0, 0, 0.7), 0 4px 16px -6px rgba(0, 0, 0, 0.4);
+  --glass-shadow-lift: 0 36px 88px -20px rgba(0, 0, 0, 0.8), 0 10px 28px -8px rgba(0, 0, 0, 0.5);
 
   --sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -8998,3 +9012,113 @@ header.top .top-work .stage-follow.visible-work.is-compact { width: var(--top-pi
     opacity: 0.85;
   }
 }
+
+/* ============================================================================
+   Glass
+
+   The app is frosted glass over a slow wash of the theme's own light: the
+   standing chrome (header, menu, pages) is translucent, and what floats over
+   moving work (the conversation, dialogs, menus) is frosted, so the work and
+   the light show through it. Blur is spent only where something can pass
+   behind a pane; the chrome has nothing behind it but the background, so it is
+   translucent without a filter. A pane that holds position: fixed content
+   (the thread, a surface) never takes a filter itself: it would pin that
+   content inside the pane (ConversationFlow.css frosts with ::before).
+   ============================================================================ */
+body::before {
+  background:
+    radial-gradient(55% 50% at 8% 4%, rgba(var(--accent-rgb), 0.26), transparent 70%),
+    radial-gradient(45% 40% at 92% 8%, rgba(var(--accent2-rgb), 0.15), transparent 70%),
+    radial-gradient(65% 55% at 72% 104%, rgba(var(--glow-rgb), 0.2), transparent 70%),
+    radial-gradient(40% 45% at -4% 96%, rgba(var(--accent2-rgb), 0.11), transparent 70%);
+}
+
+.shell { background: transparent; }
+
+.rail {
+  background: var(--glass-sheen), var(--glass-soft);
+  box-shadow: var(--glass-shine);
+}
+
+.top {
+  background: linear-gradient(180deg, rgba(var(--s2-rgb), 0.6), rgba(var(--s1-rgb), 0.4));
+  border-bottom-color: var(--glass-line);
+}
+@media (min-width: 681px) {
+  .top { background: rgba(var(--s1-rgb), 0.35); backdrop-filter: none; }
+}
+
+.page {
+  background: var(--glass-sheen), var(--glass-soft);
+}
+
+/* The pages' cards: glass panes on the page's glass. */
+.set-card,
+.stat-card,
+.tool-tile,
+.org-card,
+.nb-card,
+.art-card,
+.tw-card,
+.bill-tile {
+  background: var(--glass-sheen), rgba(var(--s1-rgb), 0.5);
+  border-color: var(--glass-line);
+  box-shadow: var(--glass-shine);
+}
+
+/* The world: the dotted board lies straight on the background's light. */
+.chat-view .panacea-workspace,
+.chat-view .pa-window { background: transparent; }
+.pa-board { background-color: transparent; }
+
+.pa-surface {
+  background: var(--glass-sheen), var(--glass-strong);
+  border-color: var(--glass-line);
+  box-shadow: var(--shadow), var(--glass-shine);
+}
+.pa-surface.is-focus { border-color: var(--accent-line); box-shadow: var(--shadow), var(--glass-shine), 0 0 0 3px rgba(var(--accent-rgb), 0.12); }
+
+/* Dialogs and sheets: the scrim frosts the app behind, and the pane itself is glass on top of that. */
+.modal {
+  background: var(--glass-sheen), var(--glass-strong);
+  border-color: var(--glass-line-strong);
+  border-radius: var(--r-xl);
+  box-shadow: var(--glass-shadow), var(--glass-shine);
+}
+.modal-top { border-bottom-color: var(--glass-line); }
+
+/* Menus and docks that open over the work: frosted, so what they cover still shows. */
+.pa-menu,
+.pa-gone-list,
+.pw-jump-dock,
+.app-pop,
+.st-menu {
+  background: var(--glass-sheen), var(--glass);
+  border-color: var(--glass-line-strong);
+  box-shadow: var(--glass-shadow), var(--glass-shine);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+.rail-bar {
+  background: var(--glass-sheen), var(--glass);
+  border-color: var(--glass-line-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+.rail-bar.is-phone { background: var(--glass-sheen), var(--glass-strong); }
+
+/* Pills and the message box speak the same glass. */
+.session-btn {
+  background: rgba(var(--s2-rgb), 0.55);
+  border-color: var(--glass-line);
+  box-shadow: var(--glass-shine);
+}
+.session-btn:hover { background: rgba(var(--s2-rgb), 0.85); border-color: var(--glass-line-strong); }
+
+.composer-box {
+  background: var(--glass-sheen), rgba(var(--s2-rgb), 0.6);
+  border-color: var(--glass-line);
+}
+.composer::before { background: none; }
+

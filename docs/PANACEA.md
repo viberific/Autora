@@ -15,12 +15,13 @@ Every opened engine stays mounted when the camera changes, so a jump is not a re
 editor state. Web remains a real work surface; Activity is not a separate card. The Tools page
 presents Panacea with capability configuration, not separate applications.
 
-The workspace fills the available area. The conversation is a panel on its left, beside the app rail (its right edge resizes it; on a phone a bottom
-sheet), with the original composer, **Ask Autora**, at its foot, retaining work mode, speech, attachments, notebooks, artifacts,
+The workspace fills the available area. On a desktop the conversation is a frosted glass window floating over it, opening at
+the bottom left a gap in from the edges: its top bar moves it (**Move conversation**; a double click puts it back), every edge and
+corner resizes it (**Resize conversation**), and brought near the left or right side it is pulled onto that side and held there
+(on a phone it is a bottom sheet). The original composer, **Ask Autora**, is at its foot, retaining work mode, speech, attachments, notebooks, artifacts,
 capabilities and Send/Stop; Enter sends and Shift+Enter writes a line (on a phone's keyboard Enter is a new line and the arrow sends).
 The **TODO list is attached above the entry**. Messages are individual bubbles above it, and older bubbles fade at the top edge.
-**Retract conversation** keeps the mounted complete history and leaves the TODO/entry visible in a strip along the foot; **Show
-conversation** brings it back. Questions and permissions
+The desktop window is never retracted; a phone's sheet retracts to its entry strip and keeps the mounted complete history. Questions and permissions
 remain immediately actionable. All tool/output/file activity is in the bubbles, **contracted by default** until
 expanded, including live and failed console work. Activity is not a second world surface.
 

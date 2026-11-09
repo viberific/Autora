@@ -89,7 +89,7 @@ async function main() {
       const follow = alone.getByRole("button", { name: "Follow", exact: true });
       assert.ok(await follow.isVisible(), "Follow is drawn");
       assert.equal(await follow.getAttribute("aria-pressed"), "true");
-      assert.ok(await alone.getByRole("button", { name: "Retract conversation", exact: true }).isVisible(), "history can retract without removing the work");
+      assert.ok(await alone.getByRole("button", { name: "Move conversation", exact: true }).isVisible(), "the conversation floats over the work and can be moved off it");
     });
     await test("the way out of full screen is the first control in the bar, and Follow is over it in full screen too", async () => {
       const toggle = alone.locator('.pw-engine[data-engine="pdf"] .pdf-bar button.pdf-full-btn:visible');

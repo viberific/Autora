@@ -206,14 +206,11 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  On a desktop the chat with Autora now sits on the left of the canvas;
-  drag its right edge to resize it. A window's Full screen now maximises it
-  on the canvas, and on a phone the chat drops to its strip so the window
-  gets the screen. Fixes: a maximised window's corner no longer blocks the
-  editor's All tools button; moving or resizing a window over an editor no
-  longer stops part-way; the agent's hand scrolls a page clear of the tool
-  tray before writing on it; a tool pinned in the PDF bar shows up; a memory
-  rewrite waiting for your answer is never folded away; replies keep their
-  paragraph spacing and a second message no longer joins the last word;
-  secrets nested deep in a tool call are blanked; merged files keep their
-  line endings. Empty pages, checkboxes and the Usage figures got a polish.
+  Autora is glass now: frosted, translucent panes over a soft glow in your
+  theme's colours, all through the app. On a desktop the chat is a floating
+  window with rounded corners, opening at the bottom left with space around
+  it. Drag its top bar to move it anywhere over your work, pull any edge or
+  corner to resize it, and bring it near the left or right side to have it
+  snap there. It remembers where you put it; double-click its bar to put it
+  back. The button that hid the chat is gone, so the message box is always
+  there.

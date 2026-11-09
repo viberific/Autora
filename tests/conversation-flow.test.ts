@@ -15,7 +15,7 @@ const hooks = registerHooks({
 });
 const { ConversationFlow } = await import("../src/components/panacea/ConversationFlow");
 hooks.deregister();
-const { previewOf } = await import("../src/components/panacea/chatLayout");
+const { FLOAT_GAP, FLOAT_MIN_W, FLOAT_SNAP, clampFloat, defaultFloat, magnet, previewOf, resizeFloat } = await import("../src/components/panacea/chatLayout");
 
 let passed = 0;
 function test(name: string, run: () => void) {
@@ -64,7 +64,7 @@ test("optional slots are absent, and labels are escaped by React", () => {
   assert.equal((html.match(/<textarea/g) ?? []).length, 1);
 });
 
-test("retraction keeps history mounted and todos/composer outside the inert region", () => {
+test("a phone's retraction keeps history mounted and todos/composer outside the inert region; a desktop never retracts", () => {
   const conversation = h("div", { className: "thread-wrap", "data-state": "kept" }, "Old and live messages");
   const slots = {
     conversation,
@@ -72,6 +72,7 @@ test("retraction keeps history mounted and todos/composer outside the inert regi
     todos: h("button", { "data-slot": "todos" }, "Task in progress"),
     workNavigation: h("button", { "data-slot": "navigation" }, "Zoom out"),
     onToggle: () => undefined,
+    phone: true,
   };
   const open = renderToStaticMarkup(h(ConversationFlow, slots));
   const closed = renderToStaticMarkup(h(ConversationFlow, { ...slots, collapsed: true }));
@@ -80,35 +81,66 @@ test("retraction keeps history mounted and todos/composer outside the inert regi
     assert.match(html, /<textarea>kept draft<\/textarea>/);
     assert.match(html, /data-slot="todos">Task in progress/);
     assert.ok(html.indexOf("</section>") < html.indexOf('data-slot="todos"'));
-    assert.ok(html.indexOf("</section>") < html.indexOf('class="conversation-flow__toggle"'));
-    assert.match(html, /aria-controls="[^"]+"/);
+    // No speech-bubble button anywhere: the sheet's handle and preview open and close it.
+    assert.doesNotMatch(html, /conversation-flow__toggle|conversation-flow__edge/);
   }
-  assert.match(closed, /conversation-flow is-collapsed/);
+  assert.match(closed, /conversation-flow is-collapsed is-sheet/);
   assert.match(closed, /<section[^>]*aria-hidden="true"[^>]*inert=""/);
-  assert.match(closed, /aria-expanded="false"[^>]*aria-label="Show conversation"/);
-  assert.match(open, /aria-expanded="true"[^>]*aria-label="Retract conversation"/);
-  // One icon, no words: the control's glyph is the same open or retracted, and it shows no text.
-  const toggleOf = (html: string) => /<button[^>]*conversation-flow__toggle[^>]*>(.*?)<\/button>/.exec(html)?.[1] ?? "";
-  assert.match(toggleOf(open), /^<svg[^>]*aria-hidden="true"[^>]*>.*<\/svg>$/);
-  assert.equal(toggleOf(open), toggleOf(closed));
   assert.doesNotMatch(open, /<section[^>]*\s(?:aria-hidden|inert)=/);
   assert.doesNotMatch(closed, /<section[^>]*\shidden=/);
+  const desktop = renderToStaticMarkup(h(ConversationFlow, { ...slots, phone: false, collapsed: true }));
+  assert.match(desktop, /class="conversation-flow is-float"/);
+  assert.doesNotMatch(desktop, /is-collapsed|<section[^>]*\s(?:aria-hidden|inert)=|conversation-flow__toggle|conversation-flow__edge/);
 });
 
-test("desktop gets a resize separator and edge tab; a phone gets the sheet handle", () => {
+test("desktop gets a move grip and resize handles on every edge; a phone gets the sheet handle", () => {
   const slots = { conversation: h("div", null, "history"), entry: h("textarea"), onToggle: () => undefined };
-  const desktop = renderToStaticMarkup(h(ConversationFlow, { ...slots, width: 420 }));
-  assert.match(desktop, /role="separator"[^>]*aria-label="Resize conversation panel"[^>]*aria-valuenow="420"/);
-  assert.match(desktop, /class="conversation-flow__edge"/);
+  const desktop = renderToStaticMarkup(h(ConversationFlow, { ...slots, workNavigation: h("i", { "data-slot": "navigation" }) }));
+  assert.match(desktop, /class="conversation-flow__bar"[^>]*><button class="conversation-flow__grip" type="button" aria-label="Move conversation"/);
+  for (const edge of ["n", "s", "e", "w", "ne", "nw", "se", "sw"]) assert.match(desktop, new RegExp(`class="conversation-flow__size" data-edge="${edge}"`));
+  assert.equal((desktop.match(/role="separator"/g) ?? []).length, 1, "one keyboard resize handle, the bottom-right corner");
+  assert.match(desktop, /data-edge="se" role="separator" tabindex="0" aria-label="Resize conversation"/);
   assert.doesNotMatch(desktop, /role="slider"/);
-  const closed = renderToStaticMarkup(h(ConversationFlow, { ...slots, collapsed: true }));
-  assert.doesNotMatch(closed, /role="separator"/, "a retracted panel has no edge to drag");
+  // The work rail stands on the world, not inside the window that floats over it.
+  assert.ok(desktop.lastIndexOf("</div>", desktop.indexOf('data-slot="navigation"')) > desktop.indexOf("conversation-flow__entry"));
+  assert.match(desktop, /<\/div><div class="conversation-flow__work-navigation"/);
   const phone = renderToStaticMarkup(h(ConversationFlow, { ...slots, phone: true, sheet: "full" }));
   assert.match(phone, /conversation-flow is-sheet is-full/);
   assert.match(phone, /role="slider"[^>]*aria-label="Conversation size"[^>]*aria-valuenow="2"[^>]*aria-valuetext="Full"/);
-  assert.doesNotMatch(phone, /role="separator"|conversation-flow__edge/);
+  assert.doesNotMatch(phone, /role="separator"|conversation-flow__grip|conversation-flow__size/);
   const peek = renderToStaticMarkup(h(ConversationFlow, { ...slots, phone: true, collapsed: true }));
   assert.match(peek, /aria-valuenow="0"[^>]*aria-valuetext="Canvas only"/);
+});
+
+test("the window opens at the bottom left, is held inside the world, and the magnet pulls it onto a side", () => {
+  const room = { w: 1400, h: 900 };
+  const start = defaultFloat(room);
+  assert.deepEqual(start, { x: FLOAT_GAP, y: 900 - 640 - FLOAT_GAP, w: 400, h: 640, snap: "left" });
+  // A short world: as tall as it allows, still a gap from the top and the foot.
+  assert.deepEqual(defaultFloat({ w: 1000, h: 500 }), { x: FLOAT_GAP, y: FLOAT_GAP, w: 400, h: 500 - FLOAT_GAP * 2, snap: "left" });
+  // Free in the middle; near a side, pulled onto it; past an edge, kept a gap inside.
+  assert.equal(magnet({ ...start, x: 500, snap: null }, room).snap, null);
+  assert.deepEqual(magnet({ ...start, x: FLOAT_GAP + FLOAT_SNAP - 4, snap: null }, room), { ...start, x: FLOAT_GAP, snap: "left" });
+  const right = magnet({ ...start, x: 1400 - 400 - FLOAT_GAP - 20, snap: null }, room);
+  assert.deepEqual(right, { ...start, x: 1400 - 400 - FLOAT_GAP, snap: "right" });
+  assert.deepEqual(clampFloat({ ...start, x: -300, y: 5000, snap: null }, room), { ...start, x: FLOAT_GAP, y: 900 - 640 - FLOAT_GAP, snap: null });
+  // Held to the right, it stays there when the world grows.
+  assert.equal(clampFloat(right, { w: 1800, h: 900 }).x, 1800 - 400 - FLOAT_GAP);
+});
+
+test("resizing moves only the dragged edges and keeps the window's minimum and the world's gap", () => {
+  const room = { w: 1400, h: 900 };
+  const box = { x: 300, y: 200, w: 400, h: 500, snap: null };
+  assert.deepEqual(resizeFloat(box, "se", 60, 40, room), { x: 300, y: 200, w: 460, h: 540, snap: null });
+  assert.deepEqual(resizeFloat(box, "nw", -50, -30, room), { x: 250, y: 170, w: 450, h: 530, snap: null });
+  assert.deepEqual(resizeFloat(box, "w", 400, 0, room), { x: 700 - FLOAT_MIN_W, y: 200, w: FLOAT_MIN_W, h: 500, snap: null });
+  assert.deepEqual(resizeFloat(box, "n", 0, -900, room), { x: 300, y: FLOAT_GAP, w: 400, h: 700 - FLOAT_GAP, snap: null });
+  assert.equal(resizeFloat(box, "s", 0, 2000, room).h, 900 - FLOAT_GAP - 200);
+  // Held to the left: its right edge resizes it and it stays held; pulling its left edge away lets it go.
+  const held = { x: FLOAT_GAP, y: 200, w: 400, h: 500, snap: "left" as const };
+  assert.equal(resizeFloat(held, "e", 80, 0, room).snap, "left");
+  assert.equal(resizeFloat(held, "w", 30, 0, room).snap, null);
+  assert.equal(resizeFloat(held, "w", 30, 0, room).x, FLOAT_GAP + 30);
 });
 
 test("a retracted phone sheet previews the last two things said and opens on a tap; a desktop strip does not", () => {
@@ -138,12 +170,20 @@ test("a retracted phone sheet previews the last two things said and opens on a t
   assert.match(css, /\.conversation-flow__entry \.composer textarea\s*\{[^}]*flex: 1 1 auto;[^}]*max-height: min\(18dvh, 160px\);/);
 });
 
-test("layout docks beside the canvas, keeps the history mounted, and speaks the tokens", () => {
+test("on a desktop it floats over the world as glass, keeps the history mounted, and speaks the tokens", () => {
   const css = fs.readFileSync(new URL("../src/components/panacea/ConversationFlow.css", import.meta.url), "utf8");
-  // A region of the layout, not an overlay: the canvas is a sibling that gives way.
-  assert.doesNotMatch(css, /\.conversation-flow\s*\{[^}]*(?:position: absolute|inset: 0)/);
-  assert.match(css, /\.conversation-flow\s*\{[^}]*--flow-w: clamp\([^}]*flex: 0 0 var\(--flow-w\)/);
-  assert.match(css, /\.pw-scene-stack\s*\{[^}]*position: relative;/);
+  // A window over the world, not a column of the layout: the canvas keeps the whole region.
+  assert.match(css, /\.conversation-flow\.is-float\s*\{[^}]*position: absolute;[^}]*z-index: var\(--z-pop\);[^}]*left: 16px;[^}]*bottom: 16px;/);
+  assert.match(css, /\.conversation-flow\.is-float\s*\{[^}]*border-radius: var\(--r-xl\);/);
+  assert.match(css, /\.chat-view\.pw-full-workspace > \.pw-scene-stack\s*\{[^}]*position: relative;[^}]*flex: 1 1 0;/);
+  // The frost is on ::before: a filter on the window would pin a maximised card or widget in the thread inside it.
+  for (const rule of css.matchAll(/([^{}]+)\{([^}]*backdrop-filter: (?!none)[^}]*)\}/g)) {
+    assert.match(rule[1].trim(), /^\.conversation-flow\.is-float::before$/, `only the window's ::before frosts (${rule[1].trim()})`);
+  }
+  assert.match(css, /\.conversation-flow\.is-float:has\(\.pdf-window\.is-full, \.app-window\.is-full, \.cell\.widget\.is-expanded, \.cell\.shot\.is-max\)\s*\{\s*z-index: var\(--z-over\);/);
+  // The magnet: a short glide onto the side, and the side lights while it is held there.
+  assert.match(css, /\[data-moving="move"\]\[data-snap\]\s*\{\s*transition: left var\(--dur-1\)/);
+  assert.match(css, /\.conversation-flow\.is-float\[data-moving\]\[data-snap\]::after\s*\{\s*opacity: 1;/);
   assert.match(css, /\.conversation-flow \.turn\s*\{[^}]*content-visibility: visible;[^}]*contain-intrinsic-size: none;/);
   assert.match(css, /\.conversation-flow__entry,[\s\S]*?pointer-events: auto;/);
   assert.match(css, /\.conversation-flow \.msg\.user\s*\{[^}]*margin-left: auto;/);
@@ -154,21 +194,20 @@ test("layout docks beside the canvas, keeps the history mounted, and speaks the 
   for (const rule of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
     const selectors = rule[1].replace(/\/\*[\s\S]*?\*\//g, "").split(",").map((s) => s.trim());
     const guarded = selectors.some((s) => /^\.conversation-flow(?:\.[\w-]+)*(?:\s+\.conversation-flow__(?:column|conversation))?$|^\.conversation-flow__(?:column|conversation)$/.test(s));
-    if (guarded) assert.doesNotMatch(rule[2], /(?:^|[\s;])(?:contain|overflow(?:-[xy])?):/, `${selectors.join(", ")} must not clip or scroll`);
+    if (guarded) assert.doesNotMatch(rule[2], /(?:^|[\s;])(?:contain|overflow(?:-[xy])?|transform):/, `${selectors.join(", ")} must not clip, scroll or transform`);
   }
   assert.match(css, /\.conversation-flow__preview-line\s*\{[^}]*overflow: hidden;[^}]*text-overflow: ellipsis;/);
-  // Only transform and opacity move: no transition or animation names the panel's width or height.
+  // Only position, transform and opacity move: no transition or animation names the window's width or height.
   for (const found of css.matchAll(/(?:^|\n)\s*(?:transition|animation):[^;]*/g)) assert.doesNotMatch(found[0], /width|height|flex/);
   assert.match(css, /\.conversation-flow \.msg\s*\{[^}]*mask-image: var\(--flow-edge-mask, none\);/);
   assert.doesNotMatch(css, /conversation-flow__conversation::before|scrim|linear-gradient/);
-  for (const rule of css.matchAll(/backdrop-filter:\s*([^;]+)/g)) assert.equal(rule[1], "none");
   assert.match(css, /\.conversation-flow\.is-collapsed \.conversation-flow__conversation\s*\{[^}]*visibility: hidden;/);
   assert.match(css, /\.conversation-flow\.is-collapsed \.conversation-flow__conversation\s*\{[^}]*height: var\(--flow-history-height/);
   assert.doesNotMatch(css, /\.conversation-flow\.is-collapsed[^}]*display: none/);
-  // On a desktop the conversation is on the left, and the rail stands on the canvas's far edge.
+  assert.doesNotMatch(css, /conversation-flow__toggle|conversation-flow__edge|is-panel/);
+  // The rail stands on the world's far edge, and steps aside for a window held to the right.
   assert.match(css, /\.conversation-flow__work-navigation\s*\{[^}]*position: absolute;[^}]*right: 16px;/);
-  assert.match(css, /\.conversation-flow\.is-panel\s*\{\s*position: static;/);
-  assert.match(css, /\.conversation-flow\s*\{[^}]*order: 1;[^}]*border-right: 1px solid/);
+  assert.match(css, /> \.conversation-flow__work-navigation\s*\{\s*right: calc\(16px \+ var\(--flow-held-right, 0px\)\);/);
   assert.doesNotMatch(css, /font-size:\s*[\d.]|border-radius:\s*(?!0\s*;)[\d.]|#[\da-f]{3,8}\b|rgba?\(\s*\d|(?:animation|transition):[^;]*\d(?:ms|s)\b/i);
 });
 

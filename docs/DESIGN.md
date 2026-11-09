@@ -47,6 +47,13 @@ Everything comes from a token, so every theme can change it.
 - Status: `--live` (good, running), `--warn`, `--danger`, each with an `-rgb` twin; `--live-light`,
   `--danger-light`, and `--on-live` / `--on-warn` for text on them.
 - Behind a dialog or drawer: `--scrim` and `--scrim-blur`. Elevation: `--shadow-sm`, `--shadow`, `--shadow-lg`.
+- Glass: the app is frosted glass over a slow wash of the theme's light (`body::before`). `--glass` (a pane floating over
+  moving work), `--glass-strong` (a pane text is read on), `--glass-soft` (standing chrome: the menu, the header, a page),
+  with `--glass-sheen` layered over each, `--glass-line` / `--glass-line-strong` for their edges, `--glass-shine` (the lit
+  top edge, an inset shadow), `--glass-blur`, `--glass-shadow` and `--glass-shadow-lift` (while it is being moved). Blur is
+  spent only where something passes behind a pane. A pane holding `position: fixed` content (the thread, a surface) never
+  takes `backdrop-filter` itself, since that would pin the content inside it: frost it with a `::before` instead, as the
+  conversation's window does (the "Glass" section at the end of `styles.css`).
 - Literals that stay literal: `#fff` on photos and video, the file-type tints of the Artifacts page, the
   Studio's piano keys, a phone's bezel. These are not interface.
 

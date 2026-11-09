@@ -5,6 +5,7 @@ import path from "node:path";
 import { chromium } from "playwright-core";
 import { startApp } from "./e2e-harness";
 import { CHROME } from "./chrome";
+import { shrinkConversation } from "./ui-workspace-ready";
 
 async function main() {
   const exe = CHROME;
@@ -17,11 +18,12 @@ async function main() {
   try {
     for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
       await page.setViewportSize(viewport);
-      // A phone's sheet has no Show/Retract button: its handle is a slider, and drag or arrow keys move it.
+      // A phone's sheet retracts by its handle, a slider that drag or arrow keys move. A desktop's conversation is a window
+      // floating over the world: it never retracts, it is made small and moved aside.
       const phone = viewport.width < 680;
       const sheet = page.getByRole("slider", { name: "Conversation size", exact: true });
-      const retract = () => (phone ? sheet.press("Home") : page.getByRole("button", { name: "Retract conversation", exact: true }).click());
-      const show = () => (phone ? sheet.press("ArrowUp") : page.getByRole("button", { name: "Show conversation", exact: true }).first().click());
+      const retract = () => (phone ? sheet.press("Home") : shrinkConversation(page));
+      const show = async () => { if (phone) await sheet.press("ArrowUp"); };
       const session = await app.newSession("Spatial workspace", "build");
       await page.goto(`${app.base}/?session=${session}`);
       await page.getByRole("button", { name: "Open Panacea", exact: true }).press("Enter");
@@ -62,7 +64,7 @@ async function main() {
       const todo = page.locator(".conversation-flow__todos .todo-dock");
       await todo.waitFor();
       await retract();
-      assert.equal(await thread.getAttribute("data-history-kept"), "yes", "retract keeps the original history viewport mounted");
+      assert.equal(await thread.getAttribute("data-history-kept"), "yes", "retracting or shrinking keeps the original history viewport mounted");
       assert.equal(await todo.isVisible(), true, "TODO stays attached to the entry when chat retracts");
       await show();
       assert.equal(await page.getByRole("textbox", { name: "Ask Autora", exact: true }).count(), 1, "there is only one main entry");
