@@ -162,7 +162,10 @@ async function main() {
         // (The click's answer lists the screen, so this is also the read.)
         { tool: "video_ui", args: { action: "click", label: "All tools" }, expect: /Export|controls/ },
         { tool: "video_ui", args: { action: "click", label: "Settings" }, expect: /controls/ },
-        { tool: "video_ui", args: { action: "type", label: "Project name", text: "Typed by hand", enter: true }, expect: /Done \(type\)|Typed by hand/ },
+        // The project is renamed where the manual says: the Projects menu's Rename, and its New name field.
+        { tool: "video_ui", args: { action: "click", label: "Projects" }, expect: /Rename/ },
+        { tool: "video_ui", args: { action: "click", label: "Rename" }, expect: /controls/ },
+        { tool: "video_ui", args: { action: "type", label: "Enter a new name", text: "Typed by hand", enter: true }, expect: /Done \(type\)|Typed by hand/ },
         { tool: "video_look", args: {}, expect: /Typed by hand/ },
         { tool: "video_ui", args: { action: "press", key: "ArrowRight" }, expect: /Done/ },
       ]);

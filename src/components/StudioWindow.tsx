@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { useFullscreen } from "../lib/fullscreen";
+import { useWindowFull } from "../lib/fullscreen";
 import { onStudioCommand } from "../lib/studio";
 import { isWorkVisible } from "../lib/frameCoordinates";
 import { bounce, Transport } from "../lib/studio/engine";
@@ -63,7 +63,7 @@ export function StudioWindow({ sessionId, phone }: { sessionId: string; phone: b
   const [rendering, setRendering] = useState(false);
   const [asked, setAsked] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
-  const [full, setFull] = useFullscreen();
+  const [full, setFull] = useWindowFull();
   const root = useRef<HTMLDivElement>(null);
   const clock = useRef<HTMLSpanElement>(null);
   const transport = useRef<Transport | null>(null);

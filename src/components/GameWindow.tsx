@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SaveButton, keptAs } from "./SaveButton";
 import { LoadButton } from "./LoadButton";
-import { useFullscreen } from "../lib/fullscreen";
+import { useWindowFull } from "../lib/fullscreen";
 import { gameStateNow, onGamePlay, onGameState, useGameState } from "../lib/gamedesk";
 import { IconArrowLeft, IconGame, IconMaximize, IconMinimize } from "./Icons";
 import { GameRail, type GameRailState } from "./game/GameRail";
@@ -44,7 +44,7 @@ export function GameWindow({ sessionId, phone }: { sessionId: string; phone: boo
   /** How the editor says the tool bar's tools look now; null until it has said. */
   const [rail, setRail] = useState<GameRailState | null>(null);
   const [asked, setAsked] = useState<string | null>(null);
-  const [full, setFull] = useFullscreen();
+  const [full, setFull] = useWindowFull();
   /* The colours the frame was opened with: its address, which must not change while it is up. */
   const [src] = useState(() => `/gdevelop-editor/index.html?autora=${encodeURIComponent(sessionId)}&theme=${encodeURIComponent(themeNow())}${phone ? "&phone=1" : ""}`);
   const lastTheme = useRef(themeNow());

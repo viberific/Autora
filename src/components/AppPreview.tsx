@@ -10,7 +10,7 @@ import {
 } from "../lib/preview";
 import { AppInspector } from "./AppInspector";
 import { AppReview } from "./AppReview";
-import { useFullscreen } from "../lib/fullscreen";
+import { useWindowFull } from "../lib/fullscreen";
 import { IconAlert, IconArrowLeft, IconMaximize, IconMinimize, IconRotateCcw, IconX } from "./Icons";
 
 /**
@@ -61,7 +61,7 @@ function isLight(info: ElementInfo | LightInfo): info is LightInfo {
 export function AppPreview({ sessionId, phone }: { sessionId: string; phone: boolean }) {
   const state = usePreviewState();
   const frame = usePreviewFrame();
-  const [full, setFull] = useFullscreen();
+  const [full, setFull] = useWindowFull();
   const isFull = phone && full;
   const collab = useCollab();
   const mine = collab.held.includes("app");

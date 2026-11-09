@@ -142,7 +142,7 @@ test("layout docks beside the canvas, keeps the history mounted, and speaks the 
   const css = fs.readFileSync(new URL("../src/components/panacea/ConversationFlow.css", import.meta.url), "utf8");
   // A region of the layout, not an overlay: the canvas is a sibling that gives way.
   assert.doesNotMatch(css, /\.conversation-flow\s*\{[^}]*(?:position: absolute|inset: 0)/);
-  assert.match(css, /\.conversation-flow\s*\{[^}]*flex: 0 0 clamp\(/);
+  assert.match(css, /\.conversation-flow\s*\{[^}]*--flow-w: clamp\([^}]*flex: 0 0 var\(--flow-w\)/);
   assert.match(css, /\.pw-scene-stack\s*\{[^}]*position: relative;/);
   assert.match(css, /\.conversation-flow \.turn\s*\{[^}]*content-visibility: visible;[^}]*contain-intrinsic-size: none;/);
   assert.match(css, /\.conversation-flow__entry,[\s\S]*?pointer-events: auto;/);
@@ -165,8 +165,9 @@ test("layout docks beside the canvas, keeps the history mounted, and speaks the 
   assert.match(css, /\.conversation-flow\.is-collapsed \.conversation-flow__conversation\s*\{[^}]*visibility: hidden;/);
   assert.match(css, /\.conversation-flow\.is-collapsed \.conversation-flow__conversation\s*\{[^}]*height: var\(--flow-history-height/);
   assert.doesNotMatch(css, /\.conversation-flow\.is-collapsed[^}]*display: none/);
-  // On a desktop the conversation is on the left, and the rail stands just right of it on the canvas.
-  assert.match(css, /\.conversation-flow__work-navigation\s*\{[^}]*position: absolute;[^}]*left: calc\(100% \+/);
+  // On a desktop the conversation is on the left, and the rail stands on the canvas's far edge.
+  assert.match(css, /\.conversation-flow__work-navigation\s*\{[^}]*position: absolute;[^}]*right: 16px;/);
+  assert.match(css, /\.conversation-flow\.is-panel\s*\{\s*position: static;/);
   assert.match(css, /\.conversation-flow\s*\{[^}]*order: 1;[^}]*border-right: 1px solid/);
   assert.doesNotMatch(css, /font-size:\s*[\d.]|border-radius:\s*(?!0\s*;)[\d.]|#[\da-f]{3,8}\b|rgba?\(\s*\d|(?:animation|transition):[^;]*\d(?:ms|s)\b/i);
 });

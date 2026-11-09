@@ -15,9 +15,11 @@
 
 .conversation-flow {
   --flow-edge-w: 44px;
+  /* How wide the open panel is: its flex basis, and where its resize edge stands. */
+  --flow-w: clamp(320px, var(--flow-panel-w, 380px), 60vw);
   position: relative;
   order: 1;
-  flex: 0 0 clamp(320px, var(--flow-panel-w, 380px), 60vw);
+  flex: 0 0 var(--flow-w);
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -35,6 +37,12 @@
    edge tab and the work rail position against the whole region, not the strip. */
 .chat-view.pw-full-workspace:has(.conversation-flow.is-panel.is-collapsed) {
   flex-direction: column;
+}
+
+/* A desktop panel places its edge and its work rail against the whole region (the chat view), not itself: the rail
+   stands on the canvas's far edge, away from the conversation, where the work laid out from the left never meets it. */
+.conversation-flow.is-panel {
+  position: static;
 }
 
 /* Retracted, the strip runs along the foot of the region: after the canvas, whichever side the panel is on. */
@@ -126,7 +134,7 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  right: -6px;
+  left: calc(var(--flow-w) - 6px);
   width: 12px;
   z-index: 1;
   cursor: col-resize;
@@ -148,7 +156,7 @@
 
 @media (pointer: coarse) {
   .conversation-flow__resize {
-    right: calc(var(--flow-edge-w) / -2);
+    left: calc(var(--flow-w) - var(--flow-edge-w) / 2);
     width: var(--flow-edge-w);
   }
 }
@@ -368,14 +376,14 @@
   box-shadow: 0 0 0 4px var(--accent-soft), var(--shadow-lg);
 }
 
-/* The work rail sits on the canvas, just right of the panel (or of the edge tab when it is retracted). It stacks above
-   the canvas, which comes after the panel in the page and would otherwise be painted over it. */
+/* The work rail stands on the canvas along its far (right) edge, the conversation on the left. It stacks above the
+   canvas, which comes after the panel in the page and would otherwise be painted over it. */
 .conversation-flow__work-navigation {
   position: absolute;
   z-index: 1;
   top: 48px;
   bottom: 24px;
-  left: calc(100% + 16px);
+  right: 16px;
   max-width: min(160px, 24vw);
   display: flex;
   align-items: center;
@@ -386,7 +394,7 @@
 }
 
 .conversation-flow.is-collapsed .conversation-flow__work-navigation {
-  left: calc(var(--flow-edge-w) + 16px);
+  right: 16px;
 }
 
 .conversation-flow__work-navigation > * {
@@ -723,7 +731,6 @@
   .conversation-flow__work-navigation {
     top: auto;
     bottom: calc(100% + 8px);
-    left: auto;
     right: max(8px, env(safe-area-inset-right));
     height: min(36dvh, 280px);
     justify-content: flex-end;
@@ -731,7 +738,6 @@
   }
 
   .conversation-flow.is-collapsed .conversation-flow__work-navigation {
-    left: auto;
     right: max(8px, env(safe-area-inset-right));
   }
 }

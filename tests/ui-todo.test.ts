@@ -29,9 +29,9 @@ async function main() {
     const L = (a: string, b: string, c: string) => ({ todos: [{ title: "Read it", status: a }, { title: "Write it", status: b }, { title: "Check it", status: c }] });
     app.script.push(
       { tools: [{ name: "todo", args: L("in-progress", "not-started", "not-started") }] },
-      { tools: [{ name: "bash", args: { command: "sleep 1" } }] },
+      { tools: [{ name: "terminal", args: { command: "sleep 1" } }] },
       { tools: [{ name: "todo", args: L("completed", "in-progress", "not-started") }] },
-      { tools: [{ name: "bash", args: { command: "sleep 6" } }] },
+      { tools: [{ name: "terminal", args: { command: "sleep 6" } }] },
       { text: "All done." },
     );
     await page.fill('textarea[aria-label="Ask Autora"]', "do three things");

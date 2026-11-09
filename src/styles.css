@@ -7888,6 +7888,12 @@ body.is-resizing iframe { pointer-events: none; }
   border-bottom-right-radius: var(--r-lg); opacity: 0.7;
 }
 .pa-resize:hover { opacity: 1; }
+/* A maximised window fills the room and has nothing to resize: no grip, which on a phone lay over the editor's own All
+   tools button in that corner and swallowed the tap. */
+.pw-engine.is-max > .pa-resize, .pa-surface.is-max > .pa-resize { display: none; }
+/* Mid-gesture (a window or a piece being moved or resized, Board.tsx holdBoard) the editors' frames let the pointer pass:
+   a drag crossing into one was taken by it, and the move or resize stopped where the frame began. */
+.pa-board.is-gesturing iframe { pointer-events: none; }
 /* Where work went between the apps (Board.tsx flowLines): a line between two windows, an arrow halfway, what went. */
 .pa-flows { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; z-index: 0; }
 .pa-flow line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 5; opacity: 0.75; }

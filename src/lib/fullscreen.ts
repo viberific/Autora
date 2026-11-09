@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { createContext, useContext, useSyncExternalStore } from "react";
 
 /**
  * Whether a tool is full screen on a phone. One flag for all of them (the
@@ -24,4 +24,18 @@ const subscribe = (l: () => void) => {
 
 export function useFullscreen(): [boolean, (next: boolean) => void] {
   return [useSyncExternalStore(subscribe, () => on, () => false), setFullscreen];
+}
+
+/**
+ * A window on the Panacea board. There "full screen" is the board's own Maximise for that window (the whole room there is
+ * for work, at its real size), and on a phone the conversation sheet drops to its strip as well; the window's Full screen
+ * button and its title bar's Maximise are one control. Outside the board a window has no frame and uses the flag above.
+ */
+export const EngineFrame = createContext<{ full: boolean; setFull: (next: boolean) => void } | null>(null);
+
+/** Whether this window is full screen, and how to change it: the board's frame when it has one, else the shared flag. */
+export function useWindowFull(): [boolean, (next: boolean) => void] {
+  const frame = useContext(EngineFrame);
+  const shared = useFullscreen();
+  return frame ? [frame.full, frame.setFull] : shared;
 }

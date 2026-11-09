@@ -206,14 +206,14 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  On a desktop the chat with Autora now sits on the left of the canvas,
-  beside the app rail; drag its right edge to resize it. Bug fixes and a
-  visual polish pass too. Replies keep the space after a
-  heading, list, table, code block or quote, and a second message from the
-  agent in the same turn starts its own paragraph instead of joining the last
-  word. Empty pages share one look, Artifacts hides its filters until there
-  is a file, checkboxes and the Usage figures follow the theme, the chat's
-  menu arrow sits beside its name, and on a phone every provider shows
-  before a model is connected. A secret nested deep in a tool call is now
-  blanked, merged files keep their Windows line endings, the automation
-  count shows only runs going now, and the Logs page copes with an odd limit.
+  On a desktop the chat with Autora now sits on the left of the canvas;
+  drag its right edge to resize it. A window's Full screen now maximises it
+  on the canvas, and on a phone the chat drops to its strip so the window
+  gets the screen. Fixes: a maximised window's corner no longer blocks the
+  editor's All tools button; moving or resizing a window over an editor no
+  longer stops part-way; the agent's hand scrolls a page clear of the tool
+  tray before writing on it; a tool pinned in the PDF bar shows up; a memory
+  rewrite waiting for your answer is never folded away; replies keep their
+  paragraph spacing and a second message no longer joins the last word;
+  secrets nested deep in a tool call are blanked; merged files keep their
+  line endings. Empty pages, checkboxes and the Usage figures got a polish.

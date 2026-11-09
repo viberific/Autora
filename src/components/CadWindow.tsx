@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useFullscreen } from "../lib/fullscreen";
+import { useWindowFull } from "../lib/fullscreen";
 import { SaveButton, keptAs, settle } from "./SaveButton";
 import { LoadButton } from "./LoadButton";
 import { cadStateNow, onCadHand, onCadState, useCadState } from "../lib/caddesk";
@@ -48,7 +48,7 @@ export function CadWindow({ sessionId, phone }: { sessionId: string; phone: bool
   /** The newest revision the frame is known to have: loaded into it, or made in it. */
   const known = useRef(-1);
   const [trouble, setTrouble] = useState<string | null>(null);
-  const [full, setFull] = useFullscreen();
+  const [full, setFull] = useWindowFull();
   /* The agent's cursor goes with its changes (the frame draws it: it knows where the toolbar and the shapes are). */
   const [cursorOn] = useAgentCursor();
   const cursorRef = useRef(cursorOn);

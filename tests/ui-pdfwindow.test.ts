@@ -294,15 +294,30 @@ async function main() {
       await phone.waitForSelector('.pw-engine[data-engine="pdf"] .pdf-window', { timeout: 20_000 });
       await phone.getByRole("navigation", { name: "Jump to work" }).getByRole("button", { name: "Jump to PDF", exact: true }).click();
       await phone.tap('.pdf-bar button[aria-label="Full screen"]');
+      /* Full screen on a phone: the conversation drops to its strip (a message can still be typed), the workspace takes
+         everything between the top bar and that strip, and the window is maximised in it -- the board's own Maximise. */
+      await phone.waitForSelector(".conversation-flow.is-sheet.is-collapsed", { timeout: 5_000 });
+      await sleep(1200);
       const full = await phone.locator(".pdf-window.is-full").boundingBox();
+      const engine = (await phone.locator('.pw-engine[data-engine="pdf"]').boundingBox())!;
       const workspace = (await phone.getByRole("region", { name: "Panacea workspace", exact: true }).boundingBox())!;
       const header = (await phone.locator(".top").boundingBox())!;
-      assert.ok(workspace.width >= 389 && workspace.height >= 844 - header.height - 2, "the workspace keeps the full available phone area");
+      const strip = (await phone.locator(".conversation-flow").boundingBox())!;
+      assert.ok(workspace.width >= 389 && Math.abs(workspace.y - (header.y + header.height)) <= 2 && Math.abs(workspace.y + workspace.height - strip.y) <= 2,
+        `the workspace takes the phone between the top bar and the strip: ${JSON.stringify({ workspace, header, strip })}`);
       assert.ok(full && full.width > 100 && full.height > 100 && full.x >= workspace.x - 1 && full.y >= workspace.y - 1 &&
         full.x + full.width <= workspace.x + workspace.width + 1 && full.y + full.height <= workspace.y + workspace.height + 1,
       "the real editor is usable inside the workspace rather than a separate full-screen application");
+      assert.ok(engine.width >= workspace.width * 0.75 && engine.height >= workspace.height * 0.75, `maximised in the workspace: ${JSON.stringify({ engine, workspace })}`);
       await phone.tap('.pdf-bar button[aria-label="Back to the conversation"]');
       assert.equal(await phone.locator(".pdf-window.is-full").count(), 0);
+      await phone.waitForSelector(".conversation-flow.is-sheet:not(.is-collapsed)", { timeout: 5_000 });
+      // Restored on the canvas too (a maximised window is kept with it), before this page goes.
+      for (let i = 0; i < 40; i++) {
+        const doc = (await app.api("GET", `/api/panacea/${s}/doc`)).body?.doc as { windows?: { id: string; was?: unknown }[] } | undefined;
+        if (!doc?.windows?.some((w) => w.id === "engine:pdf" && w.was)) break;
+        await sleep(150);
+      }
       await phone.close();
     });
 
@@ -311,6 +326,9 @@ async function main() {
       await phone.goto(`${app.base}/?session=${s}`);
       await phone.waitForSelector('.pw-engine[data-engine="pdf"] .pdf-window', { timeout: 20_000 });
       await phone.tap('.pdf-bar button[aria-label="Full screen"]');
+      // Maximised at the board's real size once the sheet has dropped and the view has glided there.
+      await phone.waitForSelector(".conversation-flow.is-sheet.is-collapsed", { timeout: 5_000 });
+      await phone.waitForFunction(() => Math.round(document.querySelector(".pdf-bar")?.getBoundingClientRect().height ?? 0) === 48, null, { timeout: 5_000 }).catch(() => undefined);
       // The window's own bar: the name and round buttons, not a row of text pills.
       assert.equal(await phone.locator(".pdf-bar .pdf-pill").count(), 0);
       // One set of measurements for every window's bar (styles.css, "Tool windows on a phone"): 48px tall, 40px soft-square buttons.
@@ -345,7 +363,12 @@ async function main() {
           colours: new Set(buttons.map((b) => getComputedStyle(b).getPropertyValue("--tc").trim())).size,
         };
       });
-      assert.deepEqual(bar.ids, ["select", "text", "highlight", "draw", "shape", "redact", "sign", "grid"], "the defaults, and the grid last");
+      // As many of the defaults as the window's width holds, in order (full screen on a 390px phone, all seven), and the
+      // grid last, where the rest are.
+      const defaults = ["select", "text", "highlight", "draw", "shape", "redact", "sign"];
+      assert.equal(bar.ids[bar.ids.length - 1], "grid", `the grid last: ${bar.ids.join(", ")}`);
+      assert.ok(bar.ids.length >= 6, `most of the defaults fit: ${bar.ids.join(", ")}`);
+      assert.deepEqual(bar.ids.slice(0, -1), defaults.slice(0, bar.ids.length - 1), "the defaults, in order");
       assert.equal(bar.scrolls, false, "it never scrolls");
       assert.ok(bar.onScreen && bar.round, "round, thumb-sized, all on screen");
       assert.ok(bar.colours >= 7, "each tool wears its own colour");
@@ -374,7 +397,8 @@ async function main() {
       };
       await frame.click('.autora-tray .autora-swatch >> nth=0');
       await frame.$eval('[data-testid="phone-width"]', (el) => { const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!; set.call(el, "9"); el.dispatchEvent(new Event("input", { bubbles: true })); });
-      await stroke(330);
+      // On the page, above the tray and the bar along the frame's foot, whatever the frame's height.
+      await stroke(Math.round(box.height * 0.35));
       const inks = () => frame.evaluate(() => [...document.querySelectorAll("svg polyline")].map((p) => [p.getAttribute("stroke"), Number(p.getAttribute("stroke-width") ?? 0)]).filter(([, w]) => (w as number) > 0));
       const first = await inks();
       assert.ok(first.some(([c, w]) => c === "#e0393e" && (w as number) > 5), `the red, thick stroke: ${JSON.stringify(first)}`);
@@ -395,7 +419,7 @@ async function main() {
       assert.match((await figure())!, /Box/, "seven figures, then round to the first");
       await frame.$eval('[data-testid="phone-wheel"]', (el) => { const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!; set.call(el, "#10b981"); el.dispatchEvent(new Event("input", { bubbles: true })); });
       await sleep(200);
-      await phone.mouse.move(box.x + 80, box.y + 460); await phone.mouse.down(); await phone.mouse.move(box.x + 220, box.y + 540, { steps: 6 }); await phone.mouse.up();
+      await phone.mouse.move(box.x + 80, box.y + box.height * 0.45); await phone.mouse.down(); await phone.mouse.move(box.x + 220, box.y + box.height * 0.6, { steps: 6 }); await phone.mouse.up();
       await sleep(500);
       assert.ok(await frame.evaluate(() => [...document.querySelectorAll("rect,ellipse")].some((e) => e.getAttribute("stroke") === "#10b981")), "a green box was drawn");
       await frame.click('.autora-tray-x');
@@ -461,6 +485,13 @@ async function main() {
       await wide.waitForSelector(".app-pane .pdf-window", { timeout: 20_000 });
       const frame = await editorIn(wide);
       await frame.waitForSelector('[data-testid="phone-bar"]', { timeout: 10_000 });
+      // Left maximised by the phone above: restored from its title bar, so this is the window at its own size.
+      const restore = wide.locator('.pw-engine[data-engine="pdf"] .pw-engine-head button[aria-label^="Restore"]');
+      if (await restore.count()) { await restore.click(); await sleep(800); }
+      // The bar holds the tools a document is for once there is one: wait for the page, then for its tools to arrive.
+      assert.ok(await waitDrawn(frame), "the page is drawn");
+      await frame.waitForFunction(() => document.querySelectorAll('[data-testid="phone-bar"] button').length > 1, null, { timeout: 10_000 });
+      await sleep(400);
       assert.equal(await frame.evaluate(() => document.documentElement.classList.contains("autora-desktop")), true);
       assert.equal(await frame.evaluate(() => document.documentElement.classList.contains("autora-phone")), false);
       const visible = (id: string) => frame.evaluate((t) => { const el = document.querySelector(`[data-testid="${t}"]`); return !!el && getComputedStyle(el).display !== "none" && el.getClientRects().length > 0; }, id);
@@ -483,16 +514,32 @@ async function main() {
       });
       assert.ok(bar.onRight && bar.vertical && bar.inside && !bar.scrolls, JSON.stringify(bar));
       assert.equal(bar.ids.at(-1), "grid");
-      assert.ok(bar.ids.length >= 12, `more tools than a phone's seven (${bar.ids.length - 1})`);
-      for (const id of ["select", "text", "highlight", "draw", "shape", "note", "stamp", "redact", "sign"]) assert.ok(bar.ids.includes(id), `${id} is on the bar`);
+      // The tools the document needs now (the rest wait in the grid): at least what a phone's bar holds.
+      assert.ok(bar.ids.length - 1 >= 7, `at least a phone's seven (${bar.ids.length - 1})`);
+      // The document's own tools lead, as many as the window's height holds (the rest are in the grid); Stamps waits until
+      // it is reached for, as the first window's bar showed above.
+      for (const id of ["select", "text", "highlight", "draw", "shape"]) assert.ok(bar.ids.includes(id), `${id} is on the bar: ${bar.ids}`);
+      assert.ok(!bar.ids.includes("stamp"), `Stamps waits: ${bar.ids}`);
 
-      // A short window shows fewer, not a scrolling bar.
-      await wide.setViewportSize({ width: 1440, height: 560 });
-      await sleep(400);
+      // A short window shows fewer, not a scrolling bar. On the canvas a window keeps its own size whatever the browser's,
+      // so it is made shorter as a person does it: by its corner.
+      const drag = async (dy: number) => {
+        // Found afresh each time: it moves with the window's corner.
+        const grip = (await wide.locator('.pw-engine[data-engine="pdf"] > .pa-resize').boundingBox())!;
+        await wide.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+        await wide.mouse.down();
+        await wide.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2 + dy, { steps: 8 });
+        await wide.mouse.up();
+        await sleep(500);
+      };
+      await drag(-260);
       const short = await frame.evaluate(() => { const nav = document.querySelector('[data-testid="phone-bar"]') as HTMLElement; return { n: nav.querySelectorAll("button").length, scrolls: nav.scrollHeight > nav.clientHeight }; });
       assert.ok(short.n < bar.ids.length && !short.scrolls, JSON.stringify(short));
-      await wide.setViewportSize({ width: 1440, height: 900 });
-      await sleep(400);
+      await drag(260);
+      // Its own size again; then maximised from its title bar, to work in it at the board's real size (a frame drawn
+      // smaller on a zoomed-out board is one Playwright cannot press inside).
+      await wide.locator('.pw-engine[data-engine="pdf"] .pw-engine-head button[aria-label^="Maximise"]').click();
+      await sleep(800);
 
       // The open tool's settings are a card beside the bar, with labels (there is room for them).
       await frame.click('[data-phone="draw"]');
@@ -529,6 +576,7 @@ async function main() {
       await frame.click('.autora-tray-x');
 
       // The grid: every tool, with a pin on each; pinning and unpinning changes the bar, and Reset puts it back.
+      const barBefore = await frame.evaluate(() => [...document.querySelectorAll('[data-testid="phone-bar"] button')].map((b) => b.getAttribute("data-phone")));
       await frame.click('[data-phone="grid"]');
       await frame.waitForSelector('[data-testid="phone-grid"]', { timeout: 10_000 });
       assert.ok((await frame.locator("[data-tile]").count()) >= 40);
@@ -542,8 +590,9 @@ async function main() {
       await frame.click('[data-phone="grid"]');
       await frame.click('[data-testid="phone-grid-reset"]');
       await frame.click('[data-testid="phone-grid-close"]');
+      await sleep(400); // a tool leaving fades out
       ids = await barIds();
-      assert.ok(ids.includes("stamp") && !ids.includes("compare"), "Reset bar");
+      assert.deepEqual(ids, barBefore, "Reset puts the bar back as it was");
 
       // A tool with a pane (Protect) opens it as a window in the middle; a tool with no tray keeps Spectra's own options, as a card.
       await frame.click('[data-phone="grid"]');

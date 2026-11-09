@@ -241,6 +241,11 @@ async function scrollTo(el: HTMLElement, fy = 0.5): Promise<void> {
   if (want > top + height * 0.15 && want < top + height * 0.8) return;
   const by = want - (top + height * 0.4);
   if (!scroller) { el.scrollIntoView({ block: "center", behavior: "smooth" }); await sleep(450); return; }
+  await wheel(scroller, by);
+}
+
+/** Scroll by this much, smoothly, as a wheel does. */
+async function wheel(scroller: HTMLElement, by: number): Promise<void> {
   const from = scroller.scrollTop;
   const ms = Math.min(900, 250 + Math.abs(by) * 0.4);
   const start = performance.now();
@@ -253,17 +258,47 @@ async function scrollTo(el: HTMLElement, fy = 0.5): Promise<void> {
   await sleep(120);
 }
 
+/**
+ * The place about to be worked on, out from under whatever floats over the page there -- a tool's options tray stands
+ * over the right of the document on a desktop, centred on the height a place is scrolled to. A person scrolls the page
+ * a little until the spot is clear; so does this, above the cover or below it, whichever fits in the view.
+ */
+async function keepClear(cell: HTMLElement, box: () => { left: number; top: number; right: number; bottom: number }): Promise<void> {
+  const scroller = scrollerOf(cell);
+  if (!scroller) return;
+  const b = box();
+  const covers = [
+    under(b.left + 1, b.top + 1), under(b.right - 1, b.top + 1), under(b.left + 1, b.bottom - 1), under(b.right - 1, b.bottom - 1),
+    under((b.left + b.right) / 2, (b.top + b.bottom) / 2),
+  ].filter((el) => !cell.contains(el) && !el.contains(cell));
+  if (!covers.length) return;
+  const over = (covers[0].closest("section, aside, [role=dialog], .autora-tray") ?? covers[0]).getBoundingClientRect();
+  const view = scroller.getBoundingClientRect();
+  const margin = 16;
+  const up = b.bottom - (over.top - margin);       // scroll down by this: the box ends above the cover
+  const down = b.top - (over.bottom + margin);     // scroll up by this (negative): the box starts below it
+  const fitsAbove = over.top - margin - (b.bottom - b.top) >= view.top + margin;
+  const fitsBelow = over.bottom + margin + (b.bottom - b.top) <= view.bottom - margin;
+  const by = fitsAbove && (!fitsBelow || Math.abs(up) <= Math.abs(down)) ? up : fitsBelow ? down : 0;
+  if (by) await wheel(scroller, by);
+}
+
 /** A place on a page, from the agent's points (top-left of the page as shown) to this screen. */
-async function onPage(page: number, x: number, y: number, h = 0): Promise<(px: number, py: number) => { x: number; y: number }> {
+async function onPage(page: number, x: number, y: number, h = 0, w = 0): Promise<(px: number, py: number) => { x: number; y: number }> {
   const cell = await waitFor(() => pageCell(page), 4000);
   if (!cell) throw new Skip(`page ${page} is not in the editor`);
   const nw = Number(cell.dataset.naturalW) || 612;
   const nh = Number(cell.dataset.naturalH) || 792;
   await scrollTo(cell, Math.min(1, Math.max(0, (y + h / 2) / nh)));
-  return (px, py) => {
+  const to = (px: number, py: number) => {
     const r = cell.getBoundingClientRect();
     return { x: r.left + (px / nw) * r.width, y: r.top + (py / nh) * r.height };
   };
+  await keepClear(cell, () => {
+    const a = to(x, y), b = to(x + Math.max(w, 8), y + Math.max(h, 8));
+    return { left: a.x, top: a.y, right: b.x, bottom: b.y };
+  });
+  return to;
 }
 
 /** Waits until a button has stopped moving (the bar grows and shrinks as the work needs tools), so the press lands where it was aimed. */
@@ -448,7 +483,7 @@ async function addItem(item: Item): Promise<void> {
       const h = num(item.height, lines.length * size * 1.5 + 6);
       await pickTool("text");
       await pickColour(item.color);
-      const to = await onPage(page, x, y, h);
+      const to = await onPage(page, x, y, h, w);
       const a = to(x, y), b = to(x + w, y + h);
       await drag([a, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, b], 420);
       const box = await openEditor();

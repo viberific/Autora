@@ -670,6 +670,9 @@ function Rail() {
     if (now.some((id) => !used.has(id))) setUsed((cur) => new Set([...cur, ...now]));
   }, [open, used]);
   const ids = PHONE ? PHONE_DEFAULT : pins;
+  // A tool the person pinned beyond the defaults is one they want on the bar, as much as one they have reached for:
+  // without this a pinned Compare waited in the grid, and the pin did nothing to be seen.
+  const wanted = useMemo<ReadonlySet<string>>(() => (PHONE ? used : new Set([...used, ...pins.filter((id) => !DESKTOP_DEFAULT.includes(id))])), [used, pins]);
   const left = useLeftHost();
   // A desktop's left side is the file menu and the pages: open it once, and leave it however the person puts it after that.
   const opened = useRef(false);
@@ -684,7 +687,7 @@ function Rail() {
       {!PHONE && left && <LeftPanel host={left} open={open} />}
       {tray && <Tray mode={tray} />}
       {redact && <RedactTray />}
-      <Bar open={open} used={used} slots={slots} ids={ids} onGrid={() => setGrid(true)} onPick={pick} />
+      <Bar open={open} used={wanted} slots={slots} ids={ids} onGrid={() => setGrid(true)} onPick={pick} />
       {grid && <Grid open={open} slots={slots} pins={pins.slice(0, slots)} setPins={setPins} onClose={() => setGrid(false)} onPick={pick} toast={say} />}
       {menu && <Menu onClose={() => setMenu(false)} />}
       <EscapeCloses active={grid || menu} onClose={() => { setGrid(false); setMenu(false); }} />

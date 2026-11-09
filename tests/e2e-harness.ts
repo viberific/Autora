@@ -126,7 +126,13 @@ export async function startApp(opts: { env?: Record<string, string>; port?: numb
         body,
       };
       seen.push(view);
-      const reply = (app.decide?.(view)) ?? app.script.shift() ?? { text: "ok" };
+      /* Autora's own housekeeping (server/context.ts condensing a long thread) is answered here, not from the test's
+         script: a test of a long conversation had its next scripted tool call taken by the compactor, and the turn it
+         was meant for got "Done." with nothing run. */
+      const housekeeping = /compress an AI agent's working context/.test(view.system);
+      const reply = housekeeping
+        ? { text: "## Task state\n- (condensed by the test model)" }
+        : (app.decide?.(view)) ?? app.script.shift() ?? { text: "ok" };
       if (reply.status) {
         res.statusCode = reply.status;
         res.setHeader("content-type", "application/json");
