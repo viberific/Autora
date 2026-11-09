@@ -164,33 +164,56 @@ body:has(.conversation-flow[data-moving]) iframe {
   outline-offset: 0;
 }
 
-/* Resize handles: a thin band on each edge and a square on each corner, invisible until used. */
+/* Resize handles. The corners are the main way to size the window (both ways at once): a generous square on each,
+   whose corner of the frame lights when the pointer is on it. Between them a thin band on each edge sizes one way. */
 .conversation-flow__size {
   position: absolute;
   z-index: 3;
   touch-action: none;
 }
 
-.conversation-flow__size[data-edge="n"] { top: -4px; left: 18px; right: 18px; height: 8px; cursor: ns-resize; }
-.conversation-flow__size[data-edge="s"] { bottom: -4px; left: 18px; right: 18px; height: 8px; cursor: ns-resize; }
-.conversation-flow__size[data-edge="e"] { right: -4px; top: 18px; bottom: 18px; width: 8px; cursor: ew-resize; }
-.conversation-flow__size[data-edge="w"] { left: -4px; top: 18px; bottom: 18px; width: 8px; cursor: ew-resize; }
-.conversation-flow__size[data-edge="ne"] { top: -4px; right: -4px; width: 22px; height: 22px; cursor: nesw-resize; }
-.conversation-flow__size[data-edge="sw"] { bottom: -4px; left: -4px; width: 22px; height: 22px; cursor: nesw-resize; }
-.conversation-flow__size[data-edge="nw"] { top: -4px; left: -4px; width: 22px; height: 22px; cursor: nwse-resize; }
-.conversation-flow__size[data-edge="se"] { bottom: -4px; right: -4px; width: 22px; height: 22px; cursor: nwse-resize; }
+.conversation-flow__size[data-edge="n"] { top: -4px; left: 26px; right: 26px; height: 8px; cursor: ns-resize; }
+.conversation-flow__size[data-edge="s"] { bottom: -4px; left: 26px; right: 26px; height: 8px; cursor: ns-resize; }
+.conversation-flow__size[data-edge="e"] { right: -4px; top: 26px; bottom: 26px; width: 8px; cursor: ew-resize; }
+.conversation-flow__size[data-edge="w"] { left: -4px; top: 26px; bottom: 26px; width: 8px; cursor: ew-resize; }
+.conversation-flow__size[data-edge="ne"] { top: -6px; right: -6px; width: 32px; height: 32px; cursor: nesw-resize; }
+.conversation-flow__size[data-edge="sw"] { bottom: -6px; left: -6px; width: 32px; height: 32px; cursor: nesw-resize; }
+.conversation-flow__size[data-edge="nw"] { top: -6px; left: -6px; width: 32px; height: 32px; cursor: nwse-resize; }
+.conversation-flow__size[data-edge="se"] { bottom: -6px; right: -6px; width: 32px; height: 32px; cursor: nwse-resize; }
+
+/* The lit corner: the frame's own curve, in the accent, under the pointer or the keyboard's focus. */
+.conversation-flow__size:not([data-edge="n"]):not([data-edge="s"]):not([data-edge="e"]):not([data-edge="w"])::after {
+  content: "";
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border: 0 solid var(--accent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-1) var(--ease);
+}
+
+.conversation-flow__size[data-edge="ne"]::after { top: 5px; right: 5px; border-top-width: 2px; border-right-width: 2px; border-top-right-radius: var(--r-xl); }
+.conversation-flow__size[data-edge="nw"]::after { top: 5px; left: 5px; border-top-width: 2px; border-left-width: 2px; border-top-left-radius: var(--r-xl); }
+.conversation-flow__size[data-edge="se"]::after { bottom: 5px; right: 5px; border-bottom-width: 2px; border-right-width: 2px; border-bottom-right-radius: var(--r-xl); }
+.conversation-flow__size[data-edge="sw"]::after { bottom: 5px; left: 5px; border-bottom-width: 2px; border-left-width: 2px; border-bottom-left-radius: var(--r-xl); }
+
+.conversation-flow__size:hover::after,
+.conversation-flow__size:active::after,
+.conversation-flow__size:focus-visible::after,
+.conversation-flow.is-float[data-moving="size"] .conversation-flow__size:hover::after {
+  opacity: 1;
+}
 
 .conversation-flow__size[data-edge="se"]:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -6px;
-  border-radius: var(--r-sm);
+  outline: none;
 }
 
 @media (pointer: coarse) {
   .conversation-flow__size[data-edge="n"], .conversation-flow__size[data-edge="s"] { height: 20px; }
   .conversation-flow__size[data-edge="e"], .conversation-flow__size[data-edge="w"] { width: 20px; }
-  .conversation-flow__size[data-edge$="e"]:not([data-edge="e"]),
-  .conversation-flow__size[data-edge$="w"]:not([data-edge="w"]) { width: 32px; height: 32px; }
+  .conversation-flow__size[data-edge="ne"], .conversation-flow__size[data-edge="nw"],
+  .conversation-flow__size[data-edge="se"], .conversation-flow__size[data-edge="sw"] { width: 44px; height: 44px; }
 }
 
 .conversation-flow__column {
@@ -315,7 +338,7 @@ body:has(.conversation-flow[data-moving]) iframe {
   padding: 11px 14px;
   border: 1px solid var(--glass-line);
   border-radius: var(--r-lg);
-  background: rgba(var(--s1-rgb), 0.42);
+  background: var(--glass);
   box-shadow: var(--glass-shine);
   align-self: flex-start;
   min-width: 0;
@@ -383,7 +406,7 @@ body:has(.conversation-flow[data-moving]) iframe {
 }
 
 .conversation-flow__entry .composer-box {
-  background: rgba(var(--s1-rgb), 0.45);
+  background: var(--glass);
   border-color: var(--glass-line);
   box-shadow: var(--glass-shine), var(--shadow);
 }
@@ -495,7 +518,7 @@ body:has(.conversation-flow[data-moving]) iframe {
   }
 
   .conversation-flow.is-sheet.is-full::before {
-    background: var(--s1);
+    background: var(--solid-1);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }

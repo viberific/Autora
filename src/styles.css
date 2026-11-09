@@ -132,12 +132,12 @@
   /* Glass: the frosted, translucent surfaces the app is built from (docs/DESIGN.md). Each is mixed from the theme's
      own surfaces, so every theme frosts in its own tint. --glass is a floating pane over moving work, --glass-strong a
      pane that text is read on, --glass-soft the app's standing chrome over the background's light. */
-  --glass: rgba(var(--s2-rgb), 0.5);
-  --glass-strong: rgba(var(--s1-rgb), 0.8);
-  --glass-soft: rgba(var(--s1-rgb), 0.55);
+  --glass: rgba(var(--s2-rgb), 0.2);
+  --glass-strong: rgba(var(--s1-rgb), 0.3);
+  --glass-soft: rgba(var(--s1-rgb), 0.2);
   /* The conversation's pane: thin enough that the work behind it is seen, frosted, with a pale veil over it so it reads
      as glass and not as a darker patch. */
-  --glass-thin: rgba(var(--s2-rgb), 0.3);
+  --glass-thin: rgba(var(--s2-rgb), 0.2);
   --glass-veil: linear-gradient(rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.06));
   --glass-sheen: linear-gradient(155deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.015) 42%, rgba(255, 255, 255, 0.03));
   --glass-line: rgba(255, 255, 255, 0.1);
@@ -9027,6 +9027,34 @@ header.top .top-work .stage-follow.visible-work.is-compact { width: var(--top-pi
    (the thread, a surface) never takes a filter itself: it would pin that
    content inside the pane (ConversationFlow.css frosts with ::before).
    ============================================================================ */
+/* Every surface in the app is glass. The surface tokens are solid on :root, where the embedded editors and the drawn
+   widgets read them (lib/frameTheme.ts and the windows' THEME_TOKENS resolve them from the document element and need
+   real colours); from the body down they are about a fifth opaque, so a pane on a pane on the page builds up like
+   panes of glass and the light behind shows through all of them. What must cover what is under it takes
+   --solid-1 / --solid-2, or is frosted (below). */
+:root { --solid-1: rgb(var(--s1-rgb)); --solid-2: rgb(var(--s2-rgb)); }
+body {
+  --s1: rgba(var(--s2-rgb), 0.2);
+  --s2: rgba(255, 255, 255, 0.05);
+  --s3: rgba(255, 255, 255, 0.09);
+  --s4: rgba(255, 255, 255, 0.14);
+}
+
+/* What floats over the work or the words is frosted: the blur is what keeps it readable at a fifth opaque. */
+.shot-picker, .slash-menu, .mode-menu, .mode-sel-sheet, .pane-follow, .gm-back, .shot-menu, .pa-summon, .pa-selbar,
+.pa-toast, .pa-proj, .agent-thought > span, .pa-panel, .todo-dock, .jump-pill, .notice {
+  background: var(--glass-sheen), var(--glass-veil), var(--glass);
+  border-color: var(--glass-line-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+/* What must hide what scrolls under it, or stand in for a window that is not there yet, stays solid. */
+.st-ruler-row, .st-corner, .st-head, .st-clip, .st-keys, .st-drum-name, .pa-table th, .pa-table-foot, .app-loading, .app-down,
+.pdf-window.is-phone .pdf-bar > .pdf-full-btn, .app-window.is-phone .app-bar > .app-full-btn {
+  --s1: var(--solid-1); --s2: var(--solid-2);
+}
+
 body::before {
   background:
     radial-gradient(55% 50% at 8% 4%, rgba(var(--accent-rgb), 0.26), transparent 70%),
@@ -9043,14 +9071,14 @@ body::before {
 }
 
 /* A phone's drawer slides over the app: a pane text is read on, over the scrim's frost. */
-.rail.is-drawer { background: var(--glass-sheen), var(--glass-strong); border-right: 1px solid var(--glass-line); }
+.rail.is-drawer { background: var(--glass-sheen), var(--glass-veil), var(--glass-strong); border-right: 1px solid var(--glass-line); }
 
 .top {
-  background: linear-gradient(180deg, rgba(var(--s2-rgb), 0.6), rgba(var(--s1-rgb), 0.4));
+  background: var(--glass-soft);
   border-bottom-color: var(--glass-line);
 }
 @media (min-width: 681px) {
-  .top { background: rgba(var(--s1-rgb), 0.35); backdrop-filter: none; }
+  .top { background: var(--glass-soft); backdrop-filter: none; }
 }
 
 .page {
@@ -9066,7 +9094,7 @@ body::before {
 .art-card,
 .tw-card,
 .bill-tile {
-  background: var(--glass-sheen), rgba(var(--s1-rgb), 0.5);
+  background: var(--glass-sheen), var(--glass);
   border-color: var(--glass-line);
   box-shadow: var(--glass-shine);
 }
@@ -9077,15 +9105,17 @@ body::before {
 .pa-board { background-color: transparent; }
 
 .pa-surface {
-  background: var(--glass-sheen), var(--glass-strong);
+  background: var(--glass-sheen), var(--glass-veil), var(--glass-strong);
   border-color: var(--glass-line);
   box-shadow: var(--shadow), var(--glass-shine);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
 }
 .pa-surface.is-focus { border-color: var(--accent-line); box-shadow: var(--shadow), var(--glass-shine), 0 0 0 3px rgba(var(--accent-rgb), 0.12); }
 
 /* Dialogs and sheets: the scrim frosts the app behind, and the pane itself is glass on top of that. */
 .modal {
-  background: var(--glass-sheen), var(--glass-strong);
+  background: var(--glass-sheen), var(--glass-veil), var(--glass-strong);
   border-color: var(--glass-line-strong);
   border-radius: var(--r-xl);
   box-shadow: var(--glass-shadow), var(--glass-shine);
@@ -9098,7 +9128,7 @@ body::before {
 .pw-jump-dock,
 .app-pop,
 .st-menu {
-  background: var(--glass-sheen), var(--glass);
+  background: var(--glass-sheen), var(--glass-veil), var(--glass);
   border-color: var(--glass-line-strong);
   box-shadow: var(--glass-shadow), var(--glass-shine);
   backdrop-filter: var(--glass-blur);
@@ -9115,14 +9145,14 @@ body::before {
 
 /* Pills and the message box speak the same glass. */
 .session-btn {
-  background: rgba(var(--s2-rgb), 0.55);
+  background: var(--glass);
   border-color: var(--glass-line);
   box-shadow: var(--glass-shine);
 }
-.session-btn:hover { background: rgba(var(--s2-rgb), 0.85); border-color: var(--glass-line-strong); }
+.session-btn:hover { background: var(--s3); border-color: var(--glass-line-strong); }
 
 .composer-box {
-  background: var(--glass-sheen), rgba(var(--s2-rgb), 0.6);
+  background: var(--glass-sheen), var(--glass);
   border-color: var(--glass-line);
 }
 .composer::before { background: none; }
