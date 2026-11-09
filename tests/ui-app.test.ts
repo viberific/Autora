@@ -11,6 +11,7 @@ import fs from "node:fs";
 import { chromium, type Page } from "playwright-core";
 import { sleep, startApp } from "./e2e-harness";
 import { CHROME } from "./chrome";
+import { openWorkButtons } from "./ui-workspace-ready";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -241,6 +242,7 @@ async function main() {
     await sleep(800);
     await test("the app is a tab in the pinned view, inside the screen, with thumb-sized tools", async () => {
       assert.equal(await p.getByRole("separator", { name: "Resize the conversation" }).count(), 0, "there is no left chat allocation");
+      await openWorkButtons(p);
       assert.equal(await p.getByRole("navigation", { name: "Jump to work" }).getByRole("button", { name: "Jump to Apps & code", exact: true }).count(), 1);
       const box = await p.locator(".app-canvas").boundingBox();
       assert.ok(box!.x >= 0 && box!.x + box!.width <= 390, "within the width");

@@ -96,10 +96,12 @@ test("a phone's retraction keeps history mounted and todos/composer outside the 
 test("desktop gets a move grip and resize handles on every edge; a phone gets the sheet handle", () => {
   const slots = { conversation: h("div", null, "history"), entry: h("textarea"), onToggle: () => undefined };
   const desktop = renderToStaticMarkup(h(ConversationFlow, { ...slots, workNavigation: h("i", { "data-slot": "navigation" }) }));
-  assert.match(desktop, /class="conversation-flow__bar"[^>]*><button class="conversation-flow__grip" type="button" aria-label="Move conversation"/);
+  // Two controls in its top corners: Move at the left, the pull at the right. No bar or line along its top.
+  assert.match(desktop, /<button class="conversation-flow__move" type="button" aria-label="Move conversation"/);
+  assert.doesNotMatch(desktop, /conversation-flow__bar|conversation-flow__grip/);
   for (const edge of ["n", "s", "e", "w", "ne", "nw", "se", "sw"]) assert.match(desktop, new RegExp(`class="conversation-flow__size" data-edge="${edge}"`));
-  assert.equal((desktop.match(/role="separator"/g) ?? []).length, 1, "one keyboard resize handle, the bottom-right corner");
-  assert.match(desktop, /data-edge="se" role="separator" tabindex="0" aria-label="Resize conversation"/);
+  assert.equal((desktop.match(/role="separator"/g) ?? []).length, 1, "one keyboard resize handle, the top-right pull");
+  assert.match(desktop, /data-edge="ne" role="separator" tabindex="0" aria-label="Resize conversation"[^>]*><svg/);
   assert.doesNotMatch(desktop, /role="slider"/);
   // The work rail stands on the world, not inside the window that floats over it.
   assert.ok(desktop.lastIndexOf("</div>", desktop.indexOf('data-slot="navigation"')) > desktop.indexOf("conversation-flow__entry"));
@@ -107,7 +109,7 @@ test("desktop gets a move grip and resize handles on every edge; a phone gets th
   const phone = renderToStaticMarkup(h(ConversationFlow, { ...slots, phone: true, sheet: "full" }));
   assert.match(phone, /conversation-flow is-sheet is-full/);
   assert.match(phone, /role="slider"[^>]*aria-label="Conversation size"[^>]*aria-valuenow="2"[^>]*aria-valuetext="Full"/);
-  assert.doesNotMatch(phone, /role="separator"|conversation-flow__grip|conversation-flow__size/);
+  assert.doesNotMatch(phone, /role="separator"|conversation-flow__move|conversation-flow__size/);
   const peek = renderToStaticMarkup(h(ConversationFlow, { ...slots, phone: true, collapsed: true }));
   assert.match(peek, /aria-valuenow="0"[^>]*aria-valuetext="Canvas only"/);
 });
@@ -181,6 +183,9 @@ test("on a desktop it floats over the world as glass, keeps the history mounted,
   // A window over the world, not a column of the layout: the canvas keeps the whole region.
   assert.match(css, /\.conversation-flow\.is-float\s*\{[^}]*position: absolute;[^}]*z-index: var\(--z-pop\);[^}]*left: 16px;[^}]*bottom: 16px;/);
   assert.match(css, /\.conversation-flow\.is-float\s*\{[^}]*border-radius: var\(--r-xl\);/);
+  // As tall as what has been said, up to the height it was given: no empty glass above a short chat.
+  assert.match(css, /\.conversation-flow\.is-float\s*\{[^}]*height: auto;[^}]*max-height: min\(640px, calc\(100% - 32px\)\);/);
+  assert.doesNotMatch(css, /conversation-flow__bar|conversation-flow__grip/);
   assert.match(css, /\.chat-view\.pw-full-workspace > \.pw-scene-stack\s*\{[^}]*position: relative;[^}]*flex: 1 1 0;/);
   // The frost is on ::before: a filter on the window would pin a maximised card or widget in the thread inside it.
   for (const rule of css.matchAll(/([^{}]+)\{([^}]*backdrop-filter: (?!none)[^}]*)\}/g)) {

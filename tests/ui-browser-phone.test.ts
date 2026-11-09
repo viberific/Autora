@@ -10,6 +10,7 @@ import fs from "node:fs";
 import { chromium } from "playwright-core";
 import { startApp } from "./e2e-harness";
 import { CHROME } from "./chrome";
+import { openWorkButtons } from "./ui-workspace-ready";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -36,6 +37,7 @@ async function main() {
     };
     await app.turn(s, "open the app's tools page", 120_000);
     await page.waitForSelector('.pw-engine[data-engine="browser"] .cell.shot', { timeout: 30_000 });
+    await openWorkButtons(page);
     await page.getByRole("navigation", { name: "Jump to work" }).getByRole("button", { name: "Jump to Web", exact: true }).click();
 
     await test("the toolbar is the window: no bar of its own, no tab strip for one tab, and thumb-sized buttons", async () => {

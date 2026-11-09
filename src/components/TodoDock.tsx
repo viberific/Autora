@@ -30,11 +30,29 @@ function currentOf(items: TodoItem[]): TodoItem | null {
  * from below, so following the work is watching one line change. Tap it to
  * see every task.
  */
-export const TodoDock = memo(function TodoDock({ items }: { items: TodoItem[] }) {
+/** How long after the list comes on screen a finished task is taken as history catching up (a chat being opened and
+    its log folded in), not as something happening in front of the person. */
+const SETTLE_MS = 600;
+
+export const TodoDock = memo(function TodoDock({ items, watching = true }: { items: TodoItem[]; watching?: boolean }) {
   const [open, setOpen] = useState(false);
   const done = items.filter((t) => t.status === "completed").length;
   const all = items.length > 0 && done === items.length;
   const current = currentOf(items);
+
+  /* The tick, the line through the words and the list opening by itself are for someone watching it happen. A task
+     finished while the person is on another page or in another app, or found already finished when a chat is opened
+     (its history arrives a moment after the list does), is simply ticked: nothing replays when they come back. */
+  const [visible, setVisible] = useState(() => typeof document === "undefined" || document.visibilityState !== "hidden");
+  useEffect(() => {
+    const onChange = () => setVisible(document.visibilityState !== "hidden");
+    document.addEventListener("visibilitychange", onChange);
+    return () => document.removeEventListener("visibilitychange", onChange);
+  }, []);
+  const since = useRef(0);
+  const seenRef = useRef<() => boolean>(() => false);
+  seenRef.current = () => visible && watching && since.current > 0 && performance.now() - since.current >= SETTLE_MS;
+  useEffect(() => { since.current = visible && watching ? performance.now() : 0; }, [visible, watching]);
 
   /* The task leaving, kept on screen just long enough to animate out. Only a
      change of task the person is watching animates: the first one shown, and
@@ -46,7 +64,7 @@ export const TodoDock = memo(function TodoDock({ items }: { items: TodoItem[] })
     if (id === shownId.current) return;
     const before = items.find((t) => t.id === shownId.current) ?? null;
     shownId.current = id;
-    if (before) setLeaving({ ...before, status: "completed" });
+    if (before && seenRef.current()) setLeaving({ ...before, status: "completed" });
   }, [current?.id, items]);
   useEffect(() => {
     if (!leaving) return;
@@ -99,21 +117,14 @@ export const TodoDock = memo(function TodoDock({ items }: { items: TodoItem[] })
     timer.current = window.setTimeout(pump, STEP_MS);
   };
   useEffect(() => () => { if (timer.current !== null) window.clearTimeout(timer.current); }, []);
-  /* Away from the screen (another app on a phone) nothing is drawn and timers are throttled, so tasks finished then
-     would be counted as seen. They are left unseen until the person is back, and the list opens for them then. */
-  const [visible, setVisible] = useState(() => typeof document === "undefined" || document.visibilityState !== "hidden");
   useEffect(() => {
-    const onChange = () => setVisible(document.visibilityState !== "hidden");
-    document.addEventListener("visibilitychange", onChange);
-    return () => document.removeEventListener("visibilitychange", onChange);
-  }, []);
-  useEffect(() => {
-    if (!visible) return;
     const before = doneIds.current;
     const now = new Set(items.filter((t) => t.status === "completed").map((t) => t.id));
     doneIds.current = now;
     const finished = [...now].filter((id) => !before.has(id));
     if (!finished.length) return;
+    // Not in front of the person (another page, another app, or a chat only now being opened): it is just ticked.
+    if (!seenRef.current()) return;
     if (!autoOpened.current && open) return;
     autoOpened.current = true;
     const running = timer.current !== null;
@@ -125,7 +136,7 @@ export const TodoDock = memo(function TodoDock({ items }: { items: TodoItem[] })
     timer.current = window.setTimeout(pump, running ? 0 : open ? 0 : OPEN_MS);
     // `open` is read only to leave a list the person opened alone.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [done, visible]);
+  }, [done]);
   const shownItems = unrevealed.length
     ? items.map((t) => (unrevealed.includes(t.id) ? { ...t, status: "in-progress" as const } : t))
     : items;

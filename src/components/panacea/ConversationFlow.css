@@ -36,7 +36,9 @@
   left: 16px;
   bottom: 16px;
   width: 400px;
-  height: min(640px, calc(100% - 32px));
+  /* As tall as what has been said, up to the height the person has given it: no empty glass above a short chat. */
+  height: auto;
+  max-height: min(640px, calc(100% - 32px));
   border: 1px solid var(--glass-line);
   border-radius: var(--r-xl);
   box-shadow: var(--glass-shadow), var(--glass-shine);
@@ -63,7 +65,7 @@
 }
 
 .conversation-flow.is-float.is-empty .conversation-flow__column {
-  padding-top: 28px;
+  padding-top: 36px;
 }
 
 /* A maximised card or expanded widget inside the thread goes above the rest of the app, as it does elsewhere. */
@@ -109,59 +111,59 @@ body:has(.conversation-flow[data-moving]) iframe {
 .conversation-flow.is-float[data-snap="right"]::after { right: -9px; }
 .conversation-flow.is-float[data-moving][data-snap]::after { opacity: 1; }
 
-/* The top bar: the whole strip moves the window, and its grip is the keyboard's way to (the arrow keys; Home and End
-   put it on the left or right). A double click puts it back at the bottom left. */
-.conversation-flow__bar {
+/* The window's two controls, in its top corners: Move at the top left (drag it; the arrow keys; Home and End put the
+   window on the left or right; a double click puts it back at the bottom left), and the pull at the top right, which
+   sizes the window both ways at once. */
+.conversation-flow__move {
   position: absolute;
-  top: 0;
-  left: 16px;
-  right: 16px;
+  top: 6px;
+  left: 6px;
+  /* Above the corner's own resize zone, which it stands in. */
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: 28px;
   height: 28px;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-3);
   cursor: grab;
   touch-action: none;
   user-select: none;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
 }
 
-.conversation-flow.is-float[data-moving="move"] .conversation-flow__bar {
+.conversation-flow__move:hover,
+.conversation-flow__move:focus-visible,
+.conversation-flow.is-float[data-moving="move"] .conversation-flow__move {
+  background: var(--s3);
+  color: var(--text);
+}
+
+.conversation-flow.is-float[data-moving="move"] .conversation-flow__move {
   cursor: grabbing;
+  color: var(--accent-light);
 }
 
-.conversation-flow__grip {
-  display: grid;
-  place-items: center;
-  width: 64px;
-  height: 20px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--r-pill);
-  background: transparent;
-  cursor: inherit;
-}
-
-.conversation-flow__grip > span {
-  width: 36px;
-  height: 4px;
-  border-radius: var(--r-pill);
-  background: var(--text-3);
-  opacity: 0.55;
-  transition: background var(--dur-1) var(--ease), opacity var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
-}
-
-.conversation-flow__bar:hover .conversation-flow__grip > span,
-.conversation-flow__grip:focus-visible > span,
-.conversation-flow.is-float[data-moving="move"] .conversation-flow__grip > span {
-  background: var(--accent);
-  opacity: 1;
-  transform: scaleX(1.25);
-}
-
-.conversation-flow__grip:focus-visible {
+.conversation-flow__move:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 0;
+}
+
+/* The thread holds itself to what it says, and scrolls once it would outgrow the window. */
+.conversation-flow.is-float .conversation-flow__conversation,
+.conversation-flow.is-float .thread-wrap,
+.conversation-flow.is-float .thread {
+  flex: 0 1 auto;
+}
+
+/* While the window is being sized it is shown at the whole height being chosen, not only what the chat fills. */
+.conversation-flow.is-float[data-moving="size"] .conversation-flow__conversation,
+.conversation-flow.is-float[data-moving="size"] .thread-wrap,
+.conversation-flow.is-float[data-moving="size"] .thread {
+  flex: 1 1 auto;
 }
 
 /* Resize handles. The corners are the main way to size the window (both ways at once): a generous square on each,
@@ -176,7 +178,23 @@ body:has(.conversation-flow[data-moving]) iframe {
 .conversation-flow__size[data-edge="s"] { bottom: -4px; left: 26px; right: 26px; height: 8px; cursor: ns-resize; }
 .conversation-flow__size[data-edge="e"] { right: -4px; top: 26px; bottom: 26px; width: 8px; cursor: ew-resize; }
 .conversation-flow__size[data-edge="w"] { left: -4px; top: 26px; bottom: 26px; width: 8px; cursor: ew-resize; }
-.conversation-flow__size[data-edge="ne"] { top: -6px; right: -6px; width: 32px; height: 32px; cursor: nesw-resize; }
+.conversation-flow__size[data-edge="ne"] {
+  top: -6px;
+  right: -6px;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
+  cursor: nesw-resize;
+  transition: color var(--dur-1) var(--ease);
+}
+
+.conversation-flow__size[data-edge="ne"]:hover,
+.conversation-flow__size[data-edge="ne"]:focus-visible,
+.conversation-flow.is-float[data-moving="size"] .conversation-flow__size[data-edge="ne"] {
+  color: var(--accent-light);
+}
 .conversation-flow__size[data-edge="sw"] { bottom: -6px; left: -6px; width: 32px; height: 32px; cursor: nesw-resize; }
 .conversation-flow__size[data-edge="nw"] { top: -6px; left: -6px; width: 32px; height: 32px; cursor: nwse-resize; }
 .conversation-flow__size[data-edge="se"] { bottom: -6px; right: -6px; width: 32px; height: 32px; cursor: nwse-resize; }
@@ -205,7 +223,7 @@ body:has(.conversation-flow[data-moving]) iframe {
   opacity: 1;
 }
 
-.conversation-flow__size[data-edge="se"]:focus-visible {
+.conversation-flow__size[data-edge="ne"]:focus-visible {
   outline: none;
 }
 
@@ -346,6 +364,41 @@ body:has(.conversation-flow[data-moving]) iframe {
   mask-image: var(--flow-edge-mask, none);
 }
 
+/* How a bubble arrives. What was said before is simply there; only the newest exchange moves, so opening a chat does
+   not set a whole history in motion. Yours springs up from the message box, growing out of its own tail; Autora's
+   settles in from its side, a little later and more quietly, with its mark landing after it. The fill is backwards
+   only: once it has arrived a bubble keeps no transform, so a card opened full screen from inside it is not held in it. */
+.conversation-flow .msg {
+  animation: none;
+}
+
+.conversation-flow .turn:last-of-type > .msg.user {
+  transform-origin: 100% 100%;
+  animation: flow-say var(--dur-3) var(--ease-spring) backwards;
+}
+
+.conversation-flow .turn:last-of-type > .msg.agent {
+  transform-origin: 0 100%;
+  animation: flow-reply var(--dur-3) var(--ease) backwards;
+}
+
+.conversation-flow .turn:last-of-type > .msg.agent > .avatar {
+  animation: flow-mark var(--dur-3) var(--ease-spring) var(--dur-1) backwards;
+}
+
+@keyframes flow-say {
+  from { opacity: 0; transform: translateY(20px) scale(0.86); }
+  55% { opacity: 1; }
+}
+
+@keyframes flow-reply {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+}
+
+@keyframes flow-mark {
+  from { opacity: 0; transform: scale(0.5); }
+}
+
 .conversation-flow .msg.user {
   margin-left: auto;
   align-self: flex-end;
@@ -385,9 +438,17 @@ body:has(.conversation-flow[data-moving]) iframe {
   margin-inline: 4px;
 }
 
+/* The to-do card and the message box are one piece: the card is the box's top, edge to edge, so the box's own top
+   corners are square under it and its top border is the line between them. */
 .conversation-flow__todos .todo-dock {
   width: 100%;
   margin: 0;
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+}
+
+.conversation-flow__todos + .conversation-flow__entry .composer-box {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
 }
 
 .conversation-flow__entry .composer {
@@ -566,7 +627,7 @@ body:has(.conversation-flow[data-moving]) iframe {
   }
 
   .conversation-flow__todos {
-    margin-inline: 2px;
+    margin-inline: 0;
   }
 
   /* While the sheet glides to its new height (see ConversationFlow.tsx) it clips what does not fit yet, may be
@@ -773,7 +834,8 @@ body:has(.conversation-flow[data-moving]) iframe {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .conversation-flow .msg {
+  .conversation-flow .turn:last-of-type > .msg,
+  .conversation-flow .turn:last-of-type > .msg.agent > .avatar {
     animation: none;
   }
 
@@ -783,7 +845,8 @@ body:has(.conversation-flow[data-moving]) iframe {
 
   .conversation-flow.is-float,
   .conversation-flow.is-float[data-moving="move"][data-snap],
-  .conversation-flow__grip > span,
+  .conversation-flow__move,
+  .conversation-flow__size[data-edge="ne"],
   .conversation-flow__handle > span {
     animation: none;
     transition: none;

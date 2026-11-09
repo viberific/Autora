@@ -21,6 +21,7 @@ import { chromium, type Frame, type Page } from "playwright-core";
 import { PDFDocument, StandardFonts } from "@cantoo/pdf-lib";
 import { sleep, startApp } from "./e2e-harness";
 import { CHROME } from "./chrome";
+import { openWorkButtons } from "./ui-workspace-ready";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -292,6 +293,7 @@ async function main() {
       const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
       await phone.goto(`${app.base}/?session=${s}`);
       await phone.waitForSelector('.pw-engine[data-engine="pdf"] .pdf-window', { timeout: 20_000 });
+      await openWorkButtons(phone);
       await phone.getByRole("navigation", { name: "Jump to work" }).getByRole("button", { name: "Jump to PDF", exact: true }).click();
       await phone.tap('.pdf-bar button[aria-label="Full screen"]');
       /* Full screen on a phone: the conversation drops to its strip (a message can still be typed), the workspace takes

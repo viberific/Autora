@@ -5,7 +5,7 @@ import path from "node:path";
 import { chromium } from "playwright-core";
 import { startApp } from "./e2e-harness";
 import { CHROME } from "./chrome";
-import { shrinkConversation } from "./ui-workspace-ready";
+import { openWorkButtons, shrinkConversation } from "./ui-workspace-ready";
 
 async function main() {
   const exe = CHROME;
@@ -42,11 +42,13 @@ async function main() {
       await dock.waitFor();
       await page.waitForTimeout(500); // it has just arrived with the work, and settles in
       assert.equal(await dock.count(), 1, "the jump dock is outside the transformed world, not copied into each surface");
+      await openWorkButtons(page);
       const jump = dock.getByRole("button", { name: "Jump to Music", exact: true });
       const first = await jump.boundingBox();
       await page.waitForTimeout(250);
       const last = await jump.boundingBox();
       assert.ok(first && last && Math.abs(first.x - last.x) < 1 && Math.abs(first.y - last.y) < 1, "jump controls do not move with the camera");
+      await openWorkButtons(page);
       await dock.getByRole("button", { name: "Jump to Music", exact: true }).click();
       const name = music.getByRole("textbox", { name: "Song name", exact: true });
       await name.fill("My work remains in the scene");
@@ -73,6 +75,7 @@ async function main() {
       for (const header of await page.locator(".conversation-flow .steps-top").all()) assert.equal(await header.getAttribute("aria-expanded"), "false");
       const documentCard = workspace.locator(".pa-surface.is-doc");
       await documentCard.waitFor();
+      await openWorkButtons(page);
       await dock.getByRole("button", { name: "Show all work", exact: true }).click();
       const allVisible = await workspace.locator(".pa-board").evaluate((node) => {
         const view = node.getBoundingClientRect();
@@ -83,6 +86,7 @@ async function main() {
         });
       });
       assert.ok(allVisible, "Show all fits native work and hosted engines in one camera");
+      await openWorkButtons(page);
       await dock.getByRole("button", { name: "Jump to Project notes", exact: true }).click();
       await retract();
       assert.equal(await music.getAttribute("data-kept-work"), "yes", "jumping did not reconstruct the engine");
@@ -96,14 +100,18 @@ async function main() {
       await page.waitForTimeout(600);
       assert.equal(await workspace.locator(".pa-world").getAttribute("style"), camera, "typing cannot shift the camera");
       const words = await editor.innerText();
+      await openWorkButtons(page);
       await dock.getByRole("button", { name: "Jump to Music", exact: true }).click();
       assert.equal(await name.inputValue(), "My work remains in the scene");
+      await openWorkButtons(page);
       await dock.getByRole("button", { name: "Jump to Project notes", exact: true }).click();
       assert.equal(await editor.innerText(), words, "the native document stayed mounted");
       const ask = page.getByRole("textbox", { name: "Ask Autora", exact: true });
       await ask.fill("Suggest two ways to organize these notes");
       assert.equal(await ask.inputValue(), "Suggest two ways to organize these notes");
+      await openWorkButtons(page);
       await dock.getByRole("button", { name: "Zoom out", exact: true }).click();
+      await openWorkButtons(page);
       await dock.getByRole("button", { name: "Show all work", exact: true }).click();
       assert.equal(await music.getAttribute("data-kept-work"), "yes");
       const caps = page.getByRole("button", { name: "Panacea capabilities", exact: true });

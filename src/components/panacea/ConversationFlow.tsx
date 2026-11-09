@@ -64,8 +64,8 @@ function onSheetSide(root: HTMLElement, x: number) {
 const EDGES: readonly Edge[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 
 /** Hosts the live Thread and native composer without taking ownership of either: a glass window floating over the
-    world on a desktop (moved by its top bar, resized from any edge, pulled onto the left or right side when brought
-    near it), a glass sheet floating over the foot of the canvas on a phone. */
+    world on a desktop (moved by the Move button in its top-left corner, sized by the pull in its top-right, pulled onto the left or
+    right side when brought near it), a glass sheet floating over the foot of the canvas on a phone. */
 export function ConversationFlow({
   conversation,
   entry,
@@ -135,15 +135,17 @@ export function ConversationFlow({
     if (next?.snap === "right") parent.style.setProperty("--flow-held-right", `${next.w + FLOAT_GAP}px`);
     else parent.style.removeProperty("--flow-held-right");
   };
-  const emptyRef = useRef(empty);
-  emptyRef.current = empty;
+  /* The box is the room the window may take; the window itself stands on the box's foot and is only as tall as what
+     has been said (its max-height is the box's), so a short chat leaves no empty glass above it. While it is being
+     sized it is drawn at the box's whole height, so the person sees the height they are choosing. */
   const place = (root: HTMLElement, next: FloatBox) => {
     const at = roomRef.current;
+    if (!at) return;
     root.style.left = `${next.x}px`;
     root.style.width = `${next.w}px`;
-    // With nothing said the window is only its message box, standing where the foot of the whole window would be.
-    if (emptyRef.current && at) root.style.bottom = `${at.h - next.y - next.h}px`;
-    else { root.style.top = `${next.y}px`; root.style.height = `${next.h}px`; }
+    root.style.bottom = `${at.h - next.y - next.h}px`;
+    root.style.maxHeight = `${next.h}px`;
+    root.style.height = gesture.current && gesture.current.kind !== "move" ? `${next.h}px` : "auto";
     if (next.snap) root.dataset.snap = next.snap; else delete root.dataset.snap;
     clear(root, next);
   };
@@ -182,14 +184,15 @@ export function ConversationFlow({
     const state = gesture.current;
     gesture.current = null;
     const root = rootRef.current;
-    if (root) delete root.dataset.moving;
+    if (root) { delete root.dataset.moving; root.style.height = "auto"; }
     if (!state) return;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     const moved = state.live.x !== state.start.x || state.live.y !== state.start.y || state.live.w !== state.start.w || state.live.h !== state.start.h;
     if (moved) onFloat?.(state.live);
   };
-  /** The arrow keys on the window's grip move it, and on its corner resize it; Home and End put it on the left or right. */
-  const keyFloat = (kind: "move" | "se") => (event: KeyboardEvent<HTMLElement>) => {
+  /** The arrow keys on Move move the window, and on the top-right pull size it (up is taller, right is wider); Home and
+      End on Move put it on the left or right. */
+  const keyFloat = (kind: "move" | "ne") => (event: KeyboardEvent<HTMLElement>) => {
     const current = boxRef.current;
     const at = roomRef.current;
     if (!current || !at) return;
@@ -200,7 +203,7 @@ export function ConversationFlow({
     if (kind === "move" && (event.key === "Home" || event.key === "End")) next = clampFloat({ ...current, snap: event.key === "Home" ? "left" : "right" }, at);
     // A key's step is shorter than the magnet's reach, so the magnet would never let a held window go: by keyboard it
     // is free the moment it steps off a side, and held again only when it is stepped right up against one.
-    else if (dx || dy) next = kind === "move" ? nudgeFloat(current, dx, dy, at) : resizeFloat(current, "se", dx, dy, at);
+    else if (dx || dy) next = kind === "move" ? nudgeFloat(current, dx, dy, at) : resizeFloat(current, "ne", dx, dy, at);
     if (!next) return;
     event.preventDefault();
     onFloat?.(next);
@@ -571,8 +574,7 @@ export function ConversationFlow({
     </div>
   );
   const floatStyle: CSSProperties | undefined = phone || !box || !room ? undefined
-    : empty ? { left: box.x, bottom: room.h - box.y - box.h, width: box.w, top: "auto", height: "auto" }
-    : { left: box.x, top: box.y, width: box.w, height: box.h, bottom: "auto" };
+    : { left: box.x, bottom: room.h - box.y - box.h, width: box.w, maxHeight: box.h, top: "auto", height: "auto" };
 
   return (
     <>
@@ -609,37 +611,42 @@ export function ConversationFlow({
         </div>
       ) : (
         <>
-          <div
-            className="conversation-flow__bar"
+          <button
+            className="conversation-flow__move"
+            type="button"
+            aria-label="Move conversation"
+            title="Move (drag; double-click to put it back)"
+            aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown Home End"
+            onKeyDown={keyFloat("move")}
             onPointerDown={beginGesture("move")}
             onPointerMove={moveGesture}
             onPointerUp={endGesture}
             onPointerCancel={endGesture}
             onDoubleClick={() => onFloat?.(null)}
           >
-            <button
-              className="conversation-flow__grip"
-              type="button"
-              aria-label="Move conversation"
-              aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown Home End"
-              onKeyDown={keyFloat("move")}
-            >
-              <span aria-hidden="true" />
-            </button>
-          </div>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+              <path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3" />
+            </svg>
+          </button>
           {EDGES.map((edge) => (
             <div
               key={edge}
               className="conversation-flow__size"
               data-edge={edge}
-              {...(edge === "se"
-                ? { role: "separator", tabIndex: 0, "aria-label": "Resize conversation", "aria-valuenow": box?.w, onKeyDown: keyFloat("se") }
+              {...(edge === "ne"
+                ? { role: "separator", tabIndex: 0, "aria-label": "Resize conversation", title: "Resize (drag)", "aria-valuenow": box?.w, onKeyDown: keyFloat("ne") }
                 : { "aria-hidden": true })}
               onPointerDown={beginGesture(edge)}
               onPointerMove={moveGesture}
               onPointerUp={endGesture}
               onPointerCancel={endGesture}
-            />
+            >
+              {edge === "ne" && (
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+                  <path d="M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7" />
+                </svg>
+              )}
+            </div>
           ))}
         </>
       )}

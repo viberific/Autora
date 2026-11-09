@@ -592,7 +592,7 @@ Spectra's fetched renderer is most of what is on disk.
   `src/lib/workspace.ts` maps capability ids to their context and phone file-kind aliases. Retained Office, PDF, video, music,
   3D, game, photo, app and browser engines run inside that shell alongside the native Canvas; their models, APIs, hand-work
   handlers and sandboxing are not replaced. `panacea/ConversationFlow.tsx` hosts the original Thread and composer docked beside the scene
-  (on desktop a glass window floating over the world, at the bottom left by default, moved by its top bar, resized from any edge,
+  (on desktop a glass window floating over the world, at the bottom left by default, as tall as its content up to the height it was given, moved by the Move button in its top-left corner, sized by the pull in its top-right,
   pulled onto the left or right side within `FLOAT_SNAP` and held there, its place and size remembered via `panacea/chatLayout.ts`
   (`defaultFloat`, `clampFloat`, `magnet`, `resizeFloat`); the work rail and the board's bottom row step aside for a window held to a
   side (`--flow-held-right`, `--flow-clear-*`), and `frameCoordinates.ts` keeps the camera's work clear of it; a three-height glass sheet floating over the foot of the canvas on a

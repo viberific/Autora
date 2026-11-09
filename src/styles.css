@@ -132,14 +132,16 @@
   /* Glass: the frosted, translucent surfaces the app is built from (docs/DESIGN.md). Each is mixed from the theme's
      own surfaces, so every theme frosts in its own tint. --glass is a floating pane over moving work, --glass-strong a
      pane that text is read on, --glass-soft the app's standing chrome over the background's light. */
-  --glass: rgba(var(--s2-rgb), 0.2);
-  --glass-strong: rgba(var(--s1-rgb), 0.3);
-  --glass-soft: rgba(var(--s1-rgb), 0.2);
+  /* How dark the glass is: the one value that darkens every pane in the app (0 is clear glass, 1 is black). */
+  --glass-dark: 0.42;
+  --glass: rgba(0, 0, 0, var(--glass-dark));
+  --glass-strong: rgba(0, 0, 0, calc(var(--glass-dark) + 0.12));
+  --glass-soft: rgba(0, 0, 0, var(--glass-dark));
   /* The conversation's pane: thin enough that the work behind it is seen, frosted, with a pale veil over it so it reads
      as glass and not as a darker patch. */
-  --glass-thin: rgba(var(--s2-rgb), 0.2);
-  --glass-veil: linear-gradient(rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.06));
-  --glass-sheen: linear-gradient(155deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.015) 42%, rgba(255, 255, 255, 0.03));
+  --glass-thin: rgba(0, 0, 0, var(--glass-dark));
+  --glass-veil: linear-gradient(rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.02));
+  --glass-sheen: linear-gradient(155deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.01) 42%, rgba(255, 255, 255, 0.02));
   --glass-line: rgba(255, 255, 255, 0.1);
   --glass-line-strong: rgba(255, 255, 255, 0.17);
   --glass-shine: inset 0 1px 0 rgba(255, 255, 255, 0.08);
@@ -6585,6 +6587,14 @@ button.dock-card:hover { border-color: var(--border-strong); }
 .pw-navigation-host { max-height: 100%; overflow-y: auto; overflow-x: hidden; }
 .pw-navigation-host .pw-jump-dock { position: static; max-width: none; width: fit-content; max-height: none; margin: 0; overflow-x: hidden; flex-wrap: nowrap; flex-direction: column; }
 .pw-navigation-host .pw-jump-dock button { flex-shrink: 0; }
+/* A phone: the buttons are smaller, and folded into one small round button until it is tapped (Board.tsx). */
+.pw-jump-dock.is-phone { gap: 3px; padding: 4px; border-radius: var(--r-pill); }
+.pw-jump-dock.is-phone button { width: 32px; height: 32px; border-radius: 50%; }
+.pw-jump-dock.is-phone button > svg { width: 15px; height: 15px; }
+.pw-jump-dock.is-phone:not(.is-open) { padding: 2px; }
+.pw-jump-dock.is-phone:not(.is-open) > button:not(.pw-jump-toggle) { display: none; }
+.pw-jump-dock.is-phone .pw-jump-toggle { background: transparent; color: var(--text-2); }
+.pw-jump-dock.is-phone.is-open > button:not(.pw-jump-toggle) { animation: paArrive var(--dur-2) var(--ease) both; }
 .pw-full-workspace .conversation-flow__entry .composer { width: 100%; max-width: none; margin: 0; }
 .conversation-flow .cell-note { width: fit-content; max-width: 100%; pointer-events: none; }
 .tool-choice { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
@@ -9034,8 +9044,8 @@ header.top .top-work .stage-follow.visible-work.is-compact { width: var(--top-pi
    --solid-1 / --solid-2, or is frosted (below). */
 :root { --solid-1: rgb(var(--s1-rgb)); --solid-2: rgb(var(--s2-rgb)); }
 body {
-  --s1: rgba(var(--s2-rgb), 0.2);
-  --s2: rgba(255, 255, 255, 0.05);
+  --s1: rgba(0, 0, 0, var(--glass-dark));
+  --s2: rgba(255, 255, 255, 0.045);
   --s3: rgba(255, 255, 255, 0.09);
   --s4: rgba(255, 255, 255, 0.14);
 }

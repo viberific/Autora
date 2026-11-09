@@ -206,12 +206,14 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Autora is glass now: every pane, card, menu and dialog is frosted and about
-  a fifth opaque, over a soft glow in your theme's colours. On a desktop the chat is a floating
-  window with rounded corners, opening at the bottom left with space around
-  it. Drag its top bar to move it anywhere over your work, pull a corner
-  (it lights up) to resize it, and bring it near the left or right side to have it
-  snap there. It remembers where you put it; double-click its bar to put it
-  back. The button that hid the chat is gone, and an empty chat is just the
-  message box. On a phone the chat is a glass sheet floating over the foot of the
-  canvas, and your work is framed above it.
+  Glass goes all the way through: every pane, card, menu and dialog is now
+  dark, frosted, see-through glass, so your work and the glow behind show
+  through. On a phone the chat is a glass sheet floating over the foot of
+  the canvas, with your work framed above it. An empty chat is just the
+  message box. On a desktop the chat is only as tall as what has been said,
+  with a Move button in its top-left corner and a resize pull in its top
+  right. Your message springs up from the box and Autora's reply
+  settles in beside it. The to-do card joins the message box edge to edge,
+  and a task that finished while you were on another page is simply ticked
+  instead of replaying when you come back. On a phone the jump, zoom and
+  show-all buttons fold into one small button until you tap it.

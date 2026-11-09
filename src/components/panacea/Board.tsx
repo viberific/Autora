@@ -4,7 +4,7 @@ import { GRID, PANEL_MAX_W, PANEL_MIN_W, snap, type Canvas, type Panel, type Sur
 import { maximise as maximiseWindow, placeWindow, raise as raiseWindow, tidy as tidyBoxes } from "../../lib/panacea/windows";
 import { KINDS } from "../../lib/panacea/kinds";
 import type { Recipe } from "../../lib/panacea/library";
-import { IconCode, IconCube, IconFile, IconGame, IconGlobe, IconImage, IconMusic, IconSparkle, IconTable, IconVideo, IconX, IconMaximize, IconTidy } from "../Icons";
+import { IconCode, IconCube, IconFile, IconGame, IconGlobe, IconImage, IconMusic, IconSparkle, IconTable, IconVideo, IconX, IconMaximize, IconMoreH, IconTidy } from "../Icons";
 import { PanelCard, type PanelActions } from "./PanelCard";
 import { SHEET_MOVED } from "./chatLayout";
 import { SurfaceView } from "./Surfaces";
@@ -331,8 +331,14 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
         h: el.querySelector<HTMLElement>(`[data-panel="${CSS.escape(panel.id)}"]`)?.offsetHeight || panel.h || 240,
       }));
       const current = viewRef.current;
-      const next = revealWorkView(current, boxes, { width: el.clientWidth, height: workViewport(el).height });
-      if (next !== current) setView(next, true);
+      /* Into the room that can be seen: clear of the conversation and of the work buttons, not just inside the board
+         (a panel brought "into view" under the buttons could not be pressed). The reveal is worked out as if that
+         room began at the board's edge, then moved back by how far in it really starts. */
+      const room = workViewport(el);
+      const inset = insetOf(el, room);
+      const seen = { ...current, x: current.x + inset / current.zoom };
+      const revealed = revealWorkView(seen, boxes, { width: room.width, height: room.height });
+      if (revealed !== seen) setView(shifted(revealed, inset) ?? revealed, true);
     };
     // Heights are untransformed; positions come from the model, never a gliding screen rectangle.
     const frame = requestAnimationFrame(reveal);
@@ -809,6 +815,20 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
   /** What a window's box is after maximising (or restoring), to put the view on. */
   const maxedPreview = (id: string, was: WorkBox | undefined, now: WorkBox, room: { width: number; height: number }, pad: number): WorkBox =>
     was ?? { x: now.x, y: now.y, w: Math.max(320, room.width - pad * 2), h: Math.max(240, room.height - pad * 2) };
+  // A phone's work buttons: folded into one until wanted (see where the dock is drawn).
+  const [dockOpen, setDockOpen] = useState(false);
+  const dockTimer = useRef(0);
+  const foldDockSoon = useCallback(() => {
+    window.clearTimeout(dockTimer.current);
+    dockTimer.current = window.setTimeout(() => setDockOpen(false), 2500);
+  }, []);
+  useEffect(() => {
+    const el = root.current;
+    if (!dockOpen || !el) return;
+    const fold = () => setDockOpen(false);
+    el.addEventListener("pointerdown", fold);
+    return () => { el.removeEventListener("pointerdown", fold); window.clearTimeout(dockTimer.current); };
+  }, [dockOpen]);
   const [, rerender] = useState(0);
   const isMaxed = (id: string) => maxed.current.has(id) || Boolean(canvas.windows?.find((w) => w.id === id)?.was);
   /* A window's own Full screen: the board's Maximise for it, and on a phone the conversation sheet drops to its strip
@@ -1006,7 +1026,13 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
            Tidy only once there is more than one thing to put in rows. (CLAUDE.md: controls appear when the work needs them.) */
         const pieces = canvas.surfaces.length + hosted.length;
         if (pieces === 0 || (phone && windowFull)) return null;
-        const dock = <nav className="pw-jump-dock pa-chrome" aria-label="Jump to work">
+        /* On a phone the buttons stand over a small screen's work, so they are folded into one small button until they
+           are wanted: a tap opens them, and they fold away again a moment after one is used or the board is touched. */
+        const dock = <nav className={`pw-jump-dock pa-chrome${phone ? ` is-phone${dockOpen ? " is-open" : ""}` : ""}`} aria-label="Jump to work"
+          onClick={phone ? (event) => { if (!(event.target as HTMLElement).closest(".pw-jump-toggle")) foldDockSoon(); } : undefined}>
+        {phone && <button type="button" className="pw-jump-toggle" aria-expanded={dockOpen}
+          aria-label={dockOpen ? "Hide the work buttons" : "Show the work buttons"} title={dockOpen ? "Hide" : "Jump to work, zoom out, show all"}
+          onClick={() => { window.clearTimeout(dockTimer.current); setDockOpen((open) => !open); }}>{dockOpen ? <IconX size={14} /> : <IconMoreH size={16} />}</button>}
         {canvas.surfaces.map((surface) => <button type="button" key={surface.id} data-jump={surface.id} title={`Jump to ${surface.title}`}
           aria-label={`Jump to ${surface.title}`} onClick={() => { handle.current?.jump(surface.id); onFocus(surface.id); onJumpWork?.("panacea"); }}>
           {workIcon(surface.kind === "image" ? "photo" : surface.kind === "data" ? "sheets" : surface.kind === "doc" ? "pages" : "widget")}

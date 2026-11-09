@@ -2331,7 +2331,7 @@ export function App() {
             onDecide={(id, approved, remember) => streamRef.current?.approve(id, approved, remember)}
           />
           </>}
-          todos={dockPlan ? <TodoDock key={cellKey(dockPlan)} items={dockPlan.items} /> : undefined}
+          todos={dockPlan ? <TodoDock key={cellKey(dockPlan)} items={dockPlan.items} watching={page === "chat"} /> : undefined}
           workNavigation={<div ref={setWorkNavigationHost} className="pw-navigation-host" />}
           entry={<>
 
