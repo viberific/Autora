@@ -7191,7 +7191,7 @@ body.is-resizing iframe { pointer-events: none; }
 @media (min-width: 1180px) {
   .pane-handle.is-rail { display: block; }
   .pane-handle.is-chat { display: block; }
-  .rail-slot { flex-basis: var(--rail-w, 56px); }
+  .rail-slot { flex-basis: var(--rail-w, 48px); }
 }
 
 /* The browser's menu and its panels: find, bookmarks, history, downloads. */
@@ -7518,7 +7518,7 @@ body.is-resizing iframe { pointer-events: none; }
 
 /* ---- Folded to icons (desktop): a strip of icons, with the context as one vertical bar under the last of them. */
 @media (min-width: 1180px) {
-  .app.rail-mini .rail-slot { flex-basis: 56px; }
+  .app.rail-mini .rail-slot { flex-basis: 48px; }
   .app.rail-mini .pane-handle.is-rail { display: none; }
 }
 .rail.is-mini .rail-top { height: var(--top-h, 52px); padding: 0; justify-content: center; }
@@ -7536,7 +7536,9 @@ body.is-resizing iframe { pointer-events: none; }
   .rail-slot, .rail:not(.is-drawer) .rail-nav-item, .rail.is-mini .rail-nav-item, .rail.is-mini .rail-nav-item > span { transition: none; }
 }
 .rail.is-mini .rail-scroll { padding: 6px 6px 12px; }
-.rail.is-mini .rail-nav-item { justify-content: center; padding: 9px 0; gap: 0; }
+/* Folded, each row is a square about its icon (so the one you are on is a square, not a wide slab), and the strip is
+   only as wide as that square and its margins. */
+.rail.is-mini .rail-nav-item { justify-content: center; width: 36px; height: 36px; margin-inline: auto; padding: 0; gap: 0; }
 .rail.is-mini .rail-nav-item > span {
   /* Off the flow rather than display: none, so the icon can slide to the middle
      of the strip while the word fades out instead of vanishing between frames.

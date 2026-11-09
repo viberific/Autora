@@ -35,10 +35,10 @@
   z-index: var(--z-pop);
   left: 16px;
   bottom: 16px;
-  width: 400px;
+  width: 360px;
   /* As tall as what has been said, up to the height the person has given it: no empty glass above a short chat. */
   height: auto;
-  max-height: min(640px, calc(100% - 32px));
+  max-height: min(600px, calc(100% - 32px));
   border: 1px solid var(--glass-line);
   border-radius: var(--r-xl);
   box-shadow: var(--glass-shadow), var(--glass-shine);
@@ -66,6 +66,67 @@
 
 .conversation-flow.is-float.is-empty .conversation-flow__column {
   padding-top: 36px;
+}
+
+/* The window speaks at the app's own size. The thread was drawn for a full-width column (14px words at 1.6, 27px
+   marks, a 36px Send); inside a window among 12 and 13px panels that read a size too big. Here the words are the
+   app's body size and everything about them is scaled to match. */
+.conversation-flow.is-float .thread-content {
+  gap: 12px;
+}
+
+.conversation-flow.is-float .msg {
+  padding: 8px 11px;
+  gap: 9px;
+}
+
+.conversation-flow.is-float .msg-text,
+.conversation-flow.is-float .thread-content > :not(.turn),
+.conversation-flow.is-float .turn > :not(.msg):not(.work) {
+  font-size: var(--fs-base);
+  line-height: 1.5;
+}
+
+.conversation-flow.is-float .avatar {
+  --tile: 22px;
+}
+
+.conversation-flow.is-float .conversation-flow__entry .composer-box {
+  padding: 9px 8px 6px 12px;
+  gap: 4px;
+}
+
+.conversation-flow.is-float .conversation-flow__entry .composer textarea {
+  font-size: var(--fs-base);
+  line-height: 1.5;
+}
+
+.conversation-flow.is-float .composer-send {
+  width: 30px;
+  height: 30px;
+}
+
+.conversation-flow.is-float .composer-tools .btn.icon {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+}
+
+.conversation-flow.is-float .composer-tools .btn.icon > svg {
+  width: 16px;
+  height: 16px;
+}
+
+.conversation-flow.is-float .composer-hint {
+  display: none;
+}
+
+.conversation-flow.is-float .todo-dock-bar {
+  height: 32px;
+}
+
+.conversation-flow.is-float .todo-dock-line {
+  font-size: var(--fs-sm);
 }
 
 /* A maximised card or expanded widget inside the thread goes above the rest of the app, as it does elsewhere. */

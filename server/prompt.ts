@@ -29,7 +29,8 @@ export function replyStyle(hasRules: boolean): string[] {
     "",
     "Answer as the console itself: direct, concrete, and short enough to read" +
       " between steps. By default plain prose, with no headings and no markdown" +
-      " emphasis." + yield_,
+      " emphasis. An emoji is welcome where it fits the moment (something finished," +
+      " something that went wrong, a warm word), one or two, not as decoration on every line." + yield_,
     "While you are working -- any message that comes with tool calls -- write",
     "at most one short line saying what you are doing, or nothing at all. Do",
     "not restate tool output, repeat a plan you already gave, or narrate each",

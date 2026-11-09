@@ -117,23 +117,23 @@ test("desktop gets a move grip and resize handles on every edge; a phone gets th
 test("the window opens at the bottom left, is held inside the world, and the magnet pulls it onto a side", () => {
   const room = { w: 1400, h: 900 };
   const start = defaultFloat(room);
-  assert.deepEqual(start, { x: FLOAT_GAP, y: 900 - 640 - FLOAT_GAP, w: 400, h: 640, snap: "left" });
+  assert.deepEqual(start, { x: FLOAT_GAP, y: 900 - 600 - FLOAT_GAP, w: 360, h: 600, snap: "left" });
   // A short world: as tall as it allows, still a gap from the top and the foot.
-  assert.deepEqual(defaultFloat({ w: 1000, h: 500 }), { x: FLOAT_GAP, y: FLOAT_GAP, w: 400, h: 500 - FLOAT_GAP * 2, snap: "left" });
+  assert.deepEqual(defaultFloat({ w: 1000, h: 500 }), { x: FLOAT_GAP, y: FLOAT_GAP, w: 360, h: 500 - FLOAT_GAP * 2, snap: "left" });
   // Free in the middle; near a side, pulled onto it; past an edge, kept a gap inside.
   assert.equal(magnet({ ...start, x: 500, snap: null }, room).snap, null);
   assert.deepEqual(magnet({ ...start, x: FLOAT_GAP + FLOAT_SNAP - 4, snap: null }, room), { ...start, x: FLOAT_GAP, snap: "left" });
-  const right = magnet({ ...start, x: 1400 - 400 - FLOAT_GAP - 20, snap: null }, room);
-  assert.deepEqual(right, { ...start, x: 1400 - 400 - FLOAT_GAP, snap: "right" });
-  assert.deepEqual(clampFloat({ ...start, x: -300, y: 5000, snap: null }, room), { ...start, x: FLOAT_GAP, y: 900 - 640 - FLOAT_GAP, snap: null });
+  const right = magnet({ ...start, x: 1400 - 360 - FLOAT_GAP - 20, snap: null }, room);
+  assert.deepEqual(right, { ...start, x: 1400 - 360 - FLOAT_GAP, snap: "right" });
+  assert.deepEqual(clampFloat({ ...start, x: -300, y: 5000, snap: null }, room), { ...start, x: FLOAT_GAP, y: 900 - 600 - FLOAT_GAP, snap: null });
   // By keyboard a step is shorter than the magnet's reach: one step off a side frees it, a step back against it holds it.
   const stepped = nudgeFloat(start, 16, 0, room);
   assert.deepEqual(stepped, { ...start, x: FLOAT_GAP + 16, snap: null });
   assert.deepEqual(nudgeFloat(stepped, -16, 0, room), start);
   assert.deepEqual(nudgeFloat(start, 0, -16, room), { ...start, y: start.y - 16 }, "up and down, it stays held");
-  assert.equal(nudgeFloat({ ...start, x: 1400 - 400 - FLOAT_GAP - 10, snap: null }, 16, 0, room).snap, "right");
+  assert.equal(nudgeFloat({ ...start, x: 1400 - 360 - FLOAT_GAP - 10, snap: null }, 16, 0, room).snap, "right");
   // Held to the right, it stays there when the world grows.
-  assert.equal(clampFloat(right, { w: 1800, h: 900 }).x, 1800 - 400 - FLOAT_GAP);
+  assert.equal(clampFloat(right, { w: 1800, h: 900 }).x, 1800 - 360 - FLOAT_GAP);
 });
 
 test("resizing moves only the dragged edges and keeps the window's minimum and the world's gap", () => {
@@ -184,7 +184,7 @@ test("on a desktop it floats over the world as glass, keeps the history mounted,
   assert.match(css, /\.conversation-flow\.is-float\s*\{[^}]*position: absolute;[^}]*z-index: var\(--z-pop\);[^}]*left: 16px;[^}]*bottom: 16px;/);
   assert.match(css, /\.conversation-flow\.is-float\s*\{[^}]*border-radius: var\(--r-xl\);/);
   // As tall as what has been said, up to the height it was given: no empty glass above a short chat.
-  assert.match(css, /\.conversation-flow\.is-float\s*\{[^}]*height: auto;[^}]*max-height: min\(640px, calc\(100% - 32px\)\);/);
+  assert.match(css, /\.conversation-flow\.is-float\s*\{[^}]*height: auto;[^}]*max-height: min\(600px, calc\(100% - 32px\)\);/);
   assert.doesNotMatch(css, /conversation-flow__bar|conversation-flow__grip/);
   assert.match(css, /\.chat-view\.pw-full-workspace > \.pw-scene-stack\s*\{[^}]*position: relative;[^}]*flex: 1 1 0;/);
   // The frost is on ::before: a filter on the window would pin a maximised card or widget in the thread inside it.
