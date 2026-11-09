@@ -32,6 +32,12 @@ await test("every window has a manual that names its tools", () => {
   for (const id of MANUAL_IDS) for (const needle of expect[id]) assert.ok(manualText(id).includes(needle), `${id} lacks ${needle}`);
 });
 
+await test("the overview puts the conversation where it is: on the left of the canvas on a desktop", () => {
+  const text = windowsOverview();
+  assert.match(text, /on desktop a panel on the left, beside the app rail \(its right edge resizes it\)/);
+  assert.doesNotMatch(text, /panel on the right/);
+});
+
 await test("the browser manual says who has the browser and how it comes back", () => {
   const browser = manualText("browser");
   for (const needle of ["Take control", "Hand back to agent", "strip", "above the message box", "I'm done", "by itself", "never ask"]) {

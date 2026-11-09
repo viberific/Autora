@@ -206,7 +206,9 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Bug fixes and a visual polish pass. Replies keep the space after a
+  On a desktop the chat with Autora now sits on the left of the canvas,
+  beside the app rail; drag its right edge to resize it. Bug fixes and a
+  visual polish pass too. Replies keep the space after a
   heading, list, table, code block or quote, and a second message from the
   agent in the same turn starts its own paragraph instead of joining the last
   word. Empty pages share one look, Artifacts hides its filters until there

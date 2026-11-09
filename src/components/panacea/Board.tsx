@@ -16,6 +16,13 @@ import { usePhone } from "../../lib/stage";
 import { jumpTo, zoomAt } from "../../lib/panacea/workspace-camera";
 import { workViewport } from "../../lib/frameCoordinates";
 
+/* How far the free part of the board starts from its left edge. On a desktop the conversation is on the left and the
+   work rail stands on the canvas beside it, so what is framed is framed to the right of the rail, not under it. */
+const insetOf = (el: Element, room: { left: number }) => Math.max(0, room.left - el.getBoundingClientRect().left);
+function shifted<T extends { x: number; zoom: number }>(next: T | null, inset: number): T | null {
+  return next && inset ? { ...next, x: next.x - inset / next.zoom } : next;
+}
+
 interface View { x: number; y: number; zoom: number }
 
 /** What the window and the agent's hand can ask of the board. */
@@ -197,7 +204,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     if (!el) return;
     const boxes = boxesOf();
     const room = workViewport(el);
-    const next = fitWorkView(boxes, { width: room.width, height: room.height }, fitOpts);
+    const next = shifted(fitWorkView(boxes, { width: room.width, height: room.height }, fitOpts), insetOf(el, room));
     if (!next) return;
     fitted.current = boxes.length > 0;
     setView(next);
@@ -209,7 +216,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     if (!el || !surface) return;
     const boxes = boxesOf().filter((box) => box === surface || current.panels.some((panel) => panel.context === surface.id && panel.x === box.x && panel.y === box.y));
     const room = workViewport(el);
-    const next = fitWorkView([surface, ...boxes], { width: room.width, height: room.height }, fitOpts);
+    const next = shifted(fitWorkView([surface, ...boxes], { width: room.width, height: room.height }, fitOpts), insetOf(el, room));
     if (next) { interacted.current = true; setView(next); }
   }, [boxesOf, setView, fitOpts]);
   const handsBusy = useCallback(() => {
@@ -303,7 +310,8 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
       if (automatic) {
         const v = viewRef.current;
         const room = workViewport(el);
-        const x0 = Math.max(target.x, v.x), x1 = Math.min(target.x + target.w, v.x + room.width / v.zoom);
+        const left = v.x + insetOf(el, room) / v.zoom;
+        const x0 = Math.max(target.x, left), x1 = Math.min(target.x + target.w, left + room.width / v.zoom);
         const y0 = Math.max(target.y, v.y), y1 = Math.min(target.y + target.h, v.y + room.height / v.zoom);
         const seen = Math.max(0, x1 - x0) * Math.max(0, y1 - y0);
         if (target.w * target.h > 0 && seen / (target.w * target.h) >= 0.7) return;
@@ -318,7 +326,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
             : canvasRef.current.surfaces.find((surface) => surface.id === canvasRef.current.focus);
           if (!freshTarget) return;
           const room = workViewport(currentRoot);
-          const next = fitWorkView([freshTarget], { width: room.width, height: room.height }, fitOpts);
+          const next = shifted(fitWorkView([freshTarget], { width: room.width, height: room.height }, fitOpts), insetOf(currentRoot, room));
           if (next) setView(next);
         }));
         return;
@@ -326,10 +334,12 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
       const v = viewRef.current;
       const room = workViewport(el);
       if (room.width <= 0 || room.height <= 0) return;
+      const inset = insetOf(el, room);
+      // The camera is worked out for the free room as if it began at the board's edge, then moved past the rail.
       const camera = automatic ? jumpTo({ x: target.x, y: target.y, width: target.w, height: target.h },
-        { width: room.width, height: room.height }, { x: -v.x * v.zoom, y: -v.y * v.zoom, zoom: v.zoom }) : null;
-      const next = camera ? { x: -camera.x / camera.zoom, y: -camera.y / camera.zoom, zoom: camera.zoom }
-        : fitWorkView([target], { width: room.width, height: room.height }, fitOpts);
+        { width: room.width, height: room.height }, { x: -(v.x + inset / v.zoom) * v.zoom, y: -v.y * v.zoom, zoom: v.zoom }) : null;
+      const next = shifted(camera ? { x: -camera.x / camera.zoom, y: -camera.y / camera.zoom, zoom: camera.zoom }
+        : fitWorkView([target], { width: room.width, height: room.height }, fitOpts), inset);
       if (next) { if (!automatic) interacted.current = true; setView(next); }
     },
     frame: (box, automatic = false) => {
@@ -338,7 +348,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
       if (!el) return;
       const room = workViewport(el);
       if (room.width <= 0 || room.height <= 0) return;
-      const next = fitWorkView([box], { width: room.width, height: room.height }, fitOpts);
+      const next = shifted(fitWorkView([box], { width: room.width, height: room.height }, fitOpts), insetOf(el, room));
       if (next) { if (!automatic) interacted.current = true; setView(next, true); }
     },
     zoomOut: () => {
@@ -346,27 +356,30 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
       if (!el) return;
       interacted.current = true;
       const v = viewRef.current;
+      const room = workViewport(el);
       const camera = zoomAt({ x: -v.x * v.zoom, y: -v.y * v.zoom, zoom: v.zoom },
-        { x: workViewport(el).width / 2, y: workViewport(el).height / 2 }, v.zoom * 0.75);
+        { x: insetOf(el, room) + room.width / 2, y: room.height / 2 }, v.zoom * 0.75);
       setView({ x: -camera.x / camera.zoom, y: -camera.y / camera.zoom, zoom: camera.zoom });
     },
     reveal: async (x, y) => {
       /* What the person can see of the board, not all of it: on a phone the conversation sheet covers its foot, and a
          point under the sheet is a hand nobody watches (and a picker opened there is out of reach). */
       const r = workViewport(root.current!);
+      const inset = insetOf(root.current!, r);
       const v = viewRef.current;
       const margin = 80 / v.zoom;
       // Too far out to press anything (a phone fitting a whole canvas): in to a size a person works at, on the point.
       if (v.zoom < 0.75) {
-        setView({ zoom: 1, x: x - r.width / 2, y: y - r.height / 3 }, true);
+        setView({ zoom: 1, x: x - inset - r.width / 2, y: y - r.height / 3 }, true);
         await new Promise((res) => setTimeout(res, 420));
         return toScreen(x, y);
       }
-      if (x < v.x + margin || y < v.y + margin || x > v.x + r.width / v.zoom - margin || y > v.y + r.height / v.zoom - margin) {
+      const left = v.x + inset / v.zoom;
+      if (x < left + margin || y < v.y + margin || x > left + r.width / v.zoom - margin || y > v.y + r.height / v.zoom - margin) {
         /* Only the agent's hand asks, and while it works it has the screen, as someone who took control of it would:
            it moves the view to where it is working, even where the person had moved it, and even while its own typing
            has the focus (which `handsBusy` would otherwise read as the person's). */
-        setView({ ...v, x: x - r.width / v.zoom / 2, y: y - r.height / v.zoom / 3 }, true);
+        setView({ ...v, x: x - (inset + r.width / 2) / v.zoom, y: y - r.height / v.zoom / 3 }, true);
         await new Promise((res) => setTimeout(res, 380));
       }
       return toScreen(x, y);
@@ -376,8 +389,11 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     zoom: () => viewRef.current.zoom,
     viewRect: () => {
       const r = root.current!.getBoundingClientRect();
+      const room = workViewport(root.current!);
+      const inset = insetOf(root.current!, room);
       const v = viewRef.current;
-      return { x: v.x + 16 / v.zoom, y: v.y + 16 / v.zoom, w: (r.width - 32) / v.zoom, h: (r.height - 90) / v.zoom };
+      // What is in view and clear of the work rail, so a new piece of work is not put down under it.
+      return { x: v.x + (inset + 16) / v.zoom, y: v.y + 16 / v.zoom, w: (r.width - inset - 32) / v.zoom, h: (r.height - 90) / v.zoom };
     },
     summonHere: () => {
       const r = root.current!.getBoundingClientRect();

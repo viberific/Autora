@@ -165,7 +165,9 @@ test("layout docks beside the canvas, keeps the history mounted, and speaks the 
   assert.match(css, /\.conversation-flow\.is-collapsed \.conversation-flow__conversation\s*\{[^}]*visibility: hidden;/);
   assert.match(css, /\.conversation-flow\.is-collapsed \.conversation-flow__conversation\s*\{[^}]*height: var\(--flow-history-height/);
   assert.doesNotMatch(css, /\.conversation-flow\.is-collapsed[^}]*display: none/);
-  assert.match(css, /\.conversation-flow__work-navigation\s*\{[^}]*position: absolute;[^}]*right: calc\(100% \+/);
+  // On a desktop the conversation is on the left, and the rail stands just right of it on the canvas.
+  assert.match(css, /\.conversation-flow__work-navigation\s*\{[^}]*position: absolute;[^}]*left: calc\(100% \+/);
+  assert.match(css, /\.conversation-flow\s*\{[^}]*order: 1;[^}]*border-right: 1px solid/);
   assert.doesNotMatch(css, /font-size:\s*[\d.]|border-radius:\s*(?!0\s*;)[\d.]|#[\da-f]{3,8}\b|rgba?\(\s*\d|(?:animation|transition):[^;]*\d(?:ms|s)\b/i);
 });
 

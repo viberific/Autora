@@ -73,6 +73,13 @@ export function workViewport(board: Element, opts: { clearDock?: boolean } = {})
       if (r.height > 0 && r.width > 0 && overlaps(r)) bottom = Math.min(bottom, r.top - 8);
     }
   }
-  const right = navigation && navigation.width > 0 && overlaps(navigation) ? Math.min(rect.right, navigation.left - 8) : rect.right;
-  return { left: rect.left, top: rect.top, width: Math.max(0, right - rect.left), height: Math.max(0, bottom - rect.top) };
+  /* The work rail stands on the canvas beside the conversation: along its left edge on a desktop (the conversation is
+     on the left), its right edge on a phone. Whichever side it is on, that side's band is kept clear of it. */
+  let left = rect.left;
+  let right = rect.right;
+  if (navigation && navigation.width > 0 && overlaps(navigation)) {
+    if (navigation.left + navigation.width / 2 < rect.left + rect.width / 2) left = Math.max(rect.left, navigation.right + 8);
+    else right = Math.min(rect.right, navigation.left - 8);
+  }
+  return { left, top: rect.top, width: Math.max(0, right - left), height: Math.max(0, bottom - rect.top) };
 }

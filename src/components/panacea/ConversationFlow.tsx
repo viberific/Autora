@@ -111,7 +111,8 @@ export function ConversationFlow({
   const moveResize = (event: PointerEvent<HTMLDivElement>) => {
     const state = drag.current;
     if (!state) return;
-    state.live = clampPanelWidth(state.start + (state.x - event.clientX), roomNow());
+    // The panel is on the left and its edge on its right: dragging the edge right makes it wider.
+    state.live = clampPanelWidth(state.start + (event.clientX - state.x), roomNow());
     rootRef.current?.style.setProperty("--flow-panel-w", `${state.live}px`);
   };
   const endResize = (event: PointerEvent<HTMLDivElement>) => {
@@ -123,9 +124,9 @@ export function ConversationFlow({
   };
   const keyResize = (event: KeyboardEvent<HTMLDivElement>) => {
     const step = event.shiftKey ? PANEL_STEP * 4 : PANEL_STEP;
-    // The panel's edge is on its left: moving it left makes the panel wider.
-    const next = event.key === "ArrowLeft" ? width + step
-      : event.key === "ArrowRight" ? width - step
+    // The panel's edge is on its right: moving it right makes the panel wider.
+    const next = event.key === "ArrowRight" ? width + step
+      : event.key === "ArrowLeft" ? width - step
       : event.key === "Home" ? PANEL_MIN
       : event.key === "End" ? PANEL_MAX
       : null;

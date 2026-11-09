@@ -19,7 +19,7 @@ import { CAPABILITIES, capabilityOf } from "./capabilities";
 const OVERVIEW = [
   "How Autora's windows work (all of these tools are yours from the first message; none needs loading):",
   "- The layout. Panacea is the main area and the conversation is docked beside it, never over it: on desktop a panel on the " +
-    "right (its left edge resizes it), with the Ask Autora bar at its foot (work mode, voice, attachments, notebooks, artifacts, " +
+    "left, beside the app rail (its right edge resizes it), with the Ask Autora bar at its foot (work mode, voice, attachments, notebooks, artifacts, " +
     "Capabilities, Send, Stop) and the TODO list just above. Retract conversation slides the panel to an edge tab (Show conversation); " +
     "the bar, the TODO list and the toggle stay in a slim strip along the foot of the workspace, so you can always type. On a phone it " +
     "is a bottom sheet under the canvas, moved on its left half (the right half only scrolls): Canvas only, Half (the default: messages " +
