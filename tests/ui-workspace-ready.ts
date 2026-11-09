@@ -24,6 +24,19 @@ export async function workspaceReady(page: Page, options: { blank?: boolean } = 
 export async function focusWork(page: Page, name: string): Promise<void> {
   await workspaceReady(page);
   await page.getByRole("navigation", { name: "Jump to work", exact: true }).getByRole("button", { name: `Jump to ${name}`, exact: true }).click();
-  const retract = page.getByRole("button", { name: "Retract conversation", exact: true });
-  if (await retract.count()) await retract.click();
+  await shrinkConversation(page);
+}
+
+/**
+ * Gives a desktop's world as much room as the conversation can: its floating window is made as small as it goes and put
+ * back at the foot of the world, by keyboard, the way a person could. A phone has no window, so nothing changes there.
+ */
+export async function shrinkConversation(page: Page): Promise<void> {
+  const corner = page.getByRole("separator", { name: "Resize conversation", exact: true });
+  if (!(await corner.count())) return;
+  for (let i = 0; i < 16; i += 1) await corner.press("Shift+ArrowUp");
+  for (let i = 0; i < 4; i += 1) await corner.press("Shift+ArrowLeft");
+  const grip = page.getByRole("button", { name: "Move conversation", exact: true });
+  for (let i = 0; i < 20; i += 1) await grip.press("Shift+ArrowDown");
+  await grip.press("Home");
 }

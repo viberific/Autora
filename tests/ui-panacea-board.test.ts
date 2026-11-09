@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { chromium, type Page } from "playwright-core";
 import { sleep, startApp } from "./e2e-harness";
-import { workspaceReady } from "./ui-workspace-ready";
+import { shrinkConversation, workspaceReady } from "./ui-workspace-ready";
 import { CHROME } from "./chrome";
 
 let passed = 0;
@@ -52,7 +52,7 @@ async function main() {
       assert.equal((await app.api("POST", `/api/panacea/${s}/open`)).status, 200);
       await page.waitForSelector(".pa-board");
       await workspaceReady(page, { blank: true });
-      await page.getByRole("button", { name: "Retract conversation", exact: true }).click();
+      await shrinkConversation(page);
       const box = (await page.locator(".pa-board").boundingBox())!;
       await page.mouse.dblclick(box.x + 80, box.y + 80);
       await page.fill(".pa-summon-q", "brainstorm");

@@ -1,7 +1,10 @@
-/* The conversation is a region of the layout, never an overlay: a panel docked on the left of the canvas on a
-   desktop (beside the app rail, where the eye starts reading), a sheet under it on a phone. The canvas (.pw-scene-stack) is resized around it. */
+/* The conversation. On a desktop it is a glass window floating over the world area (the canvas keeps the whole region
+   under it): it opens at the bottom left, a gap from every edge, and the person moves it by its top bar, resizes it
+   from any edge or corner, and brings it near the left or right side to have it pulled onto that side and held there
+   (ConversationFlow.tsx, chatLayout.ts). On a phone it is a sheet under the canvas (below). */
 .chat-view.pw-full-workspace {
-  flex-direction: row;
+  position: relative;
+  flex-direction: column;
 }
 
 .chat-view.pw-full-workspace > .pw-scene-stack {
@@ -10,87 +13,174 @@
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;
-  order: 2;
+  order: 1;
 }
 
 .conversation-flow {
-  --flow-edge-w: 44px;
-  /* How wide the open panel is: its flex basis, and where its resize edge stands. */
-  --flow-w: clamp(320px, var(--flow-panel-w, 380px), 60vw);
   position: relative;
-  order: 1;
-  flex: 0 0 var(--flow-w);
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: var(--bg);
-  border-right: 1px solid var(--border);
-  padding-left: env(safe-area-inset-left);
   font-family: var(--sans);
   color: var(--text);
 }
 
-/* Retracted on a desktop: the panel gives its width back and becomes a slim strip along the bottom of the
-   canvas region (todos, composer, the Show toggle); the canvas keeps everything above it. The history stays
-   mounted, hidden and inert (see .is-collapsed .conversation-flow__conversation). The root is static so the
-   edge tab and the work rail position against the whole region, not the strip. */
-.chat-view.pw-full-workspace:has(.conversation-flow.is-panel.is-collapsed) {
-  flex-direction: column;
+/* The window. Where it stands and its size are written inline once the room is measured; until then (and in a
+   server render) it is at the default: the bottom left, a gap from the edges. Its frosting is drawn by ::before,
+   not by the window, so a maximised card or expanded widget in the thread (position: fixed) still covers the
+   screen rather than being held inside the window. */
+.conversation-flow.is-float {
+  position: absolute;
+  z-index: var(--z-pop);
+  left: 16px;
+  bottom: 16px;
+  width: 400px;
+  height: min(640px, calc(100% - 32px));
+  border: 1px solid var(--glass-line);
+  border-radius: var(--r-xl);
+  box-shadow: var(--glass-shadow), var(--glass-shine);
+  animation: flow-float-in var(--dur-3) var(--ease) backwards;
+  transition: box-shadow var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease);
 }
 
-/* A desktop panel places its edge and its work rail against the whole region (the chat view), not itself: the rail
-   stands on the canvas's far edge, away from the conversation, where the work laid out from the left never meets it. */
-.conversation-flow.is-panel {
-  position: static;
+.conversation-flow.is-float::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--glass-sheen), var(--glass);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  pointer-events: none;
 }
 
-/* Retracted, the strip runs along the foot of the region: after the canvas, whichever side the panel is on. */
-.conversation-flow.is-panel.is-collapsed {
-  order: 3;
-  position: static;
-  flex: 0 0 auto;
-  width: 100%;
-  border-right: 0;
-  border-top: 1px solid var(--border);
-  padding-left: 0;
+/* A maximised card or expanded widget inside the thread goes above the rest of the app, as it does elsewhere. */
+.conversation-flow.is-float:has(.pdf-window.is-full, .app-window.is-full, .cell.widget.is-expanded, .cell.shot.is-max) {
+  z-index: var(--z-over);
 }
 
-.conversation-flow.is-panel.is-collapsed .conversation-flow__column {
-  flex: 0 0 auto;
-  width: min(100%, 760px);
-  margin-inline: auto;
-  padding: 8px 12px;
+.conversation-flow.is-float:hover,
+.conversation-flow.is-float:focus-within {
+  border-color: var(--glass-line-strong);
 }
 
-/* The strip's first row: the todos card with the toggle beside it, then the entry bar across the full width. */
-.conversation-flow.is-panel.is-collapsed .conversation-flow__entry-area {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+/* Being moved or resized: lifted, nothing selected, and the frames under it do not take the pointer. */
+.conversation-flow.is-float[data-moving] {
+  user-select: none;
+  box-shadow: var(--glass-shadow-lift), var(--glass-shine);
+}
+
+body:has(.conversation-flow[data-moving]) iframe {
+  pointer-events: none;
+}
+
+/* The magnet: brought near a side, the window is pulled onto it (a short glide, not a jump) and that side lights. */
+.conversation-flow.is-float[data-moving="move"][data-snap] {
+  transition: left var(--dur-1) var(--ease), box-shadow var(--dur-2) var(--ease);
+}
+
+.conversation-flow.is-float::after {
+  content: "";
+  position: absolute;
+  top: 24px;
+  bottom: 24px;
+  width: 3px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  box-shadow: 0 0 16px 2px rgba(var(--accent-rgb), 0.55);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-2) var(--ease);
+}
+
+.conversation-flow.is-float[data-snap="left"]::after { left: -9px; }
+.conversation-flow.is-float[data-snap="right"]::after { right: -9px; }
+.conversation-flow.is-float[data-moving][data-snap]::after { opacity: 1; }
+
+/* The top bar: the whole strip moves the window, and its grip is the keyboard's way to (the arrow keys; Home and End
+   put it on the left or right). A double click puts it back at the bottom left. */
+.conversation-flow__bar {
+  position: absolute;
+  top: 0;
+  left: 16px;
+  right: 16px;
+  height: 28px;
+  z-index: 2;
+  display: flex;
   align-items: center;
-  column-gap: 8px;
+  justify-content: center;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
 }
 
-.conversation-flow.is-panel.is-collapsed .conversation-flow__toggle {
-  grid-column: 2;
-  grid-row: 1;
-  margin: 0;
+.conversation-flow.is-float[data-moving="move"] .conversation-flow__bar {
+  cursor: grabbing;
 }
 
-.conversation-flow.is-panel.is-collapsed .conversation-flow__todos {
-  grid-column: 1;
-  grid-row: 1;
+.conversation-flow__grip {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  cursor: inherit;
 }
 
-.conversation-flow.is-panel.is-collapsed .conversation-flow__entry {
-  grid-column: 1 / -1;
-  grid-row: 2;
+.conversation-flow__grip > span {
+  width: 36px;
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: var(--text-3);
+  opacity: 0.55;
+  transition: background var(--dur-1) var(--ease), opacity var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
 }
 
-/* The root is static here, so the tab and the rail must stack above the (positioned) canvas themselves. */
-.conversation-flow.is-panel.is-collapsed .conversation-flow__work-navigation {
-  bottom: 200px;
-  z-index: 1;
+.conversation-flow__bar:hover .conversation-flow__grip > span,
+.conversation-flow__grip:focus-visible > span,
+.conversation-flow.is-float[data-moving="move"] .conversation-flow__grip > span {
+  background: var(--accent);
+  opacity: 1;
+  transform: scaleX(1.25);
+}
+
+.conversation-flow__grip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+
+/* Resize handles: a thin band on each edge and a square on each corner, invisible until used. */
+.conversation-flow__size {
+  position: absolute;
+  z-index: 3;
+  touch-action: none;
+}
+
+.conversation-flow__size[data-edge="n"] { top: -4px; left: 18px; right: 18px; height: 8px; cursor: ns-resize; }
+.conversation-flow__size[data-edge="s"] { bottom: -4px; left: 18px; right: 18px; height: 8px; cursor: ns-resize; }
+.conversation-flow__size[data-edge="e"] { right: -4px; top: 18px; bottom: 18px; width: 8px; cursor: ew-resize; }
+.conversation-flow__size[data-edge="w"] { left: -4px; top: 18px; bottom: 18px; width: 8px; cursor: ew-resize; }
+.conversation-flow__size[data-edge="ne"] { top: -4px; right: -4px; width: 22px; height: 22px; cursor: nesw-resize; }
+.conversation-flow__size[data-edge="sw"] { bottom: -4px; left: -4px; width: 22px; height: 22px; cursor: nesw-resize; }
+.conversation-flow__size[data-edge="nw"] { top: -4px; left: -4px; width: 22px; height: 22px; cursor: nwse-resize; }
+.conversation-flow__size[data-edge="se"] { bottom: -4px; right: -4px; width: 22px; height: 22px; cursor: nwse-resize; }
+
+.conversation-flow__size[data-edge="se"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -6px;
+  border-radius: var(--r-sm);
+}
+
+@media (pointer: coarse) {
+  .conversation-flow__size[data-edge="n"], .conversation-flow__size[data-edge="s"] { height: 20px; }
+  .conversation-flow__size[data-edge="e"], .conversation-flow__size[data-edge="w"] { width: 20px; }
+  .conversation-flow__size[data-edge$="e"]:not([data-edge="e"]),
+  .conversation-flow__size[data-edge$="w"]:not([data-edge="w"]) { width: 32px; height: 32px; }
 }
 
 .conversation-flow__column {
@@ -102,10 +192,6 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.conversation-flow.is-panel:not(.is-collapsed) .conversation-flow__column {
-  animation: flow-in var(--dur-2) var(--ease) backwards;
 }
 
 .conversation-flow__conversation {
@@ -129,85 +215,7 @@
   pointer-events: none;
 }
 
-/* The drag edge on the panel's right, the edge tab when retracted, and the sheet's handle on a phone. */
-.conversation-flow__resize {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: calc(var(--flow-w) - 6px);
-  width: 12px;
-  z-index: 1;
-  cursor: col-resize;
-  touch-action: none;
-  background: transparent;
-  transition: background var(--dur-1) var(--ease);
-}
-
-.conversation-flow__resize:hover,
-.conversation-flow__resize:active {
-  background: var(--accent-soft);
-}
-
-.conversation-flow__resize:focus-visible {
-  background: var(--accent-soft);
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-
-@media (pointer: coarse) {
-  .conversation-flow__resize {
-    left: calc(var(--flow-w) - var(--flow-edge-w) / 2);
-    width: var(--flow-edge-w);
-  }
-}
-
-.conversation-flow__edge {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  visibility: hidden;
-  z-index: 1;
-  width: var(--flow-edge-w);
-  min-height: 132px;
-  padding: 12px 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--border-strong);
-  border-left: 0;
-  border-radius: var(--r-md);
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
-  background: var(--s2);
-  color: var(--text-2);
-  font: var(--fs-xs) var(--sans);
-  writing-mode: vertical-rl;
-  cursor: pointer;
-  pointer-events: auto;
-  translate: 0 -50%;
-  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
-}
-
-.conversation-flow.is-collapsed .conversation-flow__edge {
-  visibility: visible;
-  animation: flow-edge-in var(--dur-2) var(--ease) backwards;
-}
-
-.conversation-flow__edge:hover {
-  background: var(--s3);
-  color: var(--text);
-}
-
-.conversation-flow__edge:active {
-  background: var(--accent-soft);
-  color: var(--text);
-}
-
-.conversation-flow__edge:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-
+/* The phone sheet's handle (shown only on a phone, below). */
 .conversation-flow__handle {
   display: none;
   align-items: center;
@@ -237,11 +245,7 @@
   outline-offset: -2px;
 }
 
-@keyframes flow-in {
-  from { opacity: 0; transform: translateX(-16px); }
-}
-
-@keyframes flow-edge-in {
+@keyframes flow-float-in {
   from { opacity: 0; }
 }
 
@@ -276,10 +280,10 @@
   max-width: none;
   min-height: 100%;
   justify-content: flex-end;
-  gap: 20px;
+  gap: 18px;
 }
 
-/* Keep the Thread's own scroll handlers; the panel owns its whole column now, so everything in it is live. */
+/* Keep the Thread's own scroll handlers; the window owns its whole column, so everything in it is live. */
 .conversation-flow .thread-content > :not(.turn),
 .conversation-flow .msg,
 .conversation-flow .work > *,
@@ -298,11 +302,11 @@
 .conversation-flow .msg {
   width: fit-content;
   max-width: 96%;
-  padding: 12px 14px;
-  border: 1px solid var(--border-strong);
+  padding: 11px 14px;
+  border: 1px solid var(--glass-line);
   border-radius: var(--r-lg);
-  background: rgba(var(--s1-rgb), 0.94);
-  box-shadow: var(--shadow-sm);
+  background: rgba(var(--s1-rgb), 0.55);
+  box-shadow: var(--glass-shine);
   align-self: flex-start;
   min-width: 0;
   -webkit-mask-image: var(--flow-edge-mask, none);
@@ -312,7 +316,7 @@
 .conversation-flow .msg.user {
   margin-left: auto;
   align-self: flex-end;
-  background: color-mix(in srgb, var(--accent-soft) 55%, var(--s2));
+  background: rgba(var(--accent-rgb), 0.2);
   border-color: var(--accent-line);
   border-bottom-right-radius: var(--r-2xs);
 }
@@ -359,8 +363,8 @@
   padding: 0;
 }
 
-/* In the open panel the message box lines up with the bubbles and the to-do card above it (both 4px in from the column). */
-.conversation-flow.is-panel:not(.is-collapsed) .conversation-flow__entry {
+/* In the window the message box lines up with the bubbles and the to-do card above it (both 4px in from the column). */
+.conversation-flow.is-float .conversation-flow__entry {
   margin-inline: 4px;
 }
 
@@ -369,15 +373,23 @@
 }
 
 .conversation-flow__entry .composer-box {
-  box-shadow: var(--shadow-lg);
+  background: rgba(var(--s1-rgb), 0.6);
+  border-color: var(--glass-line);
+  box-shadow: var(--glass-shine), var(--shadow);
 }
 
 .conversation-flow__entry .composer-box:focus-within {
-  box-shadow: 0 0 0 4px var(--accent-soft), var(--shadow-lg);
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 4px var(--accent-soft), var(--glass-shine), var(--shadow);
 }
 
-/* The work rail stands on the canvas along its far (right) edge, the conversation on the left. It stacks above the
-   canvas, which comes after the panel in the page and would otherwise be painted over it. */
+/* The board's bottom row (its history slider) moves out from under a window held to a side at the foot of the world. */
+.chat-view.pw-full-workspace .pa-dock {
+  left: calc(12px + var(--flow-clear-left, 0px));
+  right: calc(12px + var(--flow-clear-right, 0px));
+}
+
+/* The work rail stands on the canvas along its far (right) edge, over the world and under the conversation window. */
 .conversation-flow__work-navigation {
   position: absolute;
   z-index: 1;
@@ -393,8 +405,9 @@
   pointer-events: none;
 }
 
-.conversation-flow.is-collapsed .conversation-flow__work-navigation {
-  right: 16px;
+.chat-view.pw-full-workspace > .conversation-flow__work-navigation {
+  right: calc(16px + var(--flow-held-right, 0px));
+  transition: right var(--dur-2) var(--ease);
 }
 
 .conversation-flow__work-navigation > * {
@@ -405,40 +418,6 @@
   overscroll-behavior: contain;
 }
 
-.conversation-flow__toggle {
-  align-self: flex-end;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 44px;
-  min-height: 44px;
-  margin: 0 4px 4px;
-  padding: 6px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--r-pill);
-  background: var(--s2);
-  color: var(--text-2);
-  font: var(--fs-xs) var(--sans);
-  cursor: pointer;
-  pointer-events: auto;
-  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
-}
-
-.conversation-flow__toggle:hover {
-  background: var(--s3);
-  color: var(--text);
-}
-
-.conversation-flow__toggle:active {
-  background: var(--accent-soft);
-  color: var(--text);
-}
-
-.conversation-flow__toggle:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
 @media (max-width: 680px) {
   /* A phone: the same region, under the canvas instead of beside it. Retracted it is the entry bar alone
      (canvas only); half leaves the upper part of the screen to the canvas; full owns the screen but keeps
@@ -447,7 +426,7 @@
     flex-direction: column;
   }
 
-  /* Under the canvas, not over it: the desktop puts the panel first (on the left), a phone puts the sheet last. */
+  /* Under the canvas, not over it: the sheet comes after the canvas. */
   .chat-view.pw-full-workspace > .pw-scene-stack {
     order: 1;
   }
@@ -458,9 +437,10 @@
     min-height: min(100%, 320px);
     padding-left: 0;
     padding-bottom: env(safe-area-inset-bottom);
-    border-right: 0;
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--glass-line);
     border-radius: var(--r-xl) var(--r-xl) 0 0;
+    background: var(--glass-sheen), rgba(var(--s1-rgb), 0.92);
+    box-shadow: var(--glass-shine);
   }
 
   .conversation-flow.is-sheet.is-collapsed {
@@ -475,6 +455,8 @@
     z-index: var(--z-pop);
     border-radius: 0;
     border-top: 0;
+    /* Over the canvas, it is read on: nothing of the work shows through the words. */
+    background: var(--s1);
   }
 
   .chat-view.pw-full-workspace:has(.conversation-flow.is-full) > .pw-scene-stack {
@@ -598,12 +580,6 @@
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     column-gap: 8px;
-  }
-
-  /* No speech-bubble button on a phone: it took a 44px row of the sheet. The handle above the sheet and the
-     preview strip (a tap on either) open and close it. */
-  .conversation-flow.is-sheet .conversation-flow__toggle {
-    display: none;
   }
 
   .conversation-flow.is-sheet.is-collapsed .conversation-flow__preview {
@@ -751,37 +727,11 @@
     transition: none;
   }
 
-  .conversation-flow__toggle,
-  .conversation-flow__edge,
-  .conversation-flow__resize,
+  .conversation-flow.is-float,
+  .conversation-flow.is-float[data-moving="move"][data-snap],
+  .conversation-flow__grip > span,
   .conversation-flow__handle > span {
-    transition: none;
-  }
-
-  .conversation-flow.is-panel:not(.is-collapsed) .conversation-flow__column,
-  .conversation-flow.is-collapsed .conversation-flow__edge {
     animation: none;
-  }
-}
-
-/* A very short screen (a phone on its side, with the keyboard up): the collapse button goes beside the message box
-   instead of over it, so the box and its Send button fit in the height that is left. */
-@media (max-height: 300px) {
-  .conversation-flow.is-panel .conversation-flow__entry-area {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: flex-end;
-  }
-  .conversation-flow.is-panel .conversation-flow__entry-area > * {
-    flex: 1 0 100%;
-  }
-  .conversation-flow.is-panel .conversation-flow__entry-area > .conversation-flow__entry {
-    flex: 1 1 0;
-    min-width: 0;
-  }
-  .conversation-flow.is-panel .conversation-flow__entry-area > .conversation-flow__toggle {
-    flex: 0 0 auto;
-    order: 2;
-    margin: 0 0 4px 6px;
+    transition: none;
   }
 }

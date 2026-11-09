@@ -11,7 +11,7 @@ import fs from "node:fs";
 import zlib from "node:zlib";
 import { chromium, type Page } from "playwright-core";
 import { sleep, startApp } from "./e2e-harness";
-import { workspaceReady } from "./ui-workspace-ready";
+import { shrinkConversation, workspaceReady } from "./ui-workspace-ready";
 import { CHROME } from "./chrome";
 
 let passed = 0;
@@ -75,7 +75,7 @@ async function main() {
       await page.waitForSelector('.panacea-workspace .pa-window');
       await page.waitForSelector(".pa-board");
       await workspaceReady(page, { blank: true });
-      await page.getByRole("button", { name: "Retract conversation", exact: true }).click();
+      await shrinkConversation(page);
       assert.equal(await page.locator(".pa-panel").count(), 0, "nothing on it until the work needs it");
       assert.equal(await page.locator(".pa-window").getByText("What do you want to do").count(), 0, "and no standing instructions");
       await shot("1-empty");
@@ -127,7 +127,8 @@ async function main() {
 
     await test("double-click the grid, type, pick: a piece lands there, and its slider sets a value of its own", async () => {
       const box = (await page.locator(".pa-board").boundingBox())!;
-      await page.mouse.dblclick(box.x + 120, box.y + box.height - 220);
+      // Right of the conversation's window, which floats at the bottom left of the board.
+      await page.mouse.dblclick(box.x + 460, box.y + box.height - 220);
       await page.waitForSelector(".pa-summon-q");
       await page.fill(".pa-summon-q", "slider");
       // The blank slider by name: what ranks first for "slider" depends on what earlier tests used, so Enter was a coin toss.
