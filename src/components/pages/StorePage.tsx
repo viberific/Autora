@@ -6,7 +6,7 @@ export function StorePage() {
     <div className="page-scroll">
       <div className="page-inner">
         <div className="nb-empty">
-          <IconStore size={28} />
+          <IconStore size={20} />
           <p>Coming soon.</p>
           <p className="jf-hint">The Store will be where you make tools and share them.</p>
         </div>

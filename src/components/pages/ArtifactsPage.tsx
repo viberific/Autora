@@ -609,6 +609,7 @@ export function ArtifactsPage({
         ) : (
           <>
             <div className="art-tools">
+              {all.length > 0 && (
               <span className="art-find">
                 <IconSearch size={14} />
                 <input
@@ -624,6 +625,7 @@ export function ArtifactsPage({
                   </button>
                 )}
               </span>
+              )}
               <div className="spacer" />
               <input
                 ref={picker}
@@ -637,6 +639,8 @@ export function ArtifactsPage({
               </button>
             </div>
 
+            {/* Nothing to filter or order until there is a file: the controls come with the first one. */}
+            {all.length > 0 && (<>
             <div className="art-chips" role="group" aria-label="Filter by kind">
               {CHIPS.filter((c) => c.key === "all" || counts[c.key]).map((c) => (
                 <button
@@ -684,14 +688,19 @@ export function ArtifactsPage({
                 <span className="art-found">{shown.length} of {all.length} files</span>
               )}
             </div>
+            </>)}
           </>
         )}
 
         {items === null ? null : all.length === 0 ? (
-          <p className="jf-hint art-empty">
-            Nothing yet. Images Autora generates and files it saves for you appear here — drop a
-            file anywhere on this page to add one of your own.
-          </p>
+          <div className="nb-empty">
+            <IconFolder size={20} />
+            <p>No files yet</p>
+            <p className="jf-hint">
+              Images Autora generates and files it saves for you appear here. Drop a file anywhere on this page to add
+              one of your own.
+            </p>
+          </div>
         ) : shown.length === 0 ? (
           <p className="jf-hint art-empty">
             No file matches that.{" "}

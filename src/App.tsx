@@ -2282,7 +2282,6 @@ export function App() {
                 disabled={workspaceOpening} aria-expanded={toolsOpen}>
                 <IconWrench size={16} /> {workspaceOpening ? "Opening…" : "Open Panacea"}
               </button>
-              <span>Start directly with a canvas, file or project — no message needed.</span>
             </div>
           )}
           <Thread

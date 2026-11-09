@@ -206,10 +206,12 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Bug fixes. A secret nested deep inside a tool call's arguments is now
-  blanked before it reaches the thread or the log, as one near the top
-  always was. When you and the agent both change a file, the merged file
-  keeps its Windows line endings and the agent's removal of a final newline.
-  And the automation status counts only the scheduled runs going right now,
-  not every one since the app started. The Logs page shows lines again when
-  asked for a number of them it cannot read.
+  Bug fixes and a visual polish pass. Replies keep the space after a
+  heading, list, table, code block or quote, and a second message from the
+  agent in the same turn starts its own paragraph instead of joining the last
+  word. Empty pages share one look, Artifacts hides its filters until there
+  is a file, checkboxes and the Usage figures follow the theme, the chat's
+  menu arrow sits beside its name, and on a phone every provider shows
+  before a model is connected. A secret nested deep in a tool call is now
+  blanked, merged files keep their Windows line endings, the automation
+  count shows only runs going now, and the Logs page copes with an odd limit.

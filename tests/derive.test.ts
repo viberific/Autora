@@ -148,6 +148,23 @@ test("a reply sent because no model is connected carries the setup flag", () => 
   assert.equal(reply?.kind === "reply" && reply.turn.setup, true);
 });
 
+test("what the agent says in a second model call starts a new paragraph, not the end of the last word", () => {
+  const ev = (seq: number, kind: string, payload: Record<string, any>): AutoraEvent =>
+    ({ seq, ts: 1_700_000_000 + seq, kind, actor: "agent", span: null, payload, blob: null });
+  const view = derive([
+    ev(1, Kind.UserMessage, { text: "hello" }),
+    ev(2, Kind.AgentText, { text: "Want me to" }),
+    ev(3, Kind.AgentText, { text: " make slides?" }),
+    ev(4, Kind.UsageTurn, {}),
+    ev(5, Kind.AgentText, { text: "Done." }),
+    ev(6, Kind.UsageTurn, {}),
+    ev(7, Kind.AgentDone, {}),
+  ]);
+  const replies = view.buckets[0].cells.filter((c) => c.kind === "reply");
+  assert.equal(replies.length, 1);
+  assert.equal(replies[0].kind === "reply" && replies[0].turn.text, "Want me to make slides?\n\nDone.");
+});
+
 test("the old canned 'Analyzing' line is not shown as reasoning", () => {
   const ev = (seq: number, kind: string, payload: Record<string, any>): AutoraEvent =>
     ({ seq, ts: 1_700_000_000 + seq, kind, actor: "agent", span: null, payload, blob: null });

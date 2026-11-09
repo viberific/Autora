@@ -57,6 +57,8 @@ export function describeArgs(args: Record<string, any>): string {
 /** A value as one short piece of text: a string as it is, anything else as
     JSON -- String() of a list of objects is "[object Object]". */
 function shortValue(value: unknown): string {
+  // A list reads as how many, not as the first thirty characters of its JSON.
+  if (Array.isArray(value)) return `${value.length} item${value.length === 1 ? "" : "s"}`;
   const text = typeof value === "string" ? value : JSON.stringify(value) ?? String(value);
   return text.length > 30 ? `${text.slice(0, 30)}…` : text;
 }

@@ -186,7 +186,7 @@ export function OrganizationPage({ topSlot }: { topSlot?: HTMLElement | null }) 
 
         {agents !== null && agents.length <= 1 && selected !== "new" && (
           <div className="nb-empty">
-            <IconOrg size={28} />
+            <IconOrg size={20} />
             <p>It is only Autora so far.</p>
             <p className="jf-hint">
               Add an agent for a kind of work you do often — a researcher, an editor, a bookkeeper — and

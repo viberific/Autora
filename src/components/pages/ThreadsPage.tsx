@@ -207,7 +207,7 @@ export function ThreadsPage({ topSlot }: { topSlot?: HTMLElement | null }) {
 
         {posts !== null && posts.length === 0 && !making && (
           <div className="nb-empty">
-            <IconThreads size={28} />
+            <IconThreads size={20} />
             {narrowed ? (
               <>
                 <p>No post matches.</p>
