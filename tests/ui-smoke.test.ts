@@ -9,6 +9,7 @@
 import fs from "node:fs";
 import { chromium } from "playwright-core";
 import { startApp } from "./e2e-harness";
+import { CHROME } from "./chrome";
 const app = await startApp();
 const problems: string[] = [];
 try {
@@ -23,7 +24,7 @@ try {
   await app.turn(s, "say something");
   await app.turn(s, "make a plan");
   await app.turn(s, "show a widget");
-  const exe = process.env.AUTORA_BROWSER_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+  const exe = CHROME;
   if (!fs.existsSync(exe)) { console.log("  skip  no browser here"); await app.stop(); process.exit(0); }
   const browser = await chromium.launch({ executablePath: exe });
   for (const [label, vp, mobile] of [["desktop", { width: 1280, height: 800 }, false], ["phone", { width: 390, height: 780 }, true]] as const) {

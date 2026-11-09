@@ -11,10 +11,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { CHROME } from "./chrome";
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "autora-pdf-"));
 process.env.AUTORA_STATE_DIR = dir;
-const linuxChrome = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+const linuxChrome = CHROME;
 if (!process.env.AUTORA_BROWSER_PATH && fs.existsSync(linuxChrome)) process.env.AUTORA_BROWSER_PATH = linuxChrome;
 
 const { PDFDocument, PDFRawStream, StandardFonts, decodePDFRawStream, degrees } = await import("@cantoo/pdf-lib");

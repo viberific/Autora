@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { chromium } from "playwright-core";
 import { sleep, startApp } from "./e2e-harness";
+import { CHROME } from "./chrome";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -26,7 +27,7 @@ const sizeOf = (b: Body) => {
 };
 
 async function main() {
-  const exe = process.env.AUTORA_BROWSER_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+  const exe = CHROME;
   if (!fs.existsSync(exe)) { console.log("  skip  no browser here"); return; }
   if (!fs.existsSync("dist/autora-3d/index.html")) { console.log("  skip  the modeller is not built (npm run build)"); return; }
   const app = await startApp();

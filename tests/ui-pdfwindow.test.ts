@@ -20,6 +20,7 @@ import fs from "node:fs";
 import { chromium, type Frame, type Page } from "playwright-core";
 import { PDFDocument, StandardFonts } from "@cantoo/pdf-lib";
 import { sleep, startApp } from "./e2e-harness";
+import { CHROME } from "./chrome";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -67,7 +68,7 @@ async function waitDrawn(frame: Frame): Promise<boolean> {
 }
 
 async function main() {
-  const exe = process.env.AUTORA_BROWSER_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+  const exe = CHROME;
   if (!fs.existsSync(exe)) { console.log("  skip  no browser here"); return; }
   if (!fs.existsSync("dist/spectra-editor/index.html")) { console.log("  skip  the editor is not built (npm run build)"); return; }
   const app = await startApp();

@@ -4,9 +4,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright-core";
 import { startApp } from "./e2e-harness";
+import { CHROME } from "./chrome";
 
 async function main() {
-  const exe = process.env.AUTORA_BROWSER_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+  const exe = CHROME;
   if (!fs.existsSync(exe)) { console.log("  skip  no configured browser here"); return; }
   if (!fs.existsSync(path.join("dist", "index.html"))) { console.log("  skip  no app build here"); return; }
   const app = await startApp();

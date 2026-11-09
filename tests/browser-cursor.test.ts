@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { chromium } from "playwright-core";
 import { CURSOR_SCRIPT } from "../server/browser";
+import { CHROME } from "./chrome";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -17,7 +18,7 @@ async function test(name: string, fn: () => Promise<void>) {
 }
 
 async function main() {
-  const exe = process.env.AUTORA_BROWSER_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+  const exe = CHROME;
   if (!fs.existsSync(exe)) { console.log("  skip  no browser here"); return; }
   const browser = await chromium.launch({ executablePath: exe });
   try {

@@ -15,6 +15,7 @@ import http from "node:http";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { CHROME } from "./chrome";
 
 export interface Scripted {
   text?: string;
@@ -77,7 +78,7 @@ export interface App {
   log(): string;
 }
 
-const LOCAL_CHROME = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+const LOCAL_CHROME = CHROME;
 
 /** The servers started by this test run, and the end of every way it can stop: they go with it. */
 const running = new Set<ChildProcess>();

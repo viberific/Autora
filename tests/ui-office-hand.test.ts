@@ -13,6 +13,7 @@ import fs from "node:fs";
 import { chromium, type Frame, type Page } from "playwright-core";
 import { docxParagraphs, pptxParagraphs, xlsxCells } from "../server/officedesk";
 import { sleep, startApp, type App } from "./e2e-harness";
+import { CHROME } from "./chrome";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -60,7 +61,7 @@ async function watch(page: Page): Promise<() => Promise<string[]>> {
 
 async function main() {
   const only = process.argv[2];
-  const exe = process.env.AUTORA_BROWSER_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+  const exe = CHROME;
   if (!fs.existsSync(exe)) { console.log("  skip  no browser here"); return; }
   if (!fs.existsSync("dist/office/web/docs/index.html")) { console.log("  skip  the Office editors are not built (node scripts/build-office.mjs)"); return; }
   if (!fs.existsSync("dist/index.html")) { console.log("  skip  the app is not built (npm run build)"); return; }

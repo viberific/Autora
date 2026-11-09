@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { CHROME } from "./chrome";
 
 const home = fs.mkdtempSync(path.join(os.tmpdir(), "autora-eval-"));
 process.env.AUTORA_HOME = home;
@@ -118,9 +119,7 @@ async function main() {
   });
 
   console.log("a real page");
-  const executable = process.env.AUTORA_BROWSER_PATH
-    || ["/opt/pw-browsers/chromium-1194/chrome-linux/chrome", "/usr/bin/chromium-browser", "/usr/bin/chromium"]
-      .find((p) => fs.existsSync(p));
+  const executable = CHROME;
   if (executable) process.env.AUTORA_BROWSER_PATH = executable;
   const probe = await probeBrowser();
   if (!probe.ok) {

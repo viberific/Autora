@@ -5,19 +5,18 @@
  *   npx tsx tests/pagemark.test.ts
  */
 import assert from "node:assert/strict";
-import fs from "node:fs";
 import http from "node:http";
 import { chromium } from "playwright-core";
 import { LiveBrowser, probeBrowser } from "../server/browser";
 import { diffDom } from "../server/domdiff";
+import { CHROME } from "./chrome";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
   try { await fn(); passed += 1; console.log(`  ok  ${name}`); } catch (err) { console.error(`  FAIL ${name}`); throw err; }
 }
 
-const exe = process.env.AUTORA_BROWSER_PATH
-  || ["/opt/pw-browsers/chromium-1194/chrome-linux/chrome", "/usr/bin/chromium-browser", "/usr/bin/chromium"].find((p) => fs.existsSync(p));
+const exe = CHROME;
 if (exe) process.env.AUTORA_BROWSER_PATH = exe;
 const probe = await probeBrowser();
 if (!probe.ok) {

@@ -15,6 +15,7 @@ import fs from "node:fs";
 import { chromium, type Frame, type Page } from "playwright-core";
 import { pptxParagraphs, xlsxCells } from "../server/officedesk";
 import { sleep, startApp, type App } from "./e2e-harness";
+import { CHROME } from "./chrome";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -70,7 +71,7 @@ async function onCanvas(frame: Frame, at: { fx?: number; fy?: number; dx?: numbe
 }
 
 async function main() {
-  const exe = process.env.AUTORA_BROWSER_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+  const exe = CHROME;
   if (!fs.existsSync(exe)) { console.log("  skip  no browser here"); return; }
   for (const a of ["slides", "sheets"]) {
     if (!fs.existsSync(`dist/office/web/${a}/index.html`) || !fs.existsSync(`dist/office/host/${a}.cjs`)) { console.log(`  skip  the ${a} editor is not built (node scripts/build-office.mjs)`); return; }

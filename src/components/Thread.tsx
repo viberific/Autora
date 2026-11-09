@@ -970,7 +970,9 @@ const WorkingLine = memo(function WorkingLine({ tail, doing, elapsedMs, steps, p
  */
 const StepGroup = memo(function StepGroup({ steps, unfolded = false, ...cell }: { steps: Cell[]; unfolded?: boolean } & CellContext) {
   // A memory rewrite waiting on the person's yes or no is a question, and a question is never folded away.
-  const asking = steps.some((s) => s.kind === "learned" && s.items.some((i) => i.action === "proposed" && i.status !== "confirmed"));
+  // A rewrite is what LearnedCell calls one: proposed, or naming the memory it revises.
+  const asking = steps.some((s) => s.kind === "learned"
+    && s.items.some((i) => (i.action === "proposed" || Boolean(i.revises)) && i.status !== "confirmed"));
   const [open, setOpen] = useState(unfolded || asking);
   const running = cell.open && steps.some((s) => stepStatus(s) === "running");
   // Marked running in a turn that is over: it never reported back. Saying

@@ -106,7 +106,6 @@
   --z-pop-note: 25;
   --z-menu: 30;
   --z-top-bar: 40;
-  --z-side: 45;
   --z-panel: 50;
   --z-modal: 60;
   --z-cover: 80;
@@ -6501,15 +6500,6 @@ button.dock-card:hover { border-color: var(--border-strong); }
   max-width: calc(100% - 320px);
   border-left: 0;
 }
-/* The column beside the chat starts above the header and covers its right part, so what the header holds -- the
-   session's name and the permissions pill -- has to fit in the chat column's width, not the page's. Without this the
-   title ran on under the window and the Yolo/Ask pill, unreachable, was beneath it. The name is the one thing that
-   gives way. The 320px is the room .chat-view.has-app > .page leaves the window. */
-.shell:has(.chat-view:not([hidden]) > .side-stack) > .top {
-  padding-right: calc(100% - min(var(--chat-w, clamp(330px, 26vw, 430px)), 100% - 320px) + 8px);
-}
-.shell:has(.chat-view:not([hidden]) > .side-stack) > .top .session-btn { flex-shrink: 1; min-width: 0; }
-.shell:has(.chat-view:not([hidden]) > .side-stack) > .top .session-name { max-width: none; }
 .app-pane {
   flex: 1; min-width: 0; min-height: 0; display: flex;
   border-left: 1px solid var(--border-strong); background: var(--bg);
@@ -6537,13 +6527,6 @@ button.dock-card:hover { border-color: var(--border-strong); }
 .app-pane[data-pane='widget'] .cell.widget.is-fill .cell-top { border-bottom: 1px solid var(--border); }
 .app-pane[data-pane='widget'] .cell.widget.is-fill .widget-body { flex: 1; min-height: 0; height: auto; }
 
-/* The column beside the chat: the strip of open windows, then the window itself. The strip is the top of the
-   screen: this column starts above the header, so the tabs sit at the very edge and what shows of the header over
-   this column is its last third. It is above the header in the paint order (the header is z-index 40). */
-.side-stack {
-  flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;
-  position: relative; z-index: var(--z-side); margin-top: calc(-1 * var(--top-h, 58px));
-}
 .panacea-workspace { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--bg); }
 .pw-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; flex: 0 0 auto; border-bottom: 1px solid var(--border); background: var(--s1); }
 .pw-bar > svg { color: var(--accent-light); flex-shrink: 0; }

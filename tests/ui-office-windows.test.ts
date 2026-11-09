@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { chromium, type Browser, type Frame, type Page } from "playwright-core";
 import { sleep, startApp } from "./e2e-harness";
+import { CHROME } from "./chrome";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -44,11 +45,11 @@ async function until<T>(what: string, fn: () => Promise<T | null | false>, ms = 
 }
 
 let browser: Browser;
-if (!fs.existsSync(process.env.AUTORA_BROWSER_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome")) { console.log("  skip  no browser here"); process.exit(0); }
+if (!fs.existsSync(CHROME)) { console.log("  skip  no browser here"); process.exit(0); }
 if (!fs.existsSync("dist/office/web/docs/index.html") || !fs.existsSync("dist/office/web/sheets/index.html")) { console.log("  skip  the Office editors are not built (node scripts/build-office.mjs)"); process.exit(0); }
 if (!fs.existsSync("dist/index.html")) { console.log("  skip  the app is not built (npm run build)"); process.exit(0); }
 try {
-  browser = await chromium.launch({ executablePath: process.env.AUTORA_BROWSER_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome" });
+  browser = await chromium.launch({ executablePath: CHROME });
 } catch {
   console.log("  skip  no browser");
   process.exit(0);

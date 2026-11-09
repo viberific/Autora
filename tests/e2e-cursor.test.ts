@@ -8,6 +8,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { sleep, startApp } from "./e2e-harness";
+import { CHROME } from "./chrome";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -21,7 +22,7 @@ button{margin:20px;padding:10px 18px}
 <!--SLOT--></body></html>`;
 
 async function main() {
-  const exe = process.env.AUTORA_BROWSER_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+  const exe = CHROME;
   if (!fs.existsSync(exe)) { console.log("  skip  no browser here"); return; }
   const app = await startApp();
   try {

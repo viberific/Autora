@@ -9,6 +9,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { sleep, startApp } from "./e2e-harness";
+import { CHROME } from "./chrome";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -22,7 +23,7 @@ input{position:absolute;left:100px;top:200px;width:240px;padding:8px}
 <input placeholder="Your name"></body></html>`;
 
 async function main() {
-  const exe = process.env.AUTORA_BROWSER_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+  const exe = CHROME;
   if (!fs.existsSync(exe)) { console.log("  skip  no browser here"); return; }
   const app = await startApp();
   try {

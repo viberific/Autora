@@ -12,6 +12,7 @@ import zlib from "node:zlib";
 import { chromium, type Page } from "playwright-core";
 import { sleep, startApp } from "./e2e-harness";
 import { workspaceReady } from "./ui-workspace-ready";
+import { CHROME } from "./chrome";
 
 let passed = 0;
 let onFail: () => Promise<void> = async () => undefined;
@@ -42,7 +43,7 @@ function png(w: number, h: number): Buffer {
 const CSV = "Month\tRegion\tRevenue\tUnits\n2024-01\tEU\t120\t5\n2024-01\tUS\t200\t8\n2024-02\tEU\t150\t6\n2024-02\tUS\t180\t7\n2024-03\tEU\t170\t6\n2024-03\tUS\t260\t9\n2024-03\tAPAC\t90\t3\n";
 
 async function main() {
-  const exe = process.env.AUTORA_BROWSER_PATH || ["/opt/pw-browsers/chromium-1194/chrome-linux/chrome", "/opt/pw-browsers/chromium"].find((p) => fs.existsSync(p));
+  const exe = CHROME;
   if (!exe || !fs.existsSync(exe)) { console.log("  skip  no browser here"); return; }
   if (!fs.existsSync("dist/index.html")) { console.log("  skip  no build (npm run build)"); return; }
   const shots = process.env.PANACEA_SHOTS || "";

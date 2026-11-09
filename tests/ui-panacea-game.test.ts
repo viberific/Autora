@@ -13,6 +13,7 @@ import { chromium, type Page } from "playwright-core";
 import starter from "../server/game-starter.json";
 import { readGame } from "../src/lib/panacea/apps/game";
 import { sleep, startApp } from "./e2e-harness";
+import { CHROME } from "./chrome";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -23,7 +24,7 @@ const platformer = () => ({ name: "Behavior", type: "PlatformBehavior::Platforme
 const topDown = () => ({ name: "Behavior", type: "TopDownMovementBehavior::TopDownMovementBehavior", maxSpeed: 200, deceleration: 800, acceleration: 400 });
 
 async function main() {
-  const exe = process.env.AUTORA_BROWSER_PATH || ["/opt/pw-browsers/chromium-1243/chrome-linux64/chrome", "/opt/pw-browsers/chromium-1194/chrome-linux/chrome", "/opt/pw-browsers/chromium"].find((p) => fs.existsSync(p));
+  const exe = CHROME;
   if (!exe || !fs.existsSync(exe)) { console.log("  skip  no browser here"); return; }
   if (!fs.existsSync("dist/index.html") || !fs.existsSync("dist/gdevelop-editor/index.html")) { console.log("  skip  the game editor is not built (npm run build, with gdevelop-editor)"); return; }
   const project: any = JSON.parse(JSON.stringify(starter));

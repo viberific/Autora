@@ -12,6 +12,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { chromium } from "playwright-core";
 import { startApp } from "./e2e-harness";
+import { CHROME } from "./chrome";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -19,7 +20,7 @@ async function test(name: string, fn: () => Promise<void>) {
 }
 
 async function main() {
-  const wanted = process.env.AUTORA_BROWSER_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+  const wanted = CHROME;
   const exe = fs.existsSync(wanted) ? wanted : fs.existsSync("/usr/bin/chromium") ? "/usr/bin/chromium" : "";
   if (!exe) { console.log("  skip  no browser here"); return; }
   const app = await startApp();

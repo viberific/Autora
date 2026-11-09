@@ -28,6 +28,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright-core";
 import { sleep, startApp } from "./e2e-harness";
+import { CHROME } from "./chrome";
 
 let passed = 0;
 let failed = 0;
@@ -78,8 +79,9 @@ function seedLearned(home: string, session: string, item: { id: string; revises:
 }
 
 async function main() {
-  const exe = process.env.AUTORA_BROWSER_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+  const exe = CHROME;
   if (!fs.existsSync(exe)) { console.log("  skip  no browser here"); return; }
+  if (!fs.existsSync("dist/index.html")) { console.log("  skip  the page is not built (npm run build)"); return; }
   const app = await startApp();
   const browser = await chromium.launch({ executablePath: exe });
   const page = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();

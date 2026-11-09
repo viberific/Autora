@@ -5,9 +5,10 @@ import path from "node:path";
 import { chromium } from "playwright-core";
 import { newCanvas } from "../src/lib/panacea/canvas";
 import { startApp } from "./e2e-harness";
+import { CHROME } from "./chrome";
 
 async function main() {
-  const exe = process.env.AUTORA_BROWSER_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+  const exe = CHROME;
   if (!fs.existsSync(exe) || !fs.existsSync(path.join("dist", "index.html"))) { console.log("  skip  browser/build unavailable"); return; }
   const app = await startApp();
   const browser = await chromium.launch({ executablePath: exe });

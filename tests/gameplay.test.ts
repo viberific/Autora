@@ -10,9 +10,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { CHROME } from "./chrome";
 
 process.env.AUTORA_STATE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "autora-gameplay-"));
-const linuxChrome = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+const linuxChrome = CHROME;
 if (!process.env.AUTORA_BROWSER_PATH && fs.existsSync(linuxChrome)) process.env.AUTORA_BROWSER_PATH = linuxChrome;
 
 const { parseSteps, playPreview, MAX_PLAY_MS, MAX_STEPS, MAX_SHOTS } = await import("../server/gameplay");

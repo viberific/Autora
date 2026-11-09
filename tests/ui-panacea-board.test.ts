@@ -10,6 +10,7 @@ import fs from "node:fs";
 import { chromium, type Page } from "playwright-core";
 import { sleep, startApp } from "./e2e-harness";
 import { workspaceReady } from "./ui-workspace-ready";
+import { CHROME } from "./chrome";
 
 let passed = 0;
 let onFail: () => Promise<void> = async () => undefined;
@@ -20,7 +21,7 @@ async function test(name: string, fn: () => Promise<void>) {
 interface Card { id: string; x: number; y: number; text: string; ask?: boolean }
 
 async function main() {
-  const exe = process.env.AUTORA_BROWSER_PATH || ["/opt/pw-browsers/chromium-1194/chrome-linux/chrome", "/opt/pw-browsers/chromium"].find((p) => fs.existsSync(p));
+  const exe = CHROME;
   if (!exe || !fs.existsSync(exe)) { console.log("  skip  no browser here"); return; }
   if (!fs.existsSync("dist/index.html")) { console.log("  skip  no build (npm run build)"); return; }
   const shots = process.env.PANACEA_SHOTS || "";
