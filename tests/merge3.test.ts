@@ -127,4 +127,17 @@ test("random edits to different lines always merge to both applied, and to the s
   }
 });
 
+test("a file with Windows line endings keeps them when the two sides are merged", () => {
+  const base = "one\r\ntwo\r\nthree\r\n";
+  const r = merge3(base, "ONE\r\ntwo\r\nthree\r\n", "one\r\ntwo\r\nTHREE\r\n");
+  assert.deepEqual(r.conflicts, []);
+  assert.equal(r.text, "ONE\r\ntwo\r\nTHREE\r\n");
+});
+
+test("the agent taking away the last newline is kept, as is the person adding one", () => {
+  assert.equal(merge3("a\nb\n", "A\nb", "a\nb\nc\n").text, "A\nb\nc");
+  assert.equal(merge3("a\nb", "A\nb", "a\nB\n").text, "A\nB\n");
+  assert.equal(merge3("a\nb\n", "A\nb\n", "a\nB\n").text, "A\nB\n");
+});
+
 console.log(`${passed} passed`);

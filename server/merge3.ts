@@ -170,6 +170,10 @@ export function merge3(baseText: string, oursText: string, theirsText: string): 
     at = end;
   }
   take(base.lines.length);
-  const ends = base.ends || ours.ends || theirs.ends;
-  return { text: out.join("\n") + (ends && out.length > 0 ? "\n" : ""), conflicts, withTheirs };
+  /* The file's own line ending (the person's copy is the file as it is now), and its last newline as whichever side
+     changed it left it: joining with "\n" turned a Windows file into a Unix one, and an agent taking away the final
+     newline had it put back. */
+  const ends = ours.ends !== base.ends ? ours.ends : theirs.ends;
+  const eol = /\r\n/.test(theirsText) || (!theirsText.includes("\n") && /\r\n/.test(oursText)) ? "\r\n" : "\n";
+  return { text: out.join(eol) + (ends && out.length > 0 ? eol : ""), conflicts, withTheirs };
 }
