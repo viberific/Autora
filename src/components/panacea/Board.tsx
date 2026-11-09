@@ -15,8 +15,23 @@ import { WORKSPACE_MODES, type WorkspaceMode } from "../../lib/workspace";
 import { usePhone } from "../../lib/stage";
 import { jumpTo, zoomAt } from "../../lib/panacea/workspace-camera";
 import { workViewport } from "../../lib/frameCoordinates";
+import { EngineFrame, setFullscreen, useFullscreen } from "../../lib/fullscreen";
+
+/* How far the free part of the board starts from its left edge. On a desktop the conversation is on the left and the
+   work rail stands on the canvas beside it, so what is framed is framed to the right of the rail, not under it. */
+const insetOf = (el: Element, room: { left: number }) => Math.max(0, room.left - el.getBoundingClientRect().left);
+function shifted<T extends { x: number; zoom: number }>(next: T | null, inset: number): T | null {
+  return next && inset ? { ...next, x: next.x - inset / next.zoom } : next;
+}
 
 interface View { x: number; y: number; zoom: number }
+
+/** One window's frame (see EngineFrame): a value that changes only with the window's own state, so panning the board
+    does not re-render every editor on it. */
+function EngineFrameScope({ id, full, onFull, children }: { id: string; full: boolean; onFull: (id: string, next: boolean) => void; children: ReactNode }) {
+  const value = useMemo(() => ({ full, setFull: (next: boolean) => onFull(id, next) }), [id, full, onFull]);
+  return <EngineFrame.Provider value={value}>{children}</EngineFrame.Provider>;
+}
 
 /** What the window and the agent's hand can ask of the board. */
 export interface BoardHandle {
@@ -83,6 +98,15 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
   /** On a phone the work area is measured above the conversation already, and every pixel of it counts: fit tight. */
   const fitOpts = useMemo(() => (phone ? { padding: 8, foot: 0 } : {}), [phone]);
   const root = useRef<HTMLDivElement>(null);
+  /* While a window or a piece is being moved or resized, the editors' frames let the pointer pass (styles.css,
+     .pa-board.is-gesturing iframe): a drag that crossed into one of them was taken by it, and the grip let go of nothing. */
+  const holdBoard = useCallback((on: boolean) => {
+    root.current?.classList.toggle("is-gesturing", on);
+    hold(on);
+  }, [hold]);
+  /* A window full screen on a phone has the screen: the jump dock steps aside for it (its own bar has the way back), so it
+     takes the phone's whole width instead of the room left of the dock. */
+  const [windowFull] = useFullscreen();
   const [view, setViewState] = useState<View>({ x: -80, y: -60, zoom: 1 });
   const viewRef = useRef(view);
   const [glide, setGlide] = useState(false);
@@ -96,6 +120,26 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     setGlide(smooth);
     if (smooth) glideTimer.current = setTimeout(() => { glideTimer.current = null; setGlide(false); }, 450);
   }, []);
+  /* The board's left edge moves when the conversation beside it opens, retracts or is resized, or the app rail folds.
+     The work keeps its place on the screen: the view moves by as much, so retracting the conversation does not throw
+     everything on the board a panel's width to the left and under the work rail. */
+  const lastLeft = useRef<number | null>(null);
+  useEffect(() => {
+    const el = root.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const check = () => {
+      const left = el.getBoundingClientRect().left;
+      const was = lastLeft.current;
+      lastLeft.current = left;
+      if (was === null || Math.abs(left - was) < 1) return;
+      const v = viewRef.current;
+      setView({ ...v, x: v.x - (was - left) / v.zoom });
+    };
+    check();
+    const watch = new ResizeObserver(check);
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, [setView]);
   /* Every finger on the canvas, by pointer id. Two are a pinch (see the effect below); one is the pan. */
   const fingers = useRef(new Map<number, { x: number; y: number }>());
   const [drag, setDrag] = useState<{ ids: Set<string>; dx: number; dy: number } | null>(null);
@@ -197,7 +241,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     if (!el) return;
     const boxes = boxesOf();
     const room = workViewport(el);
-    const next = fitWorkView(boxes, { width: room.width, height: room.height }, fitOpts);
+    const next = shifted(fitWorkView(boxes, { width: room.width, height: room.height }, fitOpts), insetOf(el, room));
     if (!next) return;
     fitted.current = boxes.length > 0;
     setView(next);
@@ -209,7 +253,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     if (!el || !surface) return;
     const boxes = boxesOf().filter((box) => box === surface || current.panels.some((panel) => panel.context === surface.id && panel.x === box.x && panel.y === box.y));
     const room = workViewport(el);
-    const next = fitWorkView([surface, ...boxes], { width: room.width, height: room.height }, fitOpts);
+    const next = shifted(fitWorkView([surface, ...boxes], { width: room.width, height: room.height }, fitOpts), insetOf(el, room));
     if (next) { interacted.current = true; setView(next); }
   }, [boxesOf, setView, fitOpts]);
   const handsBusy = useCallback(() => {
@@ -303,7 +347,8 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
       if (automatic) {
         const v = viewRef.current;
         const room = workViewport(el);
-        const x0 = Math.max(target.x, v.x), x1 = Math.min(target.x + target.w, v.x + room.width / v.zoom);
+        const left = v.x + insetOf(el, room) / v.zoom;
+        const x0 = Math.max(target.x, left), x1 = Math.min(target.x + target.w, left + room.width / v.zoom);
         const y0 = Math.max(target.y, v.y), y1 = Math.min(target.y + target.h, v.y + room.height / v.zoom);
         const seen = Math.max(0, x1 - x0) * Math.max(0, y1 - y0);
         if (target.w * target.h > 0 && seen / (target.w * target.h) >= 0.7) return;
@@ -318,7 +363,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
             : canvasRef.current.surfaces.find((surface) => surface.id === canvasRef.current.focus);
           if (!freshTarget) return;
           const room = workViewport(currentRoot);
-          const next = fitWorkView([freshTarget], { width: room.width, height: room.height }, fitOpts);
+          const next = shifted(fitWorkView([freshTarget], { width: room.width, height: room.height }, fitOpts), insetOf(currentRoot, room));
           if (next) setView(next);
         }));
         return;
@@ -326,10 +371,12 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
       const v = viewRef.current;
       const room = workViewport(el);
       if (room.width <= 0 || room.height <= 0) return;
+      const inset = insetOf(el, room);
+      // The camera is worked out for the free room as if it began at the board's edge, then moved past the rail.
       const camera = automatic ? jumpTo({ x: target.x, y: target.y, width: target.w, height: target.h },
-        { width: room.width, height: room.height }, { x: -v.x * v.zoom, y: -v.y * v.zoom, zoom: v.zoom }) : null;
-      const next = camera ? { x: -camera.x / camera.zoom, y: -camera.y / camera.zoom, zoom: camera.zoom }
-        : fitWorkView([target], { width: room.width, height: room.height }, fitOpts);
+        { width: room.width, height: room.height }, { x: -(v.x + inset / v.zoom) * v.zoom, y: -v.y * v.zoom, zoom: v.zoom }) : null;
+      const next = shifted(camera ? { x: -camera.x / camera.zoom, y: -camera.y / camera.zoom, zoom: camera.zoom }
+        : fitWorkView([target], { width: room.width, height: room.height }, fitOpts), inset);
       if (next) { if (!automatic) interacted.current = true; setView(next); }
     },
     frame: (box, automatic = false) => {
@@ -338,7 +385,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
       if (!el) return;
       const room = workViewport(el);
       if (room.width <= 0 || room.height <= 0) return;
-      const next = fitWorkView([box], { width: room.width, height: room.height }, fitOpts);
+      const next = shifted(fitWorkView([box], { width: room.width, height: room.height }, fitOpts), insetOf(el, room));
       if (next) { if (!automatic) interacted.current = true; setView(next, true); }
     },
     zoomOut: () => {
@@ -346,27 +393,30 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
       if (!el) return;
       interacted.current = true;
       const v = viewRef.current;
+      const room = workViewport(el);
       const camera = zoomAt({ x: -v.x * v.zoom, y: -v.y * v.zoom, zoom: v.zoom },
-        { x: workViewport(el).width / 2, y: workViewport(el).height / 2 }, v.zoom * 0.75);
+        { x: insetOf(el, room) + room.width / 2, y: room.height / 2 }, v.zoom * 0.75);
       setView({ x: -camera.x / camera.zoom, y: -camera.y / camera.zoom, zoom: camera.zoom });
     },
     reveal: async (x, y) => {
       /* What the person can see of the board, not all of it: on a phone the conversation sheet covers its foot, and a
          point under the sheet is a hand nobody watches (and a picker opened there is out of reach). */
       const r = workViewport(root.current!);
+      const inset = insetOf(root.current!, r);
       const v = viewRef.current;
       const margin = 80 / v.zoom;
       // Too far out to press anything (a phone fitting a whole canvas): in to a size a person works at, on the point.
       if (v.zoom < 0.75) {
-        setView({ zoom: 1, x: x - r.width / 2, y: y - r.height / 3 }, true);
+        setView({ zoom: 1, x: x - inset - r.width / 2, y: y - r.height / 3 }, true);
         await new Promise((res) => setTimeout(res, 420));
         return toScreen(x, y);
       }
-      if (x < v.x + margin || y < v.y + margin || x > v.x + r.width / v.zoom - margin || y > v.y + r.height / v.zoom - margin) {
+      const left = v.x + inset / v.zoom;
+      if (x < left + margin || y < v.y + margin || x > left + r.width / v.zoom - margin || y > v.y + r.height / v.zoom - margin) {
         /* Only the agent's hand asks, and while it works it has the screen, as someone who took control of it would:
            it moves the view to where it is working, even where the person had moved it, and even while its own typing
            has the focus (which `handsBusy` would otherwise read as the person's). */
-        setView({ ...v, x: x - r.width / v.zoom / 2, y: y - r.height / v.zoom / 3 }, true);
+        setView({ ...v, x: x - (inset + r.width / 2) / v.zoom, y: y - r.height / v.zoom / 3 }, true);
         await new Promise((res) => setTimeout(res, 380));
       }
       return toScreen(x, y);
@@ -376,8 +426,11 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     zoom: () => viewRef.current.zoom,
     viewRect: () => {
       const r = root.current!.getBoundingClientRect();
+      const room = workViewport(root.current!);
+      const inset = insetOf(root.current!, room);
       const v = viewRef.current;
-      return { x: v.x + 16 / v.zoom, y: v.y + 16 / v.zoom, w: (r.width - 32) / v.zoom, h: (r.height - 90) / v.zoom };
+      // What is in view and clear of the work rail, so a new piece of work is not put down under it.
+      return { x: v.x + (inset + 16) / v.zoom, y: v.y + 16 / v.zoom, w: (r.width - inset - 32) / v.zoom, h: (r.height - 90) / v.zoom };
     },
     summonHere: () => {
       const r = root.current!.getBoundingClientRect();
@@ -551,7 +604,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     if (!selected.has(panel.id)) setSelected(new Set([panel.id]));
     const el = e.currentTarget;
     el.setPointerCapture?.(e.pointerId);
-    hold(true);
+    holdBoard(true);
     const z = viewRef.current.zoom;
     const sx = e.clientX;
     const sy = e.clientY;
@@ -562,7 +615,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
       el.removeEventListener("pointerup", up);
       el.removeEventListener("pointercancel", up);
       setDrag(null);
-      hold(false);
+      holdBoard(false);
       if (Math.abs(last.dx) < 2 && Math.abs(last.dy) < 2) return;
       edit((d) => {
         for (const p of d.panels) if (base.has(p.id)) { p.x = snap(p.x + last.dx); p.y = snap(p.y + last.dy); }
@@ -572,7 +625,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     el.addEventListener("pointermove", move);
     el.addEventListener("pointerup", up);
     el.addEventListener("pointercancel", up);
-  }, [canvas.panels, selected, setSelected, hold, edit, onMoved]);
+  }, [canvas.panels, selected, setSelected, holdBoard, edit, onMoved]);
 
   const widenStart = useCallback((panel: Panel, e: ReactPointerEvent<HTMLElement>) => {
     if (e.button !== 0) return;
@@ -580,7 +633,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     e.stopPropagation();
     const el = e.currentTarget;
     el.setPointerCapture?.(e.pointerId);
-    hold(true);
+    holdBoard(true);
     const z = viewRef.current.zoom;
     const sx = e.clientX;
     let w = panel.w;
@@ -589,12 +642,12 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
       el.removeEventListener("pointermove", move);
       el.removeEventListener("pointerup", up);
       setWiden(null);
-      hold(false);
+      holdBoard(false);
       if (Math.abs(w - panel.w) >= GRID / 2) edit((d) => { const p = d.panels.find((x) => x.id === panel.id); if (p) p.w = snap(w); }, `Resized ${panel.title}`);
     };
     el.addEventListener("pointermove", move);
     el.addEventListener("pointerup", up);
-  }, [hold, edit]);
+  }, [holdBoard, edit]);
 
   const panelActions = useMemo<PanelActions>(() => ({ ...actions, grab, widen: widenStart }), [actions, grab, widenStart]);
 
@@ -632,7 +685,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     e.preventDefault();
     e.stopPropagation();
     interacted.current = true;
-    hold(true);
+    holdBoard(true);
     const target = e.currentTarget;
     target.setPointerCapture?.(e.pointerId);
     const start = { x: e.clientX, y: e.clientY, zoom: viewRef.current.zoom };
@@ -642,14 +695,14 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
       target.removeEventListener("pointermove", move);
       target.removeEventListener("pointerup", up);
       target.removeEventListener("pointercancel", up);
-      hold(false);
+      holdBoard(false);
       const [dx, dy] = at(ev);
       done(dx, dy);
     };
     target.addEventListener("pointermove", move);
     target.addEventListener("pointerup", up);
     target.addEventListener("pointercancel", up);
-  }, [hold]);
+  }, [holdBoard]);
 
   const MIN_TILE = { w: 280, h: 180 };
   /** A surface being moved or sized: drawn with the change, and written to the canvas (one undoable step) when let go. */
@@ -751,6 +804,27 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     was ?? { x: now.x, y: now.y, w: Math.max(320, room.width - pad * 2), h: Math.max(240, room.height - pad * 2) };
   const [, rerender] = useState(0);
   const isMaxed = (id: string) => maxed.current.has(id) || Boolean(canvas.windows?.find((w) => w.id === id)?.was);
+  /* A window's own Full screen: the board's Maximise for it, and on a phone the conversation sheet drops to its strip
+     (the shared flag, which the chat view reads). Through a ref, so the frames' value stays put while the board pans. */
+  const fullRef = useRef<(id: string, next: boolean) => void>(() => undefined);
+  fullRef.current = (id, next) => {
+    const toggle = () => { if (next !== isMaxed(id)) { maximize(id, "engine"); rerender((n) => n + 1); } };
+    if (!phone) { toggle(); return; }
+    if (!next) { toggle(); setFullscreen(false); return; }
+    /* The sheet drops first and the board grows into the room it gives; the window is sized to that room once the board
+       has stopped growing (a few still frames, a second at most), not to the room it had a moment before. */
+    setFullscreen(true);
+    const el = root.current;
+    let last = -1, still = 0, frames = 0;
+    const settle = () => {
+      const h = el ? Math.round(el.getBoundingClientRect().height) : 0;
+      still = h === last ? still + 1 : 0;
+      last = h;
+      if (still >= 3 || ++frames > 60) toggle(); else requestAnimationFrame(settle);
+    };
+    requestAnimationFrame(settle);
+  };
+  const onWindowFull = useCallback((id: string, next: boolean) => fullRef.current(id, next), []);
 
   const z = view.zoom;
 
@@ -839,14 +913,14 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
             onPointerDownCapture={(e) => { if (e.isTrusted) { onJumpWork?.(work.mode); raiseIt(work.id); } }}>
             <header className="pw-engine-head" onPointerDown={(e) => {
               if (e.button !== 0 || (e.target as HTMLElement).closest("button") || enginePins.has(work.id)) return;
-              e.preventDefault(); e.stopPropagation(); interacted.current = true; hold(true);
+              e.preventDefault(); e.stopPropagation(); interacted.current = true; holdBoard(true);
               raiseIt(work.id); // taken by its title bar, by a hand or a finger: it comes over the rest
               const target = e.currentTarget; target.setPointerCapture(e.pointerId);
               const start = { x: e.clientX, y: e.clientY, zoom: viewRef.current.zoom };
               const move = (event: PointerEvent) => setEngineBoxes((before) => ({ ...before,
                 [work.id]: { ...box, x: box.x + (event.clientX - start.x) / start.zoom, y: box.y + (event.clientY - start.y) / start.zoom } }));
               const up = (event: PointerEvent) => {
-                target.removeEventListener("pointermove", move); target.removeEventListener("pointerup", up); target.removeEventListener("pointercancel", up); hold(false);
+                target.removeEventListener("pointermove", move); target.removeEventListener("pointerup", up); target.removeEventListener("pointercancel", up); holdBoard(false);
                 const dx = (event.clientX - start.x) / start.zoom, dy = (event.clientY - start.y) / start.zoom;
                 if (Math.abs(dx) + Math.abs(dy) < 3) return;
                 edit((d) => { placeWindow(d.windows ?? (d.windows = []), work.id, { x: box.x + dx, y: box.y + dy, w: box.w, h: box.h }, { front: true }); }, `Moved ${work.title}`);
@@ -855,13 +929,13 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
             }}>
               <span>{workIcon(work.mode)}</span><b>{work.title}</b><span className="pw-engine-context">{WORKSPACE_MODES[work.mode].context}</span>
               <button type="button" aria-label={isMaxed(work.id) ? `Restore ${work.title}` : `Maximise ${work.title}`} aria-pressed={isMaxed(work.id)}
-                onClick={() => { maximize(work.id, "engine"); rerender((n) => n + 1); onJumpWork?.(work.mode); }}><IconMaximize size={14} /></button>
+                onClick={() => { onWindowFull(work.id, !isMaxed(work.id)); onJumpWork?.(work.mode); }}><IconMaximize size={14} /></button>
               <button type="button" aria-pressed={enginePins.has(work.id)} aria-label={`Pin ${work.title} work`} onClick={() => setEnginePins((before) => {
                 const next = new Set(before); if (next.has(work.id)) next.delete(work.id); else next.add(work.id); return next;
               })}>Pin</button>
               {onCloseWork && work.mode !== "browser" && <button type="button" aria-label={`Close ${work.title} work`} onClick={() => onCloseWork(work.mode)}><IconX size={14} /></button>}
             </header>
-            <div className="pw-engine-body">{work.content}</div>
+            <div className="pw-engine-body"><EngineFrameScope id={work.id} full={isMaxed(work.id)} onFull={onWindowFull}>{work.content}</EngineFrameScope></div>
             <i className="pa-resize" role="presentation" title="Drag to resize" onPointerDown={engineResize(work.id)} />
           </section>;
         })}</div>
@@ -923,7 +997,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
         /* The controls for moving around the work are there when there is work to move around: none on a blank canvas, and
            Tidy only once there is more than one thing to put in rows. (CLAUDE.md: controls appear when the work needs them.) */
         const pieces = canvas.surfaces.length + hosted.length;
-        if (pieces === 0) return null;
+        if (pieces === 0 || (phone && windowFull)) return null;
         const dock = <nav className="pw-jump-dock pa-chrome" aria-label="Jump to work">
         {canvas.surfaces.map((surface) => <button type="button" key={surface.id} data-jump={surface.id} title={`Jump to ${surface.title}`}
           aria-label={`Jump to ${surface.title}`} onClick={() => { handle.current?.jump(surface.id); onFocus(surface.id); onJumpWork?.("panacea"); }}>

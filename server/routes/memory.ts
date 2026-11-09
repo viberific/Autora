@@ -46,7 +46,7 @@ export function memoryRoutes(app: Express, deps: { mind: MemoryGraph; haltHands?
     if (typeof req.body?.unprompted === "boolean") state.threadsUnprompted = req.body.unprompted;
     const mood = (MOODS as readonly string[]).includes(req.body?.mood);
     if (mood) state.threadsMood = req.body.mood;
-    if (mood || ["remarks", "threads", "news", "unprompted"].some((k) => typeof req.body?.[k] === "boolean")) save();
+    if (mood || ["remarks", "threads", "unprompted"].some((k) => typeof req.body?.[k] === "boolean")) save();
     res.json({ remarks: state.collabRemarks, threads: state.threadsAlive, mood: state.threadsMood, unprompted: state.threadsUnprompted });
   });
 

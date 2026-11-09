@@ -15,6 +15,7 @@ import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { CHROME } from "./chrome";
 
 process.env.AUTORA_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "autora-navigation-"));
 
@@ -50,9 +51,7 @@ const PAGES: Record<string, string> = {
 
 async function main() {
   const { LiveBrowser, probeBrowser, outlineOf } = await import("../server/browser");
-  const executable = process.env.AUTORA_BROWSER_PATH
-    || ["/opt/pw-browsers/chromium-1194/chrome-linux/chrome", "/usr/bin/chromium-browser", "/usr/bin/chromium"]
-      .find((p) => fs.existsSync(p));
+  const executable = CHROME;
   if (executable) process.env.AUTORA_BROWSER_PATH = executable;
 
   console.log("the outline");

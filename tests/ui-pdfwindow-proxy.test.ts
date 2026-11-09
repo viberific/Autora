@@ -16,6 +16,7 @@ import net from "node:net";
 import { chromium, type Frame } from "playwright-core";
 import { PDFDocument, PDFHexString, PDFName, PDFNumber, PDFOperator, PDFOperatorNames, PDFString, StandardFonts } from "@cantoo/pdf-lib";
 import { sleep, startApp } from "./e2e-harness";
+import { CHROME } from "./chrome";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -34,7 +35,7 @@ async function drawn(frame: Frame): Promise<boolean> {
 }
 
 async function main() {
-  const exe = process.env.AUTORA_BROWSER_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+  const exe = CHROME;
   if (!fs.existsSync(exe)) { console.log("  skip  no browser here"); return; }
   if (!fs.existsSync("dist/spectra-editor/index.html")) { console.log("  skip  the editor is not built (npm run build)"); return; }
   const app = await startApp();
@@ -120,6 +121,8 @@ async function main() {
          through the window that holds it, which is the app's own page. */
       assert.ok(passedOn.some((u) => u.startsWith("/spectra-editor/index.html")), "the editor's page came through");
       assert.ok(!passedOn.some((u) => u.startsWith("/spectra-editor/assets/")), "and it is the whole of the editor: nothing else to fetch");
+      // pdf.js asks for its data (fonts, maps) as it draws, a moment after the first paint on a busy machine.
+      for (let i = 0; i < 50 && !passedOn.some((u) => u.startsWith("/spectra-editor/pdfjs/")); i++) await sleep(100);
       assert.ok(passedOn.some((u) => u.startsWith("/spectra-editor/pdfjs/")), "pdf.js's own data came through the window that holds the frame");
       assert.deepEqual(refused, [], "nothing the editor asked for was turned away");
     });

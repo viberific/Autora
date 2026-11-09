@@ -16,6 +16,7 @@ import starter from "../server/game-starter.json";
 import { readGame } from "../src/lib/panacea/apps/game";
 import { readModel, type ModelDoc } from "../src/lib/panacea/apps/model";
 import { sleep, startApp } from "./e2e-harness";
+import { CHROME } from "./chrome";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -23,7 +24,7 @@ async function test(name: string, fn: () => Promise<void>) {
 }
 
 async function main() {
-  const exe = process.env.AUTORA_BROWSER_PATH || ["/opt/pw-browsers/chromium-1243/chrome-linux64/chrome", "/opt/pw-browsers/chromium-1194/chrome-linux/chrome", "/opt/pw-browsers/chromium"].find((p) => fs.existsSync(p));
+  const exe = CHROME;
   const engineFile = path.join("dist", "autora-3d-engine", "engine.mjs");
   if (!exe || !fs.existsSync(exe)) { console.log("  skip  no browser here"); return; }
   if (!fs.existsSync("dist/index.html") || !fs.existsSync(engineFile) || !fs.existsSync("dist/gdevelop-editor/index.html")) { console.log("  skip  the 3D modeller or the game editor is not built (npm run build)"); return; }

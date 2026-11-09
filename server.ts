@@ -1,3 +1,4 @@
+import { redactDeep as redactDeepWith } from "./server/redactdeep";
 import fs from "node:fs";
 import http from "node:http";
 import https from "node:https";
@@ -510,6 +511,7 @@ function forgetSession(id: string) {
   for (const key of heldCalls.keys()) if (key.startsWith(`${id}\u0000`)) heldCalls.delete(key);
   turnsInFlight.delete(id);
   agentRuns.delete(id);
+  automationSessions.delete(id);
   workspaces.delete(id);
   codeTouched.delete(id);
 }
@@ -589,25 +591,7 @@ function redactForPerson(text: string): string {
 // The Logs page gets the same treatment as the thread.
 setLogRedactor(redactForPerson);
 
-/**
- * Every string in a payload, however deep, with secrets blanked.
- *
- * It used to look only one level down, so a key inside a tool call's nested
- * arguments (an MCP tool's `{"auth": {"token": ...}}`, a header list) or in
- * any array went into the log on disk and to every watcher as it was.
- */
-function redactDeep(value: unknown, depth = 0): unknown {
-  if (typeof value === "string") return redactForPerson(value);
-  if (value === null || typeof value !== "object" || depth >= 8) return value;
-  if (Array.isArray(value)) return value.map((item) => redactDeep(item, depth + 1));
-  // Plain objects only: a Date or a Buffer rebuilt key by key would stop
-  // being one.
-  const proto = Object.getPrototypeOf(value);
-  if (proto !== Object.prototype && proto !== null) return value;
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(value)) out[k] = redactDeep(v, depth + 1);
-  return out;
-}
+const redactDeep = (value: unknown): unknown => redactDeepWith(value, redactForPerson);
 
 // Broadcast an event to all connected websockets for a session
 function emitEvent(session: Session, kind: string, actor: string, payload: Record<string, any>, span: string | null = null, blob: string | null = null): AutoraEvent {
@@ -7047,7 +7031,8 @@ async function startServer() {
   };
   jobRoutes(app, {
     jobs, scheduler, saveJobs, jobView, saneWatch, createJob, todaysLedger,
-    automationRunning: () => automationSessions.size,
+    /* Chats a job started stay marked as such for as long as they exist; the ones running are those with a turn. */
+    automationRunning: () => [...automationSessions].filter((id) => turnsInFlight.has(id) || sessions.get(id)?.busy).length,
   });
 
   triggerRoutes(app, {

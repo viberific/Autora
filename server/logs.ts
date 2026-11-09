@@ -78,7 +78,8 @@ const RANK: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 };
 export function readLogs(query: LogQuery = {}) {
   const floor = query.level ? RANK[query.level] : 0;
   const needle = query.q?.trim().toLowerCase();
-  const limit = Math.min(Math.max(query.limit ?? 500, 1), 2000);
+  // A limit that is not a number (`?limit=abc` reads as NaN) is the default, not a page of nothing.
+  const limit = Math.min(Math.max(Number.isFinite(query.limit) ? Math.floor(query.limit!) : 500, 1), 2000);
   const out: LogLine[] = [];
   for (let i = lines.length - 1; i >= 0 && out.length < limit; i--) {
     const l = lines[i];

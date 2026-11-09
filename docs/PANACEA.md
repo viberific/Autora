@@ -15,7 +15,7 @@ Every opened engine stays mounted when the camera changes, so a jump is not a re
 editor state. Web remains a real work surface; Activity is not a separate card. The Tools page
 presents Panacea with capability configuration, not separate applications.
 
-The workspace fills the available area. The conversation is a panel on its right (its left edge resizes it; on a phone a bottom
+The workspace fills the available area. The conversation is a panel on its left, beside the app rail (its right edge resizes it; on a phone a bottom
 sheet), with the original composer, **Ask Autora**, at its foot, retaining work mode, speech, attachments, notebooks, artifacts,
 capabilities and Send/Stop; Enter sends and Shift+Enter writes a line (on a phone's keyboard Enter is a new line and the arrow sends).
 The **TODO list is attached above the entry**. Messages are individual bubbles above it, and older bubbles fade at the top edge.

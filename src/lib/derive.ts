@@ -478,6 +478,9 @@ export function derive(events: AutoraEvent[]): Derived {
   /** Thumbs on a whole turn (written before a thumb named its reply), by the turn's seq: placed on its last reply at the end. */
   const turnRatings = new Map<number, { up: boolean; reason?: string }>();
   let openAgentTurn: TranscriptTurn | null = null;
+  /* A model call ended (usage.turn) while a reply was open: what the next call says is a new paragraph of the same reply,
+     not more of its last word -- "make slides?" and "Done." used to read "make slides?Done." */
+  let stepEnded = false;
   const approvals: Approval[] = [];
   const asks = new Map<string, Ask>();
   const files: FileChange[] = [];
@@ -697,10 +700,12 @@ export function derive(events: AutoraEvent[]): Derived {
         // Deltas coalesce into the current reply rather than creating a cell
         // each -- otherwise a streamed sentence becomes 40 cards.
         if (openAgentTurn && current()?.kind === "reply") {
+          if (stepEnded && openAgentTurn.text.trim()) openAgentTurn.text = `${openAgentTurn.text.trimEnd()}\n\n`;
           openAgentTurn.text += e.payload.text ?? "";
         } else {
           openAgentTurn = openReply(e.seq, e.payload.text ?? "");
         }
+        stepEnded = false;
         if (e.payload.setup) openAgentTurn.setup = true;
         break;
       }
@@ -1283,6 +1288,7 @@ export function derive(events: AutoraEvent[]): Derived {
 
       case Kind.UsageTurn:
         if (e.payload.context) gauge(e.payload.context);
+        if (openAgentTurn) stepEnded = true;
         break;
 
       case Kind.SessionEnded:

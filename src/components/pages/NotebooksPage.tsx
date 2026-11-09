@@ -177,7 +177,7 @@ export function NotebooksPage({
 
         {books !== null && books.length === 0 && !making && (
           <div className="nb-empty">
-            <IconNotebook size={28} />
+            <IconNotebook size={20} />
             <p>No notebooks yet.</p>
             <p className="jf-hint">
               Try asking: “Compile a report in a notebook from these emails, and refute each point in the

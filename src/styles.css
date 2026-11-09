@@ -106,7 +106,6 @@
   --z-pop-note: 25;
   --z-menu: 30;
   --z-top-bar: 40;
-  --z-side: 45;
   --z-panel: 50;
   --z-modal: 60;
   --z-cover: 80;
@@ -207,6 +206,28 @@ body::before {
 ::-webkit-scrollbar-thumb:hover { background: var(--s4); background-clip: content-box; }
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-xs); }
+
+/* Checkboxes: one look, from the tokens, so a theme reaches them. The browser's own box was a light square on a dark
+   page in every theme but its accent tint. The tick is a mask, so it takes --on-accent. */
+input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none;
+  flex: 0 0 auto; width: 16px; height: 16px; margin: 0;
+  display: inline-grid; place-content: center; vertical-align: middle;
+  border-radius: var(--r-2xs); border: 1px solid var(--border-strong); background: var(--s2);
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+input[type="checkbox"]::before {
+  content: ""; width: 10px; height: 10px;
+  background: var(--on-accent);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2l2.3 2.3 4.7-5' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2l2.3 2.3 4.7-5' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  transform: scale(0); transition: transform var(--dur-1) var(--ease-spring);
+}
+input[type="checkbox"]:hover:not(:disabled) { border-color: var(--accent-line); }
+input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
+input[type="checkbox"]:checked::before { transform: scale(1); }
+input[type="checkbox"]:disabled { opacity: 0.5; cursor: default; }
 
 /* Text fields: one focus language. A field that has a border of its own takes
    the accent on that border and a soft halo outside it (a bare input inside a
@@ -566,6 +587,12 @@ body::before {
 .empty p { margin: 0; font-size: var(--fs-sm); color: var(--text-3); max-width: 300px; }
 
 .empty .empty-note { font-size: var(--fs-xs); color: var(--text-3); max-width: 340px; }
+/* A phone's half-height chat sheet leaves the empty state about 220px: a smaller mark and tighter spacing keep the
+   whole card (the providers to pick from, above all) in view rather than behind the message box. */
+.conversation-flow.is-half .empty { padding: 12px 16px; gap: 8px; }
+.conversation-flow.is-half .empty-mark,
+.conversation-flow.is-half .empty-mark svg { width: 40px !important; height: 40px !important; }
+.conversation-flow.is-half .empty-mark { margin-bottom: 0; }
 
 /* The empty chat before a model is connected: one card asking for it. */
 .setup, .starters {
@@ -1962,7 +1989,7 @@ label + .jf-hint { margin-top: -5px; }
   font-family: var(--mono); font-size: var(--fs-base); color: var(--text); font-weight: 600;
 }
 .set-active-row span {
-  font-family: var(--mono); font-size: var(--fs-xs); color: var(--text-2);
+  font-size: var(--fs-sm); color: var(--text-2);
   overflow-wrap: anywhere;
 }
 .set-warn { margin: 9px 0 0; font-size: var(--fs-sm); line-height: 1.5; color: var(--warn); }
@@ -2002,7 +2029,7 @@ label + .jf-hint { margin-top: -5px; }
 .set-key-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .set-key-head b { font-size: var(--fs-base); font-weight: 600; }
 .set-badge {
-  font-style: normal; font-family: var(--mono); font-size: var(--fs-2xs);
+  font-style: normal; font-size: var(--fs-2xs); font-weight: 600; letter-spacing: 0.02em;
   padding: 2px 8px; border-radius: var(--r-pill);
   background: rgba(var(--live-rgb), 0.13); color: var(--live);
 }
@@ -3162,20 +3189,22 @@ select.set-select {
 
 /* The headline is three numbers, and the month is the one people came for. */
 .bill-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+/* Spoken the way the Status page's and the Sessions page's number cards are (.stat-card): the interface's own face,
+   tabular so a changing figure does not jitter, rather than a code font that made money look like a log line. */
 .bill-tile {
-  display: grid; gap: 3px; padding: 10px 11px; border-radius: var(--r-sm);
+  display: grid; gap: 4px; padding: 12px 14px; border-radius: var(--r);
   background: var(--s2); border: 1px solid var(--border);
 }
 .bill-tile.is-lead { border-color: var(--accent-line); background: var(--accent-soft); }
 .bill-tile-label {
-  font-size: var(--fs-2xs); font-weight: 650; letter-spacing: 0.06em;
+  font-size: var(--fs-2xs); font-weight: 650; letter-spacing: 0.08em;
   text-transform: uppercase; color: var(--text-3);
 }
 .bill-tile-value {
-  font-family: var(--mono); font-size: var(--fs-xl); font-weight: 650; color: var(--text);
+  font-size: var(--fs-2xl); font-weight: 650; letter-spacing: -0.01em; color: var(--text);
   font-variant-numeric: tabular-nums;
 }
-.bill-tile-sub { font-size: var(--fs-2xs); color: var(--text-3); }
+.bill-tile-sub { font-size: var(--fs-xs); color: var(--text-3); }
 
 .bill-budget { margin-top: 13px; display: grid; gap: 7px; }
 .bill-meter {
@@ -3630,6 +3659,8 @@ select.set-select {
     font-size: var(--fs-base); font-weight: 600; padding: 0 10px;
   }
   .top .session-btn:hover { background: var(--s2); border-color: var(--border); }
+  /* With no pill drawn round the name, a chevron at the far end of the header belonged to nothing: it follows the name. */
+  header.top .session-btn svg { margin-left: 0; }
   .session-name { max-width: none; }
 
   /* Slim: the work window on the right gets the room. */
@@ -3996,6 +4027,8 @@ input.shot-where[readonly] { cursor: default; }
 .md > * + * { margin-top: 10px; }
 .md h3, .md h4, .md h5, .md h6 { line-height: 1.35; font-weight: 650; letter-spacing: -0.01em; }
 .md > h3, .md > h4 { margin-top: 18px; }
+/* A heading belongs to what follows it: closer to that than to what came before. */
+.md > :is(h3, h4, h5, h6) + * { margin-top: 6px; }
 .md h3 { font-size: 1.14em; }
 .md h4 { font-size: 1.05em; }
 .md h5, .md h6 { font-size: 0.86em; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-2); }
@@ -4082,7 +4115,9 @@ input.shot-where[readonly] { cursor: default; }
 .md-detail-body > * { margin: 0; }
 .md-detail-body > * + * { margin-top: 8px; }
 
-.md p { margin: 0; }
+/* The browser's paragraph margins off, at no specificity: written as `.md p` this outweighed `.md > * + *`, and every
+   paragraph after a heading, a list, a table, a code block or a quote sat flush against it. */
+:where(.md p) { margin: 0; }
 .md blockquote > * + * { margin-top: 8px; }
 /* Inside the frame wrap, whose line-height is zero to keep the picture flush. */
 .shot-caption { line-height: 1.5; }
@@ -4963,7 +4998,7 @@ button.stat-card:hover { border-color: var(--accent-line); transform: translateY
   font-size: var(--fs-xs); font-family: var(--mono); color: var(--text-3);
   padding: 1px 7px; border-radius: var(--r-pill); background: var(--s2); border: 1px solid var(--border);
 }
-.art-empty { margin: 0; padding: 18px 16px; border-radius: var(--r); border: 1px dashed var(--border); }
+.art-empty { margin: 0; padding: 48px 16px; text-align: center; }
 .art-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
 .art-card {
   position: relative;
@@ -5162,11 +5197,19 @@ button.stat-card:hover { border-color: var(--accent-line); transform: translateY
 }
 .nb-new textarea { line-height: 1.55; }
 .nb-new-acts { display: flex; justify-content: flex-end; gap: 8px; }
+/* An empty page says so the way Schedules and Mind do (.empty): its icon in the glowing ring, a title, a line under it.
+   Notebooks, the Store, Organization and Threads share this; it was a dashed box, a different look for the same moment. */
 .nb-empty {
-  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 36px 16px;
-  border-radius: var(--r); border: 1px dashed var(--border); color: var(--text-3); text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 48px 16px;
+  color: var(--text-3); text-align: center;
 }
-.nb-empty p { margin: 0; }
+.nb-empty p { margin: 0; max-width: 420px; }
+.nb-empty > svg:first-child {
+  box-sizing: content-box; padding: 21px; margin-bottom: 4px; border-radius: 50%;
+  background: var(--s2); border: 1px solid rgba(var(--accent-rgb), 0.28);
+  box-shadow: 0 0 34px -10px rgba(var(--accent-rgb), 0.6);
+}
+.nb-empty > svg:first-child + p { color: var(--text); font-size: var(--fs-md); font-weight: 600; }
 .nb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
 .nb-card {
   display: flex; gap: 11px; align-items: flex-start; min-width: 0; padding: 13px 14px;
@@ -6457,15 +6500,6 @@ button.dock-card:hover { border-color: var(--border-strong); }
   max-width: calc(100% - 320px);
   border-left: 0;
 }
-/* The column beside the chat starts above the header and covers its right part, so what the header holds -- the
-   session's name and the permissions pill -- has to fit in the chat column's width, not the page's. Without this the
-   title ran on under the window and the Yolo/Ask pill, unreachable, was beneath it. The name is the one thing that
-   gives way. The 320px is the room .chat-view.has-app > .page leaves the window. */
-.shell:has(.chat-view:not([hidden]) > .side-stack) > .top {
-  padding-right: calc(100% - min(var(--chat-w, clamp(330px, 26vw, 430px)), 100% - 320px) + 8px);
-}
-.shell:has(.chat-view:not([hidden]) > .side-stack) > .top .session-btn { flex-shrink: 1; min-width: 0; }
-.shell:has(.chat-view:not([hidden]) > .side-stack) > .top .session-name { max-width: none; }
 .app-pane {
   flex: 1; min-width: 0; min-height: 0; display: flex;
   border-left: 1px solid var(--border-strong); background: var(--bg);
@@ -6493,13 +6527,6 @@ button.dock-card:hover { border-color: var(--border-strong); }
 .app-pane[data-pane='widget'] .cell.widget.is-fill .cell-top { border-bottom: 1px solid var(--border); }
 .app-pane[data-pane='widget'] .cell.widget.is-fill .widget-body { flex: 1; min-height: 0; height: auto; }
 
-/* The column beside the chat: the strip of open windows, then the window itself. The strip is the top of the
-   screen: this column starts above the header, so the tabs sit at the very edge and what shows of the header over
-   this column is its last third. It is above the header in the paint order (the header is z-index 40). */
-.side-stack {
-  flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;
-  position: relative; z-index: var(--z-side); margin-top: calc(-1 * var(--top-h, 58px));
-}
 .panacea-workspace { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--bg); }
 .pw-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; flex: 0 0 auto; border-bottom: 1px solid var(--border); background: var(--s1); }
 .pw-bar > svg { color: var(--accent-light); flex-shrink: 0; }
@@ -6534,7 +6561,6 @@ button.dock-card:hover { border-color: var(--border-strong); }
 .pw-capability { padding: 12px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--s1); }
 .pw-capability.on { border-color: var(--border-strong); }
 .pw-launch { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; padding: 12px; }
-.pw-launch > span { color: var(--text-3); font-size: var(--fs-xs); }
 .pw-launch button { pointer-events: auto; }
 .pw-full-workspace { position: relative; isolation: isolate; min-width: 0; overflow: hidden; }
 .pw-scene-stack { position: absolute; inset: 0; min-width: 0; min-height: 0; display: flex; z-index: 0; }
@@ -7862,6 +7888,12 @@ body.is-resizing iframe { pointer-events: none; }
   border-bottom-right-radius: var(--r-lg); opacity: 0.7;
 }
 .pa-resize:hover { opacity: 1; }
+/* A maximised window fills the room and has nothing to resize: no grip, which on a phone lay over the editor's own All
+   tools button in that corner and swallowed the tap. */
+.pw-engine.is-max > .pa-resize, .pa-surface.is-max > .pa-resize { display: none; }
+/* Mid-gesture (a window or a piece being moved or resized, Board.tsx holdBoard) the editors' frames let the pointer pass:
+   a drag crossing into one was taken by it, and the move or resize stopped where the frame began. */
+.pa-board.is-gesturing iframe { pointer-events: none; }
 /* Where work went between the apps (Board.tsx flowLines): a line between two windows, an arrow halfway, what went. */
 .pa-flows { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; z-index: 0; }
 .pa-flow line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 5; opacity: 0.75; }

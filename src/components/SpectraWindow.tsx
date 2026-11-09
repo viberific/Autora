@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SaveButton, settle } from "./SaveButton";
 import { LoadButton } from "./LoadButton";
-import { useFullscreen } from "../lib/fullscreen";
+import { useWindowFull } from "../lib/fullscreen";
 import { useCollab } from "../lib/collab";
 import { TakeControl } from "./TakeControl";
 import { onDeskHand, useDeskState, type DeskHand } from "../lib/pdfdesk";
@@ -59,7 +59,7 @@ export function SpectraWindow({ sessionId, phone }: { sessionId: string; phone: 
      -- the editor does not know this window exists. */
   const mine = useCollab().held.includes("pdf");
   /** On a phone the pinned view is a third of the screen: editing wants all of it. */
-  const [full, setFull] = useFullscreen();
+  const [full, setFull] = useWindowFull();
 
   const post = useCallback((msg: Record<string, unknown>) => {
     frame.current?.contentWindow?.postMessage(msg, "*");

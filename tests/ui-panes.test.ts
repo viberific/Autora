@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { chromium } from "playwright-core";
 import { sleep, startApp } from "./e2e-harness";
+import { CHROME } from "./chrome";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -16,7 +17,7 @@ async function test(name: string, fn: () => Promise<void>) {
 }
 
 async function main() {
-  const exe = process.env.AUTORA_BROWSER_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+  const exe = CHROME;
   if (!fs.existsSync(exe)) { console.log("  skip  no browser here"); return; }
   if (!fs.existsSync("dist/index.html")) { console.log("  skip  the app is not built"); return; }
   const app = await startApp();
@@ -111,7 +112,8 @@ async function main() {
       assert.match(await p2.locator(".pa-surface.is-doc .ProseMirror").innerText(), /Memo[\s\S]*Hello/, "the rail resize preserves the document");
       const scene = (await p2.locator(".panacea-workspace").boundingBox())!;
       const entry = (await p2.locator(".conversation-flow__entry").boundingBox())!;
-      assert.ok(entry.x >= scene.x + scene.width - 2, "the docked entry sits beside the work, never over it");
+      // The conversation is on the left of the work on a desktop.
+      assert.ok(entry.x + entry.width <= scene.x + 2, "the docked entry sits beside the work, never over it");
       await p2.getByRole("button", { name: "Show the whole menu" }).click();
     });
 

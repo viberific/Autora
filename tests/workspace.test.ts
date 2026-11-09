@@ -11,7 +11,7 @@ import { latestWorkspaceChange, workspaceToolKey, type WorkspaceSnapshot } from 
 import type { Bucket, Cell } from "../src/lib/derive";
 import { fitWorkView, revealWorkView, type WorkBox } from "../src/lib/workspaceViewport";
 import { hostedWork } from "../src/lib/workspaceScene";
-import { scaledFramePoint, workRectVisible } from "../src/lib/frameCoordinates";
+import { scaledFramePoint, workRectVisible, workViewport } from "../src/lib/frameCoordinates";
 
 let passed = 0;
 function test(name: string, run: () => void) {
@@ -192,6 +192,28 @@ test("off-camera mounted work cannot qualify for Visible hand work", () => {
   assert.equal(workRectVisible({ left: -2700, top: 150, width: 300, height: 200 }, viewport), false);
   assert.equal(workRectVisible({ left: 900, top: 150, width: 800, height: 200 }, viewport), false);
   assert.equal(workRectVisible({ left: 500, top: 150, width: 800, height: 600 }, viewport), true);
+});
+
+test("the room for work keeps clear of the work rail on whichever side of the canvas it stands", () => {
+  const rect = (left: number, top: number, width: number, height: number) =>
+    ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top }) as DOMRect;
+  const board = { getBoundingClientRect: () => rect(436, 52, 1004, 848), querySelectorAll: () => [] } as unknown as Element;
+  const withRail = (rail: DOMRect | null) => {
+    (globalThis as any).document = {
+      querySelector: (q: string) => (q.includes("work-navigation") && rail ? { getBoundingClientRect: () => rail } : null),
+    };
+    try { return workViewport(board); } finally { delete (globalThis as any).document; }
+  };
+  // A desktop: the conversation on the left, the rail just right of it, on the canvas's left edge.
+  const desk = withRail(rect(452, 100, 50, 776));
+  assert.equal(desk.left, 510);
+  assert.equal(desk.width, 1440 - 510);
+  // A phone: the rail along the right edge.
+  const phone = withRail(rect(1380, 100, 50, 300));
+  assert.equal(phone.left, 436);
+  assert.equal(phone.width, 1372 - 436);
+  // No rail: the whole board.
+  assert.equal(withRail(null).width, 1004);
 });
 
 console.log(`\n${passed} passed`);

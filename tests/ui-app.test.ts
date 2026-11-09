@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { chromium, type Page } from "playwright-core";
 import { sleep, startApp } from "./e2e-harness";
+import { CHROME } from "./chrome";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -17,7 +18,7 @@ async function test(name: string, fn: () => Promise<void>) {
 }
 
 async function main() {
-  const exe = process.env.AUTORA_BROWSER_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+  const exe = CHROME;
   if (!fs.existsSync(exe)) { console.log("  skip  no browser here"); return; }
   const app = await startApp();
   const browser = await chromium.launch({ executablePath: exe });
@@ -52,10 +53,10 @@ async function main() {
 
     console.log("opening");
     await test("the app opens beside the conversation and fits inside its window", async () => {
-      // In Panacea the app is a window on the board, and the conversation is docked to its right.
+      // In Panacea the app is a window on the board, and the conversation is docked to its left.
       const chat = await page.locator(".conversation-flow").first().boundingBox();
       const pane = await page.locator('.app-pane[data-pane="app"]').boundingBox();
-      assert.ok(chat && pane && pane.x + pane.width <= chat.x + 2, `beside the conversation, not under it (${JSON.stringify({ pane, chat })})`);
+      assert.ok(chat && pane && pane.x >= chat.x + chat.width - 2, `beside the conversation, not under it (${JSON.stringify({ pane, chat })})`);
       assert.ok(pane.width > 400, `a usable width (${Math.round(pane.width)})`);
       const canvas = await page.locator(".app-canvas").boundingBox();
       const area = await page.locator(".app-area").boundingBox();

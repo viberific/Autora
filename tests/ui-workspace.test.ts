@@ -4,9 +4,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright-core";
 import { startApp } from "./e2e-harness";
+import { CHROME } from "./chrome";
 
 async function main() {
-  const exe = process.env.AUTORA_BROWSER_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+  const exe = CHROME;
   if (!fs.existsSync(exe)) { console.log("  skip  no configured browser here"); return; }
   if (!fs.existsSync(path.join("dist", "index.html"))) { console.log("  skip  no app build here"); return; }
   const app = await startApp();
@@ -30,12 +31,15 @@ async function main() {
       const workspace = page.getByRole("region", { name: "Panacea workspace", exact: true });
       await workspace.waitFor();
       const dock = page.getByRole("navigation", { name: "Jump to work" });
-      await dock.waitFor();
-      assert.equal(await dock.count(), 1, "the jump dock is outside the transformed world, not copied into each surface");
+      // Controls come with the work: a blank canvas has no dock.
+      assert.equal(await dock.count(), 0, "a blank canvas shows no jump dock");
       assert.equal(await workspace.getByRole("combobox").count(), 0, "no replacement tab/mode selector");
       await app.api("POST", `/api/studio/${session}/open`);
       const music = workspace.locator('[data-engine="studio"]');
       await music.waitFor();
+      await dock.waitFor();
+      await page.waitForTimeout(500); // it has just arrived with the work, and settles in
+      assert.equal(await dock.count(), 1, "the jump dock is outside the transformed world, not copied into each surface");
       const jump = dock.getByRole("button", { name: "Jump to Music", exact: true });
       const first = await jump.boundingBox();
       await page.waitForTimeout(250);

@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { chromium } from "playwright-core";
 import { sleep, startApp } from "./e2e-harness";
+import { CHROME } from "./chrome";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -21,7 +22,7 @@ async function until(what: string, ok: () => Promise<boolean>, ms = 90_000) {
 }
 
 async function main() {
-  const exe = process.env.AUTORA_BROWSER_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+  const exe = CHROME;
   if (!fs.existsSync(exe)) { console.log("  skip  no browser here"); return; }
   if (!fs.existsSync("dist/office/web/slides/index.html") || !fs.existsSync("dist/office/host/slides.cjs")) { console.log("  skip  the PowerPoint editor is not built"); return; }
   if (!fs.existsSync("dist/index.html")) { console.log("  skip  the app is not built"); return; }

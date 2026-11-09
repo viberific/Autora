@@ -281,7 +281,24 @@ await test("the Logs page blanks secrets too, and a redactor that logs cannot re
   const lines = logs.readLogs({ component: "test" }).lines;
   const last = lines[lines.length - 1];
   assert.equal(last.message, "token is [REDACTED_DEEPSEEK_API_KEY]");
+  // A limit that is not a number still returns lines (it once read as NaN and returned none).
+  assert.ok(logs.readLogs({ component: "test", limit: Number("abc") }).lines.length > 0);
   logs.setLogRedactor(null);
+});
+
+await test("a secret in an event's payload is blanked however deep it is nested", async () => {
+  const { redactDeep } = await import("../server/redactdeep");
+  const secret = "sk-deepseek-env-0123456789";
+  let deep: any = { token: secret };
+  for (let i = 0; i < 100; i++) deep = { a: [deep] };
+  const out = JSON.stringify(redactDeep({ args: deep, list: [[["x " + secret]]] }, stateMod.redactSecrets));
+  assert.ok(!out.includes(secret), "nothing nested past the limit goes out as it was");
+  assert.match(out, /REDACTED_DEEPSEEK_API_KEY/);
+  const looped: any = { key: secret };
+  looped.self = looped;
+  assert.ok(!JSON.stringify(redactDeep(looped, stateMod.redactSecrets)).includes(secret), "a payload that refers to itself ends");
+  const when = new Date(0);
+  assert.equal((redactDeep({ when }, stateMod.redactSecrets) as any).when, when, "a Date stays one");
 });
 
 await test("the GitHub token goes only to GitHub's API", () => {

@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { chromium } from "playwright-core";
 import { sleep, startApp } from "./e2e-harness";
+import { CHROME } from "./chrome";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -16,7 +17,7 @@ async function test(name: string, fn: () => Promise<void>) {
 }
 
 async function main() {
-  const exe = process.env.AUTORA_BROWSER_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+  const exe = CHROME;
   if (!fs.existsSync(exe)) { console.log("  skip  no browser here"); return; }
   const app = await startApp();
   const browser = await chromium.launch({ executablePath: exe });
@@ -28,9 +29,9 @@ async function main() {
     const L = (a: string, b: string, c: string) => ({ todos: [{ title: "Read it", status: a }, { title: "Write it", status: b }, { title: "Check it", status: c }] });
     app.script.push(
       { tools: [{ name: "todo", args: L("in-progress", "not-started", "not-started") }] },
-      { tools: [{ name: "bash", args: { command: "sleep 1" } }] },
+      { tools: [{ name: "terminal", args: { command: "sleep 1" } }] },
       { tools: [{ name: "todo", args: L("completed", "in-progress", "not-started") }] },
-      { tools: [{ name: "bash", args: { command: "sleep 6" } }] },
+      { tools: [{ name: "terminal", args: { command: "sleep 6" } }] },
       { text: "All done." },
     );
     await page.fill('textarea[aria-label="Ask Autora"]', "do three things");

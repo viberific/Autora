@@ -6,6 +6,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { startApp } from "./e2e-harness";
+import { CHROME } from "./chrome";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -16,7 +17,7 @@ const GOOD = `<!doctype html><html><head><meta charset="utf-8"><title>Site</titl
 const BROKEN = GOOD.replace("</body>", `<script>throw new Error("boom in the app")</script></body>`);
 
 async function main() {
-  const exe = process.env.AUTORA_BROWSER_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+  const exe = CHROME;
   if (!fs.existsSync(exe)) { console.log("  skip  no browser here"); return; }
   const app = await startApp();
   try {

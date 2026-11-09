@@ -19,7 +19,7 @@ import { CAPABILITIES, capabilityOf } from "./capabilities";
 const OVERVIEW = [
   "How Autora's windows work (all of these tools are yours from the first message; none needs loading):",
   "- The layout. Panacea is the main area and the conversation is docked beside it, never over it: on desktop a panel on the " +
-    "right (its left edge resizes it), with the Ask Autora bar at its foot (work mode, voice, attachments, notebooks, artifacts, " +
+    "left, beside the app rail (its right edge resizes it), with the Ask Autora bar at its foot (work mode, voice, attachments, notebooks, artifacts, " +
     "Capabilities, Send, Stop) and the TODO list just above. Retract conversation slides the panel to an edge tab (Show conversation); " +
     "the bar, the TODO list and the toggle stay in a slim strip along the foot of the workspace, so you can always type. On a phone it " +
     "is a bottom sheet under the canvas, moved on its left half (the right half only scrolls): Canvas only, Half (the default: messages " +
@@ -27,7 +27,9 @@ const OVERVIEW = [
     "work) sits in the top bar, and Follow joins it once there is work to follow. Enter sends a message, Shift+Enter writes a line. Capabilities lists the editors this server has; one that is not installed is shown as such and cannot be opened. Every surface and engine card lives in one pannable, zoomable scene, not tabs: the icon dock at the canvas's bottom-left " +
     "jumps the camera to one, Zoom out and Show all work [ ] frame them, and all engines stay mounted with their unsaved work. The dock is not " +
     "there on a blank canvas, and Tidy joins it only once there is more than one piece of work: controls appear when the work needs them. A blank canvas shows nothing at all, no instructions: the canvas name and Save bar arrive with the first piece of work, and the undo and redo slider once there is something to take back. Files are put on the canvas by dropping or pasting them; they sit there, and the controls for them come when you pick them. Every " +
-    "window moves, resizes and maximises; x closes it. \"Follow\" moves the camera to your work, but not while the person types, drags, " +
+    "window moves, resizes and maximises; x closes it. A window's own Full screen button is its Maximise (the whole room there is " +
+    "for work); on a phone it also drops the conversation to its strip and the jump dock steps aside, and Back to the conversation " +
+    "gives both back. \"Follow\" moves the camera to your work, but not while the person types, drags, " +
     "pins or holds the camera; a manual jump stops it. Activity stays in the bubbles, contracted by default. A surface opens on the " +
     "first use of its tools or from Capabilities: never ask the person to open a window. A new empty chat has Open Panacea, to start " +
     "without a message. Terminal commands have no window: they are collapsible cards in the conversation.",
@@ -124,7 +126,8 @@ const PDF = [
     "not there: say \"open All tools\" and name it. The bar shows only the tools that fit and never scrolls. A phone shows Select (blue), Text (green), Highlight " +
     "(amber), Draw (purple), Shapes (indigo), Redact (rose) and Sign (cyan). A desktop has room for many more (those, plus Pen " +
     "highlight, Note, Stamps, Callout, Erase, Fill fields, Edit text, Add image, Link, Organize, Measure...) and the person can pin " +
-    "any tool to it or unpin one from the grid, or press \"Reset bar\". The last button (a grid of four squares, \"All tools\") " +
+    "any tool to it or unpin one from the grid (a pinned tool is on the bar whenever there is a document, as one reached for is), or " +
+    "press \"Reset bar\". The last button (a grid of four squares, \"All tools\") " +
     "opens every other tool in a window in the middle of the screen, with an x at the top right: " +
     "Pen highlight, Callout, Erase, Comments, Digital ID, Fill fields, Edit text, Add text, Add image, Link, Make a form, Password, " +
     "Watermark, Header & footer, Organize, Compress, Export, Compare, Repair, Crop, Page labels, Measure, Count, Make searchable, " +

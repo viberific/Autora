@@ -10,8 +10,8 @@
  *   npx tsx tests/captcha-widget.test.ts
  */
 import assert from "node:assert/strict";
-import fs from "node:fs";
 import http from "node:http";
+import { CHROME } from "./chrome";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -39,8 +39,7 @@ const hcaptcha = `<!doctype html><body style="margin:0;font:14px sans-serif"><di
 <canvas width="340" height="340" style="display:block;margin:0 auto"></canvas><div class="button-submit" style="width:90px;height:36px;margin:6px"></div></body>`;
 
 async function main() {
-  const executable = process.env.AUTORA_BROWSER_PATH
-    || ["/opt/pw-browsers/chromium-1194/chrome-linux/chrome", "/usr/bin/chromium-browser", "/usr/bin/chromium"].find((p) => fs.existsSync(p));
+  const executable = CHROME;
   if (!executable) {
     console.log("  skip  no browser here");
     return;

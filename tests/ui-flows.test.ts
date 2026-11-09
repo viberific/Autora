@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { chromium, type Page } from "playwright-core";
 import { turnStart, sleep, startApp } from "./e2e-harness";
+import { CHROME } from "./chrome";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -17,7 +18,7 @@ async function test(name: string, fn: () => Promise<void>) {
 }
 
 async function main() {
-  const exe = process.env.AUTORA_BROWSER_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+  const exe = CHROME;
   if (!fs.existsSync(exe)) { console.log("  skip  no browser here"); return; }
   const app = await startApp();
   const browser = await chromium.launch({ executablePath: exe });
@@ -160,6 +161,8 @@ async function main() {
       await page.goto(`${app.base}/?session=${s}`);
       const pill = page.locator(".mode-sel-pill");
       await pill.waitFor();
+      // The chat's own mode, once the chat has arrived (the pill draws before it does, under a slow server).
+      await page.waitForFunction(() => /Build/.test(document.querySelector(".mode-sel-pill")?.getAttribute("aria-label") ?? ""), null, { timeout: 10_000 }).catch(() => undefined);
       assert.match((await pill.getAttribute("aria-label")) ?? "", /Build/);
       const box = await pill.boundingBox();
       assert.ok(box && box.height >= 32, "a thumb-sized target");

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SaveButton, keptAs, settle } from "./SaveButton";
 import { LoadButton } from "./LoadButton";
-import { useFullscreen } from "../lib/fullscreen";
+import { useWindowFull } from "../lib/fullscreen";
 import { useCollab } from "../lib/collab";
 import { TakeControl } from "./TakeControl";
 import { onOfficeHand, onOfficePush, useOfficeWindow, type OfficeHand, type OfficeKind } from "../lib/officedesk";
@@ -55,7 +55,7 @@ export function OfficeWindow({ sessionId, kind, phone }: { sessionId: string; ki
   const [trouble, setTrouble] = useState<string | null>(null);
   const [versionsOpen, setVersionsOpen] = useState(false);
   /** On a phone the pinned view is a third of the screen: editing wants all of it. */
-  const [full, setFull] = useFullscreen();
+  const [full, setFull] = useWindowFull();
   /* A phone starts with the pages as pictures (fast, kept, readable); the full editor is a tap away. */
   const [editing, setEditing] = useState(false);
   const pages = phone && !editing;

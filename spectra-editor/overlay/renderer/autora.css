@@ -611,9 +611,10 @@
 .autora-phone [role="dialog"][data-state="open"] .flex { flex-wrap: wrap; }
 .autora-phone [role="dialog"][data-state="open"] canvas { max-width: 100%; height: auto; }
 
-/* Pinned above the conversation the window is a third of the screen: that is for looking at the page, and the bar and
-   the sheet would leave none of it. Full screen is where it is edited (the window's own button). */
-@media (max-height: 520px) {
+/* A small window is for looking at the page: the bar and the sheet would leave none of it. Full screen is where it is
+   edited (the window's own button): on a phone that is the window maximised above the conversation's strip, about 420px
+   of frame on a 390x844 screen, so the line is drawn below that rather than at the old whole-screen 520. */
+@media (max-height: 360px) {
   .autora-phone .autora-rail,
   .autora-phone .autora-tray,
   .autora-phone .autora-top,

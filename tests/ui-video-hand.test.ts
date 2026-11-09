@@ -12,6 +12,7 @@ import fs from "node:fs";
 import zlib from "node:zlib";
 import { chromium } from "playwright-core";
 import { sleep, startApp } from "./e2e-harness";
+import { CHROME } from "./chrome";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -42,7 +43,7 @@ function png(): Buffer {
 
 
 async function main() {
-  const exe = process.env.AUTORA_BROWSER_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+  const exe = CHROME;
   if (!fs.existsSync(exe)) { console.log("  skip  no browser here"); return; }
   if (!fs.existsSync("dist/opencut-editor/index.html")) { console.log("  skip  the editor is not built (npm run build)"); return; }
   const shots = process.env.VIDEO_SHOTS || "";

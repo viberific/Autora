@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { haltHands } from "./lib/handHalt";
+import { useFullscreen } from "./lib/fullscreen";
 import { SessionStream, mergeEvents, type StreamStatus } from "./lib/stream";
 import { derive, isRunning, type Cell, type Derived } from "./lib/derive";
 import { share } from "./lib/share";
@@ -1728,6 +1729,10 @@ export function App() {
   const [sheetAsked, setSheetAsked] = useState(false);
   const quietPhone = phoneLayout && openWindows.length > 0 && !sheetAsked && !chatCollapsed
     && !view.buckets.some((bucket) => bucket.prompt || bucket.attachments.length > 0);
+  /* A window made full screen on a phone (its Full screen button, or its title bar's Maximise) takes the screen: the sheet
+     drops to its strip, so a message can still be typed; a tap on the strip brings the conversation back. */
+  const [windowFull, setWindowFull] = useFullscreen();
+  const fullPhone = phoneLayout && windowFull;
   const officeLooks = OFFICE_PANES.flatMap((o) => {
     const win = windowAt(o.kind);
     return win ? [{ pane: o.pane as "pages" | "sheets" | "slides", working: win.working, name: win.name }] : [];
@@ -2272,7 +2277,8 @@ export function App() {
             it and coming back keeps your place in the thread. */}
         <div className="chat-view pw-full-workspace" role="main" hidden={page !== "chat"}>
 
-        <ConversationFlow collapsed={(chatCollapsed || quietPhone) && !requiresInput} onToggle={quietPhone ? () => setSheetAsked(true) : retractChat}
+        <ConversationFlow collapsed={(chatCollapsed || quietPhone || fullPhone) && !requiresInput}
+          onToggle={fullPhone ? () => setWindowFull(false) : quietPhone ? () => setSheetAsked(true) : retractChat}
           phone={phoneLayout} width={chatLayout.width} onWidth={chatLayout.setWidth}
           sheet={chatLayout.sheet} onSheet={chatLayout.setSheet} locked={requiresInput} preview={chatPreview} hiddenSteps={hiddenSteps}
           conversation={<>
@@ -2282,7 +2288,6 @@ export function App() {
                 disabled={workspaceOpening} aria-expanded={toolsOpen}>
                 <IconWrench size={16} /> {workspaceOpening ? "Opening…" : "Open Panacea"}
               </button>
-              <span>Start directly with a canvas, file or project — no message needed.</span>
             </div>
           )}
           <Thread

@@ -611,8 +611,8 @@ export function Settings({
         <section className="set-card set-active">
           <h3>Currently using</h3>
           <div className="set-active-row">
-            <code>{state.active.model ?? "—"}</code>
-            <span>{state.active.provider ?? "nothing connected"}</span>
+            {state.active.model && <code>{state.active.model}</code>}
+            <span>{state.active.provider ?? "Nothing connected"}</span>
           </div>
           {state.active.role_problems?.map((p) => <p key={p} className="set-warn">{p}</p>)}
           {state.active.hint && (

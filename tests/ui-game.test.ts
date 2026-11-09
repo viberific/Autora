@@ -15,6 +15,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { chromium, type Frame } from "playwright-core";
 import { turnStart, sleep, startApp } from "./e2e-harness";
+import { CHROME } from "./chrome";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -34,7 +35,7 @@ async function waitFor(what: string, ok: () => Promise<boolean>, ms = 30_000) {
 }
 
 async function main() {
-  const exe = process.env.AUTORA_BROWSER_PATH || "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
+  const exe = CHROME;
   if (!fs.existsSync(exe)) { console.log("  skip  no browser here"); return; }
   if (!fs.existsSync("dist/gdevelop-editor/index.html")) { console.log("  skip  the editor is not built (npm run build)"); return; }
   const app = await startApp();
@@ -196,8 +197,15 @@ async function main() {
       await waitFor("the editor frame", async () => { frame = phone.frames().find((f) => f.url().includes("/gdevelop-editor/")); return !!frame; }, 20_000);
       assert.match(frame!.url(), /phone=1/);
       await phone.waitForSelector(".rail-bar.is-phone", { timeout: 90_000 });
+      // The bar shows what the work needs now (ToolRail's `needed`): once the editor is up, Play and the building tools;
+      // Abilities waits for something picked, Delete for something on the scene, Undo for a change. All tools is last.
+      await phone.waitForSelector('.rail-bar.is-phone .rail-btn[aria-label="Play"]', { timeout: 90_000 });
       const names = await phone.locator(".rail-bar.is-phone .rail-btn").evaluateAll((b) => b.map((x) => x.getAttribute("aria-label")));
-      assert.deepEqual(names, ["Play", "Add object", "Objects", "Properties", "Abilities", "Undo", "Delete", "All tools"]);
+      const phoneTools = ["Play", "Add object", "Objects", "Properties", "Abilities", "Undo", "Delete"];
+      assert.deepEqual(names.slice(0, 4), ["Play", "Add object", "Objects", "Properties"], `the bar: ${names.join(", ")}`);
+      assert.equal(names[names.length - 1], "All tools");
+      const order = names.slice(0, -1).map((n) => phoneTools.indexOf(n!));
+      assert.ok(order.every((i, k) => i >= 0 && (k === 0 || i > order[k - 1])), `only the phone tools, in order: ${names.join(", ")}`);
       const shown = (id: string) => frame!.evaluate((q) => { const el = document.querySelector(q); return !!el && el.getClientRects().length > 0; }, id);
       for (const gone of ["#toolbar-preview-button", "#toolbar-save-button", "#toolbar-publish-button", "#game-editor-toggle", "#toolbar-history-button", "#main-toolbar-project-manager-button"]) {
         assert.equal(await shown(gone), false, `${gone} is the tool bar's now`);
