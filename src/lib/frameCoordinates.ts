@@ -89,10 +89,12 @@ export function workViewport(board: Element, opts: { clearDock?: boolean } = {})
      on the left), its right edge on a phone. Whichever side it is on, that side's band is kept clear of it. */
   let left = rect.left;
   let right = rect.right;
-  /* The desktop's floating conversation is kept clear the same way: the band beside it on whichever side it stands. */
+  /* The desktop's floating conversation is kept clear the same way. */
   for (const band of [navigation, float]) {
     if (!band || band.width === 0 || !overlaps(band)) continue;
-    if (band.left + band.width / 2 < rect.left + rect.width / 2) left = Math.max(left, band.right + 8);
+    // Whichever side of it has more of the board is the side the work is framed on: a window left in the middle of
+    // the world costs the narrower side, not half the board by which half its centre happens to be in.
+    if (band.left - left < right - band.right) left = Math.max(left, band.right + 8);
     else right = Math.min(right, band.left - 8);
   }
   return { left, top: rect.top, width: Math.max(0, right - left), height: Math.max(0, bottom - rect.top) };

@@ -70,6 +70,14 @@ export function magnet(box: FloatBox, room: Room): FloatBox {
   return clampFloat({ ...box, snap }, room);
 }
 
+/** The window stepped by (dx, dy), as the arrow keys step it. A step is shorter than the magnet reaches, so the magnet is
+    not asked: the window is free once it steps off a side, and held again only when a step brings it up against one. */
+export function nudgeFloat(box: FloatBox, dx: number, dy: number, room: Room): FloatBox {
+  const free = clampFloat({ ...box, x: box.x + dx, y: box.y + dy, snap: null }, room);
+  const snap = free.x <= FLOAT_GAP ? (dx > 0 ? null : "left") : free.x + free.w >= room.w - FLOAT_GAP ? (dx < 0 ? null : "right") : null;
+  return clampFloat({ ...free, snap: dx === 0 ? box.snap : snap }, room);
+}
+
 /** The window after its `edge` has been dragged by (dx, dy). The opposite edges stay where they were, and a window held
     to a side stays held unless the edge on that side is the one pulled away from it. */
 export function resizeFloat(start: FloatBox, edge: Edge, dx: number, dy: number, room: Room): FloatBox {

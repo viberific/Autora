@@ -15,7 +15,7 @@ const hooks = registerHooks({
 });
 const { ConversationFlow } = await import("../src/components/panacea/ConversationFlow");
 hooks.deregister();
-const { FLOAT_GAP, FLOAT_MIN_W, FLOAT_SNAP, clampFloat, defaultFloat, magnet, previewOf, resizeFloat } = await import("../src/components/panacea/chatLayout");
+const { FLOAT_GAP, FLOAT_MIN_W, FLOAT_SNAP, clampFloat, defaultFloat, magnet, nudgeFloat, previewOf, resizeFloat } = await import("../src/components/panacea/chatLayout");
 
 let passed = 0;
 function test(name: string, run: () => void) {
@@ -124,6 +124,12 @@ test("the window opens at the bottom left, is held inside the world, and the mag
   const right = magnet({ ...start, x: 1400 - 400 - FLOAT_GAP - 20, snap: null }, room);
   assert.deepEqual(right, { ...start, x: 1400 - 400 - FLOAT_GAP, snap: "right" });
   assert.deepEqual(clampFloat({ ...start, x: -300, y: 5000, snap: null }, room), { ...start, x: FLOAT_GAP, y: 900 - 640 - FLOAT_GAP, snap: null });
+  // By keyboard a step is shorter than the magnet's reach: one step off a side frees it, a step back against it holds it.
+  const stepped = nudgeFloat(start, 16, 0, room);
+  assert.deepEqual(stepped, { ...start, x: FLOAT_GAP + 16, snap: null });
+  assert.deepEqual(nudgeFloat(stepped, -16, 0, room), start);
+  assert.deepEqual(nudgeFloat(start, 0, -16, room), { ...start, y: start.y - 16 }, "up and down, it stays held");
+  assert.equal(nudgeFloat({ ...start, x: 1400 - 400 - FLOAT_GAP - 10, snap: null }, 16, 0, room).snap, "right");
   // Held to the right, it stays there when the world grows.
   assert.equal(clampFloat(right, { w: 1800, h: 900 }).x, 1800 - 400 - FLOAT_GAP);
 });

@@ -455,6 +455,8 @@ body:has(.conversation-flow[data-moving]) iframe {
     z-index: var(--z-pop);
     border-radius: 0;
     border-top: 0;
+    /* Over the canvas, it is read on: nothing of the work shows through the words. */
+    background: var(--s1);
   }
 
   .chat-view.pw-full-workspace:has(.conversation-flow.is-full) > .pw-scene-stack {

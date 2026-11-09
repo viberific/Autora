@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import {
-  FLOAT_GAP, FLOAT_STEP, clampFloat, defaultFloat, magnet, resizeFloat,
+  FLOAT_GAP, FLOAT_STEP, clampFloat, defaultFloat, magnet, nudgeFloat, resizeFloat,
   type Edge, type FloatBox, type PreviewLine, type Room, type Sheet,
 } from "./chatLayout";
 import { AutoraMark } from "../AutoraMark";
@@ -191,7 +191,9 @@ export function ConversationFlow({
     const dy = event.key === "ArrowDown" ? step : event.key === "ArrowUp" ? -step : 0;
     let next: FloatBox | null = null;
     if (kind === "move" && (event.key === "Home" || event.key === "End")) next = clampFloat({ ...current, snap: event.key === "Home" ? "left" : "right" }, at);
-    else if (dx || dy) next = kind === "move" ? magnet({ ...current, x: current.x + dx, y: current.y + dy, snap: null }, at) : resizeFloat(current, "se", dx, dy, at);
+    // A key's step is shorter than the magnet's reach, so the magnet would never let a held window go: by keyboard it
+    // is free the moment it steps off a side, and held again only when it is stepped right up against one.
+    else if (dx || dy) next = kind === "move" ? nudgeFloat(current, dx, dy, at) : resizeFloat(current, "se", dx, dy, at);
     if (!next) return;
     event.preventDefault();
     onFloat?.(next);
