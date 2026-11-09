@@ -127,7 +127,8 @@ async function main() {
 
     await test("double-click the grid, type, pick: a piece lands there, and its slider sets a value of its own", async () => {
       const box = (await page.locator(".pa-board").boundingBox())!;
-      await page.mouse.dblclick(box.x + 120, box.y + box.height - 220);
+      // Right of the conversation's window, which floats at the bottom left of the board.
+      await page.mouse.dblclick(box.x + 460, box.y + box.height - 220);
       await page.waitForSelector(".pa-summon-q");
       await page.fill(".pa-summon-q", "slider");
       // The blank slider by name: what ranks first for "slider" depends on what earlier tests used, so Enter was a coin toss.
