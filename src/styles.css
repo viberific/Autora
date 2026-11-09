@@ -9040,6 +9040,9 @@ body::before {
   box-shadow: var(--glass-shine);
 }
 
+/* A phone's drawer slides over the app: a pane text is read on, over the scrim's frost. */
+.rail.is-drawer { background: var(--glass-sheen), var(--glass-strong); border-right: 1px solid var(--glass-line); }
+
 .top {
   background: linear-gradient(180deg, rgba(var(--s2-rgb), 0.6), rgba(var(--s1-rgb), 0.4));
   border-bottom-color: var(--glass-line);

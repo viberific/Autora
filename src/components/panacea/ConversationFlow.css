@@ -462,6 +462,22 @@ body:has(.conversation-flow[data-moving]) iframe {
     min-height: 0;
   }
 
+  /* Nothing said yet: the sheet is as tall as what it holds (the way in to Panacea and the message box), not half a
+     screen of empty glass over the canvas. */
+  .conversation-flow.is-sheet.is-half:has(.pw-launch):not([data-gliding]) {
+    height: auto;
+    min-height: 0;
+  }
+
+  .conversation-flow.is-sheet.is-half:has(.pw-launch) .conversation-flow__conversation {
+    flex: 0 0 auto;
+  }
+
+  /* The desktop's thread starts under its window's drag bar; a sheet has only its thin handle strip above. */
+  .conversation-flow.is-sheet .thread {
+    padding-top: 20px;
+  }
+
   /* Full: the whole screen, edge to edge, and read on: nothing of the work shows through the words. */
   .conversation-flow.is-sheet.is-full {
     inset: 0;
