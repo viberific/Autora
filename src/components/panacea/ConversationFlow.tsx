@@ -156,6 +156,23 @@ export function ConversationFlow({
     return () => clear(root, null);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- clear only reads refs and the DOM; the box is its value
   }, [phone, box?.x, box?.y, box?.w, box?.h, box?.snap]);
+  /* The window lies over the board and never resizes it, so the board cannot tell when the room beside or above the
+     window has changed. It is told (SHEET_MOVED, a beat after the change settles): when the window is put somewhere
+     else or sized, and when it grows or shrinks with what is said in it. The board frames the work again only if the
+     person has not taken the camera. */
+  const telling = useRef(0);
+  const tellBoard = () => {
+    window.clearTimeout(telling.current);
+    telling.current = window.setTimeout(() => window.dispatchEvent(new Event(SHEET_MOVED)), 180);
+  };
+  useEffect(() => {
+    const root = rootRef.current;
+    if (phone || !root || typeof ResizeObserver === "undefined") return;
+    let first = true;
+    const watch = new ResizeObserver(() => { if (first) { first = false; return; } if (!gesture.current) tellBoard(); });
+    watch.observe(root);
+    return () => { watch.disconnect(); window.clearTimeout(telling.current); };
+  }, [phone]);
   const gesture = useRef<{ kind: "move" | Edge; x: number; y: number; start: FloatBox; live: FloatBox } | null>(null);
   const beginGesture = (kind: "move" | Edge) => (event: PointerEvent<HTMLElement>) => {
     const root = rootRef.current;
@@ -188,7 +205,7 @@ export function ConversationFlow({
     if (!state) return;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     const moved = state.live.x !== state.start.x || state.live.y !== state.start.y || state.live.w !== state.start.w || state.live.h !== state.start.h;
-    if (moved) onFloat?.(state.live);
+    if (moved) { onFloat?.(state.live); tellBoard(); }
   };
   /** The arrow keys on Move move the window, and on the top-right pull size it (up is taller, right is wider); Home and
       End on Move put it on the left or right. */
@@ -207,6 +224,7 @@ export function ConversationFlow({
     if (!next) return;
     event.preventDefault();
     onFloat?.(next);
+    tellBoard();
   };
 
   // Phone sheet: Canvas only (the retracted conversation), half, full. A tap steps up and wraps to the canvas;

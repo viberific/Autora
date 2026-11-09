@@ -101,6 +101,7 @@ the two windows with an arrow halfway along: noted when a tool of one app reads 
 - **The agent, watching**: while the person works, a small background model (only with the companion switch on, nothing
   running, somebody watching; at most one every 90 s and ten an hour) may offer one ghost from the library
   (`suggestNow` in `server/panacea.ts`).
+- **Where things surface**: what can be seen of the board is the room clear of the conversation and the work buttons (`workViewport`: beside a tall conversation window, above a short one, whichever leaves more). New work, new panels and offers are placed and revealed in that room; an offer is framed with the rest while the camera is still Autora's own, and never takes the view from someone who has moved it. The board is told when the conversation window moves, is sized or grows (`SHEET_MOVED`).
 - **Ghosts**: one at a time, dashed, with the reason. Add takes it; Not now waves it away; left alone it drifts off after 45
   s. A recipe waved away is not offered again on that canvas for ten minutes, and never unasked once waved away twice.
 - **Fading follows the work, not a timer**: when the focus moves to another surface its panels dim; when the work moves on

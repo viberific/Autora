@@ -58,7 +58,8 @@ async function main() {
       // camera frames the app beside it, not under it.
       const chat = await page.locator(".conversation-flow").first().boundingBox();
       const pane = await page.locator('.app-pane[data-pane="app"]').boundingBox();
-      assert.ok(chat && pane && pane.x >= chat.x + chat.width - 2, `beside the conversation, not under it (${JSON.stringify({ pane, chat })})`);
+      // Framed clear of it: beside a tall conversation, above a short one, whichever leaves the app more room.
+      assert.ok(chat && pane && (pane.x >= chat.x + chat.width - 2 || pane.y + pane.height <= chat.y + 2), `clear of the conversation, not under it (${JSON.stringify({ pane, chat })})`);
       assert.ok(pane.width > 400, `a usable width (${Math.round(pane.width)})`);
       const canvas = await page.locator(".app-canvas").boundingBox();
       const area = await page.locator(".app-area").boundingBox();

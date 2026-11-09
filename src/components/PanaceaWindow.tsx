@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { createPortal } from "react-dom";
+import { CANVAS_BAR_SLOT } from "../lib/workspace";
 import type { Value } from "../lib/panacea/atoms";
 import { createDoc, stateOf, toMarkdown, type DocMode, type DocState } from "../lib/panacea/document";
 import { boardMarkdown, createBoard, tidy, type BoardState } from "../lib/panacea/board";
@@ -33,7 +35,7 @@ import { MUSIC_TRACK } from "../lib/panacea/apps/music";
 import { SaveButton, keptAs } from "./SaveButton";
 import { LoadButton, type LoadResult } from "./LoadButton";
 import { PANACEA_LOADED, offerKeep } from "../lib/panaceaBridge";
-import { IconSparkle, IconX } from "./Icons";
+import { IconX } from "./Icons";
 import { usePhone } from "../lib/stage";
 import type { HostedWork } from "../lib/workspaceScene";
 import { workspaceMode, type NativeWorkspaceActions, type WorkspaceMode } from "../lib/workspace";
@@ -725,6 +727,17 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
     if (box) requestAnimationFrame(() => board.current?.frame(box, true));
   }, [phaseNow, live]);
 
+  /* Where the canvas's controls are shown: the slot in the app's header. Found once it is in the page (the header is
+     drawn before this window, but a window can outlive a header that is redrawn). */
+  const [barHost, setBarHost] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    const find = () => setBarHost(document.getElementById(CANVAS_BAR_SLOT));
+    find();
+    const watch = new MutationObserver(find);
+    const header = document.querySelector(".top");
+    if (header) watch.observe(header, { childList: true });
+    return () => watch.disconnect();
+  }, []);
   const note = doc.notice ?? problem;
   /* The bar (canvas name, whether it is saved, Load, Save) is for native work. With none on the canvas it has nothing to say,
      so it is there in place but unseen and out of reach, and arrives with the first piece of work. A problem or a load in
@@ -739,17 +752,17 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
         onPointerDownCapture={() => setPointerBusy(true)}
         onFocusCapture={(e) => { if ((e.target as HTMLElement).closest("input,textarea,[contenteditable='true']")) setFieldBusy(true); }}
         onBlurCapture={(e) => { if (!(e.relatedTarget as HTMLElement | null)?.closest?.("input,textarea,[contenteditable='true']")) setFieldBusy(false); }}>
-        {!phone && <div className="pdf-bar pa-canvas-bar" data-idle={idleBar ? "" : undefined} {...(idleBar ? ({ inert: "" } as object) : {})}>
-          <span className="pdf-bar-ico" aria-hidden="true"><IconSparkle size={14} /></span>
-          <span className="pdf-bar-app">Panacea</span>
-          {nativeOpen && <input className="st-song-name" value={canvas.name} size={Math.max(4, canvas.name.length + 1)} maxLength={80} aria-label="Canvas name"
-            disabled={!doc.ready}
-            onChange={(e) => { const name = e.target.value; edit((d) => { d.name = name; }, "Renamed the canvas", "name"); }} />}
-          {nativeOpen && <span className={`pdf-bar-note st-save is-${doc.save}`}>{!doc.ready ? doc.notice ? "Not loaded" : "Loading native work…" : doc.save === "saving" ? "Saving…" : doc.save === "error" ? "Not saved" : "Saved as you go"}</span>}
-          <div className="spacer" />
-          <span ref={saveRef} className="st-save-btn"><LoadButton app="panacea" session={sessionId} phone={phone} onLoaded={loaded} disabled={!sessionId} />{nativeOpen &&
-            <SaveButton onSave={keep} phone={phone} disabled={!doc.ready} label="Save native work" tooltip="Keep native panels and surfaces as .panacea.json. Engine files save on their own work cards." />}</span>
-        </div>}
+        {/* The canvas's own controls (its name, whether it is saved, Load, Save) are in the app's one header on a desktop,
+            not in a second bar under it: drawn here, shown there (the slot App.tsx keeps in the header). */}
+        {!phone && barHost && createPortal(
+          <div className="pa-canvas-bar" data-idle={idleBar ? "" : undefined} {...(idleBar ? ({ inert: "" } as object) : {})}>
+            {nativeOpen && <input className="st-song-name" value={canvas.name} size={Math.max(4, canvas.name.length + 1)} maxLength={80} aria-label="Canvas name"
+              title="The canvas's name" disabled={!doc.ready}
+              onChange={(e) => { const name = e.target.value; edit((d) => { d.name = name; }, "Renamed the canvas", "name"); }} />}
+            {nativeOpen && <span className={`pdf-bar-note st-save is-${doc.save}`}>{!doc.ready ? doc.notice ? "Not loaded" : "Loading native work…" : doc.save === "saving" ? "Saving…" : doc.save === "error" ? "Not saved" : "Saved as you go"}</span>}
+            <span ref={saveRef} className="st-save-btn"><LoadButton app="panacea" session={sessionId} phone={phone} onLoaded={loaded} disabled={!sessionId} />{nativeOpen &&
+              <SaveButton onSave={keep} phone={phone} disabled={!doc.ready} label="Save native work" tooltip="Keep native panels and surfaces as .panacea.json. Engine files save on their own work cards." />}</span>
+          </div>, barHost)}
         {note && (
           <div className="pdf-problem" role="status">
             {note}

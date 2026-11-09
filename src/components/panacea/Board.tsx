@@ -232,8 +232,9 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     const here = new Set(surfaces.map((s) => s.id));
     const panels = phase ? current.panels.filter((panel) => here.has(panel.context) || panel.context === "general") : current.panels;
     const engines = phase && surfaces.length ? [] : hostedRef.current.flatMap((work) => engineBoxesRef.current[work.id] ? [engineBoxesRef.current[work.id]] : []);
+    // A panel that is only offered is framed with the rest: an offer the framing leaves off screen is not an offer.
     return [...surfaces, ...engines,
-      ...panels.filter((panel) => panel.state === "live" || panel.pinned).map((panel) => ({
+      ...panels.filter((panel) => panel.state === "live" || panel.state === "ghost" || panel.pinned).map((panel) => ({
       x: panel.x, y: panel.y, w: panel.w,
       h: root.current?.querySelector<HTMLElement>(`[data-panel="${CSS.escape(panel.id)}"]`)?.offsetHeight || panel.h || 240,
     }))];
@@ -320,7 +321,14 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
   useEffect(() => {
     // A ghost is only an offer: it never moves the person's view away from what they are doing.
     const fresh = canvas.panels.filter((p) => !seenPanels.current.has(p.id) && p.state !== "ghost").map((p) => p.id);
+    const offered = canvas.panels.some((p) => !seenPanels.current.has(p.id) && p.state === "ghost");
     seenPanels.current = new Set(canvas.panels.map((p) => p.id));
+    /* An offer is no use out of sight. It never takes the view from someone who has put the camera where they want
+       it; while the camera is still Autora's own framing, that framing is redone to take the offer in. */
+    if (offered && !fresh.length && root.current && !drag && !interacted.current && !handsBusy() && !canvas.panels.some((panel) => panel.pinned || panel.touched)) {
+      const frame = requestAnimationFrame(fit);
+      return () => cancelAnimationFrame(frame);
+    }
     if (!fresh.length || !root.current || drag || handsBusy() || canvas.panels.some((panel) => panel.pinned)) return;
     const reveal = () => {
       const el = root.current;
@@ -343,7 +351,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     // Heights are untransformed; positions come from the model, never a gliding screen rectangle.
     const frame = requestAnimationFrame(reveal);
     return () => cancelAnimationFrame(frame);
-  }, [canvas.panels, drag, setView, handsBusy]);
+  }, [canvas.panels, drag, setView, handsBusy, fit]);
 
   handle.current = {
     fit,
@@ -437,12 +445,12 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     toScreen,
     zoom: () => viewRef.current.zoom,
     viewRect: () => {
-      const r = root.current!.getBoundingClientRect();
       const room = workViewport(root.current!);
       const inset = insetOf(root.current!, room);
       const v = viewRef.current;
-      // What is in view and clear of the work rail, so a new piece of work is not put down under it.
-      return { x: v.x + (inset + 16) / v.zoom, y: v.y + 16 / v.zoom, w: (r.width - inset - 32) / v.zoom, h: (room.height - 90) / v.zoom };
+      // What is in view and clear of the conversation and the work buttons on either side, so a new piece of work (or
+      // a panel that is only offered) is not put down under them where it cannot be seen or pressed.
+      return { x: v.x + (inset + 16) / v.zoom, y: v.y + 16 / v.zoom, w: (room.width - 32) / v.zoom, h: (room.height - 90) / v.zoom };
     },
     summonHere: () => {
       const r = root.current!.getBoundingClientRect();

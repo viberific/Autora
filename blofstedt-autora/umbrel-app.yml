@@ -219,4 +219,7 @@ releaseNotes: >-
   show-all buttons fold into one small button until you tap it. The chat's
   text and controls are now the same size as the rest of the app, the folded
   side menu is slimmer with a square highlight, and Autora may use an emoji
-  where it fits.
+  where it fits. There is one bar at the top now: the canvas name, Load and
+  Save moved into it. Panels Autora offers appear where you can see them,
+  clear of the chat and the buttons, and your work is framed around the chat
+  as it grows or moves.

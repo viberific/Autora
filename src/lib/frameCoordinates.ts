@@ -97,13 +97,22 @@ export function workViewport(board: Element, opts: { clearDock?: boolean } = {})
      on the left), its right edge on a phone. Whichever side it is on, that side's band is kept clear of it. */
   let left = rect.left;
   let right = rect.right;
-  /* The desktop's floating conversation is kept clear the same way. */
-  for (const band of [navigation, float]) {
-    if (!band || band.width === 0 || !overlaps(band)) continue;
-    // Whichever side of it has more of the board is the side the work is framed on: a window left in the middle of
-    // the world costs the narrower side, not half the board by which half its centre happens to be in.
-    if (band.left - left < right - band.right) left = Math.max(left, band.right + 8);
-    else right = Math.min(right, band.left - 8);
+  if (navigation && navigation.width > 0 && overlaps(navigation)) {
+    if (navigation.left - left < right - navigation.right) left = Math.max(left, navigation.right + 8);
+    else right = Math.min(right, navigation.left - 8);
+  }
+  /* The desktop's floating conversation is kept clear too, by whichever costs the work less room: the band beside it
+     (on the side with more of the board), or, when it is a short window standing at the foot of the board, the strip
+     above it. A chat of one line does not take a whole column from the work, and a tall one does not take the floor. */
+  if (float && overlaps(float)) {
+    const onLeft = float.left - left < right - float.right;
+    const beside = Math.max(0, onLeft ? right - (float.right + 8) : float.left - 8 - left) * Math.max(0, bottom - rect.top);
+    const aboveH = float.top - 8 - rect.top;
+    const atFoot = aboveH > bottom - (float.bottom + 8);
+    const above = atFoot ? Math.max(0, right - left) * Math.max(0, aboveH) : 0;
+    if (above > beside) bottom = Math.min(bottom, float.top - 8);
+    else if (onLeft) left = Math.max(left, float.right + 8);
+    else right = Math.min(right, float.left - 8);
   }
   return { left, top: rect.top, width: Math.max(0, right - left), height: Math.max(0, bottom - rect.top) };
 }

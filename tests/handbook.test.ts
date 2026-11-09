@@ -180,7 +180,7 @@ await test("the Office manual says what the person has picked reaches the briefi
 
 await test("the windows overview says the navigation dock and Tidy appear only when the work needs them, and a blank canvas shows nothing", () => {
   const text = windowsOverview();
-  for (const needle of ["The dock is not there on a blank canvas", "Tidy joins it only once there is more than one piece of work", "A blank canvas shows nothing at all, no instructions", "the canvas name and Save bar arrive with the first piece of work", "the undo and redo slider once there is something to take back"]) {
+  for (const needle of ["The dock is not there on a blank canvas", "Tidy joins it only once there is more than one piece of work", "A blank canvas shows nothing at all, no instructions", "the canvas name, Load and Save arrive in the app's one top header", "the undo and redo slider once there is something to take back"]) {
     assert.ok(text.includes(needle), needle);
   }
 });

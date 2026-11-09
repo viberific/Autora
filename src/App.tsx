@@ -14,7 +14,7 @@ import { ScreencastCell } from "./components/ScreencastCell";
 import { WidgetCell } from "./components/WidgetCell";
 import { AppPreview, CadWindow, GameWindow, OfficeWindow, OpenCutWindow, PhotoWindow, SpectraWindow, StudioWindow } from "./components/lazyWindows";
 import { PanaceaWorkspace } from "./components/PanaceaWorkspace";
-import type { NativeWorkspaceActions, WorkspaceMode } from "./lib/workspace";
+import { CANVAS_BAR_SLOT, type NativeWorkspaceActions, type WorkspaceMode } from "./lib/workspace";
 import { useWorkspaceFocus, workspaceToolKey } from "./lib/workspaceFocus";
 import { emitCadHand, resetCad, setCadState, useCadState } from "./lib/caddesk";
 import { emitGamePlay, resetGame, setGameState, useGameState } from "./lib/gamedesk";
@@ -2196,6 +2196,10 @@ export function App() {
               {sessionCost > 0 ? `${money(sessionCost)} this session` : `${fmt(view.tokens.in + view.tokens.out)} tokens`}
             </button>
           )}
+
+          {/* The canvas's own controls (its name, whether it is saved, Load, Save), drawn here by PanaceaWindow: one
+              bar at the top, not a second one under it. Empty until there is native work on the canvas. */}
+          {page === "chat" && <div id={CANVAS_BAR_SLOT} className="top-canvas-slot" />}
 
           {/* Following the agent's work, and watching it work (its mouse and keyboard), where they are always in reach
               rather than in a bar of the workspace's own. */}

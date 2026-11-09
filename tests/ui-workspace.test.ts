@@ -123,10 +123,11 @@ async function main() {
       await page.keyboard.press("Escape");
       await capabilityDialog.waitFor({ state: "hidden" });
       assert.ok(await caps.evaluate((node) => document.activeElement === node), "Escape restores the capability trigger");
-      // A phone has no bar over the canvas: its Load is the composer's Artifacts sheet, which also opens a file there.
+      // A phone has no canvas controls in its header: its Load is the composer's Artifacts sheet, which also opens a file there.
+      // On a desktop the canvas's Load is in the app's one header (there is no second bar under it).
       const load = phone
         ? page.getByRole("button", { name: "Add a saved file or a project folder from Artifacts", exact: true })
-        : workspace.locator(".pa-window > .pdf-bar").getByRole("button", { name: "Load", exact: true });
+        : page.locator(".top .pa-canvas-bar").getByRole("button", { name: "Load", exact: true });
       await load.click();
       const fileDialog = page.getByRole("dialog");
       await fileDialog.waitFor();

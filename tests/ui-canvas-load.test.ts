@@ -27,8 +27,11 @@ async function main() {
       });
     });
     await page.goto(`${app.base}/?session=${session}`);
-    const name = page.getByRole("textbox", { name: "Canvas name", exact: true });
-    await name.waitFor();
+    // By its label, not its role: with no work on the canvas the field is in the page but not on show, and a role
+    // locator does not see what is not shown.
+    const name = page.locator('input[aria-label="Canvas name"]');
+    // In the page, not on show: a canvas with no work on it has no controls in the header (they arrive with the work).
+    await name.waitFor({ state: "attached" });
     await page.waitForFunction(() => (document.querySelector('[aria-label="Canvas name"]') as HTMLInputElement | null)?.value === "Saved native work");
     assert.equal(await name.isEnabled(), true);
     assert.equal(await page.getByText(/The canvas could not be loaded:/).count(), 0);
@@ -36,7 +39,7 @@ async function main() {
     await page.reload();
     await page.getByText(/does not contain a valid native canvas document/).waitFor();
     assert.equal(await name.isDisabled(), true);
-    assert.equal(await page.getByRole("button", { name: "Save native work", exact: true }).isDisabled(), true);
+    assert.equal(await page.locator('.pa-canvas-bar button[aria-label="Save native work"]').isDisabled(), true);
     mode = "html";
     await page.reload();
     await page.getByText(/workspace returned invalid JSON/).waitFor();
