@@ -21,8 +21,21 @@ export async function workspaceReady(page: Page, options: { blank?: boolean } = 
   assert.ok(await navigation.evaluate((node) => !node.closest(".pa-world")), "work navigation is unscaled viewport chrome");
 }
 
+/**
+ * A phone folds the work buttons (jump to a piece of work, zoom out, show all) into one small button until they are
+ * wanted, and folds them away again a moment after one is used. This opens them; on a desktop they are always there.
+ */
+export async function openWorkButtons(page: Page): Promise<void> {
+  const toggle = page.getByRole("button", { name: "Show the work buttons", exact: true });
+  if (!(await toggle.count())) return;
+  await toggle.click();
+  // They arrive with a short motion; what is measured or pressed next is at rest.
+  await page.waitForTimeout(350);
+}
+
 export async function focusWork(page: Page, name: string): Promise<void> {
   await workspaceReady(page);
+  await openWorkButtons(page);
   await page.getByRole("navigation", { name: "Jump to work", exact: true }).getByRole("button", { name: `Jump to ${name}`, exact: true }).click();
   await shrinkConversation(page);
 }
@@ -34,9 +47,8 @@ export async function focusWork(page: Page, name: string): Promise<void> {
 export async function shrinkConversation(page: Page): Promise<void> {
   const corner = page.getByRole("separator", { name: "Resize conversation", exact: true });
   if (!(await corner.count())) return;
-  for (let i = 0; i < 16; i += 1) await corner.press("Shift+ArrowUp");
+  // The pull is the window's top-right corner: down is shorter, left is narrower. Its foot stays where it was.
+  for (let i = 0; i < 16; i += 1) await corner.press("Shift+ArrowDown");
   for (let i = 0; i < 4; i += 1) await corner.press("Shift+ArrowLeft");
-  const grip = page.getByRole("button", { name: "Move conversation", exact: true });
-  for (let i = 0; i < 20; i += 1) await grip.press("Shift+ArrowDown");
-  await grip.press("Home");
+  await page.getByRole("button", { name: "Move conversation", exact: true }).press("Home");
 }

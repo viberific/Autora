@@ -129,7 +129,9 @@ function placeStarters(canvas: Canvas, surface: Surface, find: (id: string) => R
     const p = placeRecipe(canvas, r, { near: surface.id, why: plan.why, by: "rule", side: opts.side, view: opts.view });
     if (!("error" in p)) out.push(p);
   }
-  if (plan.ghost && !opts.quiet?.(plan.ghost)) {
+  // One offer at a time: several things arriving together (four files dropped, five documents made) do not each bring
+  // their own, or the canvas fills with the same suggestion five times over.
+  if (plan.ghost && !opts.quiet?.(plan.ghost) && !canvas.panels.some((p) => p.state === "ghost")) {
     const r = find(plan.ghost);
     const p = r ? placeRecipe(canvas, r, { near: surface.id, state: "ghost", why: `Offered: ${r.about}.`, by: "rule", side: opts.side, view: opts.view }) : null;
     if (p && !("error" in p)) out.push(p);

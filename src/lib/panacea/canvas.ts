@@ -241,6 +241,9 @@ export function estimateHeight(tree: Node, w = 288): number {
     n.children?.forEach((c) => walk(c, off));
   };
   walk(tree, false);
+  // What waits behind More has a row of its own to say so.
+  const hasMore = (n: Node): boolean => n.advanced === true || !!n.children?.some(hasMore);
+  if (hasMore(tree)) h += 34;
   return Math.min(720, h);
 }
 
@@ -249,6 +252,9 @@ function taken(canvas: Canvas, except?: string): Box[] {
   return [
     ...canvas.surfaces.map((s) => ({ x: s.x, y: s.y, w: s.w, h: s.h })),
     ...canvas.panels.filter((p) => p.id !== except && p.state !== "dim").map((p) => ({ x: p.x, y: p.y, w: p.w, h: p.h || estimateHeight(p.tree, p.w) })),
+    /* The apps' windows take room too: a table, a picture or a panel is not put down on top of the song or the video
+       being worked on. A maximised window counts as the place it goes back to, or nothing else could be placed at all. */
+    ...(canvas.windows ?? []).map((w) => { const at = w.was ?? w; return { x: at.x, y: at.y, w: at.w, h: at.h }; }),
   ];
 }
 

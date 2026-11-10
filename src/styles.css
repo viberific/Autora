@@ -132,10 +132,16 @@
   /* Glass: the frosted, translucent surfaces the app is built from (docs/DESIGN.md). Each is mixed from the theme's
      own surfaces, so every theme frosts in its own tint. --glass is a floating pane over moving work, --glass-strong a
      pane that text is read on, --glass-soft the app's standing chrome over the background's light. */
-  --glass: rgba(var(--s2-rgb), 0.5);
-  --glass-strong: rgba(var(--s1-rgb), 0.8);
-  --glass-soft: rgba(var(--s1-rgb), 0.55);
-  --glass-sheen: linear-gradient(155deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.015) 42%, rgba(255, 255, 255, 0.03));
+  /* How dark the glass is: the one value that darkens every pane in the app (0 is clear glass, 1 is black). */
+  --glass-dark: 0.42;
+  --glass: rgba(0, 0, 0, var(--glass-dark));
+  --glass-strong: rgba(0, 0, 0, calc(var(--glass-dark) + 0.12));
+  --glass-soft: rgba(0, 0, 0, var(--glass-dark));
+  /* The conversation's pane: thin enough that the work behind it is seen, frosted, with a pale veil over it so it reads
+     as glass and not as a darker patch. */
+  --glass-thin: rgba(0, 0, 0, var(--glass-dark));
+  --glass-veil: linear-gradient(rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.02));
+  --glass-sheen: linear-gradient(155deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.01) 42%, rgba(255, 255, 255, 0.02));
   --glass-line: rgba(255, 255, 255, 0.1);
   --glass-line-strong: rgba(255, 255, 255, 0.17);
   --glass-shine: inset 0 1px 0 rgba(255, 255, 255, 0.08);
@@ -6574,8 +6580,6 @@ button.dock-card:hover { border-color: var(--border-strong); }
 .pw-surfaces > .app-pane:not([hidden]) { flex: 1; min-height: 0; }
 .pw-capability { padding: 12px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--s1); }
 .pw-capability.on { border-color: var(--border-strong); }
-.pw-launch { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; padding: 12px; }
-.pw-launch button { pointer-events: auto; }
 .pw-full-workspace { position: relative; isolation: isolate; min-width: 0; overflow: hidden; }
 .pw-scene-stack { position: absolute; inset: 0; min-width: 0; min-height: 0; display: flex; z-index: 0; }
 .pw-scene-stack > .panacea-workspace { width: 100%; height: 100%; }
@@ -6583,6 +6587,14 @@ button.dock-card:hover { border-color: var(--border-strong); }
 .pw-navigation-host { max-height: 100%; overflow-y: auto; overflow-x: hidden; }
 .pw-navigation-host .pw-jump-dock { position: static; max-width: none; width: fit-content; max-height: none; margin: 0; overflow-x: hidden; flex-wrap: nowrap; flex-direction: column; }
 .pw-navigation-host .pw-jump-dock button { flex-shrink: 0; }
+/* A phone: the buttons are smaller, and folded into one small round button until it is tapped (Board.tsx). */
+.pw-jump-dock.is-phone { gap: 3px; padding: 4px; border-radius: var(--r-pill); }
+.pw-jump-dock.is-phone button { width: 32px; height: 32px; border-radius: 50%; }
+.pw-jump-dock.is-phone button > svg { width: 15px; height: 15px; }
+.pw-jump-dock.is-phone:not(.is-open) { padding: 2px; }
+.pw-jump-dock.is-phone:not(.is-open) > button:not(.pw-jump-toggle) { display: none; }
+.pw-jump-dock.is-phone .pw-jump-toggle { background: transparent; color: var(--text-2); }
+.pw-jump-dock.is-phone.is-open > button:not(.pw-jump-toggle) { animation: paArrive var(--dur-2) var(--ease) both; }
 .pw-full-workspace .conversation-flow__entry .composer { width: 100%; max-width: none; margin: 0; }
 .conversation-flow .cell-note { width: fit-content; max-width: 100%; pointer-events: none; }
 .tool-choice { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
@@ -7179,7 +7191,7 @@ body.is-resizing iframe { pointer-events: none; }
 @media (min-width: 1180px) {
   .pane-handle.is-rail { display: block; }
   .pane-handle.is-chat { display: block; }
-  .rail-slot { flex-basis: var(--rail-w, 56px); }
+  .rail-slot { flex-basis: var(--rail-w, 48px); }
 }
 
 /* The browser's menu and its panels: find, bookmarks, history, downloads. */
@@ -7506,7 +7518,7 @@ body.is-resizing iframe { pointer-events: none; }
 
 /* ---- Folded to icons (desktop): a strip of icons, with the context as one vertical bar under the last of them. */
 @media (min-width: 1180px) {
-  .app.rail-mini .rail-slot { flex-basis: 56px; }
+  .app.rail-mini .rail-slot { flex-basis: 48px; }
   .app.rail-mini .pane-handle.is-rail { display: none; }
 }
 .rail.is-mini .rail-top { height: var(--top-h, 52px); padding: 0; justify-content: center; }
@@ -7524,7 +7536,9 @@ body.is-resizing iframe { pointer-events: none; }
   .rail-slot, .rail:not(.is-drawer) .rail-nav-item, .rail.is-mini .rail-nav-item, .rail.is-mini .rail-nav-item > span { transition: none; }
 }
 .rail.is-mini .rail-scroll { padding: 6px 6px 12px; }
-.rail.is-mini .rail-nav-item { justify-content: center; padding: 9px 0; gap: 0; }
+/* Folded, each row is a square about its icon (so the one you are on is a square, not a wide slab), and the strip is
+   only as wide as that square and its margins. */
+.rail.is-mini .rail-nav-item { justify-content: center; width: 36px; height: 36px; margin-inline: auto; padding: 0; gap: 0; }
 .rail.is-mini .rail-nav-item > span {
   /* Off the flow rather than display: none, so the icon can slide to the middle
      of the strip while the word fades out instead of vanishing between frames.
@@ -7909,6 +7923,37 @@ body.is-resizing iframe { pointer-events: none; }
    a drag crossing into one was taken by it, and the move or resize stopped where the frame began. */
 .pa-board.is-gesturing iframe { pointer-events: none; }
 /* Where work went between the apps (Board.tsx flowLines): a line between two windows, an arrow halfway, what went. */
+/* Sending work to another window (Board.tsx): the node in a piece of work's title bar, the line that follows the
+   pointer while it is dragged, the windows that light to say they can take it, and the list a click on the node opens. */
+.pa-link-dot {
+  flex: 0 0 auto; display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: var(--r-xs);
+  background: transparent; color: var(--text-3); cursor: crosshair; touch-action: none;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.pa-link-dot:hover, .pa-link-dot[aria-expanded="true"], .pa-link-dot:focus-visible { background: var(--accent-soft); color: var(--accent-light); }
+.pw-engine-head .pa-link-dot { padding: 0; color: var(--text-3); }
+.pa-link-line { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: var(--z-pop); }
+.pa-link-line line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 5; stroke-linecap: round; opacity: 0.8; }
+.pa-link-line line.is-over { stroke-dasharray: none; opacity: 1; }
+.pa-link-line circle { fill: var(--accent); stroke: var(--bg); stroke-width: 2; }
+.pa-link-line circle.is-over { fill: var(--live); }
+.pw-engine[data-link] { transition: opacity var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); }
+.pw-engine[data-link="no"] { opacity: 0.45; }
+.pw-engine[data-link="takes"] { border-color: var(--accent-line); box-shadow: var(--shadow-lg), 0 0 0 3px rgba(var(--accent-rgb), 0.22); }
+.pw-engine[data-link="over"] { border-color: var(--live); box-shadow: var(--shadow-lg), 0 0 0 3px rgba(var(--live-rgb), 0.4); }
+.pa-link-menu {
+  position: absolute; z-index: var(--z-menu); min-width: 168px; padding: 4px; display: flex; flex-direction: column;
+  border: 1px solid var(--glass-line-strong); border-radius: var(--r); background: var(--glass-sheen), var(--glass-veil), var(--glass);
+  box-shadow: var(--glass-shadow), var(--glass-shine); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+  animation: paArrive var(--dur-2) var(--ease) both;
+}
+.pa-link-menu-h { padding: 5px 8px 3px; font-size: var(--fs-2xs); font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
+.pa-link-menu button {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 0; border-radius: var(--r-xs); background: transparent;
+  color: var(--text); font: inherit; font-size: var(--fs-sm); text-align: left; cursor: pointer;
+}
+.pa-link-menu button:hover, .pa-link-menu button:focus-visible { background: var(--accent-soft); color: var(--accent-light); }
+.pa-link-menu button > svg { flex: 0 0 auto; color: var(--text-3); }
 .pa-flows { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; z-index: 0; }
 .pa-flow line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 5; opacity: 0.75; }
 .pa-flow-arrow { fill: var(--accent); stroke: var(--bg); stroke-width: 1.5; }
@@ -8251,8 +8296,14 @@ body.is-resizing iframe { pointer-events: none; }
 .pa-gone-list button { display: flex; justify-content: space-between; gap: 8px; border: 0; background: transparent; color: var(--text); padding: 7px 9px; border-radius: var(--r-xs); cursor: pointer; font-size: var(--fs-sm); text-align: left; }
 .pa-gone-list button span { color: var(--accent); font-size: var(--fs-xs); }
 .pa-gone-list button:hover { background: var(--s3); }
-.pa-canvas-bar { transition: opacity var(--dur-3) var(--ease); }
-.pa-canvas-bar[data-idle], .pa-history[data-idle] { opacity: 0; pointer-events: none; }
+/* The canvas's controls live in the app's header (App.tsx's slot): its name, whether it is saved, Load and Save, in
+   line with the header's own pills. With no native work they are not there at all, so they cost the header no room. */
+.top-canvas-slot { display: contents; }
+.pa-canvas-bar { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; animation: fade var(--dur-2) var(--ease) both; }
+.pa-canvas-bar[data-idle] { display: none; }
+.pa-canvas-bar .st-song-name { max-width: 200px; }
+@media (max-width: 1240px) { .pa-canvas-bar .pdf-bar-note { display: none; } }
+.pa-history[data-idle] { opacity: 0; pointer-events: none; }
 .pa-history { transition: opacity var(--dur-3) var(--ease); display: flex; align-items: center; gap: 4px; padding: 4px; background: var(--s1); border: 1px solid var(--border); border-radius: var(--r-pill); box-shadow: var(--shadow-sm); }
 .pa-hbtn { display: grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 50%; background: transparent; color: var(--text-2); cursor: pointer; }
 .pa-hbtn:hover:not(:disabled) { background: var(--s3); color: var(--text); }
@@ -8269,7 +8320,8 @@ body.is-resizing iframe { pointer-events: none; }
 .pa-toast { position: absolute; top: 12px; right: 12px; padding: 8px 14px; background: var(--s2); border: 1px solid var(--border-strong); border-radius: var(--r-pill); box-shadow: var(--shadow); font-size: var(--fs-sm); color: var(--text); animation: paArrive var(--dur-2) var(--ease) both; }
 @media (prefers-reduced-motion: reduce) {
   .pa-panel, .pa-surface, .pa-summon, .pw-jump-dock { animation: none; }
-  .pa-canvas-bar, .pa-history { transition: none; }
+  .pa-canvas-bar { animation: none; }
+  .pa-history { transition: none; }
 }
 
 /* ==========================================================================
@@ -9014,6 +9066,45 @@ header.top .top-work .stage-follow.visible-work.is-compact { width: var(--top-pi
 }
 
 /* ============================================================================
+   Panel controls: one language
+
+   The controls in a panel were written one at a time and had drifted: a field was 26, 28, 30 or 32px tall by which
+   control it was; what was switched on was accent in a toggle, a chip and a swatch but grey in a segmented control;
+   a slider's handle was white and an XY pad's was the accent. Here they agree. A field (select, text, stepper,
+   segmented, button, colour) is one height on one surface with one hairline; what is on is the accent, soft, with
+   its line; a handle is white with the accent's halo; a menu's current row is on in the same way.
+   ============================================================================ */
+.pa-panel { --pa-ctl-h: 30px; --pa-field: var(--s2); --pa-line: var(--glass-line); }
+
+.pa-select-btn, .pa-step, .pa-input, .pa-seg, .pa-btn, .pa-xy, .pa-curve, .pa-lane {
+  border: 1px solid var(--pa-line); border-radius: var(--r-sm); background-color: var(--pa-field);
+}
+.pa-select-btn, input.pa-input, .pa-seg, .pa-btn { height: var(--pa-ctl-h); box-sizing: border-box; }
+input.pa-input { padding-block: 0; }
+.pa-btn { padding-block: 0; }
+.pa-step button, .pa-step input { height: calc(var(--pa-ctl-h) - 2px); background: transparent; }
+.pa-step button:hover:not(:disabled) { background: var(--s3); }
+.pa-seg { padding: 2px; }
+.pa-seg button { height: 100%; padding-block: 0; }
+.pa-select-btn:hover, .pa-input:hover, .pa-step:hover, .pa-btn:hover { border-color: var(--glass-line-strong); }
+.pa-select-btn:focus-visible, .pa-step:focus-within { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+/* On is the accent, everywhere. */
+.pa-seg button.is-on, .pa-menu button.is-on {
+  background: var(--accent-soft); color: var(--text); box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+.pa-menu button:hover { background: var(--s3); }
+.pa-btn.is-accent { background-color: var(--accent); border-color: var(--accent); }
+.pa-btn.is-accent:hover { background-color: var(--accent-deep); border-color: var(--accent-deep); }
+
+/* A handle is white with the accent's halo: a slider's, a range's two, an XY pad's. */
+.pa-thumb, .pa-xy b {
+  width: 14px; height: 14px; margin: -7px 0 0 -7px; background: var(--text);
+  box-shadow: var(--shadow-sm), 0 0 0 3px rgba(var(--accent-rgb), 0.28);
+}
+.pa-track:focus-visible .pa-thumb, .pa-xy:focus-visible b { box-shadow: var(--shadow-sm), 0 0 0 4px var(--accent-line); }
+
+/* ============================================================================
    Glass
 
    The app is frosted glass over a slow wash of the theme's own light: the
@@ -9025,6 +9116,34 @@ header.top .top-work .stage-follow.visible-work.is-compact { width: var(--top-pi
    (the thread, a surface) never takes a filter itself: it would pin that
    content inside the pane (ConversationFlow.css frosts with ::before).
    ============================================================================ */
+/* Every surface in the app is glass. The surface tokens are solid on :root, where the embedded editors and the drawn
+   widgets read them (lib/frameTheme.ts and the windows' THEME_TOKENS resolve them from the document element and need
+   real colours); from the body down they are about a fifth opaque, so a pane on a pane on the page builds up like
+   panes of glass and the light behind shows through all of them. What must cover what is under it takes
+   --solid-1 / --solid-2, or is frosted (below). */
+:root { --solid-1: rgb(var(--s1-rgb)); --solid-2: rgb(var(--s2-rgb)); }
+body {
+  --s1: rgba(0, 0, 0, var(--glass-dark));
+  --s2: rgba(255, 255, 255, 0.045);
+  --s3: rgba(255, 255, 255, 0.09);
+  --s4: rgba(255, 255, 255, 0.14);
+}
+
+/* What floats over the work or the words is frosted: the blur is what keeps it readable at a fifth opaque. */
+.shot-picker, .slash-menu, .mode-menu, .mode-sel-sheet, .pane-follow, .gm-back, .shot-menu, .pa-summon, .pa-selbar,
+.pa-toast, .pa-proj, .agent-thought > span, .pa-panel, .todo-dock, .jump-pill, .notice {
+  background: var(--glass-sheen), var(--glass-veil), var(--glass);
+  border-color: var(--glass-line-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+/* What must hide what scrolls under it, or stand in for a window that is not there yet, stays solid. */
+.st-ruler-row, .st-corner, .st-head, .st-clip, .st-keys, .st-drum-name, .pa-table th, .pa-table-foot, .app-loading, .app-down,
+.pdf-window.is-phone .pdf-bar > .pdf-full-btn, .app-window.is-phone .app-bar > .app-full-btn {
+  --s1: var(--solid-1); --s2: var(--solid-2);
+}
+
 body::before {
   background:
     radial-gradient(55% 50% at 8% 4%, rgba(var(--accent-rgb), 0.26), transparent 70%),
@@ -9040,12 +9159,15 @@ body::before {
   box-shadow: var(--glass-shine);
 }
 
+/* A phone's drawer slides over the app: a pane text is read on, over the scrim's frost. */
+.rail.is-drawer { background: var(--glass-sheen), var(--glass-veil), var(--glass-strong); border-right: 1px solid var(--glass-line); }
+
 .top {
-  background: linear-gradient(180deg, rgba(var(--s2-rgb), 0.6), rgba(var(--s1-rgb), 0.4));
+  background: var(--glass-soft);
   border-bottom-color: var(--glass-line);
 }
 @media (min-width: 681px) {
-  .top { background: rgba(var(--s1-rgb), 0.35); backdrop-filter: none; }
+  .top { background: var(--glass-soft); backdrop-filter: none; }
 }
 
 .page {
@@ -9061,7 +9183,7 @@ body::before {
 .art-card,
 .tw-card,
 .bill-tile {
-  background: var(--glass-sheen), rgba(var(--s1-rgb), 0.5);
+  background: var(--glass-sheen), var(--glass);
   border-color: var(--glass-line);
   box-shadow: var(--glass-shine);
 }
@@ -9072,15 +9194,17 @@ body::before {
 .pa-board { background-color: transparent; }
 
 .pa-surface {
-  background: var(--glass-sheen), var(--glass-strong);
+  background: var(--glass-sheen), var(--glass-veil), var(--glass-strong);
   border-color: var(--glass-line);
   box-shadow: var(--shadow), var(--glass-shine);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
 }
 .pa-surface.is-focus { border-color: var(--accent-line); box-shadow: var(--shadow), var(--glass-shine), 0 0 0 3px rgba(var(--accent-rgb), 0.12); }
 
 /* Dialogs and sheets: the scrim frosts the app behind, and the pane itself is glass on top of that. */
 .modal {
-  background: var(--glass-sheen), var(--glass-strong);
+  background: var(--glass-sheen), var(--glass-veil), var(--glass-strong);
   border-color: var(--glass-line-strong);
   border-radius: var(--r-xl);
   box-shadow: var(--glass-shadow), var(--glass-shine);
@@ -9093,7 +9217,7 @@ body::before {
 .pw-jump-dock,
 .app-pop,
 .st-menu {
-  background: var(--glass-sheen), var(--glass);
+  background: var(--glass-sheen), var(--glass-veil), var(--glass);
   border-color: var(--glass-line-strong);
   box-shadow: var(--glass-shadow), var(--glass-shine);
   backdrop-filter: var(--glass-blur);
@@ -9110,14 +9234,14 @@ body::before {
 
 /* Pills and the message box speak the same glass. */
 .session-btn {
-  background: rgba(var(--s2-rgb), 0.55);
+  background: var(--glass);
   border-color: var(--glass-line);
   box-shadow: var(--glass-shine);
 }
-.session-btn:hover { background: rgba(var(--s2-rgb), 0.85); border-color: var(--glass-line-strong); }
+.session-btn:hover { background: var(--s3); border-color: var(--glass-line-strong); }
 
 .composer-box {
-  background: var(--glass-sheen), rgba(var(--s2-rgb), 0.6);
+  background: var(--glass-sheen), var(--glass);
   border-color: var(--glass-line);
 }
 .composer::before { background: none; }

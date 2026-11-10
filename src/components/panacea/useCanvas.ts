@@ -71,6 +71,8 @@ export function useCanvas(sessionId: string, enabled = true) {
     try {
       while (dirty.current) {
         dirty.current = false;
+        const mine = byPerson.current;
+        byPerson.current = false;
         setSave("saving");
         const res = await fetch(`${base}/doc`, {
           method: "PUT",
@@ -85,13 +87,15 @@ export function useCanvas(sessionId: string, enabled = true) {
           const got = (await fetch(`${base}/doc`).then((r) => r.json()).catch(() => null)) as { doc?: unknown; rev?: number } | null;
           const doc = normalizeCanvas(got?.doc);
           if (doc) {
-            remember({ canvas: live.current, label: "Your last change", by: "person", at: Date.now() });
-            future.current = [];
+            if (mine) {
+              remember({ canvas: live.current, label: "Your last change", by: "person", at: Date.now() });
+              future.current = [];
+            }
             known.current = Number(got?.rev ?? known.current);
             put(doc);
             sync();
           }
-          setNotice("Autora changed the canvas while you were working, so your last change was not kept. Undo brings it back.");
+          if (mine) setNotice("Autora changed the canvas while you were working, so your last change was not kept. Undo brings it back.");
           setSave("saved");
           return;
         }
@@ -108,7 +112,12 @@ export function useCanvas(sessionId: string, enabled = true) {
     }
   }, [base, put]);
 
-  const schedule = useCallback(() => {
+  /* Whether what is waiting to be saved holds something the person did. Housekeeping (a panel nudged clear of its
+     neighbour, a window's first place, a ghost drifting off) is saved the same way, but if the agent has changed the
+     canvas meanwhile it is simply dropped: the person did nothing, so there is nothing to tell them was not kept. */
+  const byPerson = useRef(false);
+  const schedule = useCallback((person = true) => {
+    if (person) byPerson.current = true;
     dirty.current = true;
     setSave("saving");
     if (timer.current) clearTimeout(timer.current);
@@ -194,7 +203,7 @@ export function useCanvas(sessionId: string, enabled = true) {
     fn(next);
     localRevision.current += 1;
     put(next);
-    schedule();
+    schedule(false);
   }, [put, schedule]);
 
   const undo = useCallback(() => {

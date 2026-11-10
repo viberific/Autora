@@ -1,7 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import {
   FLOAT_GAP, FLOAT_STEP, clampFloat, defaultFloat, magnet, nudgeFloat, resizeFloat,
-  type Edge, type FloatBox, type PreviewLine, type Room, type Sheet,
+  SHEET_MOVED, type Edge, type FloatBox, type PreviewLine, type Room, type Sheet,
 } from "./chatLayout";
 import { AutoraMark } from "../AutoraMark";
 import { IconUser } from "../Icons";
@@ -13,11 +13,13 @@ interface ConversationFlowProps {
   todos?: ReactNode;
   workNavigation?: ReactNode;
   conversationLabel?: string;
+  /** Nothing has been said yet: the pane is only as tall as its message box, with no empty glass above it. */
+  empty?: boolean;
   /** A phone's sheet is retracted to its entry strip (Canvas only). A desktop window is never retracted. */
   collapsed?: boolean;
   /** A phone: opens or retracts the sheet. */
   onToggle?: () => void;
-  /** A phone: the conversation is a bottom sheet under the canvas instead of a window floating over it. */
+  /** A phone: the conversation is a glass sheet over the foot of the canvas instead of a window anywhere over it. */
   phone?: boolean;
   /** Where the desktop window stands and how big it is (null: never moved, so the default at the bottom left), and the
       way to change it (called when a drag, a resize or a key press settles; null puts it back). */
@@ -62,8 +64,8 @@ function onSheetSide(root: HTMLElement, x: number) {
 const EDGES: readonly Edge[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 
 /** Hosts the live Thread and native composer without taking ownership of either: a glass window floating over the
-    world on a desktop (moved by its top bar, resized from any edge, pulled onto the left or right side when brought
-    near it), a bottom sheet under the canvas on a phone. */
+    world on a desktop (moved by the Move button in its top-left corner, sized by the pull in its top-right, pulled onto the left or
+    right side when brought near it), a glass sheet floating over the foot of the canvas on a phone. */
 export function ConversationFlow({
   conversation,
   entry,
@@ -75,6 +77,7 @@ export function ConversationFlow({
   phone = false,
   float = null,
   onFloat,
+  empty = false,
   sheet = "half",
   onSheet,
   locked = false,
@@ -132,11 +135,17 @@ export function ConversationFlow({
     if (next?.snap === "right") parent.style.setProperty("--flow-held-right", `${next.w + FLOAT_GAP}px`);
     else parent.style.removeProperty("--flow-held-right");
   };
+  /* The box is the room the window may take; the window itself stands on the box's foot and is only as tall as what
+     has been said (its max-height is the box's), so a short chat leaves no empty glass above it. While it is being
+     sized it is drawn at the box's whole height, so the person sees the height they are choosing. */
   const place = (root: HTMLElement, next: FloatBox) => {
+    const at = roomRef.current;
+    if (!at) return;
     root.style.left = `${next.x}px`;
-    root.style.top = `${next.y}px`;
     root.style.width = `${next.w}px`;
-    root.style.height = `${next.h}px`;
+    root.style.bottom = `${at.h - next.y - next.h}px`;
+    root.style.maxHeight = `${next.h}px`;
+    root.style.height = gesture.current && gesture.current.kind !== "move" ? `${next.h}px` : "auto";
     if (next.snap) root.dataset.snap = next.snap; else delete root.dataset.snap;
     clear(root, next);
   };
@@ -147,6 +156,23 @@ export function ConversationFlow({
     return () => clear(root, null);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- clear only reads refs and the DOM; the box is its value
   }, [phone, box?.x, box?.y, box?.w, box?.h, box?.snap]);
+  /* The window lies over the board and never resizes it, so the board cannot tell when the room beside or above the
+     window has changed. It is told (SHEET_MOVED, a beat after the change settles): when the window is put somewhere
+     else or sized, and when it grows or shrinks with what is said in it. The board frames the work again only if the
+     person has not taken the camera. */
+  const telling = useRef(0);
+  const tellBoard = () => {
+    window.clearTimeout(telling.current);
+    telling.current = window.setTimeout(() => window.dispatchEvent(new Event(SHEET_MOVED)), 180);
+  };
+  useEffect(() => {
+    const root = rootRef.current;
+    if (phone || !root || typeof ResizeObserver === "undefined") return;
+    let first = true;
+    const watch = new ResizeObserver(() => { if (first) { first = false; return; } if (!gesture.current) tellBoard(); });
+    watch.observe(root);
+    return () => { watch.disconnect(); window.clearTimeout(telling.current); };
+  }, [phone]);
   const gesture = useRef<{ kind: "move" | Edge; x: number; y: number; start: FloatBox; live: FloatBox } | null>(null);
   const beginGesture = (kind: "move" | Edge) => (event: PointerEvent<HTMLElement>) => {
     const root = rootRef.current;
@@ -175,14 +201,15 @@ export function ConversationFlow({
     const state = gesture.current;
     gesture.current = null;
     const root = rootRef.current;
-    if (root) delete root.dataset.moving;
+    if (root) { delete root.dataset.moving; root.style.height = "auto"; }
     if (!state) return;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     const moved = state.live.x !== state.start.x || state.live.y !== state.start.y || state.live.w !== state.start.w || state.live.h !== state.start.h;
-    if (moved) onFloat?.(state.live);
+    if (moved) { onFloat?.(state.live); tellBoard(); }
   };
-  /** The arrow keys on the window's grip move it, and on its corner resize it; Home and End put it on the left or right. */
-  const keyFloat = (kind: "move" | "se") => (event: KeyboardEvent<HTMLElement>) => {
+  /** The arrow keys on Move move the window, and on the top-right pull size it (up is taller, right is wider); Home and
+      End on Move put it on the left or right. */
+  const keyFloat = (kind: "move" | "ne") => (event: KeyboardEvent<HTMLElement>) => {
     const current = boxRef.current;
     const at = roomRef.current;
     if (!current || !at) return;
@@ -193,10 +220,11 @@ export function ConversationFlow({
     if (kind === "move" && (event.key === "Home" || event.key === "End")) next = clampFloat({ ...current, snap: event.key === "Home" ? "left" : "right" }, at);
     // A key's step is shorter than the magnet's reach, so the magnet would never let a held window go: by keyboard it
     // is free the moment it steps off a side, and held again only when it is stepped right up against one.
-    else if (dx || dy) next = kind === "move" ? nudgeFloat(current, dx, dy, at) : resizeFloat(current, "se", dx, dy, at);
+    else if (dx || dy) next = kind === "move" ? nudgeFloat(current, dx, dy, at) : resizeFloat(current, "ne", dx, dy, at);
     if (!next) return;
     event.preventDefault();
     onFloat?.(next);
+    tellBoard();
   };
 
   // Phone sheet: Canvas only (the retracted conversation), half, full. A tap steps up and wraps to the canvas;
@@ -204,7 +232,7 @@ export function ConversationFlow({
   const level = shut ? 0 : sheet === "full" ? 2 : 1;
   // The sheet glides between heights. The new level is laid out at once; the root's own height is then animated from
   // where it was, so the conversation slides rather than snaps. While it moves (a glide or a finger) the sheet lies
-  // over a canvas held at one size (`data-gliding` and --flow-canvas-h, ConversationFlow.css), so only the sheet is
+  // over a canvas that never changes size (`data-gliding`, ConversationFlow.css), so only the sheet is
   // laid out each frame: resizing the canvas and the editors in it every frame is what made the sheet stutter.
   const lastBox = useRef<DOMRect | null>(null);
   const restBox = useRef<number | null>(null);
@@ -213,16 +241,30 @@ export function ConversationFlow({
   const geometry = useRef<SheetGeometry | null>(null);
   /** Redraws the faded top edge of the message list; it waits while the sheet moves (see the effect that sets it). */
   const refreshEdge = useRef<() => void>(() => undefined);
-  /** The sheet starts to move: hold the canvas at the room left above the lowest height it will pass through. */
-  const startMoving = (root: HTMLElement, lowest: number) => {
+  /** The sheet starts to move: measure its surroundings once, for every frame of the move. */
+  const startMoving = (root: HTMLElement) => {
     const parent = root.parentElement;
     const parentH = parent?.getBoundingClientRect().height ?? 0;
-    parent?.style.setProperty("--flow-canvas-h", `${Math.max(0, parentH - lowest)}px`);
     const half = Math.max(parentH * 0.55, Math.min(parentH, 320));
     const entry = root.querySelector<HTMLElement>(".conversation-flow__entry-area")?.offsetHeight ?? 90;
     geometry.current = { parentH, half, min: Math.min(restBox.current ?? (HANDLE_H + entry + SHEET_PAD), half) };
     gliding.current = true;
     root.dataset.gliding = "";
+  };
+  /** The sheet lies over the canvas, so the board never changes size with it: once the sheet is at rest the board is
+      told how much of its foot is covered (--flow-sheet-h keeps its bottom row above the sheet) and that the room
+      above has changed (SHEET_MOVED: it frames the work again). */
+  const settledAt = useRef(-1);
+  const settled = (root: HTMLElement, moved = false) => {
+    const parent = root.parentElement;
+    if (!parent) return;
+    const cover = Math.round(Math.max(0, parent.getBoundingClientRect().bottom - root.getBoundingClientRect().top));
+    // After a move the board is always told, even back at the height it last heard of: it framed work in the room
+    // there was while the sheet was on its way.
+    if (!moved && cover === settledAt.current) return;
+    settledAt.current = cover;
+    parent.style.setProperty("--flow-sheet-h", `${cover}px`);
+    window.dispatchEvent(new Event(SHEET_MOVED));
   };
   const stopMoving = (root: HTMLElement) => {
     gliding.current = false;
@@ -230,6 +272,7 @@ export function ConversationFlow({
     root.style.removeProperty("height");
     geometry.current = null;
     refreshEdge.current();
+    settled(root, true);
   };
   /** Animates the root from a box it was in to the one it is in now. Returns a way to stop it. */
   const glide = (root: HTMLElement, from: { height: number }, to: { height: number }) => {
@@ -238,7 +281,7 @@ export function ConversationFlow({
     const style = getComputedStyle(root);
     const duration = (parseFloat(style.getPropertyValue("--dur-3")) || 0.4) * 1000;
     const easing = style.getPropertyValue("--ease").trim() || "ease";
-    startMoving(root, Math.min(from.height, to.height));
+    startMoving(root);
     const run = root.animate([{ height: `${from.height}px` }, { height: `${to.height}px` }], { duration, easing });
     follow();
     const done = () => {
@@ -298,13 +341,20 @@ export function ConversationFlow({
   useEffect(() => {
     const root = rootRef.current;
     if (!root || !phone || typeof ResizeObserver === "undefined") return;
+    const parent = root.parentElement;
     const watch = new ResizeObserver(() => {
       if (gliding.current) return;
       lastBox.current = root.getBoundingClientRect();
       if (root.classList.contains("is-collapsed")) restBox.current = lastBox.current.height;
+      settled(root);
     });
     watch.observe(root);
-    return () => watch.disconnect();
+    return () => {
+      watch.disconnect();
+      settledAt.current = -1;
+      parent?.style.removeProperty("--flow-sheet-h");
+      window.dispatchEvent(new Event(SHEET_MOVED));
+    };
   }, [phone]);
   useLayoutEffect(() => {
     const root = rootRef.current;
@@ -357,7 +407,7 @@ export function ConversationFlow({
       const box = root.getBoundingClientRect();
       for (const run of root.getAnimations()) run.cancel();
       state.startH = box.height;
-      startMoving(root, heights[0]);
+      startMoving(root);
       follow();
     }
     const h = Math.max(heights[0], Math.min(state.parentH, state.startH - (y - state.y)));
@@ -541,14 +591,14 @@ export function ConversationFlow({
       {workNavigation}
     </div>
   );
-  const floatStyle: CSSProperties | undefined = phone || !box ? undefined
-    : { left: box.x, top: box.y, width: box.w, height: box.h, bottom: "auto" };
+  const floatStyle: CSSProperties | undefined = phone || !box || !room ? undefined
+    : { left: box.x, bottom: room.h - box.y - box.h, width: box.w, maxHeight: box.h, top: "auto", height: "auto" };
 
   return (
     <>
     <div
       ref={rootRef}
-      className={`conversation-flow${shut ? " is-collapsed" : ""}${phone ? " is-sheet" : " is-float"}${phone && !shut ? ` is-${sheet}` : ""}`}
+      className={`conversation-flow${shut ? " is-collapsed" : ""}${empty ? " is-empty" : ""}${phone ? " is-sheet" : " is-float"}${phone && !shut ? ` is-${sheet}` : ""}`}
       style={floatStyle}
       data-snap={!phone && box?.snap ? box.snap : undefined}
     >
@@ -579,37 +629,42 @@ export function ConversationFlow({
         </div>
       ) : (
         <>
-          <div
-            className="conversation-flow__bar"
+          <button
+            className="conversation-flow__move"
+            type="button"
+            aria-label="Move conversation"
+            title="Move (drag; double-click to put it back)"
+            aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown Home End"
+            onKeyDown={keyFloat("move")}
             onPointerDown={beginGesture("move")}
             onPointerMove={moveGesture}
             onPointerUp={endGesture}
             onPointerCancel={endGesture}
             onDoubleClick={() => onFloat?.(null)}
           >
-            <button
-              className="conversation-flow__grip"
-              type="button"
-              aria-label="Move conversation"
-              aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown Home End"
-              onKeyDown={keyFloat("move")}
-            >
-              <span aria-hidden="true" />
-            </button>
-          </div>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+              <path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3" />
+            </svg>
+          </button>
           {EDGES.map((edge) => (
             <div
               key={edge}
               className="conversation-flow__size"
               data-edge={edge}
-              {...(edge === "se"
-                ? { role: "separator", tabIndex: 0, "aria-label": "Resize conversation", "aria-valuenow": box?.w, onKeyDown: keyFloat("se") }
+              {...(edge === "ne"
+                ? { role: "separator", tabIndex: 0, "aria-label": "Resize conversation", title: "Resize (drag)", "aria-valuenow": box?.w, onKeyDown: keyFloat("ne") }
                 : { "aria-hidden": true })}
               onPointerDown={beginGesture(edge)}
               onPointerMove={moveGesture}
               onPointerUp={endGesture}
               onPointerCancel={endGesture}
-            />
+            >
+              {edge === "ne" && (
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+                  <path d="M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7" />
+                </svg>
+              )}
+            </div>
           ))}
         </>
       )}

@@ -6,7 +6,7 @@ import { chromium } from "playwright-core";
 import { newProject, newTrack, newClip, parsePitch, INSTRUMENTS, type Project } from "../src/lib/studio/model";
 import { startApp, sleep } from "./e2e-harness";
 import { CHROME } from "./chrome";
-import { shrinkConversation } from "./ui-workspace-ready";
+import { openWorkButtons, shrinkConversation } from "./ui-workspace-ready";
 
 async function main() {
   const exe = CHROME;
@@ -26,11 +26,13 @@ async function main() {
     assert.equal(seeded.status, 200);
     await page.goto(`${app.base}/?session=${session}`);
     const dock = page.getByRole("navigation", { name: "Jump to work" });
+    await openWorkButtons(page);
     await dock.getByRole("button", { name: "Jump to Music", exact: true }).click();
     await shrinkConversation(page);
     const music = page.locator('[data-engine="studio"]');
     await music.locator(`[data-clip="${clip.id}"]`).click();
     await music.locator(".st-roll .st-grid").waitFor();
+    await openWorkButtons(page);
     await dock.getByRole("button", { name: "Zoom out", exact: true }).click();
     const grid = music.locator(".st-roll .st-grid");
     const geometry = await grid.evaluate((node) => {

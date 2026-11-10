@@ -28,6 +28,8 @@ const RULES = "Be concise. Answer in bullet points, three at most.";
 test("with no standing instructions the defaults stand as they were", () => {
   const style = replyStyle(false).join("\n");
   assert.match(style, /plain prose/);
+  // Emoji are allowed, sparingly: the console's own style no longer reads as forbidding them.
+  assert.match(style, /An emoji is welcome where it fits the moment/);
   assert.match(style, /final answer in full/);
   assert.doesNotMatch(style, /standing instructions/);
   assert.deepEqual(standingBlock(""), []);

@@ -29,3 +29,7 @@ export function workspaceMode(kind: string): WorkspaceMode | null {
 export function workspaceSurface(mode: WorkspaceMode): string {
   return mode === "pages" ? "docx" : mode === "sheets" ? "xlsx" : mode === "slides" ? "pptx" : mode;
 }
+
+/** The id of the place in the app's header where the canvas shows its own controls (its name, whether it is saved,
+    Load, Save): App.tsx keeps the slot, PanaceaWindow draws into it, so there is one bar at the top and not two. */
+export const CANVAS_BAR_SLOT = "top-canvas-slot";

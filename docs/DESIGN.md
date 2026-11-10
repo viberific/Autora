@@ -47,8 +47,8 @@ Everything comes from a token, so every theme can change it.
 - Status: `--live` (good, running), `--warn`, `--danger`, each with an `-rgb` twin; `--live-light`,
   `--danger-light`, and `--on-live` / `--on-warn` for text on them.
 - Behind a dialog or drawer: `--scrim` and `--scrim-blur`. Elevation: `--shadow-sm`, `--shadow`, `--shadow-lg`.
-- Glass: the app is frosted glass over a slow wash of the theme's light (`body::before`). `--glass` (a pane floating over
-  moving work), `--glass-strong` (a pane text is read on), `--glass-soft` (standing chrome: the menu, the header, a page),
+- Glass: the app is frosted glass over a slow wash of the theme's light (`body::before`). The glass is smoked: `--glass-dark` (0 clear, 1 black) is the one value that darkens every pane, card, menu and dialog at once. Every surface is see-through: from `body` down `--s1`…`--s4` are translucent (they stay solid on `:root`, where the embedded editors and drawn widgets read real colours), so use them as always and a pane builds up on the pane under it. What floats over work or words adds `backdrop-filter: var(--glass-blur)` (the frosted list in the "Glass" section); what must hide what scrolls under it uses `--solid-1` / `--solid-2`. `--glass` (a pane floating over
+  moving work), `--glass-strong` (a pane text is read on), `--glass-soft` (standing chrome: the menu, the header, a page), `--glass-thin` under `--glass-veil` (the conversation's pane: thin, frosted, pale),
   with `--glass-sheen` layered over each, `--glass-line` / `--glass-line-strong` for their edges, `--glass-shine` (the lit
   top edge, an inset shadow), `--glass-blur`, `--glass-shadow` and `--glass-shadow-lift` (while it is being moved). Blur is
   spent only where something passes behind a pane. A pane holding `position: fixed` content (the thread, a surface) never

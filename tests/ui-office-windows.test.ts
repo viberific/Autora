@@ -12,6 +12,7 @@ import fs from "node:fs";
 import { chromium, type Browser, type Frame, type Page } from "playwright-core";
 import { sleep, startApp } from "./e2e-harness";
 import { CHROME } from "./chrome";
+import { openWorkButtons } from "./ui-workspace-ready";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -103,6 +104,7 @@ try {
 
   await test("jumping to work moves the camera without hiding another editor", async () => {
     assert.equal(await page.locator('.pw-engine[data-engine="pages"],.pw-engine[data-engine="sheets"]').count(), 2);
+    await openWorkButtons(page);
     await page.getByRole("navigation", { name: "Jump to work" }).getByRole("button", { name: "Jump to Documents", exact: true }).click();
     await sleep(400);
     assert.equal(await page.locator('.pw-engine[data-engine="pages"],.pw-engine[data-engine="sheets"]').count(), 2, "jumping closes nothing");
@@ -128,6 +130,7 @@ try {
   });
 
   await test("each window's change is typed in that window: the cell goes to the Sheets window, not the Pages one", async () => {
+    await openWorkButtons(page);
     await page.getByRole("navigation", { name: "Jump to work" }).getByRole("button", { name: "Jump to Spreadsheets", exact: true }).click();
     await sleep(400);
     const shots = process.env.OFFICE_SHOT;

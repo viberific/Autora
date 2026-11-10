@@ -592,12 +592,12 @@ Spectra's fetched renderer is most of what is on disk.
   `src/lib/workspace.ts` maps capability ids to their context and phone file-kind aliases. Retained Office, PDF, video, music,
   3D, game, photo, app and browser engines run inside that shell alongside the native Canvas; their models, APIs, hand-work
   handlers and sandboxing are not replaced. `panacea/ConversationFlow.tsx` hosts the original Thread and composer docked beside the scene
-  (on desktop a glass window floating over the world, at the bottom left by default, moved by its top bar, resized from any edge,
+  (on desktop a glass window floating over the world, at the bottom left by default, as tall as its content up to the height it was given, moved by the Move button in its top-left corner, sized by the pull in its top-right,
   pulled onto the left or right side within `FLOAT_SNAP` and held there, its place and size remembered via `panacea/chatLayout.ts`
   (`defaultFloat`, `clampFloat`, `magnet`, `resizeFloat`); the work rail and the board's bottom row step aside for a window held to a
-  side (`--flow-held-right`, `--flow-clear-*`), and `frameCoordinates.ts` keeps the camera's work clear of it; a three-height bottom sheet on a
-  phone, moved by swipes on its left half only, which never scroll (every move there is claimed from the first), the right half only scrolling the list; while it moves it lies over a canvas held
-  at one size, `data-gliding`, so only the sheet is laid out per frame), never over it at rest. It keeps complete history mounted when a phone's sheet is retracted (canvas only; the desktop window never retracts) and
+  side (`--flow-held-right`, `--flow-clear-*`), and `frameCoordinates.ts` keeps the camera's work clear of it; a three-height glass sheet floating over the foot of the canvas on a
+  phone, moved by swipes on its left half only, which never scroll (every move there is claimed from the first), the right half only scrolling the list; it always lies over a canvas that keeps its size (`data-gliding` while it moves, so only the sheet is laid out per frame; when it settles it sends
+  `SHEET_MOVED` and sets `--flow-sheet-h`, and the board frames the work again in the room above it). It keeps complete history mounted when a phone's sheet is retracted (canvas only; the desktop window never retracts) and
   attaches TODO above the entry. `lib/frameCoordinates.ts` subtracts the entry and rail only where they overlap the board.
   `src/lib/steps.ts` contracts all tool/output/file activity in chat and lifts nested browser questions/permissions out of folds;
   there is no Activity work card or left chat column. The native canvas model is pure and shared

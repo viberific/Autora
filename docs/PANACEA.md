@@ -16,9 +16,9 @@ editor state. Web remains a real work surface; Activity is not a separate card. 
 presents Panacea with capability configuration, not separate applications.
 
 The workspace fills the available area. On a desktop the conversation is a frosted glass window floating over it, opening at
-the bottom left a gap in from the edges: its top bar moves it (**Move conversation**; a double click puts it back), every edge and
-corner resizes it (**Resize conversation**), and brought near the left or right side it is pulled onto that side and held there
-(on a phone it is a bottom sheet). The original composer, **Ask Autora**, is at its foot, retaining work mode, speech, attachments, notebooks, artifacts,
+the bottom left a gap in from the edges: it is only as tall as what has been said (up to the height it was given), the Move button in its top-left corner moves it (**Move conversation**; a double click puts it back), the pull in its
+top-right corner sizes it (**Resize conversation**), and brought near the left or right side it is pulled onto that side and held there
+(on a phone it is a glass sheet floating over the foot of the canvas, which runs on under it and is never resized by it). The original composer, **Ask Autora**, is at its foot, retaining work mode, speech, attachments, notebooks, artifacts,
 capabilities and Send/Stop; Enter sends and Shift+Enter writes a line (on a phone's keyboard Enter is a new line and the arrow sends).
 The **TODO list is attached above the entry**. Messages are individual bubbles above it, and older bubbles fade at the top edge.
 The desktop window is never retracted; a phone's sheet retracts to its entry strip and keeps the mounted complete history. Questions and permissions
@@ -27,7 +27,7 @@ expanded, including live and failed console work. Activity is not a second world
 
 Canvas fitting waits until the surface is actually visible (hidden engines have no usable viewport), observes phone /
 desktop resizing, and calculates reveals from model coordinates rather than animated rectangles. **Show all work**
-frames every native surface, its controls and hosted engine cards without relocating any of them. Empty chats offer **Open Panacea**, and the composer's wrench opens its
+frames every native surface, its controls and hosted engine cards without relocating any of them. On a phone the jump, zoom-out and show-all buttons are folded into one small button until tapped. The to-do card is the top of the message box, edge to edge; its tick, strike-through and self-opening are drawn only for someone watching (on the chat page, in the app, after the chat has finished loading), and otherwise a finished task is simply ticked. An empty chat is only its message box, and the composer's wrench opens Panacea's
 capability chooser without spending an agent turn. Automatic pan and control revelation pause while
 the person is typing or dragging; pinned panels are not auto-revealed or shifted to make room for suggestions.
 
@@ -101,6 +101,9 @@ the two windows with an arrow halfway along: noted when a tool of one app reads 
 - **The agent, watching**: while the person works, a small background model (only with the companion switch on, nothing
   running, somebody watching; at most one every 90 s and ten an hour) may offer one ghost from the library
   (`suggestNow` in `server/panacea.ts`).
+- **Where things surface**: what can be seen of the board is the room clear of the conversation and the work buttons (`workViewport`: beside a tall conversation window, above a short one, whichever leaves more). New work, new panels and offers are placed and revealed in that room; an offer is framed with the rest while the camera is still Autora's own, and never takes the view from someone who has moved it. The board is told when the conversation window moves, is sized or grows (`SHEET_MOVED`).
+- **Connecting pieces** (`src/lib/panacea/flows.ts`, `Board.tsx`): a piece of work that can be sent somewhere has a node in its title bar. Dragging from it draws a line to the pointer, the windows that can take it light and the others dim, and letting go on one sends it; a click on the node lists the apps instead (open ones first, then installed ones it would open). A native surface is sent as the file Export keeps (`surfaceSends`: a picture as edited is a PNG), an app's window as what its own Save keeps (`engineSends`, `keepRoute`: Images, 3D, Music, Games); `takersOf` is who can open it, by the same rule as Load. The file is opened by the ordinary load route with no turn, and the arrowed line that stays is a flow (`POST /api/panacea/:session/flow` for a native source; the load route notes app-to-app ones). Not sent this way yet: PDF, Video, Web, an app being built and the Office editors as sources, and tables or pages as files (nothing opens CSV or Markdown).
+- **Keeping itself in order**: new work is never placed on an app's window (`taken` counts windows); once panels are drawn, any the person has not placed that lies on something is moved down clear of it; Tidy moves each surface with its panels as one block; plain words pasted become a page and rows a table (`looksTabular`); several things arriving together bring one offer between them.
 - **Ghosts**: one at a time, dashed, with the reason. Add takes it; Not now waves it away; left alone it drifts off after 45
   s. A recipe waved away is not offered again on that canvas for ten minutes, and never unasked once waved away twice.
 - **Fading follows the work, not a timer**: when the focus moves to another surface its panels dim; when the work moves on

@@ -14,7 +14,7 @@ import { ScreencastCell } from "./components/ScreencastCell";
 import { WidgetCell } from "./components/WidgetCell";
 import { AppPreview, CadWindow, GameWindow, OfficeWindow, OpenCutWindow, PhotoWindow, SpectraWindow, StudioWindow } from "./components/lazyWindows";
 import { PanaceaWorkspace } from "./components/PanaceaWorkspace";
-import type { NativeWorkspaceActions, WorkspaceMode } from "./lib/workspace";
+import { CANVAS_BAR_SLOT, type NativeWorkspaceActions, type WorkspaceMode } from "./lib/workspace";
 import { useWorkspaceFocus, workspaceToolKey } from "./lib/workspaceFocus";
 import { emitCadHand, resetCad, setCadState, useCadState } from "./lib/caddesk";
 import { emitGamePlay, resetGame, setGameState, useGameState } from "./lib/gamedesk";
@@ -1787,6 +1787,8 @@ export function App() {
   // What the phone's retracted sheet shows of the conversation: the last two things said.
   const chatPreview = useMemo(() => previewOf(view.transcript, 3), [view.transcript]);
   const hiddenSteps = useMemo(() => hiddenStepCount(view.buckets[view.buckets.length - 1]?.cells ?? []), [view.buckets]);
+  // Nothing said yet (and nothing waiting to be answered): the conversation is only its message box.
+  const chatEmpty = !requiresInput && !view.busy && outbox.length === 0 && view.transcript.length === 0 && !view.buckets.some((bucket) => bucket.prompt || bucket.attachments.length > 0);
   const retractChat = useCallback(() => {
     if (requiresInput) { setNotice("A question or permission needs your answer before work can continue."); return; }
     setChatCollapsed((collapsed) => !collapsed);
@@ -2195,6 +2197,10 @@ export function App() {
             </button>
           )}
 
+          {/* The canvas's own controls (its name, whether it is saved, Load, Save), drawn here by PanaceaWindow: one
+              bar at the top, not a second one under it. Empty until there is native work on the canvas. */}
+          {page === "chat" && <div id={CANVAS_BAR_SLOT} className="top-canvas-slot" />}
+
           {/* Following the agent's work, and watching it work (its mouse and keyboard), where they are always in reach
               rather than in a bar of the workspace's own. */}
           {page === "chat" && sessionId && (
@@ -2279,17 +2285,9 @@ export function App() {
 
         <ConversationFlow collapsed={phoneLayout && (chatCollapsed || quietPhone || fullPhone) && !requiresInput}
           onToggle={!phoneLayout ? undefined : fullPhone ? () => setWindowFull(false) : quietPhone ? () => setSheetAsked(true) : retractChat}
-          phone={phoneLayout} float={chatLayout.float} onFloat={chatLayout.setFloat}
+          phone={phoneLayout} float={chatLayout.float} onFloat={chatLayout.setFloat} empty={chatEmpty}
           sheet={chatLayout.sheet} onSheet={chatLayout.setSheet} locked={requiresInput} preview={chatPreview} hiddenSteps={hiddenSteps}
           conversation={<>
-          {openWindows.length === 0 && !view.buckets.some((bucket) => bucket.prompt || bucket.attachments.length > 0) && (
-            <div className="pw-launch">
-              <button type="button" className="btn ghost" onClick={() => void openPanaceaChooser()}
-                disabled={workspaceOpening} aria-expanded={toolsOpen}>
-                <IconWrench size={16} /> {workspaceOpening ? "Opening…" : "Open Panacea"}
-              </button>
-            </div>
-          )}
           <Thread
             workspaceHosted
             chatOnly={false}
@@ -2337,7 +2335,7 @@ export function App() {
             onDecide={(id, approved, remember) => streamRef.current?.approve(id, approved, remember)}
           />
           </>}
-          todos={dockPlan ? <TodoDock key={cellKey(dockPlan)} items={dockPlan.items} /> : undefined}
+          todos={dockPlan ? <TodoDock key={cellKey(dockPlan)} items={dockPlan.items} watching={page === "chat"} /> : undefined}
           workNavigation={<div ref={setWorkNavigationHost} className="pw-navigation-host" />}
           entry={<>
 

@@ -41,11 +41,10 @@ export function isWorkVisible(element: Element, opts: { whole?: boolean } = {}):
      so it hides only what it actually covers: workViewport's band (the whole height beside it) is for placing the
      camera, and taken as what can be seen it hid a phone's picker and most panels from the agent's hand. */
   const b = board.getBoundingClientRect();
-  /* A phone's sheet runs along the foot of the board: what is above its entry is in view. A desktop's floating window
-     is a box over the board like the navigation, so it hides only what it covers. */
+  /* A phone's sheet lies over the foot of the board: what is above it is in view. A desktop's floating window is a box
+     over the board like the navigation, so it hides only what it covers. */
   const float = floatingConversation();
-  const entry = float ? undefined : document.querySelector(".conversation-flow__entry-area")?.getBoundingClientRect();
-  const bottom = entry && entry.height > 0 && entry.top < b.bottom && entry.bottom > b.top ? Math.min(b.bottom, entry.top - 8) : b.bottom;
+  const bottom = float ? b.bottom : aboveSheet(b);
   const room = { left: b.left, top: b.top, width: b.width, height: Math.max(0, bottom - b.top) };
   const nav = document.querySelector(".conversation-flow__work-navigation")?.getBoundingClientRect();
   const under = (box: DOMRect | undefined, r: DOMRect) => !!box && box.width > 0 && r.right > box.left && r.left < box.right && r.bottom > box.top && r.top < box.bottom;
@@ -64,6 +63,16 @@ export function isWorkVisible(element: Element, opts: { whole?: boolean } = {}):
   return !under(nav, rect) && !under(float, rect);
 }
 
+/** Where the room for work ends on a phone: just above the conversation's sheet, which lies over the foot of the board.
+    A sheet opened to the full screen covers the board; the work keeps the room a half sheet leaves, so nothing is
+    re-framed into no room at all while the person reads. */
+function aboveSheet(board: DOMRect): number {
+  const sheet = document.querySelector(".conversation-flow.is-sheet")?.getBoundingClientRect();
+  if (!sheet || sheet.height === 0 || sheet.top >= board.bottom || sheet.bottom <= board.top) return board.bottom;
+  const top = sheet.top - 8 > board.top + board.height * 0.2 ? sheet.top - 8 : board.top + board.height * 0.45;
+  return Math.min(board.bottom, top);
+}
+
 /** The conversation's floating window on a desktop, where it is on screen; none on a phone, where it is a sheet. */
 function floatingConversation(): DOMRect | undefined {
   const box = document.querySelector(".conversation-flow.is-float")?.getBoundingClientRect();
@@ -73,11 +82,10 @@ function floatingConversation(): DOMRect | undefined {
 export function workViewport(board: Element, opts: { clearDock?: boolean } = {}): { left: number; top: number; width: number; height: number } {
   const rect = board.getBoundingClientRect();
   const float = floatingConversation();
-  const entry = float ? undefined : document.querySelector(".conversation-flow__entry-area")?.getBoundingClientRect();
   const navigation = document.querySelector(".conversation-flow__work-navigation")?.getBoundingClientRect();
-  // A phone's sheet is under the canvas, so its entry only costs room where it really overlaps.
   const overlaps = (other: DOMRect) => other.left < rect.right && other.right > rect.left && other.top < rect.bottom && other.bottom > rect.top;
-  let bottom = entry && entry.height > 0 && overlaps(entry) ? Math.min(rect.bottom, entry.top - 8) : rect.bottom;
+  // A phone's sheet lies over the foot of the canvas: the room for work ends above it.
+  let bottom = float ? rect.bottom : aboveSheet(rect);
   // The board's own bottom row (the history slider): on a phone a window is kept clear of it, not drawn under it.
   if (opts.clearDock) {
     for (const el of Array.from(board.querySelectorAll(".pa-dock > *"))) {
@@ -89,13 +97,22 @@ export function workViewport(board: Element, opts: { clearDock?: boolean } = {})
      on the left), its right edge on a phone. Whichever side it is on, that side's band is kept clear of it. */
   let left = rect.left;
   let right = rect.right;
-  /* The desktop's floating conversation is kept clear the same way. */
-  for (const band of [navigation, float]) {
-    if (!band || band.width === 0 || !overlaps(band)) continue;
-    // Whichever side of it has more of the board is the side the work is framed on: a window left in the middle of
-    // the world costs the narrower side, not half the board by which half its centre happens to be in.
-    if (band.left - left < right - band.right) left = Math.max(left, band.right + 8);
-    else right = Math.min(right, band.left - 8);
+  if (navigation && navigation.width > 0 && overlaps(navigation)) {
+    if (navigation.left - left < right - navigation.right) left = Math.max(left, navigation.right + 8);
+    else right = Math.min(right, navigation.left - 8);
+  }
+  /* The desktop's floating conversation is kept clear too, by whichever costs the work less room: the band beside it
+     (on the side with more of the board), or, when it is a short window standing at the foot of the board, the strip
+     above it. A chat of one line does not take a whole column from the work, and a tall one does not take the floor. */
+  if (float && overlaps(float)) {
+    const onLeft = float.left - left < right - float.right;
+    const beside = Math.max(0, onLeft ? right - (float.right + 8) : float.left - 8 - left) * Math.max(0, bottom - rect.top);
+    const aboveH = float.top - 8 - rect.top;
+    const atFoot = aboveH > bottom - (float.bottom + 8);
+    const above = atFoot ? Math.max(0, right - left) * Math.max(0, aboveH) : 0;
+    if (above > beside) bottom = Math.min(bottom, float.top - 8);
+    else if (onLeft) left = Math.max(left, float.right + 8);
+    else right = Math.min(right, float.left - 8);
   }
   return { left, top: rect.top, width: Math.max(0, right - left), height: Math.max(0, bottom - rect.top) };
 }

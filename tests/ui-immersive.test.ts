@@ -13,6 +13,7 @@ import { chromium } from "playwright-core";
 import { PDFDocument, StandardFonts } from "@cantoo/pdf-lib";
 import { startApp } from "./e2e-harness";
 import { CHROME } from "./chrome";
+import { openWorkButtons } from "./ui-workspace-ready";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -58,11 +59,13 @@ async function main() {
     await phone.getByRole("navigation", { name: "Jump to work" }).waitFor({ timeout: 20_000 });
 
     await test("taking the memo's tab and going full screen, Follow carries the screen to the tool the agent used last, still full", async () => {
+      await openWorkButtons(phone);
       await phone.getByRole("navigation", { name: "Jump to work" }).getByRole("button", { name: "Jump to Documents", exact: true }).tap();
       await phone.waitForSelector(".office-window", { timeout: 20_000 });
       await phone.getByRole("button", { name: "Edit", exact: true }).tap();
       await phone.waitForSelector(".office-window.is-full");
       assert.equal(await phone.locator('.pw-engine[data-engine="pdf"]').count(), 1, "the other work stays mounted");
+      await openWorkButtons(phone);
       await phone.getByRole("navigation", { name: "Jump to work" }).getByRole("button", { name: "Jump to PDF", exact: true }).tap();
       assert.equal(await phone.locator(".office-window").count(), 1, "jumping did not remove the document");
       assert.equal(await phone.getByRole("textbox", { name: "Ask Autora", exact: true }).count(), 1, "the full workspace keeps the same centered entry");

@@ -180,7 +180,7 @@ await test("the Office manual says what the person has picked reaches the briefi
 
 await test("the windows overview says the navigation dock and Tidy appear only when the work needs them, and a blank canvas shows nothing", () => {
   const text = windowsOverview();
-  for (const needle of ["The dock is not there on a blank canvas", "Tidy joins it only once there is more than one piece of work", "A blank canvas shows nothing at all, no instructions", "the canvas name and Save bar arrive with the first piece of work", "the undo and redo slider once there is something to take back"]) {
+  for (const needle of ["The dock is not there on a blank canvas", "Tidy joins it only once there is more than one piece of work", "A blank canvas shows nothing at all, no instructions", "the canvas name, Load and Save arrive in the app's one top header", "the undo and redo slider once there is something to take back"]) {
     assert.ok(text.includes(needle), needle);
   }
 });
@@ -461,7 +461,7 @@ await test("a tool finds its window's manual, and a tool with no window finds no
 
 await test("the overview every turn explains the layout and points at the manuals", async () => {
   const overview = windowsOverview();
-  for (const needle of ["Panacea is the main area", "frosted glass window floating", "bottom left", "Move conversation", "Resize conversation", "pulled onto that side", "Open Panacea", "without a message", "Capabilities", "icon dock at the canvas's bottom-left", "stay mounted", "manual jump", "Follow", "tool_manual", "Shell commands", "Show all work", "Ask Autora bar", "bottom sheet", "left half", "Canvas only", "TODO", "contracted by default"]) {
+  for (const needle of ["Panacea is the main area", "frosted glass window floating", "bottom left", "Move conversation", "Resize conversation", "pulled onto that side", "only its message box", "Show the work buttons", "drag a line from it onto another window", "without a message", "Capabilities", "icon dock at the canvas's bottom-left", "stay mounted", "manual jump", "Follow", "tool_manual", "Shell commands", "Show all work", "Ask Autora bar", "bottom sheet", "left half", "Canvas only", "TODO", "contracted by default"]) {
     assert.ok(overview.includes(needle), `the overview lacks ${needle}`);
   }
   assert.doesNotMatch(overview, /x on its tab|Autora Terminal|Working on/);

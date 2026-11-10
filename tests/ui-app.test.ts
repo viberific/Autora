@@ -11,6 +11,7 @@ import fs from "node:fs";
 import { chromium, type Page } from "playwright-core";
 import { sleep, startApp } from "./e2e-harness";
 import { CHROME } from "./chrome";
+import { openWorkButtons } from "./ui-workspace-ready";
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -57,7 +58,8 @@ async function main() {
       // camera frames the app beside it, not under it.
       const chat = await page.locator(".conversation-flow").first().boundingBox();
       const pane = await page.locator('.app-pane[data-pane="app"]').boundingBox();
-      assert.ok(chat && pane && pane.x >= chat.x + chat.width - 2, `beside the conversation, not under it (${JSON.stringify({ pane, chat })})`);
+      // Framed clear of it: beside a tall conversation, above a short one, whichever leaves the app more room.
+      assert.ok(chat && pane && (pane.x >= chat.x + chat.width - 2 || pane.y + pane.height <= chat.y + 2), `clear of the conversation, not under it (${JSON.stringify({ pane, chat })})`);
       assert.ok(pane.width > 400, `a usable width (${Math.round(pane.width)})`);
       const canvas = await page.locator(".app-canvas").boundingBox();
       const area = await page.locator(".app-area").boundingBox();
@@ -241,6 +243,7 @@ async function main() {
     await sleep(800);
     await test("the app is a tab in the pinned view, inside the screen, with thumb-sized tools", async () => {
       assert.equal(await p.getByRole("separator", { name: "Resize the conversation" }).count(), 0, "there is no left chat allocation");
+      await openWorkButtons(p);
       assert.equal(await p.getByRole("navigation", { name: "Jump to work" }).getByRole("button", { name: "Jump to Apps & code", exact: true }).count(), 1);
       const box = await p.locator(".app-canvas").boundingBox();
       assert.ok(box!.x >= 0 && box!.x + box!.width <= 390, "within the width");

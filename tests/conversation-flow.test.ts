@@ -96,10 +96,12 @@ test("a phone's retraction keeps history mounted and todos/composer outside the 
 test("desktop gets a move grip and resize handles on every edge; a phone gets the sheet handle", () => {
   const slots = { conversation: h("div", null, "history"), entry: h("textarea"), onToggle: () => undefined };
   const desktop = renderToStaticMarkup(h(ConversationFlow, { ...slots, workNavigation: h("i", { "data-slot": "navigation" }) }));
-  assert.match(desktop, /class="conversation-flow__bar"[^>]*><button class="conversation-flow__grip" type="button" aria-label="Move conversation"/);
+  // Two controls in its top corners: Move at the left, the pull at the right. No bar or line along its top.
+  assert.match(desktop, /<button class="conversation-flow__move" type="button" aria-label="Move conversation"/);
+  assert.doesNotMatch(desktop, /conversation-flow__bar|conversation-flow__grip/);
   for (const edge of ["n", "s", "e", "w", "ne", "nw", "se", "sw"]) assert.match(desktop, new RegExp(`class="conversation-flow__size" data-edge="${edge}"`));
-  assert.equal((desktop.match(/role="separator"/g) ?? []).length, 1, "one keyboard resize handle, the bottom-right corner");
-  assert.match(desktop, /data-edge="se" role="separator" tabindex="0" aria-label="Resize conversation"/);
+  assert.equal((desktop.match(/role="separator"/g) ?? []).length, 1, "one keyboard resize handle, the top-right pull");
+  assert.match(desktop, /data-edge="ne" role="separator" tabindex="0" aria-label="Resize conversation"[^>]*><svg/);
   assert.doesNotMatch(desktop, /role="slider"/);
   // The work rail stands on the world, not inside the window that floats over it.
   assert.ok(desktop.lastIndexOf("</div>", desktop.indexOf('data-slot="navigation"')) > desktop.indexOf("conversation-flow__entry"));
@@ -107,7 +109,7 @@ test("desktop gets a move grip and resize handles on every edge; a phone gets th
   const phone = renderToStaticMarkup(h(ConversationFlow, { ...slots, phone: true, sheet: "full" }));
   assert.match(phone, /conversation-flow is-sheet is-full/);
   assert.match(phone, /role="slider"[^>]*aria-label="Conversation size"[^>]*aria-valuenow="2"[^>]*aria-valuetext="Full"/);
-  assert.doesNotMatch(phone, /role="separator"|conversation-flow__grip|conversation-flow__size/);
+  assert.doesNotMatch(phone, /role="separator"|conversation-flow__move|conversation-flow__size/);
   const peek = renderToStaticMarkup(h(ConversationFlow, { ...slots, phone: true, collapsed: true }));
   assert.match(peek, /aria-valuenow="0"[^>]*aria-valuetext="Canvas only"/);
 });
@@ -115,23 +117,23 @@ test("desktop gets a move grip and resize handles on every edge; a phone gets th
 test("the window opens at the bottom left, is held inside the world, and the magnet pulls it onto a side", () => {
   const room = { w: 1400, h: 900 };
   const start = defaultFloat(room);
-  assert.deepEqual(start, { x: FLOAT_GAP, y: 900 - 640 - FLOAT_GAP, w: 400, h: 640, snap: "left" });
+  assert.deepEqual(start, { x: FLOAT_GAP, y: 900 - 600 - FLOAT_GAP, w: 360, h: 600, snap: "left" });
   // A short world: as tall as it allows, still a gap from the top and the foot.
-  assert.deepEqual(defaultFloat({ w: 1000, h: 500 }), { x: FLOAT_GAP, y: FLOAT_GAP, w: 400, h: 500 - FLOAT_GAP * 2, snap: "left" });
+  assert.deepEqual(defaultFloat({ w: 1000, h: 500 }), { x: FLOAT_GAP, y: FLOAT_GAP, w: 360, h: 500 - FLOAT_GAP * 2, snap: "left" });
   // Free in the middle; near a side, pulled onto it; past an edge, kept a gap inside.
   assert.equal(magnet({ ...start, x: 500, snap: null }, room).snap, null);
   assert.deepEqual(magnet({ ...start, x: FLOAT_GAP + FLOAT_SNAP - 4, snap: null }, room), { ...start, x: FLOAT_GAP, snap: "left" });
-  const right = magnet({ ...start, x: 1400 - 400 - FLOAT_GAP - 20, snap: null }, room);
-  assert.deepEqual(right, { ...start, x: 1400 - 400 - FLOAT_GAP, snap: "right" });
-  assert.deepEqual(clampFloat({ ...start, x: -300, y: 5000, snap: null }, room), { ...start, x: FLOAT_GAP, y: 900 - 640 - FLOAT_GAP, snap: null });
+  const right = magnet({ ...start, x: 1400 - 360 - FLOAT_GAP - 20, snap: null }, room);
+  assert.deepEqual(right, { ...start, x: 1400 - 360 - FLOAT_GAP, snap: "right" });
+  assert.deepEqual(clampFloat({ ...start, x: -300, y: 5000, snap: null }, room), { ...start, x: FLOAT_GAP, y: 900 - 600 - FLOAT_GAP, snap: null });
   // By keyboard a step is shorter than the magnet's reach: one step off a side frees it, a step back against it holds it.
   const stepped = nudgeFloat(start, 16, 0, room);
   assert.deepEqual(stepped, { ...start, x: FLOAT_GAP + 16, snap: null });
   assert.deepEqual(nudgeFloat(stepped, -16, 0, room), start);
   assert.deepEqual(nudgeFloat(start, 0, -16, room), { ...start, y: start.y - 16 }, "up and down, it stays held");
-  assert.equal(nudgeFloat({ ...start, x: 1400 - 400 - FLOAT_GAP - 10, snap: null }, 16, 0, room).snap, "right");
+  assert.equal(nudgeFloat({ ...start, x: 1400 - 360 - FLOAT_GAP - 10, snap: null }, 16, 0, room).snap, "right");
   // Held to the right, it stays there when the world grows.
-  assert.equal(clampFloat(right, { w: 1800, h: 900 }).x, 1800 - 400 - FLOAT_GAP);
+  assert.equal(clampFloat(right, { w: 1800, h: 900 }).x, 1800 - 360 - FLOAT_GAP);
 });
 
 test("resizing moves only the dragged edges and keeps the window's minimum and the world's gap", () => {
@@ -181,10 +183,13 @@ test("on a desktop it floats over the world as glass, keeps the history mounted,
   // A window over the world, not a column of the layout: the canvas keeps the whole region.
   assert.match(css, /\.conversation-flow\.is-float\s*\{[^}]*position: absolute;[^}]*z-index: var\(--z-pop\);[^}]*left: 16px;[^}]*bottom: 16px;/);
   assert.match(css, /\.conversation-flow\.is-float\s*\{[^}]*border-radius: var\(--r-xl\);/);
+  // As tall as what has been said, up to the height it was given: no empty glass above a short chat.
+  assert.match(css, /\.conversation-flow\.is-float\s*\{[^}]*height: auto;[^}]*max-height: min\(600px, calc\(100% - 32px\)\);/);
+  assert.doesNotMatch(css, /conversation-flow__bar|conversation-flow__grip/);
   assert.match(css, /\.chat-view\.pw-full-workspace > \.pw-scene-stack\s*\{[^}]*position: relative;[^}]*flex: 1 1 0;/);
   // The frost is on ::before: a filter on the window would pin a maximised card or widget in the thread inside it.
   for (const rule of css.matchAll(/([^{}]+)\{([^}]*backdrop-filter: (?!none)[^}]*)\}/g)) {
-    assert.match(rule[1].trim(), /^\.conversation-flow\.is-float::before$/, `only the window's ::before frosts (${rule[1].trim()})`);
+    assert.match(rule[1].replace(/\/\*[\s\S]*?\*\//g, "").trim(), /^\.conversation-flow\.is-(?:float|sheet)::before$/, `only the window's and the sheet's ::before frost (${rule[1].trim()})`);
   }
   assert.match(css, /\.conversation-flow\.is-float:has\(\.pdf-window\.is-full, \.app-window\.is-full, \.cell\.widget\.is-expanded, \.cell\.shot\.is-max\)\s*\{\s*z-index: var\(--z-over\);/);
   // The magnet: a short glide onto the side, and the side lights while it is held there.

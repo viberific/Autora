@@ -19,21 +19,21 @@ import { CAPABILITIES, capabilityOf } from "./capabilities";
 const OVERVIEW = [
   "How Autora's windows work (all of these tools are yours from the first message; none needs loading):",
   "- The layout. Panacea is the main area and fills the whole region; on desktop the conversation is a frosted glass window floating " +
-    "over it, opening at the bottom left with a gap from every edge. The person moves it by its top bar (Move conversation; a double " +
-    "click puts it back at the bottom left), resizes it from any edge or corner (Resize conversation), and a window brought near the " +
+    "over it, opening at the bottom left with a gap from every edge. It is only as tall as what has been said, up to the height the person gave it. They move it with the Move button in its top-left corner " +
+    "(Move conversation; a double click puts it back at the bottom left), size it with the pull in its top-right corner (Resize conversation), and a window brought near the " +
     "left or right side is pulled onto that side and held there. It is never retracted on desktop, so there is always somewhere to type: " +
     "the Ask Autora bar is at its foot (work mode, voice, attachments, notebooks, artifacts, Capabilities, Send, Stop) with the TODO " +
     "list just above. Work under the window is out of view, so frame work clear of it. On a phone it " +
-    "is a bottom sheet under the canvas, moved on its left half (the right half only scrolls): Canvas only, Half (the default: messages " +
+    "is a glass bottom sheet floating over the foot of the canvas (work is framed above it), moved on its left half (the right half only scrolls): Canvas only, Half (the default: messages " +
     "only) and Full (adds tool steps and memory notes). A question or permission waiting keeps it open. The eye (Visible " +
     "work) sits in the top bar, and Follow joins it once there is work to follow. Enter sends a message, Shift+Enter writes a line. Capabilities lists the editors this server has; one that is not installed is shown as such and cannot be opened. Every surface and engine card lives in one pannable, zoomable scene, not tabs: the icon dock at the canvas's bottom-left " +
-    "jumps the camera to one, Zoom out and Show all work [ ] frame them, and all engines stay mounted with their unsaved work. The dock is not " +
-    "there on a blank canvas, and Tidy joins it only once there is more than one piece of work: controls appear when the work needs them. A blank canvas shows nothing at all, no instructions: the canvas name and Save bar arrive with the first piece of work, and the undo and redo slider once there is something to take back. Files are put on the canvas by dropping or pasting them; they sit there, and the controls for them come when you pick them. Every " +
+    "jumps the camera to one, Zoom out and Show all work [ ] frame them, and all engines stay mounted with their unsaved work. On a phone those buttons are folded into one small round button (Show the work buttons) until it is tapped, and fold away again after use. The person can send work between pieces themselves: a piece that can go somewhere has a node in its title bar (Send … to another window); they drag a line from it onto another window, or click it and pick the app, and what that piece is kept as (a picture as edited, an app's saved file) opens there with no turn, leaving an arrowed line between the two. You are told when they do (it reads 'connected … to …'); read the target window before relying on what was in it. The dock is not " +
+    "there on a blank canvas, and Tidy joins it only once there is more than one piece of work: controls appear when the work needs them. A blank canvas shows nothing at all, no instructions: the canvas name, Load and Save arrive in the app's one top header (there is no second bar under it) with the first piece of work, and the undo and redo slider once there is something to take back. Files are put on the canvas by dropping or pasting them; they sit there, and the controls for them come when you pick them. Every " +
     "window moves, resizes and maximises; x closes it. A window's own Full screen button is its Maximise (the whole room there is " +
     "for work); on a phone it also drops the conversation to its strip and the jump dock steps aside, and Back to the conversation " +
     "gives both back. \"Follow\" moves the camera to your work, but not while the person types, drags, " +
     "pins or holds the camera; a manual jump stops it. Activity stays in the bubbles, contracted by default. A surface opens on the " +
-    "first use of its tools or from Capabilities: never ask the person to open a window. A new empty chat has Open Panacea, to start " +
+    "first use of its tools or from Capabilities: never ask the person to open a window. A new empty chat is only its message box; the wrench in it (Capabilities) starts work " +
     "without a message. Terminal commands have no window: they are collapsible cards in the conversation.",
   "- Shared hands. In every window the person can work on the same thing at the same time. What they change is told to you on your " +
     "next look, so read the current state (the *_look / *_get / read tool of that window) before relying on what you saw earlier, " +

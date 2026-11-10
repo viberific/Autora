@@ -4,10 +4,10 @@ import { useCallback, useState } from "react";
     before it is pulled onto it, its smallest size, and the size it opens at. */
 export const FLOAT_GAP = 16;
 export const FLOAT_SNAP = 56;
-export const FLOAT_MIN_W = 360;
+export const FLOAT_MIN_W = 340;
 const FLOAT_MIN_H = 280;
-const FLOAT_DEFAULT_W = 400;
-const FLOAT_DEFAULT_H = 640;
+const FLOAT_DEFAULT_W = 360;
+const FLOAT_DEFAULT_H = 600;
 /** How far an arrow key moves or resizes the window (four times this with Shift). */
 export const FLOAT_STEP = 16;
 
@@ -17,6 +17,10 @@ export interface FloatBox { x: number; y: number; w: number; h: number; snap: "l
 export interface Room { w: number; h: number }
 /** Which edges of the window a resize handle moves: n, s, e, w or a corner. */
 export type Edge = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
+
+/** Sent to the window when a phone's sheet has settled at a new height. The sheet lies over the canvas, so the board
+    does not change size when it moves: this is how it learns the room above the sheet has. */
+export const SHEET_MOVED = "autora:conversation-sheet";
 
 /** The two open heights of the phone's bottom sheet. Closed (peek) is the retracted conversation. */
 export type Sheet = "half" | "full";

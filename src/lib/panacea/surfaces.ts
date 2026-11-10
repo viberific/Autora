@@ -302,3 +302,19 @@ export function tableCsv(columns: Column[], rows: Table["rows"]): string {
   };
   return [columns.map((c) => q(c.name)).join(","), ...rows.map((r) => r.map(q).join(","))].join("\n");
 }
+
+/** Whether pasted text is rows of a table: at least two lines, most of them split the same way by a tab, a comma or a
+    semicolon. Prose with the odd comma is not, and neither is a list of single words. */
+export function looksTabular(text: string): boolean {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length < 2) return false;
+  for (const mark of ["\t", ";", ","]) {
+    const counts = lines.map((l) => l.split(mark).length - 1);
+    const most = Math.max(...counts);
+    if (most < 1) continue;
+    // A tab is never prose, so a tab on most lines is enough; commas and semicolons must agree with the header's count.
+    const agree = mark === "\t" ? counts.filter((n) => n >= 1).length : counts.filter((n) => n === counts[0] && n >= 1).length;
+    if (agree / lines.length >= 0.8) return true;
+  }
+  return false;
+}
