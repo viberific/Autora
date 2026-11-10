@@ -147,3 +147,19 @@ export function panaceaFileRoute(input: PanaceaFileInput): PanaceaFileRoute {
   }
   return { status: "unsupported", reason: engine === undefined ? "not-supported" : "engine-mismatch" };
 }
+
+/** Why a file was not opened, in words for the person: never the route's own code for it. */
+export function whyUnsupported(name: string, reason: string): string {
+  switch (reason) {
+    case "not-supported":
+      return `Panacea has nothing that opens ${name}. It opens pictures, tables (CSV, TSV, XLSX), documents, PDFs, video and sound, and saved canvases, songs, models and games.`;
+    case "ambiguous-json":
+      return `${name} is JSON, but not a saved canvas, song, model or game.`;
+    case "engine-mismatch":
+      return `${name} is not a file that app opens.`;
+    case "resolve-name":
+      return `That file is known only by its id; say its name.`;
+    default:
+      return `Panacea cannot open ${name}.`;
+  }
+}

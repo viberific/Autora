@@ -7923,6 +7923,37 @@ body.is-resizing iframe { pointer-events: none; }
    a drag crossing into one was taken by it, and the move or resize stopped where the frame began. */
 .pa-board.is-gesturing iframe { pointer-events: none; }
 /* Where work went between the apps (Board.tsx flowLines): a line between two windows, an arrow halfway, what went. */
+/* Sending work to another window (Board.tsx): the node in a piece of work's title bar, the line that follows the
+   pointer while it is dragged, the windows that light to say they can take it, and the list a click on the node opens. */
+.pa-link-dot {
+  flex: 0 0 auto; display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: var(--r-xs);
+  background: transparent; color: var(--text-3); cursor: crosshair; touch-action: none;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.pa-link-dot:hover, .pa-link-dot[aria-expanded="true"], .pa-link-dot:focus-visible { background: var(--accent-soft); color: var(--accent-light); }
+.pw-engine-head .pa-link-dot { padding: 0; color: var(--text-3); }
+.pa-link-line { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: var(--z-pop); }
+.pa-link-line line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 5; stroke-linecap: round; opacity: 0.8; }
+.pa-link-line line.is-over { stroke-dasharray: none; opacity: 1; }
+.pa-link-line circle { fill: var(--accent); stroke: var(--bg); stroke-width: 2; }
+.pa-link-line circle.is-over { fill: var(--live); }
+.pw-engine[data-link] { transition: opacity var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); }
+.pw-engine[data-link="no"] { opacity: 0.45; }
+.pw-engine[data-link="takes"] { border-color: var(--accent-line); box-shadow: var(--shadow-lg), 0 0 0 3px rgba(var(--accent-rgb), 0.22); }
+.pw-engine[data-link="over"] { border-color: var(--live); box-shadow: var(--shadow-lg), 0 0 0 3px rgba(var(--live-rgb), 0.4); }
+.pa-link-menu {
+  position: absolute; z-index: var(--z-menu); min-width: 168px; padding: 4px; display: flex; flex-direction: column;
+  border: 1px solid var(--glass-line-strong); border-radius: var(--r); background: var(--glass-sheen), var(--glass-veil), var(--glass);
+  box-shadow: var(--glass-shadow), var(--glass-shine); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+  animation: paArrive var(--dur-2) var(--ease) both;
+}
+.pa-link-menu-h { padding: 5px 8px 3px; font-size: var(--fs-2xs); font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
+.pa-link-menu button {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 0; border-radius: var(--r-xs); background: transparent;
+  color: var(--text); font: inherit; font-size: var(--fs-sm); text-align: left; cursor: pointer;
+}
+.pa-link-menu button:hover, .pa-link-menu button:focus-visible { background: var(--accent-soft); color: var(--accent-light); }
+.pa-link-menu button > svg { flex: 0 0 auto; color: var(--text-3); }
 .pa-flows { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; z-index: 0; }
 .pa-flow line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 5; opacity: 0.75; }
 .pa-flow-arrow { fill: var(--accent); stroke: var(--bg); stroke-width: 1.5; }

@@ -15,6 +15,7 @@ import type { HostedWork } from "../../lib/workspaceScene";
 import { WORKSPACE_MODES, type WorkspaceMode } from "../../lib/workspace";
 import { usePhone } from "../../lib/stage";
 import { jumpTo, zoomAt } from "../../lib/panacea/workspace-camera";
+import { engineSends, surfaceSends, takersOf, type SentFile } from "../../lib/panacea/flows";
 import { workViewport } from "../../lib/frameCoordinates";
 import { EngineFrame, setFullscreen, useFullscreen } from "../../lib/fullscreen";
 
@@ -64,7 +65,7 @@ const MAX_ZOOM = 2;
  * double-click or press / to summon a panel, Shift+drag to pick several, drop a file or paste a table to add a surface.
  * Panels move by their title bars and widen by their right edge, and land on the grid.
  */
-export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes, actions, selected, setSelected, onPick, onFocus, onFiles, onPaste, onRemoveSurface, onSurfaceSize, onMoved, handle, children,
+export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes, actions, selected, setSelected, onPick, onFocus, onFiles, onLink, onPaste, onRemoveSurface, onSurfaceSize, onMoved, handle, children,
   hosted = [], ready = true, scene, followTarget, onJumpWork, onCloseWork, navigationHost }: {
   canvas: Canvas;
   fresh: ReadonlySet<string>;
@@ -81,6 +82,8 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
   onPick: (r: Recipe, at: { x: number; y: number }) => void;
   onFocus: (surface: string) => void;
   onFiles: (files: File[], at: { x: number; y: number }) => void;
+  /** The person connected a piece of work (a surface's id, or an app window's) to an app: send the first to the second. */
+  onLink?: (from: string, to: WorkspaceMode) => void;
   onPaste: (text: string, at: { x: number; y: number }) => void;
   onRemoveSurface: (s: Surface) => void;
   onSurfaceSize: (s: Surface, px: { w: number; h: number }) => void;
@@ -299,6 +302,36 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     window.addEventListener(SHEET_MOVED, refit);
     return () => { observer.disconnect(); window.removeEventListener(SHEET_MOVED, refit); };
   }, [fit, handsBusy, ready, enginePins.size]);
+
+  /* Nothing is left lying on something else. A panel is placed by a guess at its height and a table or a picture grows
+     once it is drawn, so a panel can end up under its neighbour. Once they are drawn, any panel the person has not
+     placed themselves (not pinned, not moved by hand) that lies on a surface, a window or a panel above it is moved
+     down clear of it. Quietly: it is the layout settling, not a step to undo. */
+  useEffect(() => {
+    const el = root.current;
+    if (!quiet || !el || drag || handsBusy()) return;
+    const frame = requestAnimationFrame(() => {
+      const c = canvasRef.current;
+      const heightOf = (p: Panel) => el.querySelector<HTMLElement>(`[data-panel="${CSS.escape(p.id)}"]`)?.offsetHeight || p.h || 0;
+      const fixed: WorkBox[] = [...c.surfaces.map((s) => ({ x: s.x, y: s.y, w: s.w, h: s.h })), ...Object.values(engineBoxesRef.current)];
+      const moves = new Map<string, number>();
+      const live = c.panels.filter((p) => p.state !== "dim").map((p) => ({ p, h: heightOf(p) })).filter((x) => x.h > 0).sort((a, b) => a.p.y - b.p.y);
+      for (const { p, h } of live) {
+        let y = p.y;
+        if (!p.pinned && !p.touched) {
+          for (let pass = 0; pass < 8; pass += 1) {
+            const on = fixed.find((b) => p.x < b.x + b.w - 4 && p.x + p.w > b.x + 4 && y < b.y + b.h - 4 && y + h > b.y + 4);
+            if (!on) break;
+            y = snap(on.y + on.h + GRID);
+          }
+          if (y !== p.y) moves.set(p.id, y);
+        }
+        fixed.push({ x: p.x, y, w: p.w, h });
+      }
+      if (moves.size) quiet((d) => { for (const p of d.panels) { const y = moves.get(p.id); if (y !== undefined) p.y = y; } });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [canvas.panels, canvas.surfaces, engineBoxes, quiet, drag, handsBusy]);
 
   // A new surface the agent added off screen comes into view.
   const surfaceCount = useRef(canvas.surfaces.length);
@@ -690,7 +723,8 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
       const r = el.getBoundingClientRect();
       const at = toWorld(r.left + r.width / 2, r.top + workViewport(el).height / 2);
       if (files.length) { e.preventDefault(); onFiles(files, at); }
-      else if (text.includes("\n") && /[\t,;]/.test(text)) { e.preventDefault(); onPaste(text, at); }
+      // Rows become a table and plain words a page: nothing pasted onto the canvas is silently dropped.
+      else if (text.trim().length > 1) { e.preventDefault(); onPaste(text, at); }
     };
     el.addEventListener("paste", paste);
     return () => el.removeEventListener("paste", paste);
@@ -760,9 +794,17 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
   /** Tidy: windows and surfaces in rows, none over another, as the agent's `tidy` does (one step to undo). */
   const tidyUp = () => {
     const c = canvasRef.current;
+    /* A surface is tidied with the panels that belong to it, as one block: put in rows by itself it left its controls
+       behind, and landed on the next one's. */
+    const mine = (id: string) => c.panels.filter((p) => p.context === id && p.state !== "dim");
+    const blockOf = (x: Surface) => {
+      const parts = [{ x: x.x, y: x.y, w: x.w, h: x.h }, ...mine(x.id).map((p) => ({ x: p.x, y: p.y, w: p.w, h: root.current?.querySelector<HTMLElement>(`[data-panel="${CSS.escape(p.id)}"]`)?.offsetHeight || p.h || 240 }))];
+      const left = Math.min(...parts.map((b) => b.x)), top = Math.min(...parts.map((b) => b.y));
+      return { id: x.id, x: left, y: top, w: Math.max(...parts.map((b) => b.x + b.w)) - left, h: Math.max(...parts.map((b) => b.y + b.h)) - top };
+    };
     const items = [
       ...hostedRef.current.flatMap((w) => engineBoxesRef.current[w.id] ? [{ id: w.id, ...engineBoxesRef.current[w.id]! }] : []),
-      ...c.surfaces.map((x) => ({ id: x.id, x: x.x, y: x.y, w: x.w, h: x.h })),
+      ...c.surfaces.map(blockOf),
     ];
     if (!items.length) return;
     const room = root.current ? workViewport(root.current, { clearDock: phone }) : { width: 1056, height: 740 };
@@ -774,12 +816,19 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
         const at = spots.get(w.id), box = engineBoxesRef.current[w.id];
         if (at && box) { const t = placeWindow(wins, w.id, { x: snap(at.x), y: snap(at.y), w: box.w, h: box.h }); if (t) delete t.was; }
       }
-      for (const x of d.surfaces) { const at = spots.get(x.id); if (at) { x.x = snap(at.x); x.y = snap(at.y); } }
+      for (const x of d.surfaces) {
+        const at = spots.get(x.id), was = items.find((i) => i.id === x.id);
+        if (!at || !was) continue;
+        const dx = snap(at.x - was.x), dy = snap(at.y - was.y);
+        x.x += dx; x.y += dy;
+        for (const p of d.panels) if (p.context === x.id && p.state !== "dim") { p.x += dx; p.y += dy; }
+      }
     }, "Tidied the layout");
     maxed.current.clear();
     rerender((n) => n + 1);
     const boxes = [...spots].map(([id, at]) => { const it = items.find((i) => i.id === id)!; return { x: at.x, y: at.y, w: it.w, h: it.h }; });
-    setView(fitWorkView(boxes, { width: room.width, height: room.height }, fitOpts) ?? viewRef.current, true);
+    // Framed in the room that can be seen (clear of the conversation and the buttons), not from the board's own edge.
+    setView(shifted(fitWorkView(boxes, { width: room.width, height: room.height }, fitOpts), root.current && "left" in room ? insetOf(root.current, room) : 0) ?? viewRef.current, true);
   };
 
   /** What each maximised tile was, to give it back. */
@@ -864,6 +913,103 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
 
   const z = view.zoom;
 
+  // ------------------------------------------- sending work to another window --
+  /* Every piece of work that can be sent somewhere has a node in its title bar. Drag from it onto another window and a
+     line follows the pointer; the windows that can take it light, and letting go on one sends it there. A click on the
+     node lists where it can go instead, including apps that are not open yet (sending opens them). The line that stays
+     is the board's own record of where work went (flowLines, below). */
+  const [link, setLink] = useState<{ from: string; sx: number; sy: number; x: number; y: number; over: string | null } | null>(null);
+  const [linkMenu, setLinkMenu] = useState<{ from: string; x: number; y: number } | null>(null);
+  const linkDragged = useRef(false);
+  const sourceOf = (id: string): { file: SentFile; mode: WorkspaceMode } | null => {
+    const s = canvas.surfaces.find((x) => x.id === id);
+    if (s) { const file = surfaceSends(s.kind, s.title); return file ? { file, mode: "panacea" } : null; }
+    const work = hosted.find((w) => w.id === id);
+    const file = work ? engineSends(work.mode) : null;
+    return work && file ? { file, mode: work.mode } : null;
+  };
+  /* Which apps this server has and has switched on: an app that is not there is not offered, since sending to it could
+     only open a window that says so. Unknown until it is read (and then everything is offered, as before). */
+  const [usable, setUsable] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    if (!onLink) return;
+    let live = true;
+    fetch("/api/settings").then((r) => r.json()).then((s: { tools?: { installed?: Record<string, boolean>; config?: Record<string, { enabled?: boolean } | undefined> } }) => {
+      if (!live) return;
+      const out: Record<string, boolean> = {};
+      for (const mode of Object.keys(WORKSPACE_MODES)) out[mode] = s?.tools?.installed?.[mode] !== false && s?.tools?.config?.[mode]?.enabled !== false;
+      setUsable(out);
+    }).catch(() => undefined);
+    return () => { live = false; };
+  }, [onLink]);
+  const appsFor = (id: string): WorkspaceMode[] => {
+    const src = sourceOf(id);
+    return src ? takersOf(src.file, src.mode).filter((mode) => usable[mode] !== false || hosted.some((w) => w.mode === mode)) : [];
+  };
+  useEffect(() => {
+    if (!linkMenu) return;
+    const shut = (e: Event) => { if (!(e.target as HTMLElement | null)?.closest?.(".pa-link-menu, .pa-link-dot")) setLinkMenu(null); };
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") setLinkMenu(null); };
+    document.addEventListener("pointerdown", shut, true);
+    document.addEventListener("keydown", key);
+    return () => { document.removeEventListener("pointerdown", shut, true); document.removeEventListener("keydown", key); };
+  }, [linkMenu]);
+  const startLink = (id: string) => (e: ReactPointerEvent<HTMLButtonElement>) => {
+    const board = root.current;
+    if (e.button !== 0 || !board) return;
+    e.stopPropagation();
+    linkDragged.current = false;
+    const dot = e.currentTarget;
+    const takes = new Set(appsFor(id));
+    const at = (cx: number, cy: number) => { const r = board.getBoundingClientRect(); return { x: cx - r.left, y: cy - r.top }; };
+    const d = dot.getBoundingClientRect();
+    const from = at(d.left + d.width / 2, d.top + d.height / 2);
+    const start = { x: e.clientX, y: e.clientY };
+    /** The window under the pointer, when it is one this can be sent to. */
+    const windowAt = (cx: number, cy: number) => {
+      const win = document.elementFromPoint(cx, cy)?.closest<HTMLElement>(".pw-engine");
+      const work = hosted.find((w) => w.id === win?.dataset.work);
+      return work && work.id !== id && takes.has(work.mode) ? work : null;
+    };
+    dot.setPointerCapture(e.pointerId);
+    const move = (ev: PointerEvent) => {
+      if (!linkDragged.current && Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < 6) return;
+      if (!linkDragged.current) { linkDragged.current = true; setLinkMenu(null); holdBoard(true); }
+      setLink({ from: id, sx: from.x, sy: from.y, ...at(ev.clientX, ev.clientY), over: windowAt(ev.clientX, ev.clientY)?.id ?? null });
+    };
+    const up = (ev: PointerEvent) => {
+      dot.removeEventListener("pointermove", move); dot.removeEventListener("pointerup", up); dot.removeEventListener("pointercancel", up);
+      if (!linkDragged.current) return;
+      holdBoard(false);
+      setLink(null);
+      const to = ev.type === "pointerup" ? windowAt(ev.clientX, ev.clientY) : null;
+      if (to) onLink?.(id, to.mode);
+    };
+    dot.addEventListener("pointermove", move); dot.addEventListener("pointerup", up); dot.addEventListener("pointercancel", up);
+  };
+  /** The node in a piece of work's title bar; none when it has nothing to send or nowhere it could go. */
+  const linkDot = (id: string, title: string) => {
+    if (!onLink || phone || !appsFor(id).length) return null;
+    return (
+      <button type="button" className="pa-link-dot" aria-label={`Send ${title} to another window`} aria-haspopup="menu" aria-expanded={linkMenu?.from === id}
+        title="Drag onto another window to send this there, or click to choose where"
+        onPointerDown={startLink(id)}
+        onClick={(e) => {
+          if (linkDragged.current) return;
+          const board = root.current;
+          if (!board) return;
+          const r = board.getBoundingClientRect();
+          const d = e.currentTarget.getBoundingClientRect();
+          setLinkMenu((open) => (open?.from === id ? null : { from: id, x: d.left - r.left, y: d.bottom - r.top + 6 }));
+        }}>
+        <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true" focusable="false">
+          <circle cx="4" cy="8" r="2.25" /><circle cx="12" cy="8" r="2.25" fill="currentColor" /><path d="M6.25 8h3.5" />
+        </svg>
+      </button>
+    );
+  };
+  const linkTakes = link ? new Set(appsFor(link.from)) : null;
+
   // ------------------------------------------------- where the work went --
   /* A line between two windows for each pair of apps work went between (lib/panacea/flows.ts): a 3D model into the game,
      a picture into a document. An arrow halfway along points the way it went; beside it, what went (the latest, and how
@@ -943,6 +1089,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
           if (!box) return null;
           const z = canvas.windows?.find((w) => w.id === work.id)?.z ?? 0;
           return <section key={work.id} className={`pw-engine${enginePins.has(work.id) ? " is-pinned" : ""}${isMaxed(work.id) ? " is-max" : ""}`} data-engine={work.mode}
+            data-link={!link || link.from === work.id ? undefined : link.over === work.id ? "over" : linkTakes?.has(work.mode) ? "takes" : "no"}
             data-work={work.id} style={{ left: box.x, top: box.y, width: box.w, height: box.h, zIndex: z + 1, ...(phone ? { maxWidth: "calc(100vw - 16px)" } : {}) }} aria-label={`${work.title} work surface`}
             /* Working in a window is not holding the view (only panning, zooming or dragging is): Follow still brings the
                agent's next window into view after the person has pressed a button in this one. */
@@ -964,6 +1111,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
               target.addEventListener("pointermove", move); target.addEventListener("pointerup", up); target.addEventListener("pointercancel", up);
             }}>
               <span>{workIcon(work.mode)}</span><b>{work.title}</b><span className="pw-engine-context">{WORKSPACE_MODES[work.mode].context}</span>
+              {linkDot(work.id, work.title)}
               <button type="button" aria-label={isMaxed(work.id) ? `Restore ${work.title}` : `Maximise ${work.title}`} aria-pressed={isMaxed(work.id)}
                 onClick={() => { onWindowFull(work.id, !isMaxed(work.id)); onJumpWork?.(work.mode); }}><IconMaximize size={14} /></button>
               <button type="button" aria-pressed={enginePins.has(work.id)} aria-label={`Pin ${work.title} work`} onClick={() => setEnginePins((before) => {
@@ -994,6 +1142,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
             <header className="pa-surface-head" onPointerDown={surfaceGesture(s, "move")}>
               <span className="pa-title">{s.title}</span>
               <span className="pa-surface-meta">{KINDS[s.kind].meta(s)}</span>
+              {linkDot(s.id, s.title)}
               <button type="button" className="pa-surface-max" aria-label={isMaxed(s.id) ? `Restore ${s.title}` : `Maximise ${s.title}`} aria-pressed={isMaxed(s.id)}
                 onClick={() => { maximize(s.id, "surface"); rerender((n) => n + 1); }}><IconMaximize size={11} /></button>
               <button type="button" className="pa-surface-x" aria-label={`Remove ${s.title}`} onClick={() => onRemoveSurface(s)}><IconX size={11} /></button>
@@ -1052,6 +1201,30 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
         {pieces > 1 && <button type="button" aria-label="Tidy the layout" title="Tidy: windows and surfaces in rows, none over another" onClick={() => { tidyUp(); onJumpWork?.(followTarget ?? "panacea"); }}><IconTidy size={16} /></button>}
         </nav>;
         return navigationHost ? createPortal(dock, navigationHost) : dock;
+      })()}
+      {link && (
+        <svg className="pa-link-line" aria-hidden="true">
+          <line x1={link.sx} y1={link.sy} x2={link.x} y2={link.y} className={link.over ? "is-over" : undefined} />
+          <circle cx={link.x} cy={link.y} r={link.over ? 7 : 5} className={link.over ? "is-over" : undefined} />
+        </svg>
+      )}
+      {linkMenu && (() => {
+        const apps = appsFor(linkMenu.from);
+        const open = apps.filter((mode) => hosted.some((w) => w.mode === mode));
+        const rest = apps.filter((mode) => !open.includes(mode));
+        const item = (mode: WorkspaceMode) => (
+          <button type="button" role="menuitem" key={mode} onClick={() => { setLinkMenu(null); onLink?.(linkMenu.from, mode); }}>
+            {workIcon(mode)}<span>{WORKSPACE_MODES[mode].name}</span>
+          </button>
+        );
+        return (
+          <div className="pa-link-menu pa-chrome" role="menu" aria-label="Send to" style={{ left: linkMenu.x, top: linkMenu.y }}>
+            <span className="pa-link-menu-h">Send to</span>
+            {open.map(item)}
+            {rest.length > 0 && open.length > 0 && <span className="pa-link-menu-h">Open in</span>}
+            {rest.map(item)}
+          </div>
+        );
       })()}
       {children}
     </div>

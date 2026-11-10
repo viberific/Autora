@@ -23,6 +23,7 @@ import { photoState, runPhotoTool } from "./photodesk";
 import { loadSong, studioState } from "./studio";
 import { loadIntoPanacea, noteFlow, panaceaState } from "./panacea";
 import { panaceaFileRoute, type PanaceaFileRoute, type PanaceaEngineName } from "./panacea-formats";
+import { whyUnsupported } from "../src/lib/panacea/file-formats";
 import { normalizeCanvas } from "../src/lib/panacea/canvas";
 import { flushStore, readDoc } from "./store";
 import { terminalDir } from "./tools";
@@ -180,7 +181,7 @@ function occupied(session: string, target: LoadApp): boolean {
           catch { return { ok: false, status: 400, error: "That file is not valid JSON." }; }
         }
         const route = panaceaFileRoute({ file: art.id, name: art.name, engine: options.engine, native: options.native, json });
-        if (route.status === "unsupported") return { ok: false, status: 415, error: `Panacea cannot open ${art.name} (${route.reason}).` };
+        if (route.status === "unsupported") return { ok: false, status: 415, error: whyUnsupported(art.name, route.reason) };
         const target = route.status === "native" ? "panacea" : route.engine;
         if (guards.off(target)) return { ok: false, status: 403, error: `${NAME[target]} is switched off or unavailable on this server.` };
         const canvas = route.status === "native" && route.kind === "canvas";

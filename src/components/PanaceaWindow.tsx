@@ -12,7 +12,7 @@ import { treeLive } from "../lib/panacea/wiring";
 import { densityOf, newProfile, normalizeProfile, noteUse, preferredSide, quieted, usageKey, type Profile } from "../lib/panacea/profile";
 import { bindsOf, parseBind, type Node } from "../lib/panacea/recipe";
 import { addSurfaceTo, placeRecipe, type SurfaceInput } from "../lib/panacea/rules";
-import { filteredRows, splitDelimited, tableCsv, tableFrom } from "../lib/panacea/surfaces";
+import { filteredRows, looksTabular, splitDelimited, tableCsv, tableFrom } from "../lib/panacea/surfaces";
 import { onPanaceaCommand } from "../lib/panacea";
 import type { HandStep } from "../lib/panacea/handsteps";
 import { Board, type BoardHandle } from "./panacea/Board";
@@ -33,12 +33,15 @@ import { GAME_OBJECT, isGameBind } from "../lib/panacea/apps/game";
 import { VIDEO_CLIP, isVideoBind } from "../lib/panacea/apps/video";
 import { MUSIC_TRACK } from "../lib/panacea/apps/music";
 import { SaveButton, keptAs } from "./SaveButton";
-import { LoadButton, type LoadResult } from "./LoadButton";
+import { LoadButton, loadInto, type LoadResult } from "./LoadButton";
+import type { LoadApp } from "../lib/loadable";
+import type { ArtifactInfo } from "../lib/notebooks";
+import { keepRoute } from "../lib/panacea/flows";
 import { PANACEA_LOADED, offerKeep } from "../lib/panaceaBridge";
 import { IconX } from "./Icons";
 import { usePhone } from "../lib/stage";
 import type { HostedWork } from "../lib/workspaceScene";
-import { workspaceMode, type NativeWorkspaceActions, type WorkspaceMode } from "../lib/workspace";
+import { WORKSPACE_MODES, workspaceMode, type NativeWorkspaceActions, type WorkspaceMode } from "../lib/workspace";
 import { sure } from "../lib/sure";
 import type { MutableRefObject } from "react";
 
@@ -200,6 +203,27 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
     }, 650));
   }, [apps, base, edit, live, quietly, tell]);
 
+  /** A native surface as the file it is kept as (its picture as edited, its rows as filtered, its words), saved to the
+      project: what Export does, and what a line drawn from it to another window sends. */
+  const keepSurface = useCallback(async (s: Surface): Promise<{ artifact: string; name: string; mime: string }> => {
+    let blob: Blob;
+    if (s.kind === "image") {
+      const img = pictureOf(s.id);
+      if (!img) throw new Error("The picture is not loaded yet.");
+      blob = await renderFull(img, s.params, "png");
+    } else if (s.kind === "doc") {
+      blob = new Blob([toMarkdown(stateOf(s.doc!).doc)], { type: "text/markdown" });
+    } else if (s.kind === "board") {
+      blob = new Blob([boardMarkdown(s.board!, s.title)], { type: "text/markdown" });
+    } else {
+      blob = new Blob([tableCsv(s.table!.columns, filteredRows(s.table!, s.params))], { type: "text/csv" });
+    }
+    const res = await fetch(`${base}/deliver?name=${encodeURIComponent(s.title)}`, { method: "POST", headers: { "Content-Type": blob.type }, body: blob });
+    const body = (await res.json().catch(() => null)) as { artifact?: string; name?: string; mime?: string; error?: string } | null;
+    if (!res.ok || !body?.artifact) throw new Error(body?.error ?? `Autora answered ${res.status}`);
+    return { artifact: body.artifact, name: body.name ?? s.title, mime: body.mime ?? blob.type };
+  }, [base]);
+
   const act = useCallback((bind: string) => {
     const { surface, param } = parseBind(bind);
     const s = live.current.surfaces.find((x) => x.id === surface);
@@ -224,31 +248,47 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
     } else if (param === "export") {
       void (async () => {
         try {
-          let blob: Blob;
-          let name = s.title;
-          if (s.kind === "image") {
-            const img = pictureOf(s.id);
-            if (!img) throw new Error("The picture is not loaded yet.");
-            blob = await renderFull(img, s.params, "png");
-          } else if (s.kind === "doc") {
-            blob = new Blob([toMarkdown(stateOf(s.doc!).doc)], { type: "text/markdown" });
-          } else if (s.kind === "board") {
-            blob = new Blob([boardMarkdown(s.board!, s.title)], { type: "text/markdown" });
-          } else {
-            blob = new Blob([tableCsv(s.table!.columns, filteredRows(s.table!, s.params))], { type: "text/csv" });
-            name = `${s.title}`;
-          }
-          const res = await fetch(`${base}/deliver?name=${encodeURIComponent(name)}`, { method: "POST", headers: { "Content-Type": blob.type }, body: blob });
-          const body = (await res.json().catch(() => null)) as { name?: string; error?: string } | null;
-          if (!res.ok) throw new Error(body?.error ?? `Autora answered ${res.status}`);
-          flash(`Saved ${body?.name ?? name} to the project.`);
-          void tell(`exported ${body?.name ?? name}`);
+          const kept = await keepSurface(s);
+          flash(`Saved ${kept.name} to the project.`);
+          void tell(`exported ${kept.name}`);
         } catch (err) {
           setProblem(`Not exported: ${err instanceof Error ? err.message : String(err)}`);
         }
       })();
     }
-  }, [base, edit, flash, live, tell]);
+  }, [edit, flash, keepSurface, live, tell]);
+
+  /* The person connected two pieces of work on the board (a line drawn from one's node onto a window, or the node's
+     list): what the first is kept as is opened in the second, with no turn. A native surface is kept as Export keeps
+     it; an app's window by the route its own Save calls. The line that stays is noted by the server. */
+  const link = useCallback((from: string, to: WorkspaceMode) => {
+    void (async () => {
+      const there = WORKSPACE_MODES[to].name;
+      try {
+        const s = live.current.surfaces.find((x) => x.id === from);
+        const work = hosted.find((w) => w.id === from);
+        let kept: { artifact: string; name: string; mime: string };
+        if (s) kept = await keepSurface(s);
+        else {
+          const route = work ? keepRoute(work.mode, sessionId) : null;
+          if (!route) throw new Error("That cannot be sent this way. Save it, then use Load in the other window.");
+          const res = await fetch(route, { method: "POST" });
+          const body = (await res.json().catch(() => null)) as { artifact?: string; name?: string; error?: string } | null;
+          if (!res.ok || !body?.artifact) throw new Error(body?.error ?? `Autora answered ${res.status}`);
+          kept = { artifact: body.artifact, name: body.name ?? "the file", mime: "" };
+        }
+        const out = await loadInto(to as LoadApp, sessionId, { id: kept.artifact, name: kept.name, mime: kept.mime } as ArtifactInfo);
+        if (!out) return;
+        if (s) await fetch(`${base}/flow`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to, what: s.name || s.title, artifact: s.artifact }) }).catch(() => undefined);
+        // Where it went is shown: the camera goes to the window it is in now (opened by this, if it was not open).
+        board.current?.jump(`engine:${to}`);
+        flash(`Sent ${kept.name} to ${there}.`);
+        void tell(`connected ${s ? `"${s.title}"` : work?.title ?? "a window"} to ${there} on the board: ${kept.name} is open there now`);
+      } catch (err) {
+        setProblem(`Not sent to ${there}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    })();
+  }, [base, flash, hosted, keepSurface, live, sessionId, tell]);
 
   const ask = useCallback((text: string, panel: Panel) => {
     const vals = [...new Set(bindsOf(panel.tree))].map((b) => `${b}=${show(valueAt(live.current, b))}`).join(", ");
@@ -572,9 +612,11 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
 
   const onPaste = useCallback((text: string, at: { x: number; y: number }) => {
     if (putPendingSurface()) return;
-    const table = tableFrom(splitDelimited(text));
-    if (!table) { setProblem("That paste is not a table: a header row and rows, separated by tabs or commas."); return; }
-    addSurface({ kind: "data", name: "Pasted table", title: "Pasted table", table, at });
+    // Rows (most lines split the same way by tabs, commas or semicolons) are a table; anything else is words, and
+    // lands as a page that is the person's to write on.
+    const table = looksTabular(text) ? tableFrom(splitDelimited(text)) : null;
+    if (table) { addSurface({ kind: "data", name: "Pasted table", title: "Pasted table", table, at }); return; }
+    addSurface({ kind: "doc", name: "Pasted text.md", title: "Pasted text", doc: createDoc(text.trim(), "guide"), at });
   }, [addSurface, putPendingSurface]);
 
   const onRemoveSurface = useCallback((s: Surface) => {
@@ -782,7 +824,7 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
           setSelected={select}
           onPick={onPick}
           onFocus={onFocus}
-          onFiles={onFiles}
+          onFiles={onFiles} onLink={link}
           onPaste={onPaste}
           onRemoveSurface={onRemoveSurface}
           onSurfaceSize={onSurfaceSize}

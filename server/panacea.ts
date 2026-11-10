@@ -29,6 +29,7 @@ import {
 } from "../src/lib/panacea/canvas";
 import { panaceaSteps, stepWords } from "../src/lib/panacea/handsteps";
 import { addFlow, type Flow } from "../src/lib/panacea/flows";
+import { WORKSPACE_MODES, type WorkspaceMode } from "../src/lib/workspace";
 import { treeLive } from "../src/lib/panacea/wiring";
 import { MUSIC_TRACK, isMusicBind, readMusic } from "../src/lib/panacea/apps/music";
 import { placeWindow, maximise as maximiseWindow, tidy as tidyBoxes, windowNamed, windowTitle, type WinBox } from "../src/lib/panacea/windows";
@@ -59,6 +60,7 @@ import { readFileRef } from "./fileref";
 import { stateDir } from "./state";
 import { readDoc, saveDoc } from "./store";
 import { panaceaFileRoute } from "./panacea-formats";
+import { whyUnsupported } from "../src/lib/panacea/file-formats";
 import type { FileLoadResult, WorkspaceFileOptions } from "./loadfile";
 import { validPanaceaImage } from "./loadfile";
 
@@ -1629,7 +1631,7 @@ export function panaceaRoutes(app: Express, opts: {
     }
     const native = req.query.native === undefined ? undefined : req.query.native === "true";
     const route = panaceaFileRoute({ file: name, name, engine, native, json });
-    if (route.status === "unsupported") return res.status(415).json({ error: `Panacea cannot open ${name} (${route.reason}).` });
+    if (route.status === "unsupported") return res.status(415).json({ error: whyUnsupported(name, route.reason) });
     if (route.status !== "native" || route.kind === "canvas") {
       if (!opts.loadFile) return res.status(503).json({ error: "Workspace file loading is unavailable on this server." });
       const art = saveArtifact({ origin: "user", name, data: req.body, session: id, note: "Dropped on Panacea" });
@@ -1689,6 +1691,20 @@ export function panaceaRoutes(app: Express, opts: {
     const raw = String(req.query.name ?? "panacea").replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "-").replace(/\.(png|jpe?g|svg|csv|md)$/i, "").slice(0, 80) || "panacea";
     const art = saveArtifact({ origin: "agent", name: `${raw}.${ext}`, data: req.body, mime, session: id, note: "Exported from Panacea" });
     res.json({ artifact: art.id, name: art.name, size: art.size, mime: art.mime });
+  });
+
+  /* The person drew a line from a native surface to an app's window, and the surface's file has been opened there
+     (the page does both): the line is noted, from the surface (by the file it was made from, or its name) to the app. */
+  app.post("/api/panacea/:session/flow", express.json(), (req, res) => {
+    const id = known(req, res);
+    if (!id) return;
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const to = String(body.to ?? "");
+    if (to === "panacea" || !Object.hasOwn(WORKSPACE_MODES, to)) return res.status(400).json({ error: "That is not an app on the board." });
+    const what = typeof body.what === "string" ? body.what.slice(0, 120) : "";
+    if (!what) return res.status(400).json({ error: "Say what was sent." });
+    noteFlow(id, { from: "panacea", to: to as WorkspaceMode, what, ...(typeof body.artifact === "string" && body.artifact ? { artifact: body.artifact.slice(0, 80) } : {}) });
+    res.json({ ok: true });
   });
 
   app.post("/api/panacea/:session/open", (req, res) => {

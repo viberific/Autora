@@ -9,6 +9,7 @@
  * Pure: plain JSON in and out, saved with the canvas.
  */
 import { WORKSPACE_MODES, type WorkspaceMode } from "../workspace";
+import { LOAD_APPS, loadable, type LoadApp } from "../loadable";
 
 export interface Flow {
   /** The app the work came from, and the one it went to (workspace modes). */
@@ -92,4 +93,50 @@ export function readFlows(raw: unknown, modes: readonly string[]): Flow[] {
       at: typeof r.at === "number" && Number.isFinite(r.at) ? r.at : 0,
     }];
   });
+}
+
+/* ------------------------------------------------------------------ connecting two pieces of work on the board --
+   The person draws the line themselves: from the node on one piece of work onto another window (or picks the window
+   from the node's list). What the first one is kept as is opened in the second, and the line is the record of it. */
+
+/** A file as the apps' Load reads one: its name and type are what decide who can open it. */
+export interface SentFile { name: string; mime: string }
+
+const SURFACE_SENDS: Record<string, { ext: string; mime: string }> = {
+  image: { ext: "png", mime: "image/png" },
+  data: { ext: "csv", mime: "text/csv" },
+  doc: { ext: "md", mime: "text/markdown" },
+  board: { ext: "md", mime: "text/markdown" },
+};
+
+/** What a native surface sends: its picture as edited, its rows as filtered, its words. Null for a kind with nothing to send. */
+export function surfaceSends(kind: string, title: string): SentFile | null {
+  const as = SURFACE_SENDS[kind];
+  return as ? { name: `${title || "Untitled"}.${as.ext}`, mime: as.mime } : null;
+}
+
+/** The apps whose own Save gives a file another app can open, and what that file is. The others (PDF, Video, Web, an
+    app being built, and the Office editors, whose Save needs the editor's own export) are not sent from by a line. */
+const ENGINE_SENDS: Partial<Record<WorkspaceMode, SentFile>> = {
+  photo: { name: "Picture.png", mime: "image/png" },
+  cad: { name: "Model.glb", mime: "model/gltf-binary" },
+  studio: { name: "Song.song.json", mime: "application/json" },
+  game: { name: "Game.game.json", mime: "application/json" },
+};
+
+/** What an app's window sends when a line is drawn from it, or null when it cannot be sent this way. */
+export function engineSends(mode: WorkspaceMode): SentFile | null {
+  return ENGINE_SENDS[mode] ?? null;
+}
+
+/** Where an app keeps a copy of its work (the same route its Save button calls); null for one that is not sent from. */
+export function keepRoute(mode: WorkspaceMode, session: string): string | null {
+  return ENGINE_SENDS[mode] ? `/api/${mode}/${encodeURIComponent(session)}/keep` : null;
+}
+
+/** The apps that can open this file, other than the one it comes from: where a line from it can end. */
+export function takersOf(file: SentFile, from: WorkspaceMode): WorkspaceMode[] {
+  return (LOAD_APPS as readonly LoadApp[])
+    .filter((app) => app !== "panacea" && app !== from && loadable(app, file))
+    .map((app) => app as WorkspaceMode);
 }
