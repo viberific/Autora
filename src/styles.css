@@ -9066,6 +9066,45 @@ header.top .top-work .stage-follow.visible-work.is-compact { width: var(--top-pi
 }
 
 /* ============================================================================
+   Panel controls: one language
+
+   The controls in a panel were written one at a time and had drifted: a field was 26, 28, 30 or 32px tall by which
+   control it was; what was switched on was accent in a toggle, a chip and a swatch but grey in a segmented control;
+   a slider's handle was white and an XY pad's was the accent. Here they agree. A field (select, text, stepper,
+   segmented, button, colour) is one height on one surface with one hairline; what is on is the accent, soft, with
+   its line; a handle is white with the accent's halo; a menu's current row is on in the same way.
+   ============================================================================ */
+.pa-panel { --pa-ctl-h: 30px; --pa-field: var(--s2); --pa-line: var(--glass-line); }
+
+.pa-select-btn, .pa-step, .pa-input, .pa-seg, .pa-btn, .pa-xy, .pa-curve, .pa-lane {
+  border: 1px solid var(--pa-line); border-radius: var(--r-sm); background-color: var(--pa-field);
+}
+.pa-select-btn, input.pa-input, .pa-seg, .pa-btn { height: var(--pa-ctl-h); box-sizing: border-box; }
+input.pa-input { padding-block: 0; }
+.pa-btn { padding-block: 0; }
+.pa-step button, .pa-step input { height: calc(var(--pa-ctl-h) - 2px); background: transparent; }
+.pa-step button:hover:not(:disabled) { background: var(--s3); }
+.pa-seg { padding: 2px; }
+.pa-seg button { height: 100%; padding-block: 0; }
+.pa-select-btn:hover, .pa-input:hover, .pa-step:hover, .pa-btn:hover { border-color: var(--glass-line-strong); }
+.pa-select-btn:focus-visible, .pa-step:focus-within { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+/* On is the accent, everywhere. */
+.pa-seg button.is-on, .pa-menu button.is-on {
+  background: var(--accent-soft); color: var(--text); box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+.pa-menu button:hover { background: var(--s3); }
+.pa-btn.is-accent { background-color: var(--accent); border-color: var(--accent); }
+.pa-btn.is-accent:hover { background-color: var(--accent-deep); border-color: var(--accent-deep); }
+
+/* A handle is white with the accent's halo: a slider's, a range's two, an XY pad's. */
+.pa-thumb, .pa-xy b {
+  width: 14px; height: 14px; margin: -7px 0 0 -7px; background: var(--text);
+  box-shadow: var(--shadow-sm), 0 0 0 3px rgba(var(--accent-rgb), 0.28);
+}
+.pa-track:focus-visible .pa-thumb, .pa-xy:focus-visible b { box-shadow: var(--shadow-sm), 0 0 0 4px var(--accent-line); }
+
+/* ============================================================================
    Glass
 
    The app is frosted glass over a slow wash of the theme's own light: the
