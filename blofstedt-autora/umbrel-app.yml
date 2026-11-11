@@ -211,4 +211,5 @@ releaseNotes: >-
   card back. The browser window on the canvas has one title bar instead of
   two, and every work window on the canvas now has a close button (X) that
   asks before it closes the window. The area where the chat messages sit now
-  has rounded corners like the rest of the interface.
+  has rounded corners like the rest of the interface. Maximise on a canvas
+  window now fills all the room for work, clear of the chat and the buttons.

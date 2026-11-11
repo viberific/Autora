@@ -855,7 +855,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
       interacted.current = true;
       const win = (maxedPreview(id, was, now, room, pad));
       if (was) setView(fitWorkView([win], { width: room.width, height: room.height }, fitOpts) ?? viewRef.current, true);
-      else setView({ x: win.x - pad, y: win.y - pad, zoom: 1 }, true);
+      else setView(snugView(win, room, pad), true);
       void result;
       return;
     }
@@ -868,7 +868,13 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     edit((d) => { const t = d.surfaces.find((x) => x.id === id); if (t) { t.x = next.x; t.y = next.y; t.w = next.w; t.h = next.h; } }, was ? "Restored a window" : "Maximised a window");
     interacted.current = true;
     if (was) setView(fitWorkView([next], { width: room.width, height: room.height }, fitOpts) ?? viewRef.current, true);
-    else setView({ x: next.x - pad, y: next.y - pad, zoom: 1 }, true);
+    else setView(snugView(next, room, pad), true);
+  };
+  /** The view that puts a maximised box's corner a pad inside the room there is for work (clear of the conversation and
+      the rail, which the board's own edge is not), at full size, so it fills that room rather than sitting under them. */
+  const snugView = (box: WorkBox, room: { left: number; top: number }, pad: number): View => {
+    const at = root.current?.getBoundingClientRect();
+    return { x: box.x - pad - (at ? Math.max(0, room.left - at.left) : 0), y: box.y - pad - (at ? Math.max(0, room.top - at.top) : 0), zoom: 1 };
   };
   /** What a window's box is after maximising (or restoring), to put the view on. */
   const maxedPreview = (id: string, was: WorkBox | undefined, now: WorkBox, room: { width: number; height: number }, pad: number): WorkBox =>
