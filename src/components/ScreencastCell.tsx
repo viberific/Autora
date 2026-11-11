@@ -493,7 +493,7 @@ export function ScreencastCell({
     >
       {/* The window's own bar, the one the PDF and Office windows carry: what this window is,
           the page in it, and who is driving. The browser's toolbar sits under it. */}
-      {toolbar && !max && !onPhone && (
+      {toolbar && !max && !onPhone && !onBoard && (
         <header className="pdf-bar">
           <span className="pdf-bar-ico" aria-hidden="true"><IconGlobe size={14} /></span>
           <span className="pdf-bar-app">Autora Browser</span>

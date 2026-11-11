@@ -14,6 +14,7 @@ import { fitWorkView, revealWorkView, type WorkBox } from "../../lib/workspaceVi
 import type { HostedWork } from "../../lib/workspaceScene";
 import { WORKSPACE_MODES, type WorkspaceMode } from "../../lib/workspace";
 import { usePhone } from "../../lib/stage";
+import { sure } from "../../lib/sure";
 import { jumpTo, zoomAt } from "../../lib/panacea/workspace-camera";
 import { engineSends, surfaceSends, takersOf, type SentFile } from "../../lib/panacea/flows";
 import { workViewport } from "../../lib/frameCoordinates";
@@ -777,14 +778,36 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
         }, `${how === "move" ? "Moved" : "Resized"} ${s.title}`);
       });
   };
+  /** The shape of the picture a browser or app window shows (width over height), and what is around it. */
+  const pictureFit = (id: string): { ratio: number; chrome: number; side: number } | null => {
+    const win = root.current?.querySelector<HTMLElement>(`[data-work="${CSS.escape(id)}"]`);
+    if (!win || !["browser", "app"].includes(win.dataset.engine ?? "")) return null;
+    const img = win.querySelector<HTMLImageElement>(".frame img, img.frame, .app-canvas img");
+    const stage = win.querySelector<HTMLElement>(".shot-stage, .app-canvas")?.closest<HTMLElement>(".shot-stage") ?? win.querySelector<HTMLElement>(".app-canvas")?.parentElement;
+    if (!img || !stage || !img.naturalWidth || !img.naturalHeight) return null;
+    const css = getComputedStyle(stage);
+    const padX = parseFloat(css.paddingLeft) + parseFloat(css.paddingRight), padY = parseFloat(css.paddingTop) + parseFloat(css.paddingBottom);
+    return {
+      ratio: img.naturalWidth / img.naturalHeight,
+      chrome: win.offsetHeight - (stage.clientHeight - padY),
+      side: win.offsetWidth - (stage.clientWidth - padX),
+    };
+  };
   const engineResize = (id: string) => (e: ReactPointerEvent<HTMLElement>) => {
     const box = engineBoxesRef.current[id];
     if (!box) return;
     raiseIt(id);
-    gesture(e, (dx, dy) => setEngineBoxes((before) => ({ ...before, [id]: { ...box, w: Math.max(320, box.w + dx), h: Math.max(240, box.h + dy) } })),
+    /* A page or an app is a picture of a fixed shape: the corner pull keeps it, so the window never has bars or a
+       blank band beside or below it. Everything else around the picture (title bar, toolbar) keeps its own height. */
+    const fit = pictureFit(id);
+    const sized = (dx: number, dy: number) => {
+      const w = Math.max(320, box.w + dx);
+      return { w, h: fit ? Math.max(240, Math.round(fit.chrome + (w - fit.side) / fit.ratio)) : Math.max(240, box.h + dy) };
+    };
+    gesture(e, (dx, dy) => setEngineBoxes((before) => ({ ...before, [id]: { ...box, ...sized(dx, dy) } })),
       (dx, dy) => {
         if (Math.abs(dx) + Math.abs(dy) < 3) return;
-        const w = Math.max(320, box.w + dx), h = Math.max(240, box.h + dy);
+        const { w, h } = sized(dx, dy);
         edit((d) => { const wins = d.windows ?? (d.windows = []); const t = placeWindow(wins, id, { w, h }, { front: true }); if (t) delete t.was; }, `Resized ${windowName(id)}`);
       });
   };
@@ -854,7 +877,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
       interacted.current = true;
       const win = (maxedPreview(id, was, now, room, pad));
       if (was) setView(fitWorkView([win], { width: room.width, height: room.height }, fitOpts) ?? viewRef.current, true);
-      else setView({ x: win.x - pad, y: win.y - pad, zoom: 1 }, true);
+      else setView(snugView(win, room, pad), true);
       void result;
       return;
     }
@@ -867,7 +890,13 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     edit((d) => { const t = d.surfaces.find((x) => x.id === id); if (t) { t.x = next.x; t.y = next.y; t.w = next.w; t.h = next.h; } }, was ? "Restored a window" : "Maximised a window");
     interacted.current = true;
     if (was) setView(fitWorkView([next], { width: room.width, height: room.height }, fitOpts) ?? viewRef.current, true);
-    else setView({ x: next.x - pad, y: next.y - pad, zoom: 1 }, true);
+    else setView(snugView(next, room, pad), true);
+  };
+  /** The view that puts a maximised box's corner a pad inside the room there is for work (clear of the conversation and
+      the rail, which the board's own edge is not), at full size, so it fills that room rather than sitting under them. */
+  const snugView = (box: WorkBox, room: { left: number; top: number }, pad: number): View => {
+    const at = root.current?.getBoundingClientRect();
+    return { x: box.x - pad - (at ? Math.max(0, room.left - at.left) : 0), y: box.y - pad - (at ? Math.max(0, room.top - at.top) : 0), zoom: 1 };
   };
   /** What a window's box is after maximising (or restoring), to put the view on. */
   const maxedPreview = (id: string, was: WorkBox | undefined, now: WorkBox, room: { width: number; height: number }, pad: number): WorkBox =>
@@ -1117,7 +1146,8 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
               <button type="button" aria-pressed={enginePins.has(work.id)} aria-label={`Pin ${work.title} work`} onClick={() => setEnginePins((before) => {
                 const next = new Set(before); if (next.has(work.id)) next.delete(work.id); else next.add(work.id); return next;
               })}>Pin</button>
-              {onCloseWork && work.mode !== "browser" && <button type="button" aria-label={`Close ${work.title} work`} onClick={() => onCloseWork(work.mode)}><IconX size={14} /></button>}
+              {onCloseWork && <button type="button" aria-label={`Close ${work.title} work`}
+                onClick={() => { void sure(`Close ${work.title}?`, "Close").then((yes) => { if (yes) onCloseWork(work.mode); }); }}><IconX size={14} /></button>}
             </header>
             <div className="pw-engine-body"><EngineFrameScope id={work.id} full={isMaxed(work.id)} onFull={onWindowFull}>{work.content}</EngineFrameScope></div>
             <i className="pa-resize" role="presentation" title="Drag to resize" onPointerDown={engineResize(work.id)} />

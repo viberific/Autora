@@ -220,6 +220,14 @@ body:has(.conversation-flow[data-moving]) iframe {
   flex: 0 1 auto;
 }
 
+/* The message area has the same rounded corners as the window and panels around it, so its scroll edge and fade
+   follow them rather than ending square. */
+.conversation-flow .conversation-flow__conversation,
+.conversation-flow .thread-wrap,
+.conversation-flow .thread {
+  border-radius: var(--r-lg);
+}
+
 /* While the window is being sized it is shown at the whole height being chosen, not only what the chat fills. */
 .conversation-flow.is-float[data-moving="size"] .conversation-flow__conversation,
 .conversation-flow.is-float[data-moving="size"] .thread-wrap,

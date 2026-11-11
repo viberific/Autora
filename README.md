@@ -1337,7 +1337,7 @@ guard's standing agreements and the irrecoverable tier ask whatever they say.
 | `DEEPGRAM_API_KEY` | Speak through Deepgram's hosted Aura voices; a key saved in Settings -> Secrets wins |
 | `AUTORA_DEEPGRAM_VOICE` | The Deepgram voice to start with (default `aura-2-thalia-en`); a voice picked in Settings wins |
 | `AUTORA_BROWSER_HEADED` | `1` shows a real browser window instead of running headless |
-| `AUTORA_BROWSER_FPS` / `AUTORA_BROWSER_QUALITY` / `AUTORA_BROWSER_STREAM_WIDTH` | How much live video to send (default `10` fps, at most `30`; quality `50`; scaled to `960` wide) |
+| `AUTORA_BROWSER_FPS` / `AUTORA_BROWSER_QUALITY` / `AUTORA_BROWSER_STREAM_WIDTH` | How much live video to send (default `24` fps, at most `30`; quality `72`; the page's own `1280` wide) |
 | `AUTORA_BROWSER_TZ` / `AUTORA_BROWSER_LOCALE` | The time zone and language the browser reports to sites (default: looked up from this machine's public address, kept a week) |
 | `AUTORA_SHELL` | The shell commands run in when Settings names none (then `$SHELL`, then bash, ash, sh) |
 | `AUTORA_DEEPGRAM_STT_MODEL` / `AUTORA_DEEPGRAM_STT_LANG` | What talk mode listens with through Deepgram (default `nova-2`, `en-US`) |
