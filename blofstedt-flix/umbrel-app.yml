@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.100"
+version: "0.3.101"
 port: 8096
 # umbrelOS only hands a container the GPU when the manifest says so: with this
 # permission it adds /dev/dri plus the render/video groups those nodes belong
@@ -60,17 +60,16 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  One play gets one converter now. The box's "one encode at a time" rule was
-  only ever written down, never enforced: an episode that stepped down a size
-  started a second and third ffmpeg beside the first, and the picture waited for
-  segments the box was still making. The cap now counts real encodes, ignores the
-  job it is starting, and takes the slot back from the size this play has already
-  left. A second screen is still never turned away -- it just runs below the
-  stream already playing.
+  Hardware encoding now actually runs. The box did pick Quick Sync, then
+  opened every real encode in a shape Quick Sync would not accept, so the
+  encode failed at the first frame and finished quietly on the CPU -- the
+  settings page said hardware while the work was on the four cores. It now
+  opens exactly the session it tested, and the GPU does the resize only with
+  the session that takes it. The honest gain is the cores: about 2.4x real
+  time against 1.85x for the CPU under the same load.
 
 
-  And the player no longer shrinks the picture when the box is the one behind: it
-  asks the server how late it was before blaming the connection, so a stall
-  ffmpeg caused keeps its size instead of stepping down and adding another
-  encoder at the worst moment. A stall that really is a slow connection steps
-  down exactly as before.
+  Pieces are four seconds again too. Quick Sync's forced keyframes were not
+  points the box could cut on, so a 20-second stretch became two long pieces;
+  a play that had just started waited longer for its first piece and seeking
+  landed coarser.
