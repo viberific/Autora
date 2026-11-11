@@ -214,4 +214,6 @@ releaseNotes: >-
   has rounded corners like the rest of the interface. Maximise on a canvas
   window now fills all the room for work, clear of the chat and the buttons.
   The browser and app windows keep the shape of their page when you pull the
-  corner, and the browser no longer leaves a blank band below the page.
+  corner, and the browser no longer leaves a blank band below the page. The
+  live browser is sharper and smoother: it now streams at the page's full
+  width, at higher quality and more than twice the frame rate.

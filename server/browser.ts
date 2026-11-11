@@ -497,15 +497,14 @@ const num = (value: string | undefined, fallback: number) => {
 
 /** How long typing has to stop before it is logged and a frame is kept. */
 const TYPING_PAUSE_MS = 1200;
-/** How often live frames go out. Chrome offers about sixty a second; a LAN is
-    not a video codec, and ten is enough to follow the pointer travelling to
-    what it is about to click. */
-const LIVE_FPS = Math.min(num(process.env.AUTORA_BROWSER_FPS, 10), 30);
-const LIVE_QUALITY = Math.min(num(process.env.AUTORA_BROWSER_QUALITY, 50), 100);
-/** Frames are sent narrower than the page is rendered: the picture is for
-    watching, not for reading nine-point text, and halving the width quarters
-    the bytes. */
-const LIVE_WIDTH = num(process.env.AUTORA_BROWSER_STREAM_WIDTH, 960);
+/** How often live frames go out. Ten a second read as a slideshow to a person scrolling or typing into the page;
+    twenty-four follows a hand. A slow link is still protected: the tiers below step the picture down when a viewer
+    backs up. */
+const LIVE_FPS = Math.min(num(process.env.AUTORA_BROWSER_FPS, 24), 30);
+const LIVE_QUALITY = Math.min(num(process.env.AUTORA_BROWSER_QUALITY, 72), 100);
+/** Frames go out at the page's own width, one frame pixel to one page pixel: scaled down they were blurred back up
+    in the window, and the page's text was unreadable. */
+const LIVE_WIDTH = num(process.env.AUTORA_BROWSER_STREAM_WIDTH, VIEWPORT.width);
 /** How hard the stream squeezes: speed over resolution when the link is
     slow or a person is working the page, sharp when they stop. */
 const TIERS = [
@@ -2554,7 +2553,8 @@ export class LiveBrowser {
     if (this.opts.sharp || !this.hooks.backlog || Date.now() - this.tierAt < 3000) return;
     const behind = this.hooks.backlog();
     let next = this.tier;
-    if (behind > 256 * 1024 && this.tier < TIERS.length - 1) next = this.tier + 1;
+    // A few full-size frames in flight is normal now; stepping down at that made a good link blurry.
+    if (behind > 512 * 1024 && this.tier < TIERS.length - 1) next = this.tier + 1;
     else if (behind < 16 * 1024 && this.tier > 0 && Date.now() - this.tierAt > 8000) next = this.tier - 1;
     if (next === this.tier) return;
     this.tier = next;
@@ -2587,7 +2587,7 @@ export class LiveBrowser {
     if ((this.hooks.backlog?.() ?? 0) > 32 * 1024) return;
     this.sharpBusy = true;
     try {
-      const shot: Buffer = await this.page.screenshot({ type: "jpeg", quality: 82, scale: "css", timeout: 3000 });
+      const shot: Buffer = await this.page.screenshot({ type: "jpeg", quality: 90, scale: "css", timeout: 3000 });
       this.hooks.onFrame(shot.toString("base64"));
     } catch {
       // Mid-navigation; the next frame covers it.
@@ -2601,7 +2601,7 @@ export class LiveBrowser {
       it left the feed parked on the page mid-change until something else
       happened to move. */
   private forward(data: string) {
-    const rate = this.opts.fps ?? (Date.now() < this.activeUntil ? Math.min(LIVE_FPS * 2, 24) : LIVE_FPS);
+    const rate = this.opts.fps ?? (Date.now() < this.activeUntil ? Math.max(LIVE_FPS, 30) : LIVE_FPS);
     const wait = 1000 / rate - (Date.now() - this.lastFrameAt);
     if (wait <= 0) {
       this.lastFrameAt = Date.now();
