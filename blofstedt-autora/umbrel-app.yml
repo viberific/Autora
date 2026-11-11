@@ -210,4 +210,5 @@ releaseNotes: >-
   your answer: the folded strip says it is waiting, and a tap brings the
   card back. The browser window on the canvas has one title bar instead of
   two, and every work window on the canvas now has a close button (X) that
-  asks before it closes the window.
+  asks before it closes the window. The area where the chat messages sit now
+  has rounded corners like the rest of the interface.
