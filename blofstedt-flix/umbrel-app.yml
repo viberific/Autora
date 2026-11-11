@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.101"
+version: "0.3.103"
 port: 8096
 # umbrelOS only hands a container the GPU when the manifest says so: with this
 # permission it adds /dev/dri plus the render/video groups those nodes belong
@@ -60,16 +60,23 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Hardware encoding now actually runs. The box did pick Quick Sync, then
-  opened every real encode in a shape Quick Sync would not accept, so the
-  encode failed at the first frame and finished quietly on the CPU -- the
-  settings page said hardware while the work was on the four cores. It now
-  opens exactly the session it tested, and the GPU does the resize only with
-  the session that takes it. The honest gain is the cores: about 2.4x real
-  time against 1.85x for the CPU under the same load.
+  The next episode is fetched ahead of time down to 10% free instead of 25%, so
+  it is ready when you press play rather than waiting on a box with a quarter of
+  its disk spare. It is still refused if the file would not fit above the hard
+  floor that stops downloads outright.
 
 
-  Pieces are four seconds again too. Quick Sync's forced keyframes were not
-  points the box could cut on, so a 20-second stretch became two long pieces;
-  a play that had just started waited longer for its first piece and seeking
-  landed coarser.
+  The Torrents page no longer claims a show was watched by everyone when it was
+  not. A "Leaving soon" window that ran out now says exactly that, and who has
+  not watched it is listed separately. Shows whose seeding goal is met but which
+  someone else has not finished are listed too, with Remove anyway -- nothing
+  deletes them on its own, because that person may still watch it.
+
+
+  A show watched through and then deleted no longer comes back under
+  Recommended: the record of having watched it used to be deleted with the files.
+
+
+  Home has a Discover area: every show in the library, filtered by genre and
+  service and ordered by trending, newest or rating, with Show more. And Back on
+  a page you opened directly now goes to Home instead of closing Flix.
