@@ -393,21 +393,6 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     surfaceCount.current = canvas.surfaces.length;
   }, [canvas.surfaces, canvas.panels, setView, autoFit, handsBusy]);
 
-  /* An app's window that opens out of sight comes into view too, even for someone holding the camera: they (or the agent,
-     for them) have just opened it. It is shown whole in the room clear of the conversation; a view that already shows
-     most of it is left alone, and so is one held by a pin or by hands in a field. */
-  const engineCount = useRef(0);
-  useEffect(() => {
-    const ids = Object.keys(engineBoxes);
-    const grew = ids.length > engineCount.current && engineCount.current >= 0 && ready;
-    engineCount.current = ids.length;
-    const id = latest.current;
-    if (!grew || !id || !engineBoxes[id] || !interacted.current || handsBusy() || enginePins.size > 0 || !root.current) return;
-    const frame = requestAnimationFrame(() => handle.current?.jump(id, false));
-    return () => cancelAnimationFrame(frame);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only a window arriving moves the view, not every change to the others
-  }, [engineBoxes, ready]);
-
   // A panel placed off screen (the agent's, or one that had nowhere closer to go) comes into view: measured as
   // drawn, so a tall one is not left under the strip along the bottom.
   const seenPanels = useRef(new Set(canvas.panels.map((p) => p.id)));

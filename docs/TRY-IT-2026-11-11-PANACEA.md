@@ -9,7 +9,7 @@ Fixed, with tests (`tests/ui-panacea-rest.test.ts`, `tests/panacea-rest.test.ts`
 
 | Finding | What changed |
 |---|---|
-| P1-1 | A surface under the conversation is no longer "in view" (the room starts at the inset); an app's window that opens out of sight is brought into view even when the camera is held |
+| P1-1 | A surface under the conversation is no longer "in view" (the room starts at the inset), so the view moves to show it. Not changed: an app's window that opens while the person holds the camera is still left where it is (the rule that a held view is never taken); its icon appears in the Jump dock |
 | P1-2 | Autora's own framing shows everything only while the zoom stays ≥ 0.6; below that, the newest piece with its panels (`autoFit`, `Board.tsx`) |
 | P1-3 | A jump frames the piece with the panels that are out for it |
 | P1-4 | The agent's chart replaces an untouched starter chart and withdraws the standing offer beside that table |
@@ -35,7 +35,9 @@ Not done, still open: P1-5's PDF window when its engine is missing; P1-7's sheet
 header clipped) and the remaining small buttons inside the editors; P2-5's second name in the header; P2-6's file names in the
 dock's labels; P2-8's "Card colour" with nothing selected; P2-11; P2-12's empty bubble and where the finished list lands;
 P2-13's `document.pdf`; P2-14 (console errors from the fetched editors); P3-1 to P3-7. Also seen while fixing: with every
-editor built, `tests/ui-panacea-connect.test.ts` fails on `main` too ("Music has no node": a song can now go to Video).
+editor built, these fail on `main` too, unchanged by this work: `ui-panacea-connect` ("Music has no node": a song can now go
+to Video), `ui-video` and `ui-pdfwindow` (they press Close and do not answer its "Close …?" question), `ui-office` (two
+"Hand back" buttons), `ui-office-rail`, `ui-office-phone`, `ui-office-engines`.
 
 ## How this was tested
 
