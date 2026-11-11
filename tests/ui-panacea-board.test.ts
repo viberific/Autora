@@ -59,7 +59,8 @@ async function main() {
       await page.click('.pa-summon [data-recipe="blank.board"]');
       await page.waitForSelector(".pa-surface.is-board .pa-brd");
       await page.waitForSelector(".pa-panel:has(.pa-title:text-is('Board'))");
-      assert.match(await page.locator(".pa-surface.is-board .pa-doc-bar").innerText(), /You write[\s\S]*first card/);
+      // The bar holds who writes, and no instructions (CLAUDE.md: no standing instructions on the canvas).
+      assert.match(await page.locator(".pa-surface.is-board .pa-doc-bar").innerText(), /^\s*You write\s*$/);
       await until("saved, the person's to write", async () => (await board())?.mode === "guide");
     });
 

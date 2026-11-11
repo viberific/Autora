@@ -5,6 +5,7 @@ import type { SurfaceKind } from "../../lib/panacea/kinds";
 import { BoardView } from "./BoardView";
 import { DocView } from "./DocView";
 import { DataTable } from "./Chart";
+import { usePanacea } from "./context";
 import { ImageEngine, outputAspect, paletteOf, setImageStats } from "./imagegl";
 
 /** The pictures on the canvas, loaded once each: for export and auto, which need the original. */
@@ -131,8 +132,17 @@ function ImageView({ surface, onSize }: { surface: Surface; onSize: (px: { w: nu
 
 /** A data surface: the table itself, as its filters leave it. */
 function DataView({ surface }: { surface: Surface }) {
+  const api = usePanacea();
   if (!surface.table) return <div className="pa-chart-empty">This table's rows are gone.</div>;
-  return <DataTable table={surface.table} params={surface.params as Record<string, Value>} limit={200} />;
+  /* A header sorts by its column, as a table's header does anywhere: largest first, then smallest first, then as it came. */
+  const sort = (column: string) => {
+    const on = surface.params.sort === column;
+    const down = surface.params.descending !== false;
+    if (!on) api.setParams(surface.id, { sort: column, descending: true }, `Sorted by ${column}`);
+    else if (down) api.setParams(surface.id, { descending: false }, `Sorted by ${column}, smallest first`);
+    else api.setParams(surface.id, { sort: "", descending: true }, "Rows in their own order");
+  };
+  return <DataTable table={surface.table} params={surface.params as Record<string, Value>} limit={200} onSort={sort} />;
 }
 
 /** How each kind of surface is drawn on the board. A kind added to the registry does not compile until it has a view here. */

@@ -206,7 +206,6 @@ export function SpectraWindow({ sessionId, phone }: { sessionId: string; phone: 
         <span className="pdf-bar-ico" aria-hidden="true"><IconFile size={14} /></span>
         <span className="pdf-bar-app">PDF</span>
         <span className="pdf-bar-name" title={desk.name ?? undefined}>{desk.name ?? "PDF"}</span>
-        <span className="pdf-bar-note">Saved as you go</span>
         <div className="spacer" />
         <LoadButton app="pdf" session={sessionId} phone={phone} />
         <SaveButton onSave={keep} phone={phone} disabled={!desk.name} />

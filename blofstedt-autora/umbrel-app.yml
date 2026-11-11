@@ -206,14 +206,18 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  On a phone you can now fold the chat away even while a card is waiting for
-  your answer: the folded strip says it is waiting, and a tap brings the
-  card back. The browser window on the canvas has one title bar instead of
-  two, and every work window on the canvas now has a close button (X) that
-  asks before it closes the window. The area where the chat messages sit now
-  has rounded corners like the rest of the interface. Maximise on a canvas
-  window now fills all the room for work, clear of the chat and the buttons.
-  The browser and app windows keep the shape of their page when you pull the
-  corner, and the browser no longer leaves a blank band below the page. The
-  live browser is sharper and smoother: it now streams at the page's full
-  width, at higher quality and more than twice the frame rate.
+  The canvas now shows only your work and what it needs at that moment. A
+  window for a document, PDF, song, video, game or model is its content and
+  its name on one strip; Load, Save, Maximise, Pin and Close appear while you
+  are in that window and fade when you move on, and nothing says "saved"
+  unless a save is in progress or failed. The instruction lines printed on
+  documents, boards and windows are gone. When new work arrives the view now
+  shows it at a readable size, clear of the chat, instead of zooming out to
+  fit everything; jumping to a piece shows its controls with it, and a
+  maximised window is no longer drawn among the others. Asking for a chart
+  leaves one chart, not three. A table's column header sorts when pressed.
+  Pasted notes keep their line breaks. The steps in the chat read as what was
+  done ("Putting a table on the canvas") instead of raw settings, and a step
+  the app held back, such as writing in a story that is yours, is shown as
+  held back rather than as a red failure. If an editor is not installed on
+  your server, Autora now tells you so plainly.

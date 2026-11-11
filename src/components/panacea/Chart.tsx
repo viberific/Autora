@@ -155,13 +155,27 @@ export function Chart({ table, params, kind, x, y, agg, label }: {
 }
 
 /** The rows of a data surface after its filters, a few columns, as a quiet table. */
-export function DataTable({ table, params, columns, limit }: { table: Table; params: Record<string, Value>; columns?: string[]; limit: number }) {
+export function DataTable({ table, params, columns, limit, onSort }: {
+  table: Table; params: Record<string, Value>; columns?: string[]; limit: number;
+  /** A header was pressed: sort by that column. Given on the table itself; a panel's copy of the rows only shows them. */
+  onSort?: (column: string) => void;
+}) {
   const rows = useMemo(() => filteredRows(table, params), [table, params]);
   const cols = (columns?.length ? columns : table.columns.map((c) => c.name)).map((n) => table.columns.findIndex((c) => c.name === n)).filter((i) => i >= 0);
   return (
     <div className="pa-table-wrap">
       <table className="pa-table">
-        <thead><tr>{cols.map((i) => <th key={i} className={table.columns[i]!.type === "number" ? "is-num" : ""}>{table.columns[i]!.name}</th>)}</tr></thead>
+        <thead><tr>{cols.map((i) => {
+          const name = table.columns[i]!.name;
+          const sorted = params.sort === name ? (params.descending !== false ? "descending" : "ascending") : undefined;
+          return (
+            <th key={i} className={table.columns[i]!.type === "number" ? "is-num" : ""} aria-sort={sorted}>
+              {onSort
+                ? <button type="button" className="pa-th-sort" onClick={() => onSort(name)} title={`Sort by ${name}`}>{name}{sorted && <span aria-hidden="true">{sorted === "descending" ? " ↓" : " ↑"}</span>}</button>
+                : name}
+            </th>
+          );
+        })}</tr></thead>
         <tbody>
           {rows.slice(0, limit).map((r, ri) => (
             <tr key={ri}>{cols.map((i) => <td key={i} className={typeof r[i] === "number" ? "is-num" : ""}>{typeof r[i] === "number" ? (r[i] as number).toLocaleString() : String(r[i] ?? "")}</td>)}</tr>

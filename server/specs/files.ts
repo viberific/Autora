@@ -864,8 +864,9 @@ export const filesSPECS: ToolSpec[] = [
       "Make a new document (.docx), spreadsheet (.xlsx) or presentation (.pptx) file, saved as an artifact. docx: markdown (headings, lists, tables, bold/italic, " +
       "links) or restricted html. xlsx: rows -- a 2-D array of cells where a string starting with = is a formula, or " +
       "{sheets:[{name, rows}]} for several sheets -- or csv text (header:true to treat the first row as a header). pptx: " +
-      "spec, the deck as {pages:[...]} (a 1280x720 px canvas of shapes, text, pictures, tables and charts; call " +
-      "office_guide slides design and spec first), or ops for the editing operations. Refine it afterwards with office_edit, " +
+      "spec, the deck as {pages:[{elements:[...]}]} (each page a 1280x720 px canvas whose `elements` are shapes, text, pictures, " +
+      "tables and charts; a text element is {type:\"text\", x, y, w, h, paragraphs:[{runs:[{text}]}]}; call office_guide slides " +
+      "design and spec first for the rest), or ops for the editing operations. Refine it afterwards with office_edit, " +
       "and check it with office_check.",
     parameters: {
       type: "object",

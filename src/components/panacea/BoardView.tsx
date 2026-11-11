@@ -170,7 +170,6 @@ export function BoardView({ surface }: { surface: Surface }) {
         >
           {mode === "agent" ? "Autora writes" : "You write"}
         </button>
-        <span>{flow ? "Double-click for a node · drag its dot to connect" : board.cards.length ? "Double-click for a card · drag its dot onto another to link" : "Double-click anywhere for your first card"}</span>
         {flow && <button type="button" onClick={() => newCard(freeSpot(board))}>Add node</button>}
       </div>
       {(flow || selectedLink) && <div className="pa-brd-controls">

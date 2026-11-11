@@ -39,7 +39,7 @@ async function main() {
     await page.reload();
     await page.getByText(/does not contain a valid native canvas document/).waitFor();
     assert.equal(await name.isDisabled(), true);
-    assert.equal(await page.locator('.pa-canvas-bar button[aria-label="Save native work"]').isDisabled(), true);
+    assert.equal(await page.locator('.pa-canvas-bar button[aria-label="Save"]').isDisabled(), true);
     mode = "html";
     await page.reload();
     await page.getByText(/workspace returned invalid JSON/).waitFor();

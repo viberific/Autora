@@ -15,6 +15,8 @@ export interface PanaceaApi {
   options: (source: string) => Array<{ value: string; label: string; color?: string }>;
   /** The person set a value with a control on `panel`. `label` names the step in the history. */
   set: (key: string, value: Value, panel: Panel, label: string) => void;
+  /** The person set values on a surface from the surface itself (a column header pressed to sort), in one step. */
+  setParams: (surface: string, values: Record<string, Value>, label: string) => void;
   /** A surface's action (reset, auto, export, clear). */
   act: (bind: string) => void;
   /** Send a request to the chat, with the panel's values. */

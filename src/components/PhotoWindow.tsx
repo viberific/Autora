@@ -212,7 +212,6 @@ export function PhotoWindow({ sessionId, phone }: { sessionId: string; phone: bo
         <span className="pdf-bar-ico" aria-hidden="true"><IconImage size={14} /></span>
         <span className="pdf-bar-app">Images</span>
         <span className="pdf-bar-name">{size ? `${size.w} × ${size.h}, ${layers === 1 ? "1 layer" : `${layers} layers`}` : "No picture yet"}</span>
-        <span className="pdf-bar-note">Saved as you go</span>
         <div className="spacer" />
         <LoadButton app="photo" session={sessionId} phone={phone} />
         <SaveButton onSave={keep} phone={phone} disabled={!size} />

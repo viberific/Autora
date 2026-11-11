@@ -4,7 +4,7 @@ import { GRID, PANEL_MAX_W, PANEL_MIN_W, snap, type Canvas, type Panel, type Sur
 import { maximise as maximiseWindow, placeWindow, raise as raiseWindow, tidy as tidyBoxes } from "../../lib/panacea/windows";
 import { KINDS } from "../../lib/panacea/kinds";
 import type { Recipe } from "../../lib/panacea/library";
-import { IconCode, IconCube, IconFile, IconGame, IconGlobe, IconImage, IconMusic, IconSparkle, IconTable, IconVideo, IconX, IconMaximize, IconMoreH, IconTidy } from "../Icons";
+import { IconCode, IconCube, IconFile, IconGame, IconGlobe, IconImage, IconMusic, IconNotebook, IconOrg, IconSlides, IconSparkle, IconTable, IconVideo, IconX, IconMaximize, IconMoreH, IconTidy } from "../Icons";
 import { PanelCard, type PanelActions } from "./PanelCard";
 import { SHEET_MOVED } from "./chatLayout";
 import { SurfaceView } from "./Surfaces";
@@ -22,6 +22,8 @@ import { EngineFrame, setFullscreen, useFullscreen } from "../../lib/fullscreen"
 
 /* How far the free part of the board starts from its left edge. On a desktop the conversation is on the left and the
    work rail stands on the canvas beside it, so what is framed is framed to the right of the rail, not under it. */
+/** Below this zoom, text on the board cannot be read: Autora's own framing does not go under it for the piece being worked on. */
+const READABLE = 0.6;
 const insetOf = (el: Element, room: { left: number }) => Math.max(0, room.left - el.getBoundingClientRect().left);
 function shifted<T extends { x: number; zoom: number }>(next: T | null, inset: number): T | null {
   return next && inset ? { ...next, x: next.x - inset / next.zoom } : next;
@@ -158,6 +160,8 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
   const [enginePins, setEnginePins] = useState<ReadonlySet<string>>(new Set());
   const engineBoxesRef = useRef(engineBoxes);
   const hostedRef = useRef(hosted);
+  /** The piece that arrived last: what Autora's own framing shows when everything at once would be too small to read. */
+  const latest = useRef<string | null>(null);
   const pendingJump = useRef<string | null>(null);
   const previousFollow = useRef<WorkspaceMode | null>(null);
   const hostedKey = hosted.map((work) => work.id).join("|");
@@ -195,6 +199,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
         // Never shorter than an app needs to show itself under its own bars (the app preview's phone screen is tall).
         const height = phone ? Math.max(560, (room?.height ?? 600) - 16) : 740;
         next[id] = { x: -(count % 3 + 1) * 1200, y: Math.floor(count / 3) * 920, w: width, h: height };
+        latest.current = id;
         count += 1;
       }
       return ids.some((id) => !before[id]) ? next : before;
@@ -253,6 +258,41 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     fitted.current = boxes.length > 0;
     setView(next);
   }, [boxesOf, setView, fitOpts]);
+  /* Autora's own framing, used while nobody has taken the camera. Everything is shown while that keeps it readable; once
+     it would not, the newest piece is framed with its panels instead, at a size its words can be read. "Show all work"
+     is still one press away, and is the person's to ask for. */
+  const groupOf = useCallback((id: string): WorkBox[] => {
+    const current = canvasRef.current;
+    const engine = engineBoxesRef.current[id];
+    if (engine) return [engine];
+    const surface = current.surfaces.find((item) => item.id === id);
+    if (!surface) return [];
+    return [surface, ...current.panels.filter((panel) => panel.context === id && (panel.state === "live" || panel.state === "ghost" || panel.state === "dim" || panel.pinned)).map((panel) => ({
+      x: panel.x, y: panel.y, w: panel.w,
+      h: root.current?.querySelector<HTMLElement>(`[data-panel="${CSS.escape(panel.id)}"]`)?.offsetHeight || panel.h || 240,
+    }))];
+  }, []);
+  const autoFit = useCallback(() => {
+    const el = root.current;
+    if (!el) return;
+    const boxes = boxesOf();
+    const room = workViewport(el);
+    const size = { width: room.width, height: room.height };
+    const all = fitWorkView(boxes, size, fitOpts);
+    if (!all) return;
+    let next = all;
+    if (boxes.length > 0 && all.zoom < READABLE) {
+      const current = canvasRef.current;
+      const id = latest.current ?? current.focus ?? current.surfaces.at(-1)?.id ?? hostedRef.current.at(-1)?.id ?? null;
+      const group = id ? groupOf(id) : [];
+      const framed = group.length ? fitWorkView(group, size, fitOpts) : null;
+      // A piece with many panels can itself be too much: then the piece alone, which is what was asked for.
+      const alone = framed && framed.zoom < READABLE ? fitWorkView(group.slice(0, 1), size, fitOpts) : framed;
+      if (alone) next = alone;
+    }
+    fitted.current = boxes.length > 0;
+    setView(shifted(next, insetOf(el, room)) ?? next);
+  }, [boxesOf, groupOf, setView, fitOpts]);
   const focus = useCallback(() => {
     const el = root.current;
     const current = canvasRef.current;
@@ -284,25 +324,25 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
 
   // The first time there is something on the canvas, frame it.
   useEffect(() => {
-    if (ready && !fitted.current) fit();
-  }, [canvas.surfaces, canvas.panels, engineBoxes, ready, fit]);
+    if (ready && !fitted.current) autoFit();
+  }, [canvas.surfaces, canvas.panels, engineBoxes, ready, autoFit]);
   useEffect(() => {
-    if (ready && !interacted.current && !handsBusy() && enginePins.size === 0 && !canvasRef.current.panels.some((panel) => panel.pinned || panel.touched)) fit();
-  }, [engineBoxes, ready, enginePins.size, fit, handsBusy]);
+    if (ready && !interacted.current && !handsBusy() && enginePins.size === 0 && !canvasRef.current.panels.some((panel) => panel.pinned || panel.touched)) autoFit();
+  }, [engineBoxes, ready, enginePins.size, autoFit, handsBusy]);
   useEffect(() => {
     const el = root.current;
     if (!el) return;
     const refit = () => {
       if (el.clientWidth <= 40 || el.clientHeight <= 40) return;
       if (!ready) return;
-      if (!fitted.current || (!interacted.current && !handsBusy() && enginePins.size === 0 && !canvasRef.current.panels.some((panel) => panel.pinned || panel.touched))) fit();
+      if (!fitted.current || (!interacted.current && !handsBusy() && enginePins.size === 0 && !canvasRef.current.panels.some((panel) => panel.pinned || panel.touched))) autoFit();
     };
     const observer = new ResizeObserver(refit);
     observer.observe(el);
     // A phone's sheet lies over the board and so never resizes it: it says when the room above it has changed.
     window.addEventListener(SHEET_MOVED, refit);
     return () => { observer.disconnect(); window.removeEventListener(SHEET_MOVED, refit); };
-  }, [fit, handsBusy, ready, enginePins.size]);
+  }, [autoFit, handsBusy, ready, enginePins.size]);
 
   /* Nothing is left lying on something else. A panel is placed by a guess at its height and a table or a picture grows
      once it is drawn, so a panel can end up under its neighbour. Once they are drawn, any panel the person has not
@@ -338,16 +378,35 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
   const surfaceCount = useRef(canvas.surfaces.length);
   useEffect(() => {
     if (canvas.surfaces.length > surfaceCount.current && root.current && !handsBusy()) {
-      if (!interacted.current && !canvas.panels.some((panel) => panel.pinned || panel.touched)) { fit(); surfaceCount.current = canvas.surfaces.length; return; }
       const s = canvas.surfaces.at(-1)!;
-      // What can be seen of the board: the conversation lies over part of it (a phone's sheet over its foot).
+      latest.current = s.id;
+      if (!interacted.current && !canvas.panels.some((panel) => panel.pinned || panel.touched)) { autoFit(); surfaceCount.current = canvas.surfaces.length; return; }
+      /* What can be seen of the board is the room clear of the conversation (beside a desktop's window, above a phone's
+         sheet), which does not begin at the board's left edge: a surface under the conversation is not in view. */
       const r = workViewport(root.current);
       const v = viewRef.current;
-      const inView = s.x >= v.x && s.y >= v.y && s.x + s.w <= v.x + r.width / v.zoom && s.y + s.h <= v.y + r.height / v.zoom;
-      if (!inView && r.width > 40 && r.height > 40 && !canvas.panels.some((panel) => panel.pinned)) setView({ ...v, x: s.x - 48 / v.zoom, y: s.y - 48 / v.zoom }, true);
+      const inset = insetOf(root.current, r);
+      const left = v.x + inset / v.zoom;
+      const inView = s.x >= left && s.y >= v.y && s.x + s.w <= left + r.width / v.zoom && s.y + s.h <= v.y + r.height / v.zoom;
+      if (!inView && r.width > 40 && r.height > 40 && !canvas.panels.some((panel) => panel.pinned)) setView({ ...v, x: s.x - (inset + 48) / v.zoom, y: s.y - 48 / v.zoom }, true);
     }
     surfaceCount.current = canvas.surfaces.length;
-  }, [canvas.surfaces, canvas.panels, setView, fit, handsBusy]);
+  }, [canvas.surfaces, canvas.panels, setView, autoFit, handsBusy]);
+
+  /* An app's window that opens out of sight comes into view too, even for someone holding the camera: they (or the agent,
+     for them) have just opened it. It is shown whole in the room clear of the conversation; a view that already shows
+     most of it is left alone, and so is one held by a pin or by hands in a field. */
+  const engineCount = useRef(0);
+  useEffect(() => {
+    const ids = Object.keys(engineBoxes);
+    const grew = ids.length > engineCount.current && engineCount.current >= 0 && ready;
+    engineCount.current = ids.length;
+    const id = latest.current;
+    if (!grew || !id || !engineBoxes[id] || !interacted.current || handsBusy() || enginePins.size > 0 || !root.current) return;
+    const frame = requestAnimationFrame(() => handle.current?.jump(id, false));
+    return () => cancelAnimationFrame(frame);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only a window arriving moves the view, not every change to the others
+  }, [engineBoxes, ready]);
 
   // A panel placed off screen (the agent's, or one that had nowhere closer to go) comes into view: measured as
   // drawn, so a tall one is not left under the strip along the bottom.
@@ -360,7 +419,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     /* An offer is no use out of sight. It never takes the view from someone who has put the camera where they want
        it; while the camera is still Autora's own framing, that framing is redone to take the offer in. */
     if (offered && !fresh.length && root.current && !drag && !interacted.current && !handsBusy() && !canvas.panels.some((panel) => panel.pinned || panel.touched)) {
-      const frame = requestAnimationFrame(fit);
+      const frame = requestAnimationFrame(autoFit);
       return () => cancelAnimationFrame(frame);
     }
     if (!fresh.length || !root.current || drag || handsBusy() || canvas.panels.some((panel) => panel.pinned)) return;
@@ -385,7 +444,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     // Heights are untransformed; positions come from the model, never a gliding screen rectangle.
     const frame = requestAnimationFrame(reveal);
     return () => cancelAnimationFrame(frame);
-  }, [canvas.panels, drag, setView, handsBusy, fit]);
+  }, [canvas.panels, drag, setView, handsBusy, autoFit]);
 
   handle.current = {
     fit,
@@ -430,7 +489,13 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
       const camera = automatic ? jumpTo({ x: target.x, y: target.y, width: target.w, height: target.h },
         { width: room.width, height: room.height }, { x: -(v.x + inset / v.zoom) * v.zoom, y: -v.y * v.zoom, zoom: v.zoom }) : null;
       const next = shifted(camera ? { x: -camera.x / camera.zoom, y: -camera.y / camera.zoom, zoom: camera.zoom }
-        : fitWorkView([target], { width: room.width, height: room.height }, fitOpts), inset);
+        : (() => {
+          /* A jump shows the piece with the controls that are out for it; when that is too much to read, the piece alone. */
+          const size = { width: room.width, height: room.height };
+          const group = id ? groupOf(id) : [target];
+          const whole = group.length > 1 ? fitWorkView(group, size, fitOpts) : null;
+          return whole && whole.zoom >= READABLE ? whole : fitWorkView([target], size, fitOpts);
+        })(), inset);
       if (next) { if (!automatic) interacted.current = true; setView(next); }
     },
     frame: (box, automatic = false) => {
@@ -518,6 +583,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     // A second finger is the pinch's, never a second pan.
     if (fingers.current.size > 1) return;
     interacted.current = true;
+    setActiveWin(null);
     if (e.isTrusted) onJumpWork?.(followTarget ?? "panacea");
     e.preventDefault();
     root.current?.focus({ preventScroll: true });
@@ -860,7 +926,8 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
   const maximize = (id: string, kind: "engine" | "surface") => {
     const el = root.current;
     if (!el) return;
-    const room = workViewport(el, { clearDock: phone });
+    // Clear of the board's bottom row (the history track) on any screen: a maximised window is not drawn under it.
+    const room = workViewport(el, { clearDock: true });
     const pad = phone ? 8 : 16;
     if (kind === "engine") {
       // A window's "was" is kept with the canvas, so a reload (or the agent) can give it back.
@@ -903,6 +970,21 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     was ?? { x: now.x, y: now.y, w: Math.max(320, room.width - pad * 2), h: Math.max(240, room.height - pad * 2) };
   // A phone's work buttons: folded into one until wanted (see where the dock is drawn).
   const [dockOpen, setDockOpen] = useState(false);
+  /* The window being worked in: its controls are there while it is, and gone when the work moves to the board or another window. */
+  const [activeWin, setActiveWin] = useState<string | null>(null);
+  /* An editor in a frame takes the pointer and the keys whole: the page hears no press inside it, and neither :hover nor
+     :focus-within can be counted on there. What the page can always see is that the frame has the focus, so that is
+     looked at a couple of times a second: the window being typed or clicked in is the one being worked in. */
+  useEffect(() => {
+    const look = window.setInterval(() => {
+      const el = document.activeElement;
+      const id = el instanceof HTMLIFrameElement ? el.closest(".pw-engine")?.getAttribute("data-work") : null;
+      if (id) setActiveWin((before) => (before === id ? before : id));
+      // The work has moved off the board (into the conversation, a dialog): no window is being worked in.
+      else if (el && el !== document.body && !el.closest(".pa-board")) setActiveWin(null);
+    }, 400);
+    return () => window.clearInterval(look);
+  }, []);
   const dockTimer = useRef(0);
   const foldDockSoon = useCallback(() => {
     window.clearTimeout(dockTimer.current);
@@ -1084,6 +1166,23 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     backgroundSize: `${dot}px ${dot}px`,
     backgroundPosition: `${-view.x * z}px ${-view.y * z}px`,
   };
+  /** Take a window by its title strip, with a mouse or a finger: it comes over the rest and goes where it is put. */
+  const moveWindow = (e: ReactPointerEvent<HTMLElement>, work: HostedWork, box: { x: number; y: number; w: number; h: number }) => {
+    if (e.button !== 0 || (e.target as HTMLElement).closest("button,a,input,select,textarea,[role='button']") || enginePins.has(work.id)) return;
+    e.preventDefault(); e.stopPropagation(); interacted.current = true; holdBoard(true);
+    raiseIt(work.id);
+    const target = e.currentTarget; target.setPointerCapture(e.pointerId);
+    const start = { x: e.clientX, y: e.clientY, zoom: viewRef.current.zoom };
+    const move = (event: PointerEvent) => setEngineBoxes((before) => ({ ...before,
+      [work.id]: { ...box, x: box.x + (event.clientX - start.x) / start.zoom, y: box.y + (event.clientY - start.y) / start.zoom } }));
+    const up = (event: PointerEvent) => {
+      target.removeEventListener("pointermove", move); target.removeEventListener("pointerup", up); target.removeEventListener("pointercancel", up); holdBoard(false);
+      const dx = (event.clientX - start.x) / start.zoom, dy = (event.clientY - start.y) / start.zoom;
+      if (Math.abs(dx) + Math.abs(dy) < 3) return;
+      edit((d) => { placeWindow(d.windows ?? (d.windows = []), work.id, { x: box.x + dx, y: box.y + dy, w: box.w, h: box.h }, { front: true }); }, `Moved ${work.title}`);
+    };
+    target.addEventListener("pointermove", move); target.addEventListener("pointerup", up); target.addEventListener("pointercancel", up);
+  };
   return (
     <div
       ref={root}
@@ -1117,29 +1216,16 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
           const box = engineBoxes[work.id];
           if (!box) return null;
           const z = canvas.windows?.find((w) => w.id === work.id)?.z ?? 0;
-          return <section key={work.id} className={`pw-engine${enginePins.has(work.id) ? " is-pinned" : ""}${isMaxed(work.id) ? " is-max" : ""}`} data-engine={work.mode}
+          return <section key={work.id} className={`pw-engine${enginePins.has(work.id) ? " is-pinned" : ""}${isMaxed(work.id) ? " is-max" : ""}${activeWin === work.id ? " is-active" : ""}`} data-engine={work.mode}
             data-link={!link || link.from === work.id ? undefined : link.over === work.id ? "over" : linkTakes?.has(work.mode) ? "takes" : "no"}
             data-work={work.id} style={{ left: box.x, top: box.y, width: box.w, height: box.h, zIndex: z + 1, ...(phone ? { maxWidth: "calc(100vw - 16px)" } : {}) }} aria-label={`${work.title} work surface`}
             /* Working in a window is not holding the view (only panning, zooming or dragging is): Follow still brings the
                agent's next window into view after the person has pressed a button in this one. */
-            onPointerDownCapture={(e) => { if (e.isTrusted) { onJumpWork?.(work.mode); raiseIt(work.id); } }}>
-            <header className="pw-engine-head" onPointerDown={(e) => {
-              if (e.button !== 0 || (e.target as HTMLElement).closest("button") || enginePins.has(work.id)) return;
-              e.preventDefault(); e.stopPropagation(); interacted.current = true; holdBoard(true);
-              raiseIt(work.id); // taken by its title bar, by a hand or a finger: it comes over the rest
-              const target = e.currentTarget; target.setPointerCapture(e.pointerId);
-              const start = { x: e.clientX, y: e.clientY, zoom: viewRef.current.zoom };
-              const move = (event: PointerEvent) => setEngineBoxes((before) => ({ ...before,
-                [work.id]: { ...box, x: box.x + (event.clientX - start.x) / start.zoom, y: box.y + (event.clientY - start.y) / start.zoom } }));
-              const up = (event: PointerEvent) => {
-                target.removeEventListener("pointermove", move); target.removeEventListener("pointerup", up); target.removeEventListener("pointercancel", up); holdBoard(false);
-                const dx = (event.clientX - start.x) / start.zoom, dy = (event.clientY - start.y) / start.zoom;
-                if (Math.abs(dx) + Math.abs(dy) < 3) return;
-                edit((d) => { placeWindow(d.windows ?? (d.windows = []), work.id, { x: box.x + dx, y: box.y + dy, w: box.w, h: box.h }, { front: true }); }, `Moved ${work.title}`);
-              };
-              target.addEventListener("pointermove", move); target.addEventListener("pointerup", up); target.addEventListener("pointercancel", up);
-            }}>
-              <span>{workIcon(work.mode)}</span><b>{work.title}</b><span className="pw-engine-context">{WORKSPACE_MODES[work.mode].context}</span>
+            onPointerDownCapture={(e) => { if (e.isTrusted) { onJumpWork?.(work.mode); raiseIt(work.id); } setActiveWin(work.id); }}
+            /* The app's own bar (the file's name) is the window's title strip too: taken anywhere that is not a control, it moves the window. */
+            onPointerDown={(e) => { if ((e.target as HTMLElement).closest(".pw-engine-body .pdf-bar, .pw-engine-body .app-bar")) moveWindow(e, work, box); }}>
+            <header className="pw-engine-head" onPointerDown={(e) => moveWindow(e, work, box)}>
+              <span className="pw-engine-ico">{workIcon(work.mode)}</span><b>{work.title}</b><span className="spacer" />
               {linkDot(work.id, work.title)}
               <button type="button" aria-label={isMaxed(work.id) ? `Restore ${work.title}` : `Maximise ${work.title}`} aria-pressed={isMaxed(work.id)}
                 onClick={() => { onWindowFull(work.id, !isMaxed(work.id)); onJumpWork?.(work.mode); }}><IconMaximize size={14} /></button>
@@ -1222,7 +1308,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
           onClick={() => { window.clearTimeout(dockTimer.current); setDockOpen((open) => !open); }}>{dockOpen ? <IconX size={14} /> : <IconMoreH size={16} />}</button>}
         {canvas.surfaces.map((surface) => <button type="button" key={surface.id} data-jump={surface.id} title={`Jump to ${surface.title}`}
           aria-label={`Jump to ${surface.title}`} onClick={() => { handle.current?.jump(surface.id); onFocus(surface.id); onJumpWork?.("panacea"); }}>
-          {workIcon(surface.kind === "image" ? "photo" : surface.kind === "data" ? "sheets" : surface.kind === "doc" ? "pages" : "widget")}
+          {surface.kind === "board" ? <IconOrg size={17} /> : workIcon(surface.kind === "image" ? "photo" : surface.kind === "data" ? "sheets" : surface.kind === "doc" ? "pages" : "widget")}
         </button>)}
         {hosted.map((work) => <button type="button" key={work.id} data-jump={work.id} title={`Jump to ${work.title}`} aria-label={`Jump to ${work.title}`}
           onClick={() => { handle.current?.jump(work.id); onJumpWork?.(work.mode); }}>{workIcon(work.mode)}</button>)}
@@ -1263,7 +1349,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
 
 function workIcon(mode: WorkspaceMode): ReactNode {
   const icons: Partial<Record<WorkspaceMode, ReactNode>> = {
-    pages: <IconFile size={17} />, sheets: <IconTable size={17} />, slides: <IconFile size={17} />, pdf: <IconFile size={17} />,
+    pages: <IconNotebook size={17} />, sheets: <IconTable size={17} />, slides: <IconSlides size={17} />, pdf: <IconFile size={17} />,
     photo: <IconImage size={17} />, video: <IconVideo size={17} />, studio: <IconMusic size={17} />, cad: <IconCube size={17} />,
     game: <IconGame size={17} />, browser: <IconGlobe size={17} />, app: <IconCode size={17} />,
   };

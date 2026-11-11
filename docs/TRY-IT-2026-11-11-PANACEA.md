@@ -3,6 +3,40 @@
 For: review and fixing. Every finding has a way to reproduce it, what was expected, the evidence (screenshot in
 `docs/screenshots/try-2026-11-11/`) and, where I found it, the code it comes from. IDs are stable so fixes can cite them.
 
+## Status (0.9.367, same branch)
+
+Fixed, with tests (`tests/ui-panacea-rest.test.ts`, `tests/panacea-rest.test.ts`, the Panacea manual in `server/handbook.ts`):
+
+| Finding | What changed |
+|---|---|
+| P1-1 | A surface under the conversation is no longer "in view" (the room starts at the inset); an app's window that opens out of sight is brought into view even when the camera is held |
+| P1-2 | Autora's own framing shows everything only while the zoom stays ≥ 0.6; below that, the newest piece with its panels (`autoFit`, `Board.tsx`) |
+| P1-3 | A jump frames the piece with the panels that are out for it |
+| P1-4 | The agent's chart replaces an untouched starter chart and withdraws the standing offer beside that table |
+| P1-5 (agent half) | "Autora Photo is not installed on this server…" / "…is switched off on the Tools page" instead of "its group is not available" |
+| P1-6 | Maximise stays clear of the history track on every screen; the other pieces are not drawn around a maximised one |
+| P1-7 (partly) | The install offer waits while an app's window is on a phone's board; window buttons are 36 px there |
+| P2-1 | Folded steps read as what was done (`stepWords`); `key=value` only inside an opened step |
+| P2-2 | Held-back steps show "planning first" / "yours to write" / "waited for you", never red |
+| P2-3 | Removed: the document and board instruction lines, every app window's sentence, "Visible work: coming soon", "Saved as you go", the chooser's intro and footer, the hint after opening from the chooser; Load's title shortened |
+| P2-4 | Chooser: no wrong "bottom-left", no tile for an app that is not installed, Explainers has its own icon, "New" only on files, inside its tile, and it asks first |
+| P2-5 (partly) | "Saved as you go" gone everywhere; the canvas's button is "Save" |
+| P2-6 (partly) | Documents, Presentations, PDF and boards have their own icons in the Jump dock |
+| P2-7 | Pasted plain text keeps its lines and is called by its first line |
+| P2-8 (partly) | A board's count includes Autora's questions ("0 cards · 2 questions") |
+| P2-9 | A table's header sorts by its column (largest, smallest, own order) |
+| P2-10 | The ⓘ reason is drawn at screen size |
+| P2-12 (partly) | The in-thread to-do marker no longer says "above the message box" |
+| P2-13 (partly) | An untitled document is called by its first heading |
+| P2-15 | `office_create`'s description gives the real shape of a slide's `elements` |
+| **App-like windows** (asked for with the fix) | One strip per window (the app's bar is the title bar, the board's buttons at its right end); all controls fade unless the person is in the window |
+
+Not done, still open: P1-5's PDF window when its engine is missing; P1-7's sheet on a phone (does not retract on a tap, to-do
+header clipped) and the remaining small buttons inside the editors; P2-5's second name in the header; P2-6's file names in the
+dock's labels; P2-8's "Card colour" with nothing selected; P2-11; P2-12's empty bubble and where the finished list lands;
+P2-13's `document.pdf`; P2-14 (console errors from the fetched editors); P3-1 to P3-7. Also seen while fixing: with every
+editor built, `tests/ui-panacea-connect.test.ts` fails on `main` too ("Music has no node": a song can now go to Video).
+
 ## How this was tested
 
 - The real server (`tests/e2e-harness.ts`) behind a **scripted stand-in model** (I wrote each tool call), the real page in

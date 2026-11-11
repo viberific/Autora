@@ -180,7 +180,10 @@ const BOARD: SurfaceKindDef = {
   },
   meta: (s) => {
     const n = Number(s.params.cards ?? 0);
-    return s.board?.diagram === "flowchart" ? `${n} ${n === 1 ? "node" : "nodes"} · flowchart` : `${n} ${n === 1 ? "card" : "cards"}`;
+    if (s.board?.diagram === "flowchart") return `${n} ${n === 1 ? "node" : "nodes"} · flowchart`;
+    // Autora's questions are cards on the board too: "0 cards" over two of them read as a miscount.
+    const q = Number(s.params.questions ?? 0);
+    return `${n} ${n === 1 ? "card" : "cards"}${q ? ` · ${q} ${q === 1 ? "question" : "questions"}` : ""}`;
   },
   read: (raw) => {
     const board = readBoardState(raw.board);

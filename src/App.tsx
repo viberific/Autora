@@ -134,21 +134,6 @@ import {
 import { SureHost } from "./components/SureHost";
 import { AgentThought } from "./components/AgentThought";
 
-/** What to do first in each thing the chooser opens: said under the box, so a blank screen is never a dead end. */
-const OPENED_NEXT: Record<string, string> = {
-  Canvas: "Drop a photo or a table on it, or tell Autora what to make.",
-  Flowchart: "Double-click the page to add a step, or tell Autora the process.",
-  Music: "Pick a first part, or tell Autora what you want to hear.",
-  PDF: "Load a file to work on, or tell Autora what to do with it.",
-  Video: "Add clips to the timeline, or tell Autora what to cut.",
-  Documents: "Start typing, or tell Autora what to write.",
-  Spreadsheets: "Start entering data, or tell Autora what to calculate.",
-  Presentations: "Start on the first slide, or tell Autora the story.",
-  Images: "Open a photo, or tell Autora what to change.",
-  "3D": "Shape the block, or tell Autora what to model.",
-  Games: "Tell Autora the game, or start with a scene.",
-};
-
 /** A phone or tablet keyboard: Enter stays a new line there (the composer). */
 const TOUCH_KEYBOARD = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 
@@ -2765,7 +2750,7 @@ export function App() {
                             await nativeWorkspaceActions.current.createFlowchart();
                           }}
                           onOpened={(name, app, mode) => {
-                            tell(`${name} is open. ${OPENED_NEXT[app] ?? "Tell Autora what to do next."}`);
+                            tell(`${name} is open.`);
                             if (mode) pickWindow(mode);
                           }}
                           onAsk={(text) => {

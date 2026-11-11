@@ -22,7 +22,7 @@ export const LOAD_WHAT: Record<LoadApp, string> = {
   studio: "a song you saved",
   cad: "a model you saved, or a mesh (GLB, OBJ or STL) to add to it",
   game: "a game you saved, or a picture, sound or font for it",
-  panacea: "a canvas, document, workbook (full Sheets), table, photo, PDF, media or saved song, model or game",
+  panacea: "a file to work on",
 };
 
 /** Whether this app can use this file, by what it is. */

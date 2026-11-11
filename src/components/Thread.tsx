@@ -18,7 +18,7 @@ import { FileCell } from "./FileCell";
 import { RemarkCell } from "./RemarkCell";
 import { ChimeCell } from "./ChimeCell";
 import { VendorCell } from "./VendorCell";
-import { ToolCell, describeArgs } from "./ToolCell";
+import { ToolCell, describeArgs, heldWords, stepWords } from "./ToolCell";
 import { TodoCell } from "./TodoCell";
 import { usePreviewState } from "../lib/preview";
 import { useDeskState } from "../lib/pdfdesk";
@@ -833,7 +833,7 @@ const stepStatus = (cell: Cell) =>
 /** The line of a step that is worth showing without opening it. */
 const stepLine = (cell: Cell) =>
   cell.kind === "terminal" ? cell.command
-    : cell.kind === "tool" ? describeArgs(cell.span.args)
+    : cell.kind === "tool" ? stepWords(cell.span.name, cell.span.args)
     : cell.kind === "screen" ? cell.url ?? `${cell.source} view`
     : cell.kind === "file" ? cell.file.path
     : cell.kind === "files" ? `${cell.files.length} files`
@@ -982,13 +982,17 @@ const StepGroup = memo(function StepGroup({ steps, unfolded = false, ...cell }: 
     stepStatus(s) === "error"
     || (s.kind === "terminal" && s.exitCode !== null && s.exitCode !== 0)).length;
   const denied = steps.filter((s) => stepStatus(s) === "denied").length;
+  /* Steps the app itself held back (still planning, the person's own words, something the person is using): its rules
+     working. Said in plain words and never in the colour of a failure. */
+  const heldBack = steps.flatMap((s) => (s.kind === "tool" && s.span.status === "denied" && s.span.held ? [s.span.held] : []));
+  const declined = denied - heldBack.length;
   const took = stepsTook(steps);
   const many = steps.length > 1;
   const last = steps[steps.length - 1];
   const doing = running ? steps.find((s) => stepStatus(s) === "running") ?? last : last;
   const title = many ? `${steps.length} steps` : stepLine(steps[0]) || steps[0].kind;
   const tail = many ? stepLine(doing) : "";
-  const tone = failed ? "is-bad" : denied ? "is-warn" : running ? "is-live" : "";
+  const tone = failed ? "is-bad" : declined ? "is-warn" : running ? "is-live" : "";
 
   return (
     <section className={`steps flow-detail ${tone} ${open ? "is-open" : ""}`.trim()}>
@@ -1001,7 +1005,8 @@ const StepGroup = memo(function StepGroup({ steps, unfolded = false, ...cell }: 
         {tail && <span className="steps-doing">{tail}</span>}
         {running && <em className="cell-chip is-running">running</em>}
         {orphaned && <em className="cell-chip">no result</em>}
-        {denied > 0 && <em className="cell-chip is-warn">declined</em>}
+        {declined > 0 && <em className="cell-chip is-warn">declined</em>}
+        {heldBack.length > 0 && <em className="cell-chip">{heldWords(heldBack[0])}</em>}
         {failed > 0 && <em className="cell-chip is-bad">{failed} failed</em>}
         {!running && took !== null && <em className="cell-at">{shortMs(took)}</em>}
       </button>
@@ -1213,7 +1218,7 @@ const CellView = memo(function CellView({
           <StageStub
             kind="plan"
             title={NAME.plan}
-            note={`${done} of ${cell.items.length} done · above the message box`}
+            note={`${done} of ${cell.items.length} done`}
           />
         );
       }

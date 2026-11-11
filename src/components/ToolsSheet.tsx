@@ -12,7 +12,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { WorkspaceMode } from "../lib/workspace";
-import { IconCode, IconCube, IconFile, IconGame, IconGlobe, IconImage, IconMusic, IconNotebook, IconOrg, IconSlides, IconSparkle, IconStar, IconTable, IconVideo, IconWrench, IconX } from "./Icons";
+import { sure } from "../lib/sure";
+import { IconCode, IconCube, IconFile, IconGame, IconGlobe, IconImage, IconMusic, IconNotebook, IconOrg, IconSlides, IconChart, IconSparkle, IconTable, IconVideo, IconWrench, IconX } from "./Icons";
 
 type Kind = "pdf" | "docx" | "xlsx" | "pptx" | "video" | "cad" | "game" | "photo" | "studio" | "panacea" | "flowchart";
 
@@ -24,6 +25,9 @@ type Tool = {
   what: string;
   icon: (size: number) => JSX.Element;
 };
+
+/** The kinds that are files: the only ones "New" can start over. */
+const NEW_FILE = new Set<Kind>(["docx", "xlsx", "pptx", "pdf"]);
 
 const TOOLS: Tool[] = [
   { kind: "panacea", app: "Canvas", setting: "panacea", what: "Adaptive controls, documents, thinking boards, images and data", icon: (s) => <IconSparkle size={s} /> },
@@ -166,13 +170,13 @@ export function ToolsSheet({ session, onClose, onTrouble, onOpened, onAsk, openM
           </button>
         </div>
         <div className="modal-body tools-body">
-          <p className="jf-hint">Start work inside Panacea with a blank file or project. Everything stays in one scene;
-            once there is work, the buttons at the canvas's bottom-left jump to it, or show all of it at once.</p>
           {on === null && !error && <p className="jf-hint" role="status">Loading capabilities…</p>}
           {error && <p className="set-warn" role="alert">{error}</p>}
           <div className="tool-tiles">
             {TOOLS.map((tool) => {
               const missing = installed[tool.setting] === false;
+              // An app this server has no editor for is not offered: a tile that can only say "not installed" is chrome for nothing.
+              if (missing) return null;
               const off = missing || (on !== null && on[tool.setting]?.enabled === false);
               const why = missing ? "Not installed on this server" : "Switched off on the Tools page";
               const opened = tool.kind !== "flowchart" && openModes.includes(tool.setting) && !!onSelect;
@@ -192,9 +196,12 @@ export function ToolsSheet({ session, onClose, onTrouble, onOpened, onAsk, openM
                   </span>
                   {busy === tool.kind && <span className="attach-spin" aria-hidden="true" />}
                 </button>
-                {opened && <button type="button" className="btn tiny ghost tool-new" disabled={off || busy !== null}
-                  onClick={() => void open(tool)} title={`Create new ${tool.app} work, replacing the current file in this mode`}>
-                  New · replace current
+                {/* Only a file can be started over (a document, a workbook, a deck, a PDF); a song, a model, a game and the
+                    canvas are the chat's own, and "new" there would only reopen them. It replaces what is open, so it asks. */}
+                {opened && NEW_FILE.has(tool.kind) && <button type="button" className="btn tiny ghost tool-new" disabled={off || busy !== null}
+                  onClick={() => { void sure(`Start a new file in ${tool.app}? The one that is open is closed; it stays in Artifacts if it was saved.`, "Start new").then((yes) => { if (yes) void open(tool); }); }}
+                  title={`Start a new file in ${tool.app}, in place of the one that is open`} aria-label={`Start a new file in ${tool.app}`}>
+                  New
                 </button>}
                 </div>
               );
@@ -221,17 +228,13 @@ export function ToolsSheet({ session, onClose, onTrouble, onOpened, onAsk, openM
               title={widgetsOff ? "Explainers are switched off in Panacea's capabilities" : "Ask for an interactive explainer"}
               onClick={() => { if (openModes.includes("widget") && onSelect) onSelect("widget"); else onAsk("Make an interactive widget that shows "); onClose(); }}
             >
-              <span className="tool-tile-icon"><IconSparkle size={20} /></span>
+              <span className="tool-tile-icon"><IconChart size={20} /></span>
               <span className="tool-tile-main">
                 <b>Explainers</b>
                 <em>{widgetsOff ? "switched off on the Tools page" : "An interactive explanation in Panacea"}</em>
               </span>
             </button>
           </div>
-          <p className="jf-hint tools-more">
-            <IconStar size={12} /> Web and Apps &amp; code open in Panacea when you ask to browse a page or build an app.
-            Commands run as collapsible cards in the conversation, not in a separate terminal.
-          </p>
         </div>
       </div>
     </div>,

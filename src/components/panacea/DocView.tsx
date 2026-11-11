@@ -136,7 +136,6 @@ export function DocView({ surface }: { surface: Surface }) {
         >
           {mode === "agent" ? "Autora writes" : "You write"}
         </button>
-        <span>{mode === "agent" ? "Every change is a step you can undo" : "Autora formats and structures; the words are yours"}</span>
       </div>
       <DocSide surface={surface} />
       <div className="pa-doc-scroll">

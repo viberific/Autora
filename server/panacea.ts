@@ -825,6 +825,16 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
       } else return refuse("Give `recipe` (a library id), `tree` (atoms), or `parts` (nested layout and recipe references).");
       if ("error" in placed) refuse(placed.error);
       const panel = placed as Panel;
+      /* The agent has chosen the panel this work needs, so what the rules put out or offered for the same job gives way
+         to it: the standing offer beside that surface is withdrawn, and a starter chart nobody has touched is replaced
+         by the chart that was asked for. Asking for one chart used to leave three, the asked-for one the least seen. */
+      if (state === "live" && panel.context !== "general") {
+        const charts = (node: unknown): boolean => !!node && typeof node === "object"
+          && ((node as { atom?: string }).atom === "chart" || ((node as { children?: unknown[] }).children ?? []).some(charts));
+        const isChart = charts(panel.tree);
+        c.panels = c.panels.filter((other) => other.id === panel.id || other.context !== panel.context || other.by !== "rule" || other.pinned || other.touched
+          || !(other.state === "ghost" || (isChart && charts(other.tree))));
+      }
       if (args.writes === "agent") panel.writes = "agent";
       // Values it opens with: checked like any other.
       const problems: string[] = [];
@@ -966,7 +976,10 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
       if (typeof args.document === "string") {
         if (args.document.length > MAX_DOC_TEXT) refuse(`That is more than ${MAX_DOC_TEXT.toLocaleString()} characters; a document starts smaller.`);
         const mode: DocMode = args.mode === "agent" ? "agent" : "guide";
-        const { surface, panels } = addSurface(c, { kind: "doc", name: `${title ?? "Document"}.md`, title: title ?? "Document", doc: createDoc(args.document, mode) });
+        // Called by its own first heading when no title was given: "Document" names nothing.
+        const heading = /^#{1,3}\s+(.+)$/m.exec(args.document)?.[1]?.replace(/[*_`]/g, "").trim().slice(0, 80);
+        const called = title ?? (heading || "Document");
+        const { surface, panels } = addSurface(c, { kind: "doc", name: `${called}.md`, title: called, doc: createDoc(args.document, mode) });
         return { text: docAdded(surface, panels), preview: surface.title };
       }
       if (typeof args.board === "string" || typeof args.flowchart === "string") {
