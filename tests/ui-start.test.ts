@@ -65,7 +65,7 @@ async function main() {
       await sleep(200);
     });
 
-    await test("a missing editor says so in its frame, and Canvas says what to do first", async () => {
+    await test("a missing editor says so in its frame, and opening Canvas says it is open and nothing more", async () => {
       const built = fs.existsSync("dist/spectra-editor/index.html");
       const res = await fetch(`${app.base}/spectra-editor/index.html`);
       if (!built) {
@@ -76,7 +76,9 @@ async function main() {
       await page.goto(`${app.base}/?session=${sid}`);
       await page.locator('button[aria-label="Panacea capabilities"]').first().click();
       await page.locator('.tool-tile:has(.tool-tile-main b:text-is("Canvas"))').click();
-      await page.waitForFunction(() => document.body.innerText.includes("Drop a photo or a table"), null, { timeout: 10_000 });
+      // It says the canvas is open, and prints no instructions about what to do on it (CLAUDE.md: no standing instructions).
+      await page.waitForFunction(() => document.body.innerText.includes("is open."), null, { timeout: 10_000 });
+      assert.ok(!(await page.innerText("body")).includes("Drop a photo or a table"), "no instructions are printed for the blank canvas");
       assert.ok(!(await page.innerText("body")).includes("mode is now"), "opening a capability does not change the chat's mode");
     });
 

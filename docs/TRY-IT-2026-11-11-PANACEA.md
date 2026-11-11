@@ -37,7 +37,8 @@ dock's labels; P2-8's "Card colour" with nothing selected; P2-11; P2-12's empty 
 P2-13's `document.pdf`; P2-14 (console errors from the fetched editors); P3-1 to P3-7. Also seen while fixing: with every
 editor built, these fail on `main` too, unchanged by this work: `ui-panacea-connect` ("Music has no node": a song can now go
 to Video), `ui-video` and `ui-pdfwindow` (they press Close and do not answer its "Close …?" question), `ui-office` (two
-"Hand back" buttons), `ui-office-rail`, `ui-office-phone`, `ui-office-engines`.
+"Hand back" buttons), `ui-office-rail`, `ui-office-phone`, `ui-office-engines`, `ui-immersive` (the Jump dock is hidden while a phone's window is full
+screen) and `toolbudget` (the briefing is 31,078 characters here against a budget of 29,000).
 
 ## How this was tested
 
