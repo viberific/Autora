@@ -6534,9 +6534,9 @@ button.dock-card:hover { border-color: var(--border-strong); }
   display: flex; flex-direction: column;
 }
 .app-pane[data-pane='browser'] .cell.shot .cell-top { border-bottom: 1px solid var(--border); }
-.app-pane[data-pane='browser'] .shot-stage.is-big { flex: 1; min-height: 0; display: flex; }
-.app-pane[data-pane='browser'] .shot-stage.is-big .frame { max-height: none; height: 100%; }
-.app-pane[data-pane='browser'] .shot-stage.is-big .frame img { height: 100%; object-fit: contain; }
+.app-pane[data-pane='browser'] .shot-stage { flex: 1; min-height: 0; display: flex; }
+.app-pane[data-pane='browser'] .shot-stage .frame { max-height: none; height: 100%; }
+.app-pane[data-pane='browser'] .shot-stage .frame img { height: 100%; object-fit: contain; }
 
 /* The explainer the agent drew, in a window of its own: its frame fills what the strip leaves, at whatever width
    the column has, so a chart or an orbit is drawn at the size it was meant for rather than in a card. */

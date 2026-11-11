@@ -778,14 +778,36 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
         }, `${how === "move" ? "Moved" : "Resized"} ${s.title}`);
       });
   };
+  /** The shape of the picture a browser or app window shows (width over height), and what is around it. */
+  const pictureFit = (id: string): { ratio: number; chrome: number; side: number } | null => {
+    const win = root.current?.querySelector<HTMLElement>(`[data-work="${CSS.escape(id)}"]`);
+    if (!win || !["browser", "app"].includes(win.dataset.engine ?? "")) return null;
+    const img = win.querySelector<HTMLImageElement>(".frame img, img.frame, .app-canvas img");
+    const stage = win.querySelector<HTMLElement>(".shot-stage, .app-canvas")?.closest<HTMLElement>(".shot-stage") ?? win.querySelector<HTMLElement>(".app-canvas")?.parentElement;
+    if (!img || !stage || !img.naturalWidth || !img.naturalHeight) return null;
+    const css = getComputedStyle(stage);
+    const padX = parseFloat(css.paddingLeft) + parseFloat(css.paddingRight), padY = parseFloat(css.paddingTop) + parseFloat(css.paddingBottom);
+    return {
+      ratio: img.naturalWidth / img.naturalHeight,
+      chrome: win.offsetHeight - (stage.clientHeight - padY),
+      side: win.offsetWidth - (stage.clientWidth - padX),
+    };
+  };
   const engineResize = (id: string) => (e: ReactPointerEvent<HTMLElement>) => {
     const box = engineBoxesRef.current[id];
     if (!box) return;
     raiseIt(id);
-    gesture(e, (dx, dy) => setEngineBoxes((before) => ({ ...before, [id]: { ...box, w: Math.max(320, box.w + dx), h: Math.max(240, box.h + dy) } })),
+    /* A page or an app is a picture of a fixed shape: the corner pull keeps it, so the window never has bars or a
+       blank band beside or below it. Everything else around the picture (title bar, toolbar) keeps its own height. */
+    const fit = pictureFit(id);
+    const sized = (dx: number, dy: number) => {
+      const w = Math.max(320, box.w + dx);
+      return { w, h: fit ? Math.max(240, Math.round(fit.chrome + (w - fit.side) / fit.ratio)) : Math.max(240, box.h + dy) };
+    };
+    gesture(e, (dx, dy) => setEngineBoxes((before) => ({ ...before, [id]: { ...box, ...sized(dx, dy) } })),
       (dx, dy) => {
         if (Math.abs(dx) + Math.abs(dy) < 3) return;
-        const w = Math.max(320, box.w + dx), h = Math.max(240, box.h + dy);
+        const { w, h } = sized(dx, dy);
         edit((d) => { const wins = d.windows ?? (d.windows = []); const t = placeWindow(wins, id, { w, h }, { front: true }); if (t) delete t.was; }, `Resized ${windowName(id)}`);
       });
   };
