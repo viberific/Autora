@@ -1785,14 +1785,18 @@ export function App() {
   }, [view.buckets]);
   const requiresInput = !!view.asking || view.approvals.some((approval) => !approval.settled);
   // What the phone's retracted sheet shows of the conversation: the last two things said.
-  const chatPreview = useMemo(() => previewOf(view.transcript, 3), [view.transcript]);
+  const chatPreview = useMemo(() => {
+    const lines = previewOf(view.transcript, 3);
+    // Folded away while a question waits: the strip still says so, and a tap brings the card back.
+    if (requiresInput) lines.push({ who: "Autora", text: "Waiting for your answer…" });
+    return lines;
+  }, [view.transcript, requiresInput]);
   const hiddenSteps = useMemo(() => hiddenStepCount(view.buckets[view.buckets.length - 1]?.cells ?? []), [view.buckets]);
   // Nothing said yet (and nothing waiting to be answered): the conversation is only its message box.
   const chatEmpty = !requiresInput && !view.busy && outbox.length === 0 && view.transcript.length === 0 && !view.buckets.some((bucket) => bucket.prompt || bucket.attachments.length > 0);
   const retractChat = useCallback(() => {
-    if (requiresInput) { setNotice("A question or permission needs your answer before work can continue."); return; }
     setChatCollapsed((collapsed) => !collapsed);
-  }, [requiresInput]);
+  }, []);
   const openPanaceaChooser = useCallback(async () => {
     if (workspaceOpening) return;
     if (toolsOpen) { setToolsOpen(false); return; }
@@ -1812,6 +1816,11 @@ export function App() {
     const url = closeUrlFor(mode, sessionId);
     if (url) void fetch(url, { method: "POST" }).catch(() => setNotice("That surface could not be closed."));
     else if (mode === "widget") setWidgetClosed(widgetSeq);
+    else if (mode === "browser") {
+      void fetch(`/api/sessions/${encodeURIComponent(sessionId)}/browser`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "close" }),
+      }).catch(() => setNotice("That surface could not be closed."));
+    }
   }, [sessionId, widgetSeq]);
   /* The browser window is the live view while it is open, so the thread's card
      stops following the feed: one live page, not the same one in two places. */
@@ -2283,10 +2292,10 @@ export function App() {
             it and coming back keeps your place in the thread. */}
         <div className="chat-view pw-full-workspace" role="main" hidden={page !== "chat"}>
 
-        <ConversationFlow collapsed={phoneLayout && (chatCollapsed || quietPhone || fullPhone) && !requiresInput}
+        <ConversationFlow collapsed={phoneLayout && (chatCollapsed || quietPhone || fullPhone)}
           onToggle={!phoneLayout ? undefined : fullPhone ? () => setWindowFull(false) : quietPhone ? () => setSheetAsked(true) : retractChat}
           phone={phoneLayout} float={chatLayout.float} onFloat={chatLayout.setFloat} empty={chatEmpty}
-          sheet={chatLayout.sheet} onSheet={chatLayout.setSheet} locked={requiresInput} preview={chatPreview} hiddenSteps={hiddenSteps}
+          sheet={chatLayout.sheet} onSheet={chatLayout.setSheet} preview={chatPreview} hiddenSteps={hiddenSteps}
           conversation={<>
           <Thread
             workspaceHosted

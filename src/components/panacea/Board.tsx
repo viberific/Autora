@@ -14,6 +14,7 @@ import { fitWorkView, revealWorkView, type WorkBox } from "../../lib/workspaceVi
 import type { HostedWork } from "../../lib/workspaceScene";
 import { WORKSPACE_MODES, type WorkspaceMode } from "../../lib/workspace";
 import { usePhone } from "../../lib/stage";
+import { sure } from "../../lib/sure";
 import { jumpTo, zoomAt } from "../../lib/panacea/workspace-camera";
 import { engineSends, surfaceSends, takersOf, type SentFile } from "../../lib/panacea/flows";
 import { workViewport } from "../../lib/frameCoordinates";
@@ -1117,7 +1118,8 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
               <button type="button" aria-pressed={enginePins.has(work.id)} aria-label={`Pin ${work.title} work`} onClick={() => setEnginePins((before) => {
                 const next = new Set(before); if (next.has(work.id)) next.delete(work.id); else next.add(work.id); return next;
               })}>Pin</button>
-              {onCloseWork && work.mode !== "browser" && <button type="button" aria-label={`Close ${work.title} work`} onClick={() => onCloseWork(work.mode)}><IconX size={14} /></button>}
+              {onCloseWork && <button type="button" aria-label={`Close ${work.title} work`}
+                onClick={() => { void sure(`Close ${work.title}?`, "Close").then((yes) => { if (yes) onCloseWork(work.mode); }); }}><IconX size={14} /></button>}
             </header>
             <div className="pw-engine-body"><EngineFrameScope id={work.id} full={isMaxed(work.id)} onFull={onWindowFull}>{work.content}</EngineFrameScope></div>
             <i className="pa-resize" role="presentation" title="Drag to resize" onPointerDown={engineResize(work.id)} />

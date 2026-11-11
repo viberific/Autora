@@ -206,24 +206,8 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Glass goes all the way through: every pane, card, menu and dialog is now
-  dark, frosted, see-through glass, so your work and the glow behind show
-  through. On a phone the chat is a glass sheet floating over the foot of
-  the canvas, with your work framed above it. An empty chat is just the
-  message box. On a desktop the chat is only as tall as what has been said,
-  with a Move button in its top-left corner and a resize pull in its top
-  right. Your message springs up from the box and Autora's reply
-  settles in beside it. The to-do card joins the message box edge to edge,
-  and a task that finished while you were on another page is simply ticked
-  instead of replaying when you come back. On a phone the jump, zoom and
-  show-all buttons fold into one small button until you tap it. The chat's
-  text and controls are now the same size as the rest of the app, the folded
-  side menu is slimmer with a square highlight, and Autora may use an emoji
-  where it fits. There is one bar at the top now: the canvas name, Load and
-  Save moved into it. Panels Autora offers appear where you can see them,
-  clear of the chat and the buttons, and your work is framed around the chat
-  as it grows or moves. You can connect pieces of work: drag a line from the
-  node in a picture's title bar onto another window (or click the node and
-  pick the app) and the picture opens there. Pasting plain text makes a page,
-  new work no longer lands on top of an open app, and Tidy keeps each piece
-  with its controls.
+  On a phone you can now fold the chat away even while a card is waiting for
+  your answer: the folded strip says it is waiting, and a tap brings the
+  card back. The browser window on the canvas has one title bar instead of
+  two, and every work window on the canvas now has a close button (X) that
+  asks before it closes the window.
