@@ -127,7 +127,7 @@ await test("a panel's shape is its fingerprint: other words and values, same sha
 // ------------------------------------------------------------- the library --
 
 await test("the library has twenty pieces per domain plus native Flowchart (Music, 3D, Video and Games have only what their engines can do); every recipe passes the rulebook", () => {
-  for (const d of DOMAINS) assert.equal(BUILTINS.filter((r) => r.domain === d).length, d === "general" ? 21 : d === "music" ? 13 : d === "3d" ? 8 : d === "video" || d === "game" ? 9 : 20, d);
+  for (const d of DOMAINS) assert.equal(BUILTINS.filter((r) => r.domain === d).length, d === "general" ? 21 : d === "music" ? 13 : d === "3d" ? 12 : d === "video" ? 9 : d === "game" ? 10 : 20, d);
   assert.equal(new Set(BUILTINS.map((r) => r.id)).size, BUILTINS.length, "ids are unique");
   const c = withSurfaces();
   for (const r of BUILTINS) {

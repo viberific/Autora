@@ -37,6 +37,9 @@ import {
   SquareMinus,
   SquareRoundCorner,
   Star,
+  Sun,
+  Grid3x3,
+  Wind,
   Trash2,
   Triangle,
   TriangleRight,
@@ -47,8 +50,15 @@ import {
 } from 'lucide-react';
 import { SHAPE_LABELS, ShapeKind } from '../utils/primitives';
 import Sidebar from './Sidebar';
+import { HairPanel, LightPanel, MaterialPanel, TexturePanel } from './SurfacePanels';
+import type { HairArgs, SurfaceArgs } from '../core/ops';
+import type { GroomBrush } from '../utils/hair';
+import type { SceneLook, Surface } from '../types';
 import { useFading } from '../hooks/useFading';
 import { EdgePanel, FacePanel, SculptPanel, SizePositionPanel, sculptable, selectionMode, type TopBarProps } from './TopBar';
+
+/** The shape has something the Texture card works: a pattern or a picture. */
+const hasTexture = (b?: { surface?: Surface }) => !!(b?.surface?.pattern || b?.surface?.image || b?.surface?.reliefImage || b?.surface?.roughnessImage);
 
 const SHAPE_ICONS: Record<ShapeKind, LucideIcon> = {
   box: Square,
@@ -103,6 +113,17 @@ export interface RailProps extends TopBarProps {
   onBreakRepeat: () => void;
   onPattern: () => void;
   onDelete: () => void;
+  /** What the selected shape is made of: its finish, numbers, pattern and picture. */
+  onSurface: (args: SurfaceArgs) => void;
+  /** Its hair or fur. */
+  onHair: (args: HairArgs) => void;
+  groomBrush: GroomBrush;
+  onGroomBrush: (patch: Partial<GroomBrush>) => void;
+  /** The grooming brush is in the person's hand: a press on the hair strokes it. */
+  groomOn: boolean;
+  onGroomOn: (on: boolean) => void;
+  look: SceneLook | undefined;
+  onLook: (patch: Partial<SceneLook>) => void;
 }
 
 interface Tool {
@@ -177,7 +198,10 @@ export default function Rail(props: RailProps) {
     { id: 'breakrepeat', label: 'Make copies separate', group: 'Combine', icon: Unlink, color: C.note, disabled: !props.repeated, run: props.onBreakRepeat },
     { id: 'size', label: 'Size & position', group: 'Shape', icon: Move, color: C.insert, phone: true, desktop: true, on: openId === 'size', disabled: n < 1, hint: picked, run: toggleOpen('size') },
     { id: 'props', label: 'Properties', group: 'Shape', icon: SlidersHorizontal, color: C.select, on: openId === 'props', disabled: !(props.selected.length === 1 && !props.group), hint: picked, run: toggleOpen('props') },
-    { id: 'material', label: 'Material', group: 'Shape', icon: Palette, color: C.text, desktop: true, on: openId === 'material', disabled: !(props.selected.length === 1 && !props.group), hint: picked, run: toggleOpen('material') },
+    { id: 'material', label: 'Material', group: 'Surface', icon: Palette, color: C.text, desktop: true, on: openId === 'material', disabled: !(props.selected.length === 1 && !props.group), hint: picked, run: toggleOpen('material') },
+    { id: 'texture', label: 'Texture', group: 'Surface', icon: Grid3x3, color: C.gold, desktop: true, on: openId === 'texture', disabled: !(props.selected.length === 1 && !props.group), hint: picked, run: toggleOpen('texture') },
+    { id: 'hair', label: 'Hair', group: 'Surface', icon: Wind, color: C.amber, phone: true, desktop: true, on: openId === 'hair', disabled: !(props.selected.length === 1 && !props.group && !props.selected[0]?.frame), hint: 'Select a shape that stands upright', run: toggleOpen('hair') },
+    { id: 'light', label: 'Light', group: 'Surface', icon: Sun, color: C.amber, on: openId === 'light', disabled: props.bodyCount < 1, run: toggleOpen('light') },
     { id: 'sculpt', label: 'Sculpt', group: 'Shape', icon: Brush, color: C.draw, phone: true, desktop: true, on: openId === 'sculpt', disabled: !(props.selected.length === 1 && sculptable(props.selected[0])), hint: 'Select a mesh shape', run: toggleOpen('sculpt') },
     { id: 'edges', label: 'Pick edges', group: 'Shape', icon: SquareDashed, color: C.shape, on: openId === 'edges', disabled: mode !== 'edge', hint: 'Tap an edge of a shape', run: toggleOpen('edges') },
     { id: 'face', label: 'Push & pull', group: 'Shape', icon: Layers3, color: C.note, on: openId === 'face', disabled: mode !== 'face', hint: 'Tap a face of a shape', run: toggleOpen('face') },
@@ -212,6 +236,9 @@ export default function Rail(props: RailProps) {
     if (t.id === 'shapes' || t.id === 'draw') return true;
     if (t.id === 'library') return props.library.length > 0;
     if (t.id === 'file') return props.bodyCount > 0;
+    // Texture and Hair stand on the bar once the shape has a pattern, a picture or hair; until then Material leads to them.
+    if (t.id === 'texture') return !t.disabled && hasTexture(props.selected[0]);
+    if (t.id === 'hair') return !t.disabled && !!props.selected[0]?.hair;
     return !t.disabled;
   };
   const wanted = ids.filter((id) => needed(byId.get(id)!));
@@ -246,6 +273,8 @@ export default function Rail(props: RailProps) {
 
   const press = (t: Tool) => { setGrid(false); t.run(); };
   const sidebar = props.sidebar;
+  // A shape's own cards go with the shape: picked away, they close.
+  const one = props.selected.length === 1 && !props.group;
   const panel = (() => {
     switch (auto) {
       case 'shapes':
@@ -294,7 +323,10 @@ export default function Rail(props: RailProps) {
         );
       case 'size': return <SizePositionPanel {...props} />;
       case 'props': return <Sidebar {...sidebar} section="properties" />;
-      case 'material': return <Sidebar {...sidebar} section="material" />;
+      case 'material': return one ? <MaterialPanel selected={props.selected} onSurface={props.onSurface} onOpen={setOpenId} /> : null;
+      case 'texture': return one ? <TexturePanel selected={props.selected} onSurface={props.onSurface} /> : null;
+      case 'hair': return !one || props.selected[0].frame ? null : <HairPanel selected={props.selected} onHair={props.onHair} groomBrush={props.groomBrush} onGroomBrush={props.onGroomBrush} groomOn={props.groomOn} onGroomOn={props.onGroomOn} />;
+      case 'light': return <LightPanel look={props.look} onLook={props.onLook} />;
       case 'file': return <Sidebar {...sidebar} section="export" />;
       case 'edges': return <EdgePanel {...props} />;
       case 'face': return <FacePanel {...props} />;

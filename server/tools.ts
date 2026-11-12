@@ -2041,7 +2041,7 @@ const LONG_TOOLS = new Set([
   "video_export", "video_import", "studio_export", "cad_export", "cad_doc_set",
   "pdf_compose", "pdf_edit", "pdf_compress", "pdf_pages",
   "office_create", "office_edit", "office_convert", "office_pdf",
-  "game_import", "game_play", "notebook", "schedule",
+  "game_import", "game_play", "game_from_model", "notebook", "schedule",
 ]);
 
 /**
@@ -3962,6 +3962,7 @@ async function runToolUnredacted(
       case "game_template":
       case "game_import":
       case "game_play":
+      case "game_from_model":
         if (ctx.memory.incognito) {
           return { ok: false, summary: "Not available in an incognito chat: the game window keeps its game on disk." };
         }

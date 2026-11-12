@@ -8,11 +8,15 @@ import * as THREE from 'three';
 import { AnimatePresence, motion } from 'motion/react';
 import { BevelPicker, DrawChip, MeasureReadout, RepeatChip } from './FloatingControls';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { hairObject, hairSignature, lighting, lookSignature, surfaceMaterial } from './surfaceLook';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
-import { BevelStyle, Body3D, EdgeSel, FaceSel, MATERIAL_PRESETS, DrawForm, DrawSession, Frame, Point2D, RepeatSession, ShapeGroup } from '../types';
+import { BevelStyle, Body3D, EdgeSel, FaceSel, DrawForm, DrawSession, Frame, GroomStroke, Point2D, RepeatSession, SceneLook, ShapeGroup } from '../types';
+import { obstaclesNear, SCENE_STRANDS, settleHair, type GroomBrush } from '../utils/hair';
+
+/** How long the model must be still before its hair is grown again. */
+const HAIR_SETTLE_MS = 160;
 import { withGroupMates } from '../utils/groups';
 import { Brush, SculptMesh } from '../utils/sculpt';
 import { buildBodyGeometry, buildBodyShape, featureEdges, getInteriorAnchor } from '../utils/bodyGeometry';
@@ -162,6 +166,12 @@ export interface ModelViewer3DProps {
   onToggleMove?: () => void;
   /** Sculpting: while set, a press on this mesh shape works the surface with the brush instead of picking or moving it. */
   sculpt?: { bodyId: string; brush: Brush } | null;
+  /** How the scene is lit (the model's look). */
+  look?: SceneLook;
+  /** Grooming: while set, a press on this shape's hair strokes it with the brush instead of picking or moving the shape. */
+  groom?: { bodyId: string; brush: GroomBrush } | null;
+  /** A finished grooming stroke (the person's own command, `hair_groom`). */
+  onGroom?: (id: string, stroke: GroomStroke, mirror?: 'x' | 'y') => void;
   /** A finished brush stroke: the shape's surface points after it (the person's own command, `sculpt_apply`). */
   onSculpt?: (id: string, positions: number[]) => void;
 }
@@ -293,40 +303,6 @@ function clearGroup(group: THREE.Group) {
   }
 }
 
-function createMaterial(body: Body3D): THREE.Material {
-  const preset = MATERIAL_PRESETS.find((p) => p.id === body.materialType) || MATERIAL_PRESETS[0];
-  const color = body.color || preset.color;
-  const common = {
-    color,
-    roughness: preset.roughness,
-    metalness: preset.metalness,
-    polygonOffset: true,
-    polygonOffsetFactor: 1,
-    polygonOffsetUnits: 1,
-  };
-  switch (body.materialType) {
-    case 'glossy':
-      return new THREE.MeshPhysicalMaterial({ ...common, clearcoat: 1, clearcoatRoughness: 0.08 });
-    case 'glass':
-      return new THREE.MeshPhysicalMaterial({
-        ...common,
-        transmission: preset.transmission ?? 0.8,
-        ior: preset.ior ?? 1.5,
-        thickness: 8,
-        transparent: true,
-        opacity: 0.92,
-      });
-    case 'neon':
-      return new THREE.MeshStandardMaterial({
-        ...common,
-        emissive: color,
-        emissiveIntensity: preset.emissiveIntensity ?? 1.2,
-      });
-    default:
-      return new THREE.MeshStandardMaterial(common);
-  }
-}
-
 /** Stands a shape on its wall (or leaves it upright). */
 function placeFrame(root: THREE.Group, body: Body3D) {
   root.matrixAutoUpdate = false;
@@ -356,8 +332,6 @@ const bodySignature = (b: Body3D) =>
     b.elevation,
     b.edgeBevels,
     b.cornerBevels,
-    b.materialType,
-    b.color,
   ]);
 
 interface BodyEntry {
@@ -367,6 +341,9 @@ interface BodyEntry {
   group: THREE.Group;
   outline: THREE.LineSegments;
   signature: string;
+  /** What its material was made from, and its hair: either changes without the shape being built again. */
+  look: string;
+  hair: string;
 }
 
 export default function ModelViewer3D({
@@ -405,6 +382,9 @@ export default function ModelViewer3D({
   onFaceValue,
   sculpt,
   onSculpt,
+  look,
+  groom,
+  onGroom,
 }: ModelViewer3DProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   /** The circle that shows how far the sculpt brush reaches; moved by the stroke code, not by React. */
@@ -454,6 +434,47 @@ export default function ModelViewer3D({
   const popRef = useRef<{ start: number } | null>(null);
   const popKeyRef = useRef('');
   const invalidateRef = useRef<(shadows?: boolean) => void>(() => {});
+  const applyLookRef = useRef<(look: SceneLook | undefined) => void>(() => {});
+  const hairTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(hairTimer.current), []);
+
+  /**
+   * Grows the hair the model asks for, on the surfaces as they are now: only where it changed (its numbers, or the surface it
+   * grows from), sharing one strand budget between every shape with hair, so a scene of many furry things stays quick.
+   * Grown in one go after the model settles (HAIR_SETTLE_MS), keeping the old hair on screen until then.
+   */
+  const growHair = () => {
+    const entries = [...entriesRef.current.values()];
+    const strands = entries.filter((e) => e.body.hair && e.body.hair.style !== 'fur' && !e.signature.endsWith('|fast')).length;
+    const most = Math.max(200, Math.floor(SCENE_STRANDS / Math.max(1, strands)));
+    // Every shape as something hair rests on rather than passing through: its box in the world (round for a mesh shape).
+    const solids = entries.map((e) => {
+      const g = (e.group.children[0] as THREE.Mesh).geometry;
+      g.computeBoundingBox();
+      // The root's matrix is set by hand (a wall shape's frame), never recomposed here.
+      return { id: e.body.id, obstacle: { box: g.boundingBox!.clone().applyMatrix4(e.root.matrix), round: !!e.body.mesh } };
+    });
+    let grew = false;
+    for (const e of entries) {
+      const mesh = e.group.children[0] as THREE.Mesh;
+      const obstacles = e.body.hair && e.body.hair.style !== 'fur' ? obstaclesNear(mesh.geometry, settleHair(e.body.hair), solids.filter((x) => x.id !== e.body.id).map((x) => x.obstacle)) : [];
+      // What the hair rests on is part of what it is grown from: a shape moved under it grows it again.
+      const resting = obstacles.map((o) => [o.box.min.toArray(), o.box.max.toArray()].flat().map(Math.round).join(',')).join(';');
+      const want = e.body.hair && !e.signature.endsWith('|fast') ? `${hairSignature(e.body)}|${most}|${resting}` : '';
+      if (e.hair === want && e.group.userData.hairOn === mesh.geometry) continue;
+      e.group.children.filter((c) => c.userData.hair).forEach((c) => { e.group.remove(c); disposeObject(c); });
+      e.hair = want;
+      e.group.userData.hairOn = mesh.geometry;
+      grew = true;
+      if (!want) continue;
+      const grown = hairObject(mesh.geometry, e.body, most, obstacles);
+      if (grown) {
+        grown.visible = !live.current.xray;
+        e.group.add(grown);
+      }
+    }
+    if (grew) invalidateRef.current(true);
+  };
   const refreshOutlinesRef = useRef<() => void>(() => {});
   const applyXrayRef = useRef<() => void>(() => {});
   const clearHoverRef = useRef<() => void>(() => {});
@@ -505,6 +526,9 @@ export default function ModelViewer3D({
     onFaceValue,
     sculpt,
     onSculpt,
+    look,
+    groom,
+    onGroom,
   };
 
   // ---- Scene setup (once) -------------------------------------------------
@@ -517,8 +541,10 @@ export default function ModelViewer3D({
 
     const scene = new THREE.Scene();
     // The background follows the theme (Autora sends its own when this is its window).
-    scene.background = new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--color-slate-950').trim() || BACKGROUND);
-    scene.fog = new THREE.Fog(BACKGROUND, 900, 2800);
+    const backdrop = new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--color-slate-950').trim() || BACKGROUND);
+    const fog = new THREE.Fog(BACKGROUND, 900, 2800);
+    scene.background = backdrop;
+    scene.fog = fog;
 
     const camera = new THREE.PerspectiveCamera(40, width / height, 1, 4000);
     cameraRef.current = camera;
@@ -538,15 +564,43 @@ export default function ModelViewer3D({
     container.appendChild(renderer.domElement);
     viewportSize.set(width, height);
 
-    // Image-based lighting: without an environment map, metals render near-black.
+    // Image-based lighting: without an environment map, metals render near-black. The model's look chooses which.
     const pmrem = new THREE.PMREMGenerator(renderer);
-    const envTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    scene.environment = envTexture;
-    scene.environmentIntensity = 0.55;
-
+    let envTexture: THREE.Texture | null = null;
+    let lit = '';
     const key = new THREE.DirectionalLight('#ffffff', 1.15);
-    key.position.set(240, 420, 260);
+    const applyLook = (look: SceneLook | undefined) => {
+      const want = JSON.stringify(look ?? null);
+      if (want === lit) return;
+      lit = want;
+      const l = lighting(look, pmrem);
+      envTexture?.dispose();
+      envTexture = l.texture;
+      scene.environment = envTexture;
+      scene.environmentIntensity = l.intensity;
+      // Outdoors the surroundings are seen behind the model too (softly), so glass shows what is behind it; the studio keeps the theme's backdrop.
+      if (l.backdrop) {
+        scene.background = envTexture;
+        scene.backgroundBlurriness = 0.5;
+        scene.backgroundIntensity = l.intensity;
+        scene.fog = null;
+      } else {
+        scene.background = backdrop;
+        scene.backgroundBlurriness = 0;
+        scene.backgroundIntensity = 1;
+        scene.fog = fog;
+      }
+      renderer.toneMappingExposure = l.exposure;
+      key.color.set(l.key.color);
+      key.intensity = l.key.intensity;
+      key.position.set(...l.key.position);
+      invalidateRef.current(true);
+    };
+    applyLookRef.current = applyLook;
+    applyLook(live.current.look);
     key.castShadow = true;
+    // Soft-edged shadows: hair and glass read better without hard pixel steps.
+    key.shadow.radius = 3;
     key.shadow.mapSize.set(1536, 1536);
     key.shadow.camera.near = 50;
     key.shadow.camera.far = 1400;
@@ -863,6 +917,8 @@ export default function ModelViewer3D({
         mesh.material = see ? mesh.userData.ghost : mesh.userData.solid;
         mesh.castShadow = !see;
         mesh.receiveShadow = !see;
+        // Seeing through a shape means seeing through its hair too.
+        entry.group.children.forEach((c) => { if (c.userData.hair) c.visible = !see; });
       });
       refreshOutlines();
       invalidate(true);
@@ -915,6 +971,9 @@ export default function ModelViewer3D({
       } else if (hit?.type === 'edge') {
         cursor = 'pointer';
         text = 'Click to select this edge and bevel it · drag to move the shape';
+      } else if (hit?.type === 'body' && live.current.groom?.bodyId === hit.bodyId) {
+        cursor = 'crosshair';
+        text = 'Stroke the hair to groom it · drag empty space to turn the view';
       } else if (hit?.type === 'body') {
         const onSelectedFace = sameFace(live.current.selectedFace, hit.face);
         cursor = onSelectedFace ? 'ns-resize' : 'move';
@@ -1378,7 +1437,14 @@ export default function ModelViewer3D({
       const sc = live.current.sculpt;
       const entry = sc ? entriesRef.current.get(sc.bodyId) : undefined;
       const mesh = entry?.group.children.find((c): c is THREE.Mesh => c instanceof THREE.Mesh);
-      return sc && entry && mesh && entry.body.mesh && !entry.body.frame ? { sc, entry, mesh } : null;
+      return sc && entry && mesh && entry.body.mesh && !entry.body.frame ? { sc, entry, mesh, radius: sc.brush.radius } : null;
+    };
+    /** The shape whose hair the grooming brush works, when it is open. */
+    const groomTarget = () => {
+      const g = live.current.groom;
+      const entry = g ? entriesRef.current.get(g.bodyId) : undefined;
+      const mesh = entry?.group.children[0] as THREE.Mesh | undefined;
+      return g && entry && mesh && entry.body.hair && !entry.body.frame ? { g, entry, mesh, radius: g.brush.radius } : null;
     };
     /** Where a pointer at this spot meets the sculpted shape: in the world, and in the shape's own numbers (x, y, height). */
     const sculptHit = (clientX: number, clientY: number, mesh: THREE.Mesh, lift: number) => {
@@ -1431,6 +1497,8 @@ export default function ModelViewer3D({
       mesh.geometry.dispose();
       mesh.geometry = geometry;
       entry.outline.visible = false;
+      // The hair stood on the old surface: it goes while the surface moves, and grows back on the finished one.
+      entry.group.children.forEach((c) => { if (c.userData.hair) c.visible = false; });
       const normal = camera.getWorldDirection(new THREE.Vector3()).negate();
       stroke = { id: sc.bodyId, mesh, sm, attr, lift, pointerId: e.pointerId, last: hit.model, plane: new THREE.Plane().setFromNormalAndCoplanarPoint(normal, hit.world), start: hit.world, changed: false };
       controls.enabled = false;
@@ -1498,6 +1566,66 @@ export default function ModelViewer3D({
       }
       live.current.onDragStateChange?.(false);
     };
+    /**
+     * A grooming stroke: the brush's path over the shape is drawn as a line while it goes, and handed back on release as one
+     * stroke (one undo step); the hair is then grown again with it.
+     */
+    interface Combing {
+      id: string;
+      pointerId: number;
+      lift: number;
+      mesh: THREE.Mesh;
+      path: number[];
+      line: THREE.Line;
+      world: THREE.Vector3[];
+    }
+    let combing: Combing | null = null;
+    const startGroom = (e: PointerEvent): boolean => {
+      const target = groomTarget();
+      if (!target || !e.isPrimary || e.button !== 0) return false;
+      const lift = target.entry.body.elevation ?? 0;
+      const hit = sculptHit(e.clientX, e.clientY, target.mesh, lift);
+      if (!hit) return false; // off the shape: let the view orbit
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([hit.world]), new THREE.LineBasicMaterial({ color: ACCENT_LIGHT, depthTest: false, transparent: true, opacity: 0.9 }));
+      line.renderOrder = 40;
+      previewGroupRef.current?.add(line);
+      combing = { id: target.g.bodyId, pointerId: e.pointerId, lift, mesh: target.mesh, path: [...hit.model], line, world: [hit.world] };
+      controls.enabled = false;
+      renderer.domElement.setPointerCapture(e.pointerId);
+      live.current.onDragStateChange?.(true);
+      showRing(e.clientX, e.clientY, hit.world, { radius: target.radius } as Brush);
+      invalidate();
+      return true;
+    };
+    const moveGroom = (e: PointerEvent) => {
+      const st = combing;
+      const g = live.current.groom;
+      if (!st || !g) return;
+      const hit = sculptHit(e.clientX, e.clientY, st.mesh, st.lift);
+      if (!hit) return;
+      const n = st.path.length;
+      const last: [number, number, number] = [st.path[n - 3], st.path[n - 2], st.path[n - 1]];
+      if (Math.hypot(hit.model[0] - last[0], hit.model[1] - last[1], hit.model[2] - last[2]) < Math.max(0.5, g.brush.radius * 0.2) || n >= 600) return;
+      st.path.push(...hit.model);
+      st.world.push(hit.world);
+      st.line.geometry.dispose();
+      st.line.geometry = new THREE.BufferGeometry().setFromPoints(st.world);
+      showRing(e.clientX, e.clientY, hit.world, { radius: g.brush.radius } as Brush);
+      invalidate();
+    };
+    const endGroom = (e: PointerEvent, cancelled: boolean) => {
+      const st = combing;
+      if (!st) return;
+      combing = null;
+      st.line.removeFromParent();
+      disposeObject(st.line);
+      controls.enabled = true;
+      if (renderer.domElement.hasPointerCapture(e.pointerId)) renderer.domElement.releasePointerCapture(e.pointerId);
+      const g = live.current.groom;
+      if (!cancelled && g) live.current.onGroom?.(st.id, { tool: g.brush.tool, path: st.path.map((v) => Math.round(v * 100) / 100), radius: g.brush.radius, strength: g.brush.strength }, g.brush.mirror === 'off' ? undefined : g.brush.mirror);
+      live.current.onDragStateChange?.(false);
+      invalidate();
+    };
     /** The brush circle follows the pointer over the shape when nothing is pressed. */
     const hoverRing = (e: PointerEvent) => {
       if (ringBusy) return;
@@ -1506,15 +1634,16 @@ export default function ModelViewer3D({
       const y = e.clientY;
       requestAnimationFrame(() => {
         ringBusy = false;
-        const target = sculptTarget();
+        const target = sculptTarget() ?? groomTarget();
         const hit = target && e.pointerType === 'mouse' ? sculptHit(x, y, target.mesh, target.entry.body.elevation ?? 0) : null;
-        showRing(x, y, hit?.world ?? null, target?.sc.brush);
+        showRing(x, y, hit?.world ?? null, target ? ({ radius: target.radius } as Brush) : undefined);
       });
     };
 
     const onPointerDown = (e: PointerEvent) => {
       if (live.current.draw) return;
       if (startStroke(e)) return; // the Draw tool reads the pointer while a sketch is open
+      if (startGroom(e)) return;
       trackTouchDown(e);
       pickPx = e.pointerType === 'touch' ? EDGE_PICK_TOUCH_PX : EDGE_PICK_PX;
       // A second finger means the user wants to orbit/pinch: abandon any one-finger drag.
@@ -1573,7 +1702,11 @@ export default function ModelViewer3D({
         if (e.pointerId === stroke.pointerId) moveStroke(e);
         return;
       }
-      if (live.current.sculpt) hoverRing(e);
+      if (combing) {
+        if (e.pointerId === combing.pointerId) moveGroom(e);
+        return;
+      }
+      if (live.current.sculpt || live.current.groom) hoverRing(e);
       trackTouchMove(e);
       if (drag || candidate) pending = { x: e.clientX, y: e.clientY, shift: e.shiftKey };
       else if (e.pointerType === 'mouse' && e.buttons === 0) pendingHover = { x: e.clientX, y: e.clientY };
@@ -1675,12 +1808,20 @@ export default function ModelViewer3D({
         endStroke(e, false);
         return;
       }
+      if (combing) {
+        endGroom(e, false);
+        return;
+      }
       trackTouchUp(e);
       finishPointer(e, false);
     };
     const onPointerCancel = (e: PointerEvent) => {
       if (stroke) {
         endStroke(e, true);
+        return;
+      }
+      if (combing) {
+        endGroom(e, true);
         return;
       }
       trackTouchUp(e);
@@ -1995,7 +2136,7 @@ export default function ModelViewer3D({
       entriesRef.current.clear();
       [bodyGroup, gizmoGroup, helperGroup, previewGroup, hoverGroup].forEach(clearGroup);
       [shadowCatcher, grid, axisX, axisY].forEach(disposeObject);
-      envTexture.dispose();
+      envTexture?.dispose();
       pmrem.dispose();
       renderer.dispose();
       renderer.domElement.remove();
@@ -2025,6 +2166,18 @@ export default function ModelViewer3D({
       if (existing?.body === body && existing.signature.endsWith('|fast') === fast) return; // untouched object
       const signature = bodySignature(body) + (fast ? '|fast' : '');
       if (existing && existing.signature === signature) {
+        const mesh = existing.group.children[0] as THREE.Mesh;
+        const look = lookSignature(body);
+        if (existing.look !== look) {
+          // Only the surface changed: a new material on the same geometry.
+          const solid = surfaceMaterial(body, () => invalidateRef.current(true));
+          (mesh.userData.solid as THREE.Material).dispose();
+          mesh.userData.solid = solid;
+          (mesh.userData.ghost as THREE.MeshStandardMaterial).color.set(body.color);
+          if (!live.current.xray) mesh.material = solid;
+          existing.look = look;
+        }
+        // A change to the hair alone: the old hair stays until it has settled (growHair).
         // Where a wall shape stands is not part of its geometry: a move arrives as a new frame, replacing the drag preview.
         if (JSON.stringify(existing.body.frame) !== JSON.stringify(body.frame)) {
           existing.group.position.set(0, 0, 0);
@@ -2043,7 +2196,7 @@ export default function ModelViewer3D({
 
       const geometry = buildBodyGeometry(body, { fast });
       if (!geometry) return;
-      const solid = createMaterial(body);
+      const solid = surfaceMaterial(body, () => invalidateRef.current(true));
       const mesh = new THREE.Mesh(geometry, solid);
       mesh.userData.solid = solid;
       mesh.userData.ghost = new THREE.MeshStandardMaterial({ color: body.color, roughness: 0.6, transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide });
@@ -2062,9 +2215,12 @@ export default function ModelViewer3D({
       root.add(bodyGroup);
       placeFrame(root, body);
       group.add(root);
-      entries.set(id, { body, root, group: bodyGroup, outline, signature });
+      entries.set(id, { body, root, group: bodyGroup, outline, signature, look: lookSignature(body), hair: '' });
     });
     applyXrayRef.current();
+    // Hair is grown once the model has settled, not on every frame of a slider or a drag (see growHair).
+    window.clearTimeout(hairTimer.current);
+    hairTimer.current = window.setTimeout(growHair, HAIR_SETTLE_MS);
 
     // A newly added shape may land outside the view: bring everything back into frame, keeping the angle.
     const known = knownIdsRef.current;
@@ -2079,6 +2235,9 @@ export default function ModelViewer3D({
   useEffect(() => {
     applyXrayRef.current();
   }, [xray, isSceneReady]);
+  useEffect(() => {
+    if (isSceneReady) applyLookRef.current(look);
+  }, [look, isSceneReady]);
 
   const repeating = !!repeat;
   const drawing = !!draw;
@@ -2604,8 +2763,8 @@ export default function ModelViewer3D({
   };
 
   useEffect(() => {
-    if (!sculpt && brushRingRef.current) brushRingRef.current.style.display = 'none';
-  }, [sculpt]);
+    if (!sculpt && !groom && brushRingRef.current) brushRingRef.current.style.display = 'none';
+  }, [sculpt, groom]);
 
   const handleSelectCameraAngle = useCallback((face: CubeFace) => frameViewRef.current(face), []);
 

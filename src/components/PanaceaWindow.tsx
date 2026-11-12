@@ -156,7 +156,8 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
     const r = find(offer.recipe);
     if (!r || live.current.panels.some((p) => p.state === "ghost" || (p.recipe === r.id && p.context === offer.near))) return;
     // An offer about a value that has moved on since, or one the person waved away a moment ago, is not made.
-    if (typeof extra.bind === "string" && JSON.stringify(valueAt(live.current, extra.bind)) !== JSON.stringify(extra.value)) return;
+    // (An app's value lives in the app, not on the canvas: its offer is checked by the server against the app itself.)
+    if (typeof extra.bind === "string" && !isAppBind(extra.bind) && JSON.stringify(valueAt(live.current, extra.bind)) !== JSON.stringify(extra.value)) return;
     if (Date.now() - (waved.current.get(r.id) ?? 0) < WAVED_MS) return;
     quietly((d) => { placeRecipe(d, r, { near: offer.near, state: "ghost", why: offer.why, by: "rule", side: preferredSide(profile), view: board.current?.viewRect() }); });
   }, [base, find, live, quietly, profile, saveNow]);
@@ -202,7 +203,7 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
       const { surface } = parseBind(key);
       const where = surface ? live.current.surfaces.find((s) => s.id === surface)?.title : null;
       const now = isAppBind(key) ? v : valueAt(live.current, key);
-      void tell(`set ${label.replace(/ .*$/, "") || key} to ${show(now)}${where ? ` on ${where}` : ""} (panel "${panel.title}")`, { bind: key, value: now });
+      void tell(`set ${label.replace(/ .*$/, "") || key} to ${show(now)}${where ? ` on ${where}` : ""} (panel "${panel.title}")`, { bind: key, value: now, panel: panel.id });
     }, 650));
   }, [apps, base, edit, live, quietly, tell]);
 

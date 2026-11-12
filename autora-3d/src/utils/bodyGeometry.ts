@@ -4,6 +4,7 @@
  */
 
 import * as THREE from 'three';
+import { addBoxUVs } from './surface';
 import { Brush, Evaluator, SUBTRACTION } from 'three-bvh-csg';
 import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { BevelStyle, Body3D, Point2D } from '../types';
@@ -337,8 +338,16 @@ export function buildBodyGeometry(body: Body3D, options: { fast?: boolean } = {}
     // An imported mesh is the solid itself: no outline to push up, no bevels. Organic forms read best smooth, so only sharp folds crease.
     const raw = meshGeometry(body);
     if (!raw) return null;
+    if (raw.getAttribute('uv')) {
+      // It brought its own layout for an image: keep it, smooth-shaded across the vertices the file shared.
+      raw.computeVertexNormals();
+      const laid = raw.toNonIndexed();
+      raw.dispose();
+      return laid;
+    }
     const shaded = toCreasedNormals(raw, THREE.MathUtils.degToRad(55));
     raw.dispose();
+    addBoxUVs(shaded);
     return shaded;
   }
   const shape = buildBodyShape(body);
@@ -397,6 +406,14 @@ export function buildBodyGeometry(body: Body3D, options: { fast?: boolean } = {}
   const smooth = bevels.length || cornerCutters.length ? cleanMesh(geometry, crease, cutIsExact) : toCreasedNormals(geometry, crease);
   if (smooth !== geometry) geometry.dispose();
   smooth.translate(0, body.elevation ?? 0, 0);
+  // Where a pattern or an image sits on it.
+  if (smooth.getIndex()) {
+    const flat = smooth.toNonIndexed();
+    smooth.dispose();
+    addBoxUVs(flat);
+    return flat;
+  }
+  addBoxUVs(smooth);
   return smooth;
 }
 /**

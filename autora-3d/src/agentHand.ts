@@ -21,6 +21,7 @@ import type { Doc } from './core/doc';
 import type { ViewerApi, ViewerHit } from './components/ModelViewer3D';
 import { MATERIAL_PRESETS, SWATCHES, type Body3D, type DrawSession, type EdgeSel, type FaceSel, type Frame, type Point2D, type RepeatSession } from './types';
 import { SHAPE_LABELS, type ShapeKind } from './utils/primitives';
+import { PATTERNS, resolveSurface } from './utils/surface';
 import { selectionBounds } from './utils/transform';
 import { defaultBevelSize, edgeKey, edgeSize, edgeStyle, edgesAroundFace, edgesOfKind, listEdges, maxBevelSize, primaryEdge } from './utils/edges';
 import { wallEnds } from './utils/outline';
@@ -581,7 +582,7 @@ async function setLook(api: HandApi, id: string, look: { name?: string | null; c
     const preset = MATERIAL_PRESETS.find((m) => m.id === look.material);
     if (preset) {
       const mat = await card('Material');
-      await press(byText(mat, preset.name, true), `Choosing ${preset.name}`);
+      await press(mat.querySelector<HTMLElement>(`button[aria-label="${preset.name}"]`), `Choosing ${preset.name}`);
       did.push(`chose ${preset.name} in Material`);
     }
   }
@@ -602,6 +603,168 @@ async function setLook(api: HandApi, id: string, look: { name?: string | null; c
       did.push(`set the custom colour ${look.color} in Material`);
     }
   }
+}
+
+// ---- Surfaces, hair and light --------------------------------------------------------------------
+
+/** Moves a card's slider (found by its name) to a value, as a hand drags it: the pointer goes to it, the value follows. */
+async function slide(scope: HTMLElement, label: string, value: number, did: string[], where: string): Promise<boolean> {
+  let input = scope.querySelector<HTMLInputElement>(`input[type="range"][aria-label="${label}"]`);
+  if (!input) {
+    // Behind More: open it once.
+    const more = Array.from(scope.querySelectorAll<HTMLElement>('button[aria-expanded="false"]')).find((b) => b.textContent?.trim() === 'More');
+    if (more) {
+      await press(more, 'Showing more');
+      input = await waitFor(() => scope.querySelector<HTMLInputElement>(`input[type="range"][aria-label="${label}"]`), 1500);
+    }
+  }
+  if (!input) return false;
+  const p = centre(input);
+  await handGo(p, true, input.parentElement, `Setting ${label.toLowerCase()}`);
+  const lo = Number(input.min);
+  const hi = Number(input.max);
+  const target = Math.min(hi, Math.max(lo, value));
+  // A drag passes through the values on its way, so the person sees the surface change as it goes.
+  const from = Number(input.value);
+  for (let i = 1; i <= 4; i++) {
+    setValue(input, String(from + ((target - from) * i) / 4));
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await sleep(40);
+  }
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  did.push(`set ${label} to ${Math.round(target * 100) / 100} in ${where}`);
+  return true;
+}
+
+/** Sets a card's colour field (found by its name). */
+async function pickColour(scope: HTMLElement, label: string, value: string, did: string[], where: string): Promise<boolean> {
+  const input = scope.querySelector<HTMLInputElement>(`input[type="color"][aria-label="${label}"]`);
+  if (!input) return false;
+  await handGo(centre(input), true, input.parentElement, `Mixing the ${label.toLowerCase()}`);
+  setValue(input, value.toLowerCase());
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  did.push(`set ${label} to ${value} in ${where}`);
+  return true;
+}
+
+const pressIn = async (scope: HTMLElement, text: string, words: string, did: string[], said: string, prefix = false) => {
+  const b = byText(scope, text, prefix);
+  if (!b) return false;
+  await press(b, words);
+  did.push(said);
+  return true;
+};
+
+/** The Material card's sliders, by the surface number each sets. */
+const FINISH_SLIDERS: Record<string, string> = {
+  roughness: 'Roughness', metalness: 'Metal', transmission: 'Clear', ior: 'Bends light', thickness: 'Thickness', opacity: 'Opacity',
+  clearcoat: 'Lacquer', sheen: 'Sheen', subsurface: 'Light through', glow: 'Glow',
+};
+const HAIR_SLIDERS: Record<string, string> = {
+  length: 'Length', density: 'Density', curl: 'Curl', thickness: 'Thickness', frizz: 'Frizz', clump: 'Locks', droop: 'Droop', shine: 'Shine',
+};
+
+async function surfaceByHand(api: HandApi, args: Record<string, unknown>, goal: Doc | null, did: string[], skip: string[]): Promise<void> {
+  const list = ids(args.ids).length ? ids(args.ids) : str(args.id) ? [String(args.id)] : [];
+  if (!list.length) throw new Skip('no shape named');
+  for (const id of list) {
+    await pick(api, [id], true);
+    did.push('picked the shape in the view');
+    const want = goal?.bodies.find((b) => b.id === id) ?? null;
+    const resolved = want ? resolveSurface(want) : null;
+    if (str(args.preset)) await setLook(api, id, { material: str(args.preset) }, did);
+    if (str(args.color)) await setLook(api, id, { color: str(args.color) }, did);
+    const numbers = Object.keys(FINISH_SLIDERS).filter((k) => num(args[k]) !== null);
+    if (args.reset === true || numbers.length) {
+      const mat = await card('Material');
+      if (args.reset === true && !(await pressIn(mat, 'Back to the finish', 'Back to the finish', did, 'pressed Back to the finish in Material'))) {
+        const more = Array.from(mat.querySelectorAll<HTMLElement>('button[aria-expanded="false"]')).find((b) => b.textContent?.trim() === 'More');
+        if (more) await press(more, 'Showing more');
+        const back = await waitFor(() => byText(mat, 'Back to the finish'), 1500);
+        if (back) { await press(back, 'Back to the finish'); did.push('pressed Back to the finish in Material'); }
+      }
+      for (const k of numbers) {
+        const value = resolved ? (resolved as unknown as Record<string, number>)[k] : num(args[k])!;
+        if (!(await slide(mat, FINISH_SLIDERS[k], value, did, 'Material'))) skip.push(`${k}: its slider shows only when it matters (Bends light and Thickness need Clear above 0)`);
+      }
+    }
+    if (args.sheenColor !== undefined) skip.push('the sheen colour: the window has no control for it');
+    if (args.reliefScale !== undefined || args.roughnessScale !== undefined) skip.push('a relief or roughness picture\'s own size: the window lays them like the colour picture');
+    const tex = ['pattern', 'image', 'imageScale', 'reliefImage', 'reliefStrength', 'roughnessImage'].some((k) => args[k] !== undefined);
+    if (tex) {
+      const card3 = await card('Texture');
+      const p = want?.surface?.pattern;
+      const kind = typeof args.pattern === 'string' ? args.pattern : (args.pattern as { kind?: string } | null)?.kind ?? p?.kind;
+      if (args.pattern !== undefined && kind) {
+        const label = kind === 'none' ? 'None' : PATTERNS.find((x) => x.kind === kind)?.label;
+        const button = label ? card3.querySelector<HTMLElement>('[role="group"][aria-label="Pattern"]') : null;
+        const target = button ? byText(button, label!) : null;
+        if (target && target.getAttribute('aria-pressed') !== 'true') { await press(target, `Choosing ${label}`); did.push(`chose ${label} in Texture`); }
+        if (p) {
+          const given = typeof args.pattern === 'object' && args.pattern ? (args.pattern as Record<string, unknown>) : {};
+          if (given.color2 !== undefined) await pickColour(card3, 'Second colour', p.color2, did, 'Texture');
+          if (given.scale !== undefined) await slide(card3, 'Size', p.scale, did, 'Texture');
+          if (given.bump !== undefined) await slide(card3, 'Relief', p.bump, did, 'Texture');
+          if (given.angle !== undefined) await slide(card3, 'Turn', p.angle ?? 0, did, 'Texture');
+        }
+      }
+      if (args.image === null) await pressIn(card3, 'Remove picture', 'Taking the picture off', did, 'pressed Remove picture in Texture');
+      else if (args.image !== undefined) skip.push('the picture: Picture… asks for a file from this computer, which the hand does not choose');
+      if (args.reliefImage === null) await pressIn(card3, 'Remove relief', 'Taking the relief off', did, 'pressed Remove relief in Texture');
+      else if (args.reliefImage !== undefined) skip.push('the relief picture: Relief picture… asks for a file, which the hand does not choose');
+      if (args.roughnessImage === null) await pressIn(card3, 'Remove roughness', 'Taking the roughness picture off', did, 'pressed Remove roughness in Texture');
+      else if (args.roughnessImage !== undefined) skip.push('the roughness picture: Roughness picture… asks for a file, which the hand does not choose');
+      if (num(args.reliefStrength) !== null && !(await slide(card3, 'Relief strength', want?.surface?.reliefImage?.strength ?? num(args.reliefStrength)!, did, 'Texture'))) skip.push('the relief strength: there was no relief picture yet');
+      if (num(args.imageScale) !== null && !(await slide(card3, 'Picture size', want?.surface?.image?.scale ?? num(args.imageScale)!, did, 'Texture'))) skip.push('the picture size: there was no picture yet');
+    }
+  }
+}
+
+async function hairByHand(api: HandApi, args: Record<string, unknown>, goal: Doc | null, did: string[], skip: string[]): Promise<void> {
+  const list = ids(args.ids).length ? ids(args.ids) : str(args.id) ? [String(args.id)] : [];
+  if (!list.length) throw new Skip('no shape named');
+  for (const id of list) {
+    await pick(api, [id], true);
+    did.push('picked the shape in the view');
+    const hairCard = await card('Hair');
+    const had = api.doc().bodies.find((b) => b.id === id)?.hair;
+    if (args.remove === true) {
+      if (!(await pressIn(hairCard, 'Remove ', 'Taking the hair off', did, 'pressed Remove in Hair', true))) throw new Skip('there was no hair to remove');
+      continue;
+    }
+    const want = goal?.bodies.find((b) => b.id === id)?.hair;
+    if (!want) throw new Skip('the hair was not worked out');
+    if (!had) {
+      await pressIn(hairCard, want.style === 'fur' ? 'Grow fur' : 'Grow hair', want.style === 'fur' ? 'Growing fur' : 'Growing hair', did, `pressed ${want.style === 'fur' ? 'Grow fur' : 'Grow hair'} in Hair`);
+      await waitFor(() => !!api.doc().bodies.find((b) => b.id === id)?.hair && !!hairCard.querySelector('input[aria-label="Length"]'), 3000);
+    } else if (args.style !== undefined && had.style !== want.style) {
+      const group = hairCard.querySelector<HTMLElement>('[role="group"][aria-label="Style"]');
+      await pressIn(group ?? hairCard, want.style === 'fur' ? 'Fur' : 'Hair', 'Changing the style', did, `chose ${want.style === 'fur' ? 'Fur' : 'Hair'} in Hair`);
+    }
+    for (const [k, label] of Object.entries(HAIR_SLIDERS)) {
+      if (num(args[k]) === null) continue;
+      if (!(await slide(hairCard, label, (want as unknown as Record<string, number>)[k], did, 'Hair'))) skip.push(`${k}: no slider for it`);
+    }
+    if (str(args.rootColor)) await pickColour(hairCard, 'Root colour', want.rootColor, did, 'Hair');
+    if (str(args.tipColor)) await pickColour(hairCard, 'Tip colour', want.tipColor, did, 'Hair');
+    if (num(args.seed) !== null) {
+      if (had && want.seed === had.seed + 1) await pressIn(hairCard, 'Grow it another way', 'Growing it another way', did, 'pressed Grow it another way in Hair');
+      else skip.push('a chosen seed: the window grows the next one with Grow it another way');
+    }
+    if (args.clearGrooming === true) await pressIn(hairCard, 'Undo all grooming', 'Undoing the grooming', did, 'pressed Undo all grooming in Hair');
+  }
+}
+
+async function lightByHand(args: Record<string, unknown>, goal: Doc | null, did: string[]): Promise<void> {
+  const light = await card('Light');
+  const env = str(args.environment);
+  if (env) {
+    const label = env[0].toUpperCase() + env.slice(1);
+    const group = light.querySelector<HTMLElement>('[role="group"][aria-label="Surroundings"]');
+    await pressIn(group ?? light, label, `Choosing ${label}`, did, `chose ${label} in Light`);
+  }
+  if (num(args.exposure) !== null) await slide(light, 'Brightness', goal?.look?.exposure ?? num(args.exposure)!, did, 'Light');
 }
 
 /** The number a picked face shows by itself: tap it and type. */
@@ -1297,12 +1460,21 @@ export async function runHand(name: string, args: Record<string, unknown>, api: 
         }
         break;
       }
+      case 'surface_set':
+        await surfaceByHand(api, args, goal, did, skip);
+        break;
+      case 'hair_set':
+        await hairByHand(api, args, goal, did, skip);
+        break;
+      case 'scene_look':
+        await lightByHand(args, goal, did);
+        break;
       case 'history_undo':
       case 'history_redo': {
         // The window keeps each step a person makes; the model keeps each of the agent's calls as one. Pressed until the
         // window is where the model's own history leads.
         const undo = name === 'history_undo';
-        const content = (d: Doc) => JSON.stringify([d.bodies, d.groups, d.repeats]);
+        const content = (d: Doc) => JSON.stringify([d.bodies, d.groups, d.repeats, d.look]);
         const there = goal ? content(goal) : null;
         const button = () => document.querySelector<HTMLElement>(`header button[aria-label="${undo ? 'Undo (⌘Z)' : 'Redo (⇧⌘Z)'}"]`);
         let presses = 0;

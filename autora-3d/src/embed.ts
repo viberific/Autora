@@ -28,6 +28,14 @@ import { halt, setBoardDraws, setWho, show, type Cue, type Who } from './agentCu
  */
 
 /** Whether this page is Autora's frame rather than a page of its own. */
+/**
+ * Asks Autora to bring shapes into the chat's game (Autora Games), with physics or without: frame -> parent
+ * { autora3d: 'toGame', shapes, physics }. Autora answers { autora3d: 'toGameDone', ok, text }.
+ */
+export function sendToGame(shapes: string[], physics: 'none' | 'falls' | 'fixed'): void {
+  window.parent.postMessage({ autora3d: 'toGame', shapes, physics }, window.location.origin);
+}
+
 export const embedded = (): boolean => {
   try {
     return new URLSearchParams(window.location.search).get('embed') === 'autora' && window.parent !== window;
@@ -144,7 +152,7 @@ export function useAutoraEmbed(
     if (!on || !loaded.current || doc === known.current) return;
     // The model that came down, as the app keeps it, is not a change of the person's: sent back late it would undo a
     // change the agent made after it.
-    const content = (d: Doc | null) => (d ? JSON.stringify([d.bodies, d.groups, d.repeats, d.library]) : '');
+    const content = (d: Doc | null) => (d ? JSON.stringify([d.bodies, d.groups, d.repeats, d.library, d.look]) : '');
     if (content(doc) === content(known.current)) {
       known.current = doc;
       return;

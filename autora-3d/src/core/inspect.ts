@@ -4,8 +4,10 @@
  */
 
 import * as THREE from 'three';
-import { Body3D, EdgeBevel, Frame, Point2D } from '../types';
+import { Body3D, EdgeBevel, Frame, Point2D, SceneLook } from '../types';
 import { buildBodyGeometry } from '../utils/bodyGeometry';
+import { describeSurface, hasOwnUVs } from '../utils/surface';
+import { describeHair } from '../utils/hair';
 import { listEdges } from '../utils/edges';
 import { faceMeasure } from '../utils/faces';
 import { frameMatrix } from '../utils/frame';
@@ -53,7 +55,11 @@ export interface ShapeSummary {
   /** Present on a shape drawn on a wall. */
   wall?: Frame;
   /** Present on a shape brought in from a mesh file: it has a triangle surface, not an outline (corners 4 is just the box it fills). */
-  mesh?: { triangles: number };
+  mesh?: { triangles: number; laidOut?: boolean };
+  /** What its surface is, when it has its own numbers, a pattern or a picture on top of its material. */
+  surface?: string;
+  /** Its hair or fur, in a few words. */
+  hair?: string;
 }
 
 /** The corners of a shape, in the world, top and bottom. */
@@ -111,7 +117,9 @@ export function summarize(doc: Doc, body: Body3D): ShapeSummary {
   if (body.instanceOf) out.linkedTo = body.instanceOf;
   if (link) out.repeat = { kind: link.kind, count: link.count, gap: round2(spacing(link)), follow: link.follow, start: link.start, end: link.end, bend: link.bend };
   if (body.frame) out.wall = body.frame;
-  if (body.mesh) out.mesh = { triangles: body.mesh.indices.length / 3 };
+  if (body.mesh) out.mesh = { triangles: body.mesh.indices.length / 3, ...(hasOwnUVs(body) ? { laidOut: true } : {}) };
+  if (body.surface) out.surface = describeSurface(body);
+  if (body.hair) out.hair = describeHair(body.hair);
   return out;
 }
 
@@ -226,6 +234,8 @@ export function meshReport(body: Body3D): MeshReport | null {
 }
 
 export interface SceneSummary {
+  /** How the scene is lit, when it is not the studio light it starts with. */
+  light?: SceneLook;
   shapes: ShapeSummary[];
   groups: { id: string; name: string; shapes: string[]; joined: boolean; parent?: string; library?: string; linked?: boolean; place?: { x: number; y: number; z: number; degrees: number } }[];
   bounds: { min: Vec3; max: Vec3 } | null;
@@ -240,6 +250,7 @@ export function sceneSummary(doc: Doc, options: { includeCopies?: boolean } = {}
     groups: doc.groups.map((g) => ({ id: g.id, name: g.name, shapes: g.bodyIds, joined: !!g.joined, parent: g.parentId, library: g.libraryId, linked: g.place ? true : undefined, place: g.place ? { x: g.place.x, y: g.place.y, z: g.place.z, degrees: round2((g.place.angle * 180) / Math.PI) } : undefined })),
     bounds: boundsOf(doc.bodies.filter((b) => b.visible)),
     units: 'millimetres. x is to the right, y is away from the front of the view, z is up. A shape stands on its bottom (z) and rises to its top.',
+    ...(doc.look ? { light: doc.look } : {}),
   };
   return out;
 }

@@ -544,6 +544,39 @@ Spectra's fetched renderer is most of what is on disk.
   `sync-autora-3d.mjs` loses it. Test: `tests/mesh-import.test.ts`.
   **Organic forms** (`autora-3d/src/utils/organic.ts`, `docs/autora-3d-organic.patch`): `sculpt_blend` (spheres, tapered capsules, ellipsoids melted by a smooth union and meshed with surface nets, optional mirror), `sculpt_loft` (a tube through sections on a Catmull-Rom path) and `sculpt_smooth` (optional 4-way subdivision, then Taubin smoothing) each make or change a mesh shape (`ops.ts` `addSurface` goes through `placeMesh`, so a form is an ordinary mesh). No window controls yet, so they are "Not by hand" (`NO_CONTROL`). Test: `tests/sculpt.test.ts`. `docs/autora-3d-organic.patch` is to be applied to the 3D-Modeling repository, or the next sync loses it.
   **Sculpting by hand** (`autora-3d/src/utils/sculpt.ts`, `docs/autora-3d-sculpt.patch`, applied after the organic patch): the Sculpt tool (`SculptPanel` in `TopBar.tsx`, `sculpt` prop of `ModelViewer3D`) is the *person's* brush on a mesh shape: Grab, Build/Carve, Smooth, Flatten, size, strength, mirror, Finer surface. `SculptMesh` welds vertices that share a place, so seams do not tear; a stroke edits a plain preview geometry live and the viewer hands back ONE `onUpdateBody` on release (one undo step, via `onDragStateChange`). `bodySignature` includes the mesh object so the shape is rebuilt. The agent deliberately has no brush tool (the shaping is the person's; see the Core principle in CLAUDE.md). The person's stroke is a command (`sculpt_apply`, authority `person`: `ToolSpec.authority`, refused to the agent in `execute` and not in `cadSPECS`). **The command layer** (`autora-3d/src/core/commands.ts`, `engine.ts`, `docs/autora-3d-commands.patch`): `Engine.execute` logs every non-read call as a `CommandRecord` (name, who, ok, changed, revision, a short summary, and the model before and after, which is its inverse); a change the window sends (`setDoc(doc, "person")`) is logged as `person_edit`, described from the difference (`describeEdit`); `revertTo(n)` puts the model back as a new change; `onCommand` feeds `server/caddesk.ts`, which emits each as a `cad.command` event through `emitEvent()`, serves `GET /api/cad/:session/commands` and `POST /api/cad/:session/revert`, and the agent reads it with `cad_history_log`. Tests: `tests/commands-3d.test.ts` and the e2e case in `tests/e2e-cad.test.ts`. Test: `tests/sculpt-brush.test.ts`; verified in a real browser by a scratch Playwright run (stroke changes the mesh, one undo restores it).
+  **Surfaces, hair and light** (`autora-3d/src/utils/surface.ts`, `utils/hair.ts`, `components/surfaceLook.ts`, `components/SurfacePanels.tsx`,
+  `docs/autora-3d-surfaces.patch`, applied after the sculpt patch): a shape's `surface` overrides its preset's numbers (`resolveSurface`: roughness,
+  metalness, opacity, transmission/ior/thickness, clearcoat, sheen, subsurface, glow; nine presets in `MATERIAL_PRESETS`, a preset chosen again clears
+  them), a `pattern` the modeller draws itself (`patternPixels`: seeded, seamless tiles of wood, marble, speckle, fabric, scales, brushed, checker,
+  dots, with relief) and pictures in three slots (`PICTURE_SLOTS`: `image` for colour, `reliefImage` as a bump map with a `strength`, `roughnessImage`
+  as a roughness map; each a PNG/JPEG data URL, read from a named file by `runCadTool`'s `readPicture` so it never goes through the
+  conversation; relief and roughness lie like the colour picture unless they have a `scale` of their own). Every geometry `buildBodyGeometry` makes is non-indexed with box-projected UVs (`addBoxUVs`, 100 mm a unit); a mesh whose GLB had a
+  layout keeps `mesh.uvs` (welded per UV seam, dropped once the vertex count changes) and its base colour picture. `hair` is numbers plus the person's
+  grooming `strokes` (a stroke with `mirror` is kept with its reflection, `mirrorStroke`, as one command); strands are grown from them, seeded, whenever the shape is drawn or exported (`growStrands`: area-weighted roots, capped at
+  `MAX_STRANDS` and widened past it, falling down and away and kept outside the shape's box ellipsoid and the other shapes they reach (`Obstacle`s: an outline shape's
+  box, a mesh shape's ellipsoid; the viewer's `growHair` regrows hair when one under it moves, and GLB export does the same), curl, frizz, locks), drawn as ribbons with a
+  tangent for an anisotropic highlight, fur as alpha-tested shells (`furShell`). The viewer rebuilds only a material when only the surface changed; hair is grown by `growHair` once the model has
+  been still for `HAIR_SETTLE_MS` (a slider moves freely, the old hair stays until then), only where its numbers or its surface changed,
+  sharing `SCENE_STRANDS` between the shapes with strands, and fur keeps its layers under `FUR_VERTICES`; hair is never picked (`raycast` off) and hides in See through. `doc.look`
+  (`scene_look`) picks the environment (`lighting`: the RoomEnvironment studio, or a sky dome for daylight, sunset, night, which is also the backdrop),
+  exposure and the key light. GLB export writes the surface as glTF PBR with KHR transmission, ior, volume, clearcoat, sheen, diffuse transmission and
+  emissive strength, the pattern as an embedded PNG (`encodePng`, stored deflate, no zlib) or the picture, a roughness picture as the
+  metallic-roughness texture on a non-metal only (glTF reads metal from its blue; its own repeat as `KHR_texture_transform`), no relief (glTF has
+  only normal maps), UVs with the repeat baked in, and hair as a
+  `<name>_hair` node under its shape with `COLOR_0`, capped (`EXPORT_STRANDS` a shape, `EXPORT_STRANDS_TOTAL` a file; `hair: false` leaves it out); STL and OBJ carry the shape only. Pictures travel once (`src/lib/cadPictures.ts`): `CadWindow`'s save
+  sends a picture the server holds as its key (`byReference`), the PUT route puts it back from the chat's `entry.pictures`
+  (`restorePictures`; 409 with `missing` makes the window send those whole), and `settle` points every copy of a picture at one kept
+  string (`sharePictures`), so the command log's before/after models and the window's undo stack share it. The window's cards (Material,
+  Texture, Hair with the Groom brush, Light) show what the work needs and keep the rest behind More; Texture and Hair stand on the bar
+  only once the shape has a pattern, a picture or hair (Material's foot opens them before that), and a card closes when its shape is
+  no longer picked; the groom brush is a person-only command (`hair_groom`, authority `person`). Panacea's
+  3D panels read and set the same numbers through `model.*` binds (`src/lib/panacea/apps/model.ts`: `FINISH_OF` mirrors the presets, held equal by
+  `tests/surface-3d.test.ts`); a 3D panel moved somewhere telling offers the next one beside it (`suggestForApp` in `rules.ts`: glass offers
+  Glass, a pattern Texture, hair Hair), through the same activity route as the canvas's own offers. Thumbnails show glass see-through, a
+  pattern's colours and hair as a soft edge (`thumbnail.ts` `looks`). `node scripts/sync-autora-3d.mjs --specs` rewrites `server/specs/cad.ts` from the copy here while a patch is not
+  upstream yet. Traps: a pattern's colour, size and relief need a pattern first, and the hair's numbers need hair on; clear glass is kept slightly
+  tinted on screen (transmission at most 0.94, opacity 0.92) so it reads against the dark studio. Tests: `tests/surface-3d.test.ts`, `tests/cad-pictures.test.ts`, the `surface` and
+  `hair` cases of `tests/ui-cad-hand-tools.test.ts`.
 - `server/studio.ts`, `server/specs/studio.ts`, `src/lib/studio/`, `src/components/StudioWindow.tsx` + `src/components/studio/`:
   **Autora Music**, the music window, and the agent's `studio_*` tools. A song is tracks of clips of notes, in beats
   (`src/lib/studio/model.ts`: plain JSON, no DOM/React/Node, imported by the server *and* the page, so there is one idea of a valid
@@ -760,6 +793,23 @@ Spectra's fetched renderer is most of what is on disk.
   by `autora.css` under `html.autora-rail-ui`. Play runs in the window: the overlay `BrowserPreviewWindow.js`
   returns an iframe's window as the preview window. The Asset Store is gone from the Add object dialog, the effects
   dialog and the resource picker (patches), since it cannot load offline.
+  **From Autora 3D, with physics** (`src/lib/gamephysics.ts`, pure; `modelToGame` in `server/gamedesk.ts`; `modelForGame` in
+  `server/caddesk.ts`): `game_from_model` (and the 3D window's Export & file → Send to the game, `POST /api/game/:s/from-model`, which the
+  frame asks for with `{autora3d:'toGame'}` through `CadWindow.tsx`) exports the picked shapes (or everything visible) as a GLB centred on its
+  footprint on the ground, keeps it as a `model3D` resource, and makes or updates a `Scene3D::Model3DObject` (size = mm × `scale` px;
+  `rotationX` 90 stands a y-up GLB in GDevelop's z-up world; `originLocation` BottomCenterZ so an instance's z is where it stands, and
+  `centerLocation` ObjectCenter because Physics3D centres its body on the object's centre: with the model's origin it rests half its
+  height above the floor). Physics is GDevelop's `Physics3D::Physics3DBehavior` (Jolt), named `Physics3D` with `object3D: "Object3D"` (the
+  3D capability every 3D object has by default), from the person's words (`FEELS`) and numbers (`physicsOf`, which refuses a moving mesh
+  body: Jolt's mesh shapes are static only); the scene gets the shared world once (`{name, type, gravityX/Y/Z, worldScale}` as
+  GDevelop's Layout serialises it), `ground: true` a static Cube3D floor. A made object is a link in the game's saved `models` (shapes,
+  resource, scale): `followModel` watches the 3D engine (`onModelChange`) and `refreshFromModel` makes linked objects again 1.5 s after the
+  model is still, keeping physics and placements; a link whose shapes are gone stops. Panacea's "3D physics" Game panel binds
+  `game.body/weight/bounce/grip/fall/upright` on the picked body (`src/lib/panacea/apps/game.ts`). **Trap, fixed in `patches.mjs`:**
+  GDevelop's in-browser preview copier tracks only full URLs, so any file Autora keeps (`/api/game/<chat>/assets/...`: pictures, sounds,
+  models) was left out of a preview ("Copy not done") and failed to load; `copyFile` now fetches it and stores it with the preview.
+  Tests: `tests/game-physics.test.ts`; `tests/ui-game-physics.test.ts` plays it in GDevelop's engine and reads the body's height off the
+  page title as it falls, bounces and comes to rest.
 - `photo/` + `server/photodesk.ts`: **Autora Photo**, PhotoCraft (github.com/storytold/photocraft, MIT OR Apache-2.0; ArtCraft's name and
   logo are its authors') in a window beside the chat, and the agent's `photo_*` tools. PhotoCraft is a Rust image editor (layers, masks,
   adjustment layers, layer styles, type, brushes, real PSD files) with 500+ commands in one registry that its UI, its command line and its

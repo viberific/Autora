@@ -157,6 +157,23 @@ await test("the 3D manual teaches organic forms: blend, loft, smooth, and that t
   }
 });
 
+await test("the 3D manual teaches surfaces, hair and light: where each control is, and that grooming is the person's", () => {
+  const cad = manualText("cad");
+  for (const needle of ["cad_surface_set", "cad_hair_set", "cad_scene_look", "Texture", "Picture…", "Grow hair", "Grow fur", "Comb, Cut, Lengthen and Puff", "hair_groom", "is refused to you", "their strokes stay", "Bends light", "Back to the finish", "STL never does", "Panacea's 3D panels"]) {
+    assert.ok(cad.includes(needle), `the 3D manual lacks "${needle}"`);
+  }
+  assert.ok(!cad.includes("no textures are read"), "the manual no longer says textures are not read");
+});
+
+await test("the Games and 3D manuals teach the bridge: game_from_model, the feel words, following the model, the person's Send", () => {
+  const games = manualText("game");
+  for (const needle of ["game_from_model", "Physics3D", "bouncy", "physics:false", "ground:true", "follows the model", "mesh for a static body only", "3D physics panel"]) {
+    assert.ok(games.includes(needle), `the Games manual lacks "${needle}"`);
+  }
+  const cad = manualText("cad");
+  for (const needle of ["game_from_model", "Send to the game", "Stays put", "follows this model"]) assert.ok(cad.includes(needle), `the 3D manual lacks "${needle}"`);
+});
+
 await test("the 3D manual teaches the command log: who did what, history_log since a revision, and the person's own commands", () => {
   const cad = manualText("cad");
   for (const needle of ["Who did what", "cad_history_log", "since_revision", "the person's own hand and are not given to you", "history_revert"]) {

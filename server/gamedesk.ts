@@ -23,6 +23,7 @@
  * by address.
  */
 import express, { type Express, type Request, type Response } from "express";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import catalogJson from "./game-catalog.json";
@@ -36,6 +37,8 @@ import { stateDir } from "./state";
 import { readDoc, saveDoc } from "./store";
 import { editorMissing, staticDir } from "./staticfiles";
 import { GAME_OBJECT, isGameBind, writeGame } from "../src/lib/panacea/apps/game";
+import { PHYSICS3D, objectNameFor, physicsOf, placeModel, readPhysics, type Physics } from "../src/lib/gamephysics";
+import { cadAvailable, modelForGame, onModelChange } from "./caddesk";
 import type { Value } from "../src/lib/panacea/atoms";
 
 // ------------------------------------------------------------------ shapes --
@@ -111,6 +114,23 @@ interface Entry {
   quiet?: number;
   /** When the game last changed, by anyone: a preview older than this is of an earlier game. Not kept on disk. */
   changedAt: number;
+  /** Objects made from the 3D model that follow it (object name: what it was made of). */
+  models: Record<string, ModelLink>;
+}
+
+/** A game object made from part of the chat's 3D model, which is made again whenever those shapes change. */
+interface ModelLink {
+  scene: string;
+  /** The shapes it was made of (ids in the 3D model). */
+  shapes: string[];
+  /** The resource holding its GLB. */
+  resource: string;
+  /** Pixels per mm. */
+  scale: number;
+  /** Keep following the model (true unless the person or the agent let it go). */
+  follow: boolean;
+  /** The GLB it was last made from, by content: an unchanged part of the model is not made again. */
+  made?: string;
 }
 
 /** What is kept on disk for a chat: its game, and whether its window was open. */
@@ -119,6 +139,7 @@ interface Saved {
   open: boolean;
   since: number;
   rev: number;
+  models?: Record<string, ModelLink>;
 }
 
 const entries = new Map<string, Entry>();
@@ -145,8 +166,11 @@ function entryFor(session: string): Entry {
       rev: saved?.rev ?? 0,
       by: "agent",
       changedAt: 0,
+      models: saved?.models ?? {},
     };
     entries.set(session, entry);
+    // Objects made from the model follow it from the moment the game is known again (after a restart too).
+    if (Object.values(entry.models).some((m) => m.follow)) void followModel(session);
   }
   return entry;
 }
@@ -162,7 +186,7 @@ function projectOf(session: string): Json {
 
 function persist(session: string) {
   const entry = entryFor(session);
-  saveDoc(savedName(session), () => ({ project: entry.project, open: entry.open, since: entry.since, rev: entry.rev }) satisfies Saved);
+  saveDoc(savedName(session), () => ({ project: entry.project, open: entry.open, since: entry.since, rev: entry.rev, models: entry.models }) satisfies Saved);
 }
 
 function changed(session: string) {
@@ -237,6 +261,8 @@ export function onGameChange(fn: (session: string) => void) {
 
 /** The chat is gone: let go of its game, and of the file and the files it was kept in. */
 export function dropGame(session: string) {
+  following.get(session)?.stop();
+  following.delete(session);
   entries.delete(session);
   previews.delete(session);
   if (!validSession(session)) return;
@@ -979,6 +1005,148 @@ function resourceFor(kind: string, name: string, url: string): Json {
   return { ...JSON.parse(JSON.stringify(base)), name, file: url, userAdded: true, origin: { identifier: url, name: "url" } };
 }
 
+// ------------------------------------------------------------ from the 3D model --
+
+/** The chats whose game follows their 3D model: the way to stop, and the pending update. */
+const following = new Map<string, { stop: () => void; timer?: NodeJS.Timeout }>();
+/** How long the model must be still before the game takes it again. */
+const FOLLOW_MS = 1500;
+
+/** Starts watching the chat's 3D model for the objects that follow it (once per chat). */
+async function followModel(session: string): Promise<void> {
+  if (following.has(session) || !cadAvailable()) return;
+  const slot: { stop: () => void; timer?: NodeJS.Timeout } = { stop: () => {} };
+  following.set(session, slot);
+  try {
+    const stop = await onModelChange(session, () => {
+      if (slot.timer) clearTimeout(slot.timer);
+      slot.timer = setTimeout(() => void refreshFromModel(session), FOLLOW_MS);
+    });
+    slot.stop = () => { stop(); if (slot.timer) clearTimeout(slot.timer); };
+  } catch {
+    following.delete(session);
+  }
+}
+
+/** Makes every object that follows the model again from the shapes it was made of; one that lost all its shapes stops. */
+async function refreshFromModel(session: string): Promise<void> {
+  const entry = entryFor(session);
+  const links = Object.entries(entry.models).filter(([, m]) => m.follow);
+  if (!links.length || !entry.project) return;
+  const project = JSON.parse(JSON.stringify(entry.project));
+  normalize(project);
+  let changedAny = false;
+  for (const [name, link] of links) {
+    const made = await modelForGame(session, link.shapes).catch(() => null);
+    if (!made || "error" in made) { link.follow = false; continue; }
+    // Another part of the model changed: this one is as it was.
+    const fingerprint = contentKey(made.glb);
+    if (fingerprint === link.made) continue;
+    link.made = fingerprint;
+    const layout = asArray(project.layouts).find((l) => l?.name === link.scene);
+    const object = layout && asArray(layout.objects).find((o) => o?.name === name);
+    if (!object) { link.follow = false; continue; }
+    const res = asArray(project.resources?.resources).find((r) => r?.name === link.resource);
+    const kept = keepModel(session, name, made.glb);
+    if (res && res.file !== kept.url) {
+      dropOwnAsset(session, String(res.file));
+      res.file = kept.url;
+      res.origin = { identifier: kept.url, name: "url" };
+    }
+    placeModel(project, layout, { object: name, modelName: made.name, resource: link.resource, size: made.size, scale: link.scale }, catalog.templates as never);
+    changedAny = true;
+  }
+  persist(session);
+  if (changedAny) commit(session, project, "agent");
+}
+
+const contentKey = (bytes: Buffer) => createHash("sha1").update(bytes).digest("hex").slice(0, 12);
+
+/**
+ * Keeps a model's GLB under a name made from its content (`Barrel-<hash>.glb`): a changed model always has a new address, so
+ * the editor and a preview never show one they loaded before under the same name; the same model again is the same file.
+ */
+function keepModel(session: string, base: string, glb: Buffer): { file: string; url: string; kind: string } {
+  const file = assetName(`${base}-${contentKey(glb)}.glb`);
+  if (fs.existsSync(path.join(assetsDir(session), file))) return { file, url: `/api/game/${session}/assets/${encodeURIComponent(file)}`, kind: "model3D" };
+  return keepAsset(session, file, glb);
+}
+
+/** Removes a file this game kept, given its address, when it is one of its own. */
+function dropOwnAsset(session: string, url: string): void {
+  const prefix = `/api/game/${session}/assets/`;
+  if (!url.startsWith(prefix)) return;
+  const file = decodeURIComponent(url.slice(prefix.length));
+  if (file.includes("/") || file.includes("..")) return;
+  fs.rmSync(path.join(assetsDir(session), file), { force: true });
+}
+
+/**
+ * game_from_model: part of the chat's 3D model (or all of it) becomes a 3D object in the game, kept as a GLB resource, with
+ * rigid-body physics if asked, placed and given a floor if asked, and following the model from then on. Called again with the
+ * same object, it updates it (its model, size or physics).
+ */
+async function modelToGame(session: string, args: Record<string, any>): Promise<Outcome> {
+  if (!cadAvailable()) return { ok: false, summary: "Autora 3D is not built on this server, so there is no model to bring in." };
+  const entry = entryFor(session);
+  const project = JSON.parse(JSON.stringify(projectOf(session)));
+  normalize(project);
+  const layouts = asArray(project.layouts);
+  const layout = typeof args.scene === "string" && args.scene ? layouts.find((l) => l?.name === args.scene) : layouts[0];
+  if (!layout) return { ok: false, summary: `The game has no scene called "${args.scene}". Scenes: ${layouts.map((l) => l?.name).join(", ")}.` };
+  const objectName = typeof args.object === "string" && args.object.trim() ? args.object.trim() : undefined;
+  const link = objectName ? entry.models[objectName] : undefined;
+  const shapes: string[] = Array.isArray(args.shapes) ? args.shapes.map(String) : typeof args.shapes === "string" ? [args.shapes] : link?.shapes ?? [];
+  const made = await modelForGame(session, shapes);
+  if ("error" in made) return { ok: false, summary: made.error };
+  const scale = typeof args.scale === "number" && args.scale > 0 && args.scale <= 100 ? args.scale : link?.scale ?? 1;
+
+  // Physics: absent keeps what is there; false takes it off; an object of words and numbers sets it.
+  let physics: Physics | false | undefined;
+  let feels: string[] = [];
+  if (args.physics === false) physics = false;
+  else if (args.physics && typeof args.physics === "object") {
+    const existing = objectName ? asArray(layout.objects).find((o) => o?.name === objectName) : null;
+    const had = existing ? asArray(existing.behaviors).find((b) => b?.type === PHYSICS3D) : null;
+    const asked = physicsOf(args.physics, readPhysics(had ?? {}));
+    if ("error" in asked) return { ok: false, summary: asked.error };
+    physics = asked.physics;
+    feels = asked.feels;
+  }
+
+  const resourceName = link?.resource ?? `${objectNameFor(objectName ?? made.name, new Set())}_model`;
+  const kept = keepModel(session, objectNameFor(objectName ?? made.name, new Set()), made.glb);
+  const resources: Json[] = project.resources.resources;
+  const res = resources.find((r) => r?.name === resourceName);
+  if (res) {
+    if (res.kind !== "model3D") return { ok: false, summary: `The game already has a ${res.kind} called "${resourceName}". Pass another object name.` };
+    if (res.file !== kept.url) dropOwnAsset(session, String(res.file));
+    res.file = kept.url;
+    res.origin = { identifier: kept.url, name: "url" };
+  } else resources.push(resourceFor("model3D", resourceName, kept.url));
+
+  let placed;
+  try {
+    placed = placeModel(project, layout, { object: objectName, modelName: made.name, resource: resourceName, size: made.size, scale, physics, place: args.place === undefined ? !link : args.place, ground: args.ground === true }, catalog.templates as never);
+  } catch (err) {
+    return { ok: false, summary: err instanceof Error ? err.message : String(err) };
+  }
+  entry.models[placed.object] = { scene: String(layout.name), shapes: made.shapes, resource: resourceName, scale, follow: args.follow !== false, made: contentKey(made.glb) };
+  setOpen(session, true);
+  commit(session, project, "agent");
+  if (entry.models[placed.object].follow) void followModel(session);
+  const notes = [
+    physics && physics.body === "Dynamic" && !layout.objects.some((o: Json) => asArray(o.behaviors).some((b: Json) => b?.type === PHYSICS3D && b.bodyType === "Static")) ? "Nothing in the scene stays put yet, so it will fall for ever: pass ground: true, or give something static physics." : "",
+    "A 3D scene is seen from above by the default camera: set a 3D camera (game_catalog \"camera\") to watch it fall from the side.",
+    entry.models[placed.object].follow ? `It follows the model: change those shapes in Autora 3D and ${placed.object} is updated (its physics and placements stay).` : "",
+  ].filter(Boolean);
+  return {
+    ok: true,
+    summary: `${placed.did.join("; ")}${feels.length ? ` (${feels.join(", ")})` : ""}. ${notes.join(" ")}`,
+    preview: `${placed.object} from the 3D model`,
+  };
+}
+
 // -------------------------------------------------------------------- tools --
 
 interface GameToolHooks {
@@ -1011,6 +1179,9 @@ export async function runGameTool(session: string, name: string, args: Record<st
   if (!validSession(session)) return { ok: false, summary: "Autora Games needs a chat to work in." };
   try {
     switch (name) {
+      case "game_from_model":
+        return await modelToGame(session, args);
+
       case "game_open": {
         const project = projectOf(session);
         const entry = entryFor(session);
@@ -1260,6 +1431,26 @@ export function gameRoutes(app: Express, opts: { exists: (session: string) => bo
     const done = gamePanel(id, bind, req.body?.value, req.body?.object, "person");
     if (!done.ok) return res.status(400).json({ error: done.error });
     res.json({ rev: entryFor(id).rev, did: done.did });
+  });
+
+  /* The person sent shapes from the 3D window to the game (its Export & file card): the same bridge the agent's
+     game_from_model is. Shapes already sent update the object made from them rather than making another. */
+  app.post("/api/game/:session/from-model", express.json(), async (req, res) => {
+    const id = known(req, res);
+    if (!id) return;
+    if (opts.off()) return res.status(403).json({ error: "Autora Games is switched off on the Tools page." });
+    if (opts.incognito(id)) return res.status(403).json({ error: "An incognito chat has no game." });
+    const shapes = Array.isArray(req.body?.shapes) ? req.body.shapes.filter((x: unknown) => typeof x === "string").slice(0, 200) : [];
+    const kind = req.body?.physics;
+    const physics = kind === "falls" ? { body: "dynamic" } : kind === "fixed" ? { body: "static", shape: "mesh" } : undefined;
+    const entry = entryFor(id);
+    const same = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x));
+    // The shapes picked, as the model has them (ids): an object already made from exactly these is the one to update.
+    const made = await modelForGame(id, shapes);
+    const already = "error" in made ? undefined : Object.entries(entry.models).find(([, m]) => same(m.shapes, made.shapes))?.[0];
+    const out = await modelToGame(id, { shapes, ...(already ? { object: already } : {}), ...(physics ? { physics } : {}), ...(kind === "falls" && !already ? { ground: true } : {}) });
+    if (!out.ok) return res.status(400).json({ error: out.summary });
+    res.json({ ok: true, did: out.summary, rev: entry.rev });
   });
 
   /* What the person did in the editor. Refused when the game moved on since the editor took it (the agent changed it), and

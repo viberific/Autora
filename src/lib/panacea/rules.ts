@@ -152,6 +152,27 @@ export function suggestFor(canvas: Canvas, key: string, value: Value, quiet: (id
   return found ? { recipe: found.recipe.id, why: found.why, near: s.id } : null;
 }
 
+/**
+ * A 3D panel's value went somewhere telling: the panel that helps next, offered beside it. A part turned to glass offers
+ * Glass; a pattern put on offers Texture; hair grown offers Hair. The model is not a canvas surface, so this is its own
+ * reflex: one offer, never one already on the canvas or waved away.
+ */
+const APP_OFFERS: Array<{ bind: string; when: (v: Value) => boolean; recipe: string; why: string }> = [
+  { bind: "model.material", when: (v) => v === "glass" || v === "frosted", recipe: "3d.glass", why: "Offered: how clear it is, its frost and how much it bends light." },
+  { bind: "model.clear", when: (v) => typeof v === "number" && v > 0.2, recipe: "3d.glass", why: "Offered: the rest of the glass, its frost and how much it bends light." },
+  { bind: "model.pattern", when: (v) => typeof v === "string" && v !== "none", recipe: "3d.texture", why: "Offered: the pattern's colour, size and relief." },
+  { bind: "model.hair", when: (v) => v === true, recipe: "3d.hair", why: "Offered: the hair's length, density, curl and colours." },
+  { bind: "model.hairstyle", when: () => true, recipe: "3d.hair", why: "Offered: the hair's length, density, curl and colours." },
+];
+
+export function suggestForApp(canvas: Canvas, key: string, value: Value, near: string | null, quiet: (id: string) => boolean): (Offer & { near: string }) | null {
+  const hit = APP_OFFERS.find((o) => o.bind === key && o.when(value));
+  if (!hit || !near || quiet(hit.recipe)) return null;
+  if (canvas.panels.some((p) => p.recipe === hit.recipe)) return null;
+  if (!LIVE.some((r) => r.id === hit.recipe)) return null;
+  return { recipe: hit.recipe, why: hit.why, near };
+}
+
 export interface SurfaceInput {
   kind: SurfaceKind;
   name: string;

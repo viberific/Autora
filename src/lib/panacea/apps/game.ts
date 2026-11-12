@@ -11,10 +11,14 @@
  * Pure: shared by the server (which changes the project) and the page (which shows it).
  */
 import type { Value } from "../atoms";
+import { physicsBodies, physicsOf, readPhysics, writePhysics } from "../../gamephysics";
 
 export const GAME_OBJECT = "game.object";
 
-const GAME_BINDS = [GAME_OBJECT, "game.speed", "game.jump", "game.gravity", "game.friction"] as const;
+/** The 3D physics a body has (src/lib/gamephysics.ts), in the words its panel uses. */
+const BODY_BINDS = ["game.body", "game.weight", "game.bounce", "game.grip", "game.fall", "game.upright"] as const;
+const GAME_BINDS = [GAME_OBJECT, "game.speed", "game.jump", "game.gravity", "game.friction", ...BODY_BINDS] as const;
+const isBodyBind = (bind: string) => (BODY_BINDS as readonly string[]).includes(bind);
 
 /** Every `game.*` value something acts on: the adapter's, and what the panels that hold the person's choices keep. */
 export const GAME_WIRED: readonly string[] = [
@@ -49,9 +53,16 @@ function movers(project: Json): Array<{ object: Json; behavior: Json }> {
   return out;
 }
 
-/** The objects a person can pick: those that move. */
+/** The objects a person can pick: those that move by a behaviour, then those with 3D physics. */
 export function gameOptions(project: Json): Array<{ value: string; label: string }> {
-  return movers(project).map(({ object }) => ({ value: object.name, label: object.name }));
+  const names = [...movers(project), ...physicsBodies(project)].map(({ object }) => object.name as string);
+  return [...new Set(names)].map((name) => ({ value: name, label: name }));
+}
+
+/** The body a physics control acts on: the one picked, else the first with 3D physics. */
+function body(project: Json, picked: unknown): { object: Json; behavior: Json } | null {
+  const all = physicsBodies(project);
+  return all.find((m) => m.object.name === picked) ?? all[0] ?? null;
 }
 
 /** The object a control acts on: the one picked, else the first that moves. */
@@ -62,7 +73,20 @@ function mover(project: Json, picked: unknown): { object: Json; behavior: Json }
 
 /** What a control shows, read off the game; undefined when it has nothing for it (no moving object, or no such setting). */
 export function readGame(project: Json, bind: string, picked?: unknown): Value | undefined {
-  if (bind === GAME_OBJECT) return mover(project, picked)?.object.name ?? "";
+  if (bind === GAME_OBJECT) return mover(project, picked)?.object.name ?? body(project, picked)?.object.name ?? "";
+  if (isBodyBind(bind)) {
+    const bd = body(project, picked);
+    if (!bd) return undefined;
+    const p = readPhysics(bd.behavior);
+    switch (bind) {
+      case "game.body": return p.body.toLowerCase();
+      case "game.weight": return p.density;
+      case "game.bounce": return Math.round(p.bounce * 100);
+      case "game.grip": return Math.round(p.friction * 100);
+      case "game.fall": return p.gravity;
+      case "game.upright": return p.upright;
+    }
+  }
   const m = mover(project, picked);
   if (!m) return undefined;
   const b = m.behavior;
@@ -81,6 +105,26 @@ export function readGame(project: Json, bind: string, picked?: unknown): Value |
  */
 export function writeGame(project: Json, bind: string, v: Value, picked?: unknown): { did: string } | { error: string } {
   if (!isGameBind(bind) || bind === GAME_OBJECT) return { error: `nothing in the game answers to ${bind}` };
+  if (isBodyBind(bind)) {
+    const bd = body(project, picked);
+    if (!bd) return { error: "no object in the game has 3D physics yet: bring one in from Autora 3D with physics (game_from_model)" };
+    const who = bd.object.name;
+    const n = num(v);
+    // The panel speaks in percent for bounce and grip; the behaviour in 0 to 1.
+    const spec: Record<string, unknown> =
+      bind === "game.body" ? { body: v } :
+      bind === "game.weight" ? { density: n } :
+      bind === "game.bounce" ? { bounce: n === null ? n : n / 100 } :
+      bind === "game.grip" ? { friction: n === null ? n : n / 100 } :
+      bind === "game.fall" ? { gravity: n } :
+      { upright: v === true };
+    if (bind !== "game.body" && bind !== "game.upright" && n === null) return { error: "that is a number" };
+    const asked = physicsOf(spec, readPhysics(bd.behavior));
+    if ("error" in asked) return { error: asked.error };
+    writePhysics(bd.behavior, asked.physics);
+    const p = asked.physics;
+    return { did: bind === "game.body" ? `${who} is ${p.body.toLowerCase()}` : bind === "game.upright" ? `${who} ${p.upright ? "stays upright" : "can tip over"}` : `${who}: ${bind.slice(5)} ${bind === "game.bounce" ? Math.round(p.bounce * 100) : bind === "game.grip" ? Math.round(p.friction * 100) : bind === "game.weight" ? p.density : p.gravity}` };
+  }
   const m = mover(project, picked);
   if (!m) return { error: "no object in the game moves by a behaviour yet: add a player with a Platformer or Top-down movement behaviour" };
   const n = num(v);

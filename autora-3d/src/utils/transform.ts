@@ -27,7 +27,7 @@ function mapMesh(mesh: MeshData, f: (p: Point2D) => Point2D): MeshData {
     positions[i] = Math.round(p.x * 1000) / 1000;
     positions[i + 1] = Math.round(p.y * 1000) / 1000;
   }
-  return { positions, indices: mesh.indices };
+  return { ...mesh, positions };
 }
 
 /** A mesh shape's height changed to `height`, every height in the mesh scaled with it. */
@@ -36,7 +36,7 @@ export function scaleMeshHeight(body: Body3D, height: number): Partial<Body3D> {
   const k = height / Math.max(1e-6, body.extrusionHeight);
   const positions = body.mesh.positions.slice();
   for (let i = 2; i < positions.length; i += 3) positions[i] = Math.round(positions[i] * k * 1000) / 1000;
-  return { mesh: { positions, indices: body.mesh.indices }, extrusionHeight: height };
+  return { mesh: { ...body.mesh, positions }, extrusionHeight: height };
 }
 
 /** Rigid move/rotate of a body. Edge bevels and corner radii are index-based, so they carry over unchanged. */

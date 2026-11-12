@@ -148,8 +148,13 @@ export const cadSPECS: ToolSpec[] = [
             "metal",
             "glossy",
             "glass",
-            "neon"
-          ]
+            "neon",
+            "frosted",
+            "velvet",
+            "skin",
+            "rubber"
+          ],
+          "description": "A finish to start from: matte, metal, glossy, glass, neon, frosted (frosted glass), velvet (cloth with a soft sheen), skin (soft, light glows through) or rubber. cad_surface_set fine-tunes it."
         }
       },
       "required": [
@@ -344,8 +349,13 @@ export const cadSPECS: ToolSpec[] = [
             "metal",
             "glossy",
             "glass",
-            "neon"
-          ]
+            "neon",
+            "frosted",
+            "velvet",
+            "skin",
+            "rubber"
+          ],
+          "description": "A finish to start from: matte, metal, glossy, glass, neon, frosted (frosted glass), velvet (cloth with a soft sheen), skin (soft, light glows through) or rubber. cad_surface_set fine-tunes it."
         }
       },
       "required": [
@@ -559,8 +569,13 @@ export const cadSPECS: ToolSpec[] = [
             "metal",
             "glossy",
             "glass",
-            "neon"
-          ]
+            "neon",
+            "frosted",
+            "velvet",
+            "skin",
+            "rubber"
+          ],
+          "description": "A finish to start from: matte, metal, glossy, glass, neon, frosted (frosted glass), velvet (cloth with a soft sheen), skin (soft, light glows through) or rubber. cad_surface_set fine-tunes it."
         },
         "visible": {
           "type": "boolean"
@@ -709,7 +724,7 @@ export const cadSPECS: ToolSpec[] = [
   {
     "name": "cad_mesh_import",
     "group": "files",
-    "description": "Bring in a triangle mesh from a file as ONE shape: .glb/.gltf, .obj or .stl (a free CC0 model from Poly Pizza, Quaternius or Sketchfab, or one made in Blender). It arrives as the real surface, so organic forms (an animal, a face, a scan) are possible, which stock shapes and extruded outlines cannot give. It stands on the ground; size sets its longest side in mm (without it a GLB is read in metres, STL and OBJ in mm, and a result that is a speck or a building is fitted to 100 mm). Very large meshes are simplified to 60000 triangles. Move, turn, resize (cad_shape_resize scales it whole), recolour, group and export work on it; it has no outline, faces, bevels or holes, and cannot be joined or cut with the outline tools. Textures are not read: colour it with color or material.",
+    "description": "Bring in a triangle mesh from a file as ONE shape: .glb/.gltf, .obj or .stl (a free CC0 model from Poly Pizza, Quaternius or Sketchfab, or one made in Blender). It arrives as the real surface, so organic forms (an animal, a face, a scan) are possible, which stock shapes and extruded outlines cannot give. It stands on the ground; size sets its longest side in mm (without it a GLB is read in metres, STL and OBJ in mm, and a result that is a speck or a building is fitted to 100 mm). Very large meshes are simplified to 60000 triangles. Move, turn, resize (cad_shape_resize scales it whole), recolour, group and export work on it; it has no outline, faces, bevels or holes, and cannot be joined or cut with the outline tools. A GLB's base colour picture (texture) comes with it when it is inside the file and every part has a layout (UVs); otherwise colour it with color, material or cad_surface_set.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -762,8 +777,13 @@ export const cadSPECS: ToolSpec[] = [
             "metal",
             "glossy",
             "glass",
-            "neon"
-          ]
+            "neon",
+            "frosted",
+            "velvet",
+            "skin",
+            "rubber"
+          ],
+          "description": "A finish to start from: matte, metal, glossy, glass, neon, frosted (frosted glass), velvet (cloth with a soft sheen), skin (soft, light glows through) or rubber. cad_surface_set fine-tunes it."
         }
       },
       "required": []
@@ -907,8 +927,13 @@ export const cadSPECS: ToolSpec[] = [
             "metal",
             "glossy",
             "glass",
-            "neon"
-          ]
+            "neon",
+            "frosted",
+            "velvet",
+            "skin",
+            "rubber"
+          ],
+          "description": "A finish to start from: matte, metal, glossy, glass, neon, frosted (frosted glass), velvet (cloth with a soft sheen), skin (soft, light glows through) or rubber. cad_surface_set fine-tunes it."
         }
       },
       "required": [
@@ -984,8 +1009,13 @@ export const cadSPECS: ToolSpec[] = [
             "metal",
             "glossy",
             "glass",
-            "neon"
-          ]
+            "neon",
+            "frosted",
+            "velvet",
+            "skin",
+            "rubber"
+          ],
+          "description": "A finish to start from: matte, metal, glossy, glass, neon, frosted (frosted glass), velvet (cloth with a soft sheen), skin (soft, light glows through) or rubber. cad_surface_set fine-tunes it."
         }
       },
       "required": [
@@ -1019,6 +1049,345 @@ export const cadSPECS: ToolSpec[] = [
       "required": [
         "id"
       ]
+    }
+  },
+  {
+    "name": "cad_surface_set",
+    "group": "files",
+    "description": "Change what shapes are made of, beyond the material presets: start from a preset (it clears earlier fine-tuning) and/or set any number of the finish, a pattern the modeller draws itself, or a picture laid on it. Glass: transmission 1, roughness 0 (clear) to 0.5 (frosted), ior 1.33 water / 1.5 glass / 2.4 diamond, thickness in mm. Cloth and fuzz: sheen. Skin, wax, leaves, marble: subsurface. Light: glow. A pattern is in the shape's colour and color2, repeating every scale mm, with bump for relief. A picture: image (an artifact id or path; the host reads it, PNG or JPEG), repeating every imageScale mm (a mesh whose file had a layout fits it once); a grey reliefImage gives it relief and a grey roughnessImage rough and polished patches. A GLB carries the colour and (on a non-metal) the roughness picture; relief shows in Autora only, as glTF has no relief picture. Several shapes at once with ids.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "description": "Shape ids."
+        },
+        "preset": {
+          "type": "string",
+          "enum": [
+            "matte",
+            "metal",
+            "glossy",
+            "glass",
+            "neon",
+            "frosted",
+            "velvet",
+            "skin",
+            "rubber"
+          ],
+          "description": "A finish to start from: matte, metal, glossy, glass, neon, frosted (frosted glass), velvet (cloth with a soft sheen), skin (soft, light glows through) or rubber. cad_surface_set fine-tunes it."
+        },
+        "color": {
+          "type": "string",
+          "description": "Hex colour such as \"#3b82f6\"."
+        },
+        "roughness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "0 mirror-smooth to 1 fully matte."
+        },
+        "metalness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "0 non-metal to 1 metal."
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 1,
+          "description": "How solid it is: 1 solid, lower fades it out (not glass: use transmission)."
+        },
+        "transmission": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "How clear it is, like glass or water."
+        },
+        "ior": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 2.5,
+          "description": "How much a clear surface bends light."
+        },
+        "thickness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 200,
+          "description": "How thick a clear or glowing-through solid is, mm: thicker tints and bends more."
+        },
+        "clearcoat": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "A clear lacquer layer on top (car paint, varnish)."
+        },
+        "sheen": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "The soft rim light of cloth, velvet, felt and fuzz."
+        },
+        "sheenColor": {
+          "type": "string",
+          "description": "Hex colour such as \"#3b82f6\"."
+        },
+        "glow": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 5,
+          "description": "How brightly it glows in its own colour."
+        },
+        "subsurface": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Light glowing through from under the surface: skin, wax, jade, leaves."
+        },
+        "pattern": {
+          "description": "A pattern drawn on it: a kind, or the kind with its settings. \"none\" takes it off.",
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "none",
+                "wood",
+                "marble",
+                "noise",
+                "weave",
+                "scales",
+                "brushed",
+                "checker",
+                "dots"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "none",
+                    "wood",
+                    "marble",
+                    "noise",
+                    "weave",
+                    "scales",
+                    "brushed",
+                    "checker",
+                    "dots"
+                  ]
+                },
+                "color2": {
+                  "type": "string",
+                  "description": "The second colour of the pattern (the first is the shape's colour)."
+                },
+                "scale": {
+                  "type": "number",
+                  "description": "How big one repeat is, mm (default 60)."
+                },
+                "bump": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Relief: how much it stands out from the surface."
+                },
+                "angle": {
+                  "type": "number",
+                  "description": "Turns the pattern, degrees."
+                }
+              },
+              "required": []
+            }
+          ]
+        },
+        "image": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A picture to lay on it: an artifact id (file_...) or a path; the host reads it. null takes it off."
+        },
+        "imageScale": {
+          "type": "number",
+          "description": "How big one repeat of the picture is, mm (default 100)."
+        },
+        "reliefImage": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A grey relief picture (a bump map: light parts stand out, dark sink in), an artifact id or path the host reads; null takes it off. It lies like the colour picture unless reliefScale says otherwise."
+        },
+        "reliefScale": {
+          "type": "number",
+          "description": "How big one repeat of the relief picture is, mm."
+        },
+        "reliefStrength": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "How far the relief picture stands out (default 0.5)."
+        },
+        "roughnessImage": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A grey roughness picture (light is rough, dark is polished), times roughness; an artifact id or path; null takes it off."
+        },
+        "roughnessScale": {
+          "type": "number",
+          "description": "How big one repeat of the roughness picture is, mm."
+        },
+        "reset": {
+          "type": "boolean",
+          "description": "Put every number back to the material preset's (keeps the pattern and picture)."
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "cad_hair_set",
+    "group": "files",
+    "description": "Grow hair or fur on shapes, change it, or take it off (remove: true). style \"strands\" is separate hairs that fall, curl and gather into locks (a head of hair, a mane, a tail, grass); \"fur\" is a dense short coat (an animal, a teddy, a rug, moss). Give only what should change; the rest keeps its value. Lengths in mm, density in hairs per cm². Grooming (combing, cutting and puffing where the hair goes) is the person's, with the brush in the window's Hair card; their strokes stay when you change the numbers. Suggest settings and explain them, but the look is theirs to decide.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "description": "Shape ids."
+        },
+        "style": {
+          "type": "string",
+          "enum": [
+            "strands",
+            "fur"
+          ]
+        },
+        "length": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 400,
+          "description": "mm (default 40 for strands, 8 for fur)."
+        },
+        "density": {
+          "type": "number",
+          "minimum": 0.2,
+          "maximum": 80,
+          "description": "Hairs per cm² (default 30 strands, 40 fur)."
+        },
+        "thickness": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 3,
+          "description": "Width of a hair at its root, mm."
+        },
+        "curl": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "0 straight, 0.3 wavy, 1 tight curls."
+        },
+        "frizz": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Random wander along each hair."
+        },
+        "clump": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "How much neighbouring hairs gather into locks."
+        },
+        "droop": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "How much it falls under its own weight: 0 stiff, 1 limp."
+        },
+        "shine": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "The highlight band along the hair."
+        },
+        "rootColor": {
+          "type": "string",
+          "description": "Hex colour such as \"#3b82f6\"."
+        },
+        "tipColor": {
+          "type": "string",
+          "description": "Hex colour such as \"#3b82f6\"."
+        },
+        "seed": {
+          "type": "integer",
+          "description": "Another number grows another, equally good, head of hair."
+        },
+        "clearGrooming": {
+          "type": "boolean",
+          "description": "Forget the person's grooming strokes. Only when they ask."
+        },
+        "remove": {
+          "type": "boolean",
+          "description": "Take the hair off."
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "cad_scene_look",
+    "group": "files",
+    "description": "How the whole scene is lit: the surroundings glass, metal and hair reflect (\"studio\" soft and even, \"daylight\" sky and sun, \"sunset\" warm and low, \"night\" dark and blue) and exposure (overall brightness, 0.3 to 2, default 1). Saved with the model; exported files do not carry it.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "environment": {
+          "type": "string",
+          "enum": [
+            "studio",
+            "daylight",
+            "sunset",
+            "night"
+          ]
+        },
+        "exposure": {
+          "type": "number",
+          "minimum": 0.3,
+          "maximum": 2
+        }
+      },
+      "required": []
     }
   },
   {
@@ -1814,7 +2183,7 @@ export const cadSPECS: ToolSpec[] = [
   {
     "name": "cad_export",
     "group": "files",
-    "description": "Export the visible shapes. format \"stl\" (binary, Z-up), \"glb\" (binary glTF for game engines: metres, Y-up, keeps colours and materials), \"obj\" (text) or \"json\" (the document). glb options: scale (output metres per scene mm, default 0.001) and pivot (\"scene\" as placed, \"asset\" centred on the ground, \"shape\" one pivot per shape at the centre of its base). The file is saved as an artifact the person can download from the thread, and the reply names it; pass name to choose the file name.",
+    "description": "Export the visible shapes. format \"stl\" (binary, Z-up), \"glb\" (binary glTF for game engines: metres, Y-up, keeps colours, materials, textures and hair), \"obj\" (text) or \"json\" (the document). glb options: scale (output metres per scene mm, default 0.001), pivot (\"scene\" as placed, \"asset\" centred on the ground, \"shape\" one pivot per shape at the centre of its base) and hair (false leaves hair and fur out; with it each shape's hair is thinned to a size an engine takes). STL and OBJ never carry hair. The file is saved as an artifact the person can download from the thread, and the reply names it; pass name to choose the file name.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -1837,6 +2206,9 @@ export const cadSPECS: ToolSpec[] = [
             "asset",
             "shape"
           ]
+        },
+        "hair": {
+          "type": "boolean"
         },
         "name": {
           "type": "string",

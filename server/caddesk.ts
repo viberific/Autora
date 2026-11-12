@@ -22,6 +22,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { keepCopy, saveArtifact } from "./artifacts";
 import { FileRefError, readFileRef } from "./fileref";
+import { picturesOf, restorePictures } from "../src/lib/cadPictures";
 import { chatTitle } from "./folders";
 import { stateDir } from "./state";
 import { readDoc, saveDoc } from "./store";
@@ -109,6 +110,22 @@ interface Entry {
   quiet?: number;
   /** The agent's hand is at work in the window: what the window sends up meanwhile is its hand's steps, not the person's. */
   handing?: number;
+  /** The surface pictures this chat's model has had, by key (src/lib/cadPictures.ts): the window sends one it has seen by its key. */
+  pictures?: Map<string, string>;
+}
+
+/** The most picture bytes (as characters) a chat keeps for the window to refer to; past it only the model's own are kept. */
+const PICTURE_CHARS = 96 * 1024 * 1024;
+
+/** Remembers the pictures of a model for this chat, so the window can refer to them by key. */
+function keepPictures(entry: Entry, doc: unknown): void {
+  const now = picturesOf(doc as Parameters<typeof picturesOf>[0]);
+  if (!now.size && !entry.pictures) return;
+  const store = entry.pictures ?? new Map<string, string>();
+  for (const [k, v] of now) store.set(k, v);
+  let size = 0;
+  for (const v of store.values()) size += v.length;
+  entry.pictures = size > PICTURE_CHARS ? now : store;
 }
 
 const entries = new Map<string, Entry>();
@@ -498,6 +515,18 @@ export async function runCadTool(
       given.commands = given.commands.map((c: any) =>
         c && typeof c.tool === "string" ? { ...c, tool: c.tool.replace(/^cad_/, "") } : c);
     }
+    // A picture for a surface is named the same way; it reaches the model as the picture itself, never through the conversation.
+    try {
+      if (name === "surface_set") readPicture(given, hooks.cwd ?? process.cwd());
+      if (name === "batch" && Array.isArray(given.commands)) {
+        for (const c of given.commands as Array<{ tool?: unknown; args?: Record<string, unknown> }>) {
+          if (c?.tool === "surface_set" && c.args && typeof c.args === "object") c.args = readPicture({ ...c.args }, hooks.cwd ?? process.cwd());
+        }
+      }
+    } catch (err) {
+      if (err instanceof FileRefError) return { ok: false, summary: err.message };
+      throw err;
+    }
     if (name === "mesh_import" && typeof given.file === "string" && given.data === undefined) {
       // The model names a file; the bytes never go through the conversation.
       try {
@@ -594,6 +623,23 @@ export function cadModel(session: string): ModelDoc | null {
   return (entries.get(session)?.engine?.getDoc() as unknown as ModelDoc | undefined) ?? null;
 }
 
+/**
+ * A surface_set's pictures (`image`, `reliefImage`, `roughnessImage`) name files (an artifact or a path): each becomes the
+ * picture, as a data URL, before the model sees it.
+ */
+function readPicture(args: Record<string, unknown>, cwd: string): Record<string, unknown> {
+  for (const slot of ["image", "reliefImage", "roughnessImage"]) {
+    const ref = args[slot];
+    if (typeof ref !== "string" || ref.startsWith("data:")) continue;
+    const f = readFileRef(ref, cwd, "picture", "cad_surface_set");
+    const png = f.data[0] === 0x89 && f.data[1] === 0x50 && f.data[2] === 0x4e && f.data[3] === 0x47;
+    const jpg = f.data[0] === 0xff && f.data[1] === 0xd8;
+    if (!png && !jpg) throw new FileRefError(`${f.name} is not a PNG or a JPEG; a surface's picture must be one.`);
+    args[slot] = `data:image/${png ? "png" : "jpeg"};base64,${f.data.toString("base64")}`;
+  }
+  return args;
+}
+
 /** Which of the model's tools exist, for the capability briefing. */
 export function cadBriefing(on: boolean): string {
   if (!on) {
@@ -605,6 +651,7 @@ export function cadBriefing(on: boolean): string {
     "the extruded shapes cannot make those, so for organic forms build them or import a free CC0 mesh). " +
     "cad_sculpt_blend makes ONE smooth organic shape by melting spheres, tapered capsules and ellipsoids together (an animal's body, neck, head and legs; mirror reflects half of it), " +
     "cad_sculpt_loft a smooth tube through changing cross-sections (a leg, tail, horn), and cad_sculpt_smooth evens out any mesh shape. " +
+    "cad_surface_set: glass, velvet, skin, patterns, pictures; cad_hair_set: hair or fur (the person grooms it); cad_scene_look: the light. " +
     "Shapes are flat outlines pushed up to a height, in millimetres, x right, y away, z up. Model what the person asks to " +
     "make, print or design with these, not code. The window opens beside the chat on first use and the person can work " +
     "in it too: call cad_scene_get again before relying on what you saw earlier. Check a part with cad_shape_measure " +
@@ -656,7 +703,9 @@ export function cadRoutes(app: Express, opts: {
       const engine = await engineOf(id);
       res.setHeader("Cache-Control", "no-store");
       const entry = entryFor(id);
-      res.json({ doc: engine.getDoc(), rev: entry.rev, ...(entry.by === "agent" && entry.cue ? { cue: entry.cue } : {}) });
+      const doc = engine.getDoc();
+      keepPictures(entry, doc);
+      res.json({ doc, rev: entry.rev, ...(entry.by === "agent" && entry.cue ? { cue: entry.cue } : {}) });
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
@@ -681,10 +730,15 @@ export function cadRoutes(app: Express, opts: {
     if (opts.off()) return res.status(403).json({ error: "Autora 3D is switched off on the Tools page." });
     try {
       const c = await loadCore();
-      const doc = c.parseDoc(req.body?.doc);
-      if (!doc) return res.status(400).json({ error: "That is not an Autora 3D model." });
       const engine = await engineOf(id);
       const entry = entryFor(id);
+      // Pictures the window knows the server holds come as their keys: put them back before the model is read.
+      keepPictures(entry, engine.getDoc());
+      const given = req.body?.doc && typeof req.body.doc === "object" ? restorePictures(req.body.doc, entry.pictures ?? new Map()) : null;
+      if (given?.missing.length) return res.status(409).json({ error: "Some pictures are not here any more; send them whole.", missing: given.missing });
+      const doc = c.parseDoc(given?.doc);
+      if (!doc) return res.status(400).json({ error: "That is not an Autora 3D model." });
+      keepPictures(entry, doc);
       // The agent's hand is at work: these are its steps, and the call puts in the finished model itself, as one change.
       if (entry.handing) return res.json({ rev: entry.rev });
       // Stays "person" until the agent's next tool call says otherwise: that is who made the latest change.
@@ -827,4 +881,72 @@ export function serveCad(app: Express, dist: string): void {
     editorMissing(path.join(dist, "autora-3d"), "The 3D editor"),
     ...staticDir(path.join(dist, "autora-3d"), { fallthrough: false }),
   );
+}
+
+// ------------------------------------------------------------------ to a game --
+
+type ModelBody = { id: string; name: string; visible: boolean; points: Array<{ x: number; y: number }>; extrusionHeight: number; elevation?: number; groupId?: string; repeatOf?: string; frame?: unknown };
+type ModelGroup = { id: string; name: string; bodyIds: string[] };
+
+/** A part of the chat's model as a game takes it: a GLB of the shapes (centred on the ground), its size, and what it was made of. */
+interface ModelForGame {
+  glb: Buffer;
+  /** Its size, mm: x across, y deep, z tall. */
+  size: { x: number; y: number; z: number };
+  /** The shapes it was made of (their ids), so it can be made again when they change. */
+  shapes: string[];
+  /** A name for it: the group's or the shape's, or "Model". */
+  name: string;
+}
+
+/**
+ * The shapes `pick` names in this chat's model (shape or group ids or names; nothing means everything visible), as one GLB a
+ * game can use. Shapes and their copies, groups whole, hidden ones left out. An error says what was not found.
+ */
+export async function modelForGame(session: string, pick: string[] = [], hair = true): Promise<ModelForGame | { error: string }> {
+  if (!validSession(session)) return { error: "Autora 3D needs a chat to work in." };
+  if (!cadAvailable()) return { error: "Autora 3D is not built on this server." };
+  const engine = await engineOf(session);
+  const doc = engine.getDoc() as unknown as { bodies: ModelBody[]; groups: ModelGroup[]; repeats: unknown[]; library: unknown[] };
+  const visible = doc.bodies.filter((b) => b.visible);
+  if (!visible.length) return { error: "The 3D model has nothing visible to send. Make or show something in Autora 3D first." };
+  const wanted = new Set<string>();
+  const missing: string[] = [];
+  let name = "";
+  for (const raw of pick) {
+    const p = raw.trim();
+    const group = doc.groups.find((g) => g.id === p || g.name.toLowerCase() === p.toLowerCase());
+    const body = doc.bodies.find((b) => b.id === p || b.name.toLowerCase() === p.toLowerCase());
+    if (group) { group.bodyIds.forEach((id) => wanted.add(id)); name ||= group.name; }
+    else if (body) { wanted.add(body.id); name ||= body.name; }
+    else missing.push(p);
+  }
+  if (missing.length) return { error: `The model has no shape or group called ${missing.map((m) => `"${m}"`).join(", ")}. Shapes: ${doc.bodies.filter((b) => !b.repeatOf).slice(0, 12).map((b) => b.name).join(", ")}; groups: ${doc.groups.map((g) => g.name).join(", ") || "none"}.` };
+  // A live repeat's copies go with their shape.
+  const chosen = pick.length ? visible.filter((b) => wanted.has(b.id) || (b.repeatOf && wanted.has(b.repeatOf))) : visible;
+  if (!chosen.length) return { error: "Those shapes are hidden; show them first." };
+  const c = await loadCore();
+  const ids = new Set(chosen.map((b) => b.id));
+  const part = c.parseDoc({ ...doc, bodies: chosen, groups: doc.groups.filter((g) => g.bodyIds.some((id) => ids.has(id))).map((g) => ({ ...g, bodyIds: g.bodyIds.filter((id) => ids.has(id)) })), repeats: [] });
+  if (!part) return { error: "That part of the model could not be read." };
+  const res = await new c.Engine(part).execute("export", { format: "glb", pivot: "asset", hair });
+  const out = res.result as { data?: string } | undefined;
+  if (!res.ok || !out?.data) return { error: asAgentSees(res.error ?? "The model could not be exported.") };
+  const xs = chosen.flatMap((b) => b.points.map((p) => p.x));
+  const ys = chosen.flatMap((b) => b.points.map((p) => p.y));
+  const lo = Math.min(...chosen.map((b) => b.elevation ?? 0));
+  const hi = Math.max(...chosen.map((b) => (b.elevation ?? 0) + b.extrusionHeight));
+  const round = (n: number) => Math.round(n * 100) / 100;
+  return {
+    glb: Buffer.from(out.data, "base64"),
+    size: { x: round(Math.max(...xs) - Math.min(...xs)), y: round(Math.max(...ys) - Math.min(...ys)), z: round(hi - lo) },
+    shapes: chosen.filter((b) => !b.repeatOf).map((b) => b.id),
+    name: name || (chosen.length === 1 ? chosen[0].name : "Model"),
+  };
+}
+
+/** Be told when a chat's model changes (any change, by anyone): what follows the model elsewhere (a game) updates from it. */
+export async function onModelChange(session: string, fn: () => void): Promise<() => void> {
+  const engine = await engineOf(session);
+  return engine.subscribe(() => fn());
 }

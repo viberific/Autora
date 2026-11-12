@@ -87,7 +87,9 @@ async function main() {
       const panel = page.locator('.pa-panel[aria-label="Material"]');
       await panel.locator('[data-bind="model.part"] .pa-select-btn').click();
       await panel.getByRole("option", { name: "Post", exact: true }).click();
-      await panel.getByRole("radio", { name: "metal", exact: true }).click();
+      // Nine finishes: a list, picked like the part.
+      await panel.locator('[data-bind="model.material"] .pa-select-btn').click();
+      await panel.getByRole("option", { name: "metal", exact: true }).click();
       const [base, post] = modelParts(await doc());
       await until("the Post is metal", async () => { const d = await doc(); return readModel(d, "model.material", post!.id) === "metal"; });
       assert.notEqual(readModel(await doc(), "model.material", base!.id), "metal", "the other part is untouched");

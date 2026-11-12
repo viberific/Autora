@@ -93,7 +93,9 @@ description: >-
   repeating and measuring them) and you work on the same model beside the chat:
   push and pull faces, move, resize and bevel by finger or mouse. For organic
   forms (an animal, a face) the agent blends and lofts smooth shapes that you then
-  sculpt with brushes, and you can bring in a GLB, OBJ or STL mesh. Exports STL for
+  sculpt with brushes, and you can bring in a GLB, OBJ or STL mesh. Shapes take real
+  materials (glass, velvet, skin, rubber), patterns or your own pictures, and can grow
+  hair or fur that you groom. Exports STL for
   printing and GLB for games. Configure its capability on the Tools page.
 
 
@@ -206,23 +208,22 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  The canvas now shows only your work and what it needs at that moment. A
-  window for a document, PDF, song, video, game or model is its content and
-  its name on one strip; Load, Save, Maximise, Pin and Close appear while you
-  are in that window and fade when you move on, and nothing says "saved"
-  unless a save is in progress or failed. The instruction lines printed on
-  documents, boards and windows are gone. When new work arrives the view now
-  shows it at a readable size, clear of the chat, instead of zooming out to
-  fit everything; jumping to a piece shows its controls with it, and a
-  maximised window is no longer drawn among the others. Asking for a chart
-  leaves one chart, not three. A table's column header sorts when pressed.
-  Pasted notes keep their line breaks. The steps in the chat read as what was
-  done ("Putting a table on the canvas") instead of raw settings, and a step
-  the app held back, such as writing in a story that is yours, is shown as
-  held back rather than as a red failure. If an editor is not installed on
-  your server, Autora now tells you so plainly, and the PDF window says so
-  itself. Sending a message always brings the chat to its end. On a phone,
-  touching the canvas folds the chat down to its strip, and windows keep
-  their buttons in view. A song is no longer offered to 3D or Games. Opening
-  a PDF, a spreadsheet or a new video no longer logs errors in the browser,
-  and spreadsheets load their fonts.
+  3D models can now be made of much more than five finishes. A shape can be
+  clear or frosted glass, water, velvet, skin, rubber and more, with sliders
+  for roughness, metal, clarity, sheen, light shining through and glow. It can
+  carry a pattern drawn for you (wood, marble, fabric, scales, brushed metal,
+  checks, dots) or a picture of your own, with grey pictures for relief and
+  for rough and polished patches, and a GLB you bring in keeps its texture. Any shape can grow hair or fur: choose length, density, curl, locks
+  and colours, then comb, cut, lengthen or puff it yourself with the new
+  grooming brush, mirrored to the other side if you like. Hair rests on the
+  shapes it falls onto instead of passing through them. The scene can be lit as a studio, daylight, a sunset or
+  night. GLB exports carry the glass, cloth, glow, textures and hair to game
+  engines (hair is thinned to a size engines take, or left out if you ask).
+  Hair regrows once a slider stops, so dragging stays smooth, and a picture
+  is uploaded once rather than with every edit. The agent can set all of this for you, and Panacea's 3D panels
+  have new Glass, Texture, Hair and Light controls. Anything you model can
+  now go into your game as a 3D object with real physics (it falls, rolls,
+  bounces and collides): send it from the 3D window or ask for it, say how
+  it should feel (heavy, bouncy, slippery, stays put) and fine-tune it in
+  Panacea's 3D physics panel. It keeps following the model as you change it.
+  Pictures, sounds and models you add to a game now load when you press Play.

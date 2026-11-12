@@ -7,6 +7,73 @@
 const SRC = "newIDE/app/src/";
 
 export const PATCHES = [
+  // ---- Previews take the game's own files. A resource Autora keeps (a picture, a sound, a 3D model the agent or the person
+  // added) has the server's address, /api/game/<chat>/assets/<file>, not a full URL; GDevelop's in-browser file system only
+  // tracks full URLs and leaves any other file uncopied ("Copy not done"), so a preview asked for a file it never had. The
+  // copy is now made: fetched from Autora and stored with the preview's other files before the preview starts. ----
+  {
+    file: SRC + "ExportAndShare/BrowserExporters/BrowserSWFileSystem.js",
+    find: `    console.warn(
+      '[BrowserSWFileSystem] Copy not done from',
+      source,
+      'to',
+      dest
+    );
+    return true;
+  };`,
+    replace: `    if (source.startsWith('/api/game/')) {
+      // Autora: one of the game's own files, on this origin. Fetched and stored beside the preview's other files.
+      const relativePath = dest.replace(this.rootUrl, '');
+      this._pendingCopies.push(
+        fetch(source)
+          .then(response => {
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            return response.arrayBuffer();
+          })
+          .then(bytes => putFile('/' + relativePath, bytes, getContentType(dest)))
+          .catch(error => console.error('[BrowserSWFileSystem] Could not copy', source, error))
+      );
+      return true;
+    }
+    console.warn(
+      '[BrowserSWFileSystem] Copy not done from',
+      source,
+      'to',
+      dest
+    );
+    return true;
+  };`,
+  },
+  {
+    file: SRC + "ExportAndShare/BrowserExporters/BrowserSWFileSystem.js",
+    find: `  _pendingDeleteOperations: Array<Promise<any>> = [];`,
+    replace: `  _pendingDeleteOperations: Array<Promise<any>> = [];
+
+  // Autora: copies of the game's own files (see copyFile), finished before the preview starts.
+  _pendingCopies: Array<Promise<any>> = [];`,
+  },
+  {
+    file: SRC + "ExportAndShare/BrowserExporters/BrowserSWFileSystem.js",
+    find: `      await Promise.all(uploadPromises);`,
+    replace: `      await Promise.all(uploadPromises);
+      await Promise.all(this._pendingCopies);`,
+  },
+  {
+    file: SRC + "ExportAndShare/BrowserExporters/BrowserSWFileSystem.js",
+    find: `    '.svg': 'image/svg+xml',`,
+    replace: `    '.svg': 'image/svg+xml',
+    '.webp': 'image/webp',
+    '.glb': 'model/gltf-binary',
+    '.gltf': 'model/gltf+json',
+    '.mp3': 'audio/mpeg',
+    '.ogg': 'audio/ogg',
+    '.wav': 'audio/wav',
+    '.m4a': 'audio/mp4',
+    '.ttf': 'font/ttf',
+    '.otf': 'font/otf',
+    '.mp4': 'video/mp4',
+    '.webm': 'video/webm',`,
+  },
   {
     file: "newIDE/app/scripts/import-GDJS-Runtime.js",
     find: `const fs = require('fs');`,

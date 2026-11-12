@@ -2,7 +2,7 @@
  * The 3D window with Visible work on, for the rest of the cad_* calls: each is done with the modeller's own controls,
  * live, and the agent is told it was done by hand -- Draw (a rectangle dragged out, corners tapped, a circle on a shape's
  * top, a hole cut through), a turn with the ring, a wall's and a top's number typed, a bevel's handle dragged, Properties
- * and Material, Duplicate, a group renamed and dissolved, a repeat's count stepped and its end dragged, the library's
+ * and Material, a surface's finish and pattern (Material and Texture), fur grown and set (Hair), the light (Light), Duplicate, a group renamed and dissolved, a repeat's count stepped and its end dragged, the library's
  * Save, Library and remove, Undo and Redo in the top bar, a batch one command at a time, and the whole model cleared.
  *
  * Each test starts from a model put in at speed (Visible work off for a moment), so it does not lean on the one before.
@@ -166,6 +166,39 @@ async function main() {
       assert.equal(lid.color.toLowerCase(), "#10b981");
       await byHand("hide it", [{ name: "cad_shape_set", args: { id: lid.id, visible: false } }]);
       assert.equal((await named("Lid")).visible, false);
+    });
+
+    await test("surface", "Material and Texture: a finish chosen, its sliders dragged (More for the rarer), a pattern picked and sized", async () => {
+      await start([add("Pane")]);
+      const pane = await named("Pane");
+      const out = await byHand("make it frosted glass with a wood grain", [
+        { name: "cad_surface_set", args: { id: pane.id, preset: "glass", roughness: 0.4, sheen: 0.3, pattern: { kind: "wood", scale: 30 } } },
+      ]);
+      assert.match(out, /chose Translucent Acrylic in Material/);
+      assert.match(out, /set Roughness to 0.4 in Material/);
+      assert.match(out, /set Sheen to 0.3 in Material/);
+      assert.match(out, /chose Wood in Texture/);
+      assert.match(out, /set Size to 30 in Texture/);
+      const d = (await doc()).bodies.find((b) => b.id === pane.id) as Body & { surface?: { roughness?: number; sheen?: number; pattern?: { kind: string; scale: number } } };
+      assert.equal(d.materialType, "glass");
+      assert.equal(d.surface?.roughness, 0.4);
+      assert.equal(d.surface?.pattern?.kind, "wood");
+      assert.equal(d.surface?.pattern?.scale, 30);
+    });
+
+    await test("hair", "Hair: Grow fur pressed, its length and colour set; the light chosen in Light", async () => {
+      await start([add("Rug", { height: 6, width: 80 })]);
+      const rug = await named("Rug");
+      let out = await byHand("give it a fur coat, 12 mm, white tips", [{ name: "cad_hair_set", args: { id: rug.id, style: "fur", length: 12, tipColor: "#ffffff" } }]);
+      assert.match(out, /pressed Grow fur in Hair/);
+      assert.match(out, /set Length to 12 in Hair/);
+      assert.match(out, /set Tip colour to #ffffff in Hair/);
+      const h = ((await doc()).bodies.find((b) => b.id === rug.id) as Body & { hair?: { style: string; length: number; tipColor: string } }).hair;
+      assert.deepEqual([h?.style, h?.length, h?.tipColor], ["fur", 12, "#ffffff"]);
+      out = await byHand("light it like a sunset", [{ name: "cad_scene_look", args: { environment: "sunset", exposure: 1.2 } }]);
+      assert.match(out, /chose Sunset in Light/);
+      assert.match(out, /set Brightness to 1.2 in Light/);
+      assert.deepEqual(((await doc()) as Doc & { look?: unknown }).look, { environment: "sunset", exposure: 1.2 });
     });
 
     await test("dup", "Duplicate in Properties, the copy moved where it was asked", async () => {

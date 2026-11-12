@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { resolveSurface } from './surface';
 import { Body3D, Point2D } from '../types';
 
 /**
@@ -38,9 +39,31 @@ interface Face {
   pts: P2[];
   fill: string;
   holes?: P2[][];
+  /** See-through (glass, a faded shape). */
+  opacity?: number;
+  /** Hair or fur: a soft edge in its colour. */
+  fuzz?: string;
 }
 
-function facesOf(b: Body3D): Face[] {
+const mixHex = (a: string, b: string, t: number) => {
+  const p = (h: string) => { const n = parseInt((/^#?([0-9a-f]{6})$/i.exec(h)?.[1] ?? '94a3b8'), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+  const [x, y] = [p(a), p(b)];
+  return `#${x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, '0')).join('')}`;
+};
+
+/** What a shape looks like at thumbnail size: its colour as its pattern or hair shows it, and how see-through it is. */
+function looks(b: Body3D): { color: string; opacity: number; fuzz?: string } {
+  const s = resolveSurface(b);
+  let color = s.pattern ? mixHex(s.color, s.pattern.color2, 0.35) : s.color;
+  if (b.hair) color = mixHex(b.hair.rootColor, b.hair.tipColor, 0.5);
+  const opacity = Math.max(0.25, s.opacity * (1 - 0.6 * s.transmission));
+  return { color, opacity, ...(b.hair ? { fuzz: b.hair.tipColor } : {}) };
+}
+
+function facesOf(body: Body3D): Face[] {
+  const look = looks(body);
+  const b = { ...body, color: look.color };
+  const extra = { ...(look.opacity < 1 ? { opacity: look.opacity } : {}), ...(look.fuzz ? { fuzz: look.fuzz } : {}) };
   const pts = b.points;
   if (pts.length < 3) return [];
   const z0 = b.elevation ?? 0;
@@ -59,12 +82,12 @@ function facesOf(b: Body3D): Face[] {
     const facing = (nx - ny) * R;
     if (facing <= 0.01) continue;
     walls.push({
-      face: { pts: [project(a, z0), project(c, z0), project(c, z1), project(a, z1)], fill: shade(b.color, 0.55 + 0.3 * facing) },
+      face: { pts: [project(a, z0), project(c, z0), project(c, z1), project(a, z1)], fill: shade(b.color, 0.55 + 0.3 * facing), ...extra },
       depth: near({ x: (a.x + c.x) / 2, y: (a.y + c.y) / 2 }),
     });
   }
   walls.sort((x, y) => x.depth - y.depth);
-  return [...walls.map((w) => w.face), { pts: pts.map((p) => project(p, z1)), fill: shade(b.color, 1.08), holes: b.holes?.map((h) => h.map((p) => project(p, z1))) }];
+  return [...walls.map((w) => w.face), { pts: pts.map((p) => project(p, z1)), fill: shade(b.color, 1.08), holes: b.holes?.map((h) => h.map((p) => project(p, z1))), ...extra }];
 }
 
 /** SVG text for a square picture of `bodies`, `size` px wide. Empty shapes give an empty picture. */
@@ -88,7 +111,12 @@ export function thumbnailSvg(bodies: Body3D[], size = 96): string {
   const oy = (size - (maxV - minV) * scale) / 2;
   const sx = (p: P2) => `${(ox + (p.u - minU) * scale).toFixed(1)},${(oy + (maxV - p.v) * scale).toFixed(1)}`;
   const d = (ps: P2[]) => `M${ps.map(sx).join('L')}Z`;
-  const body = faces.map((f) => `<path d="${d(f.pts)}${(f.holes ?? []).map(d).join('')}" fill="${f.fill}" fill-rule="evenodd" stroke="rgba(0,0,0,0.25)" stroke-width="0.6" stroke-linejoin="round"/>`).join('');
+  const body = faces
+    .map((f) => {
+      const edge = f.fuzz ? `stroke="${f.fuzz}" stroke-width="1.6" stroke-dasharray="1 1.4"` : 'stroke="rgba(0,0,0,0.25)" stroke-width="0.6"';
+      return `<path d="${d(f.pts)}${(f.holes ?? []).map(d).join('')}" fill="${f.fill}"${f.opacity !== undefined ? ` fill-opacity="${f.opacity.toFixed(2)}"` : ''} fill-rule="evenodd" ${edge} stroke-linejoin="round"/>`;
+    })
+    .join('');
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">${body}</svg>`;
 }
 

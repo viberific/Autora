@@ -49,7 +49,9 @@ export interface ExecuteOptions {
 
 const personsOwn = (name: string) => toolByName(name)?.authority === 'person';
 const refusal = (name: string) =>
-  new AgentError(`${name} is the person's own hand, not a tool for you: shaping a form by hand is theirs to do.`, 'Suggest what to change and tell them where the tool is (the Sculpt tool in the 3D window).');
+  name.startsWith('hair_')
+    ? new AgentError(`${name} is the person's own hand, not a tool for you: styling hair by hand is theirs to do.`, 'Suggest how to groom it and tell them where the brush is (Groom in the Hair card of the 3D window). hair_set changes how it grows.')
+    : new AgentError(`${name} is the person's own hand, not a tool for you: shaping a form by hand is theirs to do.`, 'Suggest what to change and tell them where the tool is (the Sculpt tool in the 3D window).');
 
 const READ_ONLY = new Set(TOOL_SPECS.filter((t) => t.readOnly).map((t) => t.name));
 
@@ -138,7 +140,7 @@ function runOne(host: AgentHost, doc: Doc, ids: IdGen, name: string, args: unkno
         return { doc, result: { format: 'stl', filename: 'craft3d.stl', encoding: 'base64', bytes: bytes.length, data: toBase64(bytes) }, changed: false };
       }
       if (a.format === 'glb') {
-        const bytes = glbBytes(bodies, { scale: a.scale, pivot: a.pivot, groups: doc.groups });
+        const bytes = glbBytes(bodies, { scale: a.scale, pivot: a.pivot, groups: doc.groups, hair: a.hair !== false });
         if (!bytes) throw new AgentError('Nothing visible to export.');
         return { doc, result: { format: 'glb', filename: 'craft3d.glb', encoding: 'base64', bytes: bytes.length, data: toBase64(bytes) }, changed: false };
       }
