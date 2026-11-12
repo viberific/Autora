@@ -29,7 +29,7 @@ const TEXT_WIDTH = 9360;
 
 const KIND_OF: Record<string, OfficeKind> = { "engine:sheets": "xlsx", "engine:pages": "docx", "engine:slides": "pptx" };
 
-export interface SheetTable { sheet: string; rows: string[][]; clipped: boolean }
+interface SheetTable { sheet: string; rows: string[][]; clipped: boolean }
 
 const colNumber = (letters: string) => [...letters].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0);
 
@@ -40,7 +40,7 @@ function shown(value: string): string {
 }
 
 /** The first sheet's filled cells as rows, from its top-left filled cell to its bottom-right; null when it has none. */
-export function sheetTable(xlsx: Buffer): SheetTable | null {
+function sheetTable(xlsx: Buffer): SheetTable | null {
   const cells = xlsxCells(xlsx, { values: true });
   if (!cells || cells.size === 0) return null;
   const first = cells.keys().next().value?.split("!")[0];
@@ -71,7 +71,7 @@ const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 const unesc = (t: string) => t.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
 
 /** The table, as Word writes one: bordered, the first row bold, the page's width shared between the columns. */
-export function tableXml(table: SheetTable, mark: string, caption: string): string {
+function tableXml(table: SheetTable, mark: string, caption: string): string {
   const cols = Math.max(1, ...table.rows.map((r) => r.length));
   const w = Math.floor(TEXT_WIDTH / cols);
   const border = (side: string) => `<w:${side} w:val="single" w:sz="4" w:space="0" w:color="auto"/>`;
@@ -123,7 +123,7 @@ function tableWords(tbl: string): string[][] {
  * The document with the joined table in it, as the sheet has it now: the marked table rewritten in place, or added at
  * the end the first time. Null when the document already shows exactly this, or cannot be read.
  */
-export function withJoinedTable(docx: Buffer, table: SheetTable, mark: string, caption: string): Buffer | null {
+function withJoinedTable(docx: Buffer, table: SheetTable, mark: string, caption: string): Buffer | null {
   let files: Record<string, Uint8Array>;
   try {
     files = unzipSync(new Uint8Array(docx));
@@ -154,7 +154,7 @@ export function withJoinedTable(docx: Buffer, table: SheetTable, mark: string, c
 
 // --------------------------------------------------------- keeping it live --
 
-export interface JoinHooks {
+interface JoinHooks {
   /** The joins on a chat's canvas (server/panacea.ts). */
   joinsOf(session: string): readonly Join[];
   /** What a document's table is called, from the file in the joined window. */
@@ -169,7 +169,7 @@ const hashOf = (data: Buffer | null) => (data ? crypto.createHash("sha1").update
 let hooks: JoinHooks | null = null;
 
 /** Bring every join of the chat up to date, now. What it changed, in words, one line per document. */
-export function syncJoins(session: string): string[] {
+function syncJoins(session: string): string[] {
   if (!hooks) return [];
   const said: string[] = [];
   for (const join of hooks.joinsOf(session)) {
