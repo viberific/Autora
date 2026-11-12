@@ -18,7 +18,7 @@ import { FileCell } from "./FileCell";
 import { RemarkCell } from "./RemarkCell";
 import { ChimeCell } from "./ChimeCell";
 import { VendorCell } from "./VendorCell";
-import { ToolCell, describeArgs } from "./ToolCell";
+import { ToolCell, describeArgs, heldWords, stepWords } from "./ToolCell";
 import { TodoCell } from "./TodoCell";
 import { usePreviewState } from "../lib/preview";
 import { useDeskState } from "../lib/pdfdesk";
@@ -324,6 +324,19 @@ export function Thread({
     const el = scrollerRef.current;
     if (el) el.scrollTo({ top: el.scrollHeight, behavior });
   }, []);
+
+  /* A message the person has just sent takes the thread to its end, wherever they had scrolled to: they were reading up
+     the thread, said something, and the answer then arrived out of sight behind a "New messages" pill. */
+  const turnsSeen = useRef(count);
+  useEffect(() => {
+    const grew = count > turnsSeen.current;
+    turnsSeen.current = count;
+    if (!grew || !tail?.prompt) return;
+    setStuck(true);
+    setUnread(false);
+    const frame = requestAnimationFrame(() => toBottom("auto"));
+    return () => cancelAnimationFrame(frame);
+  }, [count, tail, toBottom]);
 
   /**
    * Where the thread sits, readable from a handler that is not re-rendered.
@@ -833,7 +846,7 @@ const stepStatus = (cell: Cell) =>
 /** The line of a step that is worth showing without opening it. */
 const stepLine = (cell: Cell) =>
   cell.kind === "terminal" ? cell.command
-    : cell.kind === "tool" ? describeArgs(cell.span.args)
+    : cell.kind === "tool" ? stepWords(cell.span.name, cell.span.args)
     : cell.kind === "screen" ? cell.url ?? `${cell.source} view`
     : cell.kind === "file" ? cell.file.path
     : cell.kind === "files" ? `${cell.files.length} files`
@@ -982,13 +995,17 @@ const StepGroup = memo(function StepGroup({ steps, unfolded = false, ...cell }: 
     stepStatus(s) === "error"
     || (s.kind === "terminal" && s.exitCode !== null && s.exitCode !== 0)).length;
   const denied = steps.filter((s) => stepStatus(s) === "denied").length;
+  /* Steps the app itself held back (still planning, the person's own words, something the person is using): its rules
+     working. Said in plain words and never in the colour of a failure. */
+  const heldBack = steps.flatMap((s) => (s.kind === "tool" && s.span.status === "denied" && s.span.held ? [s.span.held] : []));
+  const declined = denied - heldBack.length;
   const took = stepsTook(steps);
   const many = steps.length > 1;
   const last = steps[steps.length - 1];
   const doing = running ? steps.find((s) => stepStatus(s) === "running") ?? last : last;
   const title = many ? `${steps.length} steps` : stepLine(steps[0]) || steps[0].kind;
   const tail = many ? stepLine(doing) : "";
-  const tone = failed ? "is-bad" : denied ? "is-warn" : running ? "is-live" : "";
+  const tone = failed ? "is-bad" : declined ? "is-warn" : running ? "is-live" : "";
 
   return (
     <section className={`steps flow-detail ${tone} ${open ? "is-open" : ""}`.trim()}>
@@ -1001,7 +1018,8 @@ const StepGroup = memo(function StepGroup({ steps, unfolded = false, ...cell }: 
         {tail && <span className="steps-doing">{tail}</span>}
         {running && <em className="cell-chip is-running">running</em>}
         {orphaned && <em className="cell-chip">no result</em>}
-        {denied > 0 && <em className="cell-chip is-warn">declined</em>}
+        {declined > 0 && <em className="cell-chip is-warn">declined</em>}
+        {heldBack.length > 0 && <em className="cell-chip">{heldWords(heldBack[0])}</em>}
         {failed > 0 && <em className="cell-chip is-bad">{failed} failed</em>}
         {!running && took !== null && <em className="cell-at">{shortMs(took)}</em>}
       </button>
@@ -1090,6 +1108,10 @@ const CellView = memo(function CellView({
   const held = !stage && docked !== "" && docked.split("|").includes(cellKey(cell));
   switch (cell.kind) {
     case "reply":
+      /* A reply with nothing in it yet (the model has begun and said no word, thought nothing shown, recalled nothing) is not
+         a bubble: an empty one with only the name on it stood in the thread while the steps ran. The line under the
+         thread already says what the agent is on. */
+      if (!cell.turn.text.trim() && !cell.turn.thinking?.trim() && cell.memories.length === 0 && !cell.turn.setup) return null;
       return (
         <Reply
           text={cell.turn.text}
@@ -1213,7 +1235,7 @@ const CellView = memo(function CellView({
           <StageStub
             kind="plan"
             title={NAME.plan}
-            note={`${done} of ${cell.items.length} done · above the message box`}
+            note={`${done} of ${cell.items.length} done`}
           />
         );
       }

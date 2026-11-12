@@ -69,7 +69,7 @@ export function thoughtForTool(name: string, args: Record<string, any> = {}): st
     case "office_look": return "Looking it over";
     case "office_edit": return count(args.ops) > 1 ? `Making ${noun(count(args.ops), "change")}` : "Making a change";
     case "office_check": return "Checking it";
-    case "office_create": return "Starting a document";
+    case "office_create": return args.type === "xlsx" ? "Starting a spreadsheet" : args.type === "pptx" ? "Starting a presentation" : "Starting a document";
     case "video_edit": return "Editing the video";
     case "video_ui": return str(args.label) ? `Using ${quote(args.label, 22)}` : "Using the editor";
     case "video_look": case "video_frame": return "Looking at the frame";
@@ -80,6 +80,20 @@ export function thoughtForTool(name: string, args: Record<string, any> = {}): st
     case "studio_track": return "Setting up a track";
     case "studio_song": case "studio_make": return "Working on the song";
     case "studio_play": return "Playing it back";
+    case "panacea_open": return "Opening the canvas";
+    case "panacea_look": return "Looking at the canvas";
+    case "panacea_surface":
+      return str(args.remove) ? "Taking work off the canvas" : typeof args.csv === "string" ? "Putting a table on the canvas"
+        : typeof args.document === "string" ? "Starting a page" : str(args.board) || str(args.flowchart) ? "Starting a board"
+        : "Putting work on the canvas";
+    case "panacea_board": return "Working on the board";
+    case "panacea_project": return "Updating the project";
+    case "panacea_export": return "Saving a file from the canvas";
+    case "studio_open": return "Opening the song";
+    case "video_open": return "Opening the video";
+    case "game_open": return "Opening the game";
+    case "photo_open": return "Opening the picture";
+    case "office_open": return "Opening the file";
     case "panacea_place": return "Bringing a panel";
     case "panacea_set": return "Setting it";
     case "panacea_arrange": return "Arranging the canvas";

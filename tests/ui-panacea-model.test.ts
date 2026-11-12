@@ -64,6 +64,10 @@ async function main() {
     assert.equal((await app.api("PUT", `/api/cad/${s}/doc`, { doc: mine.toJSON() })).status, 200);
 
     await test("the Width slider changes the model in Autora 3D", async () => {
+      /* The 3D window has just arrived, far from the panels: Autora's own framing shows the newest piece at a size that can
+         be read rather than everything too small to use, so the person asks for all of it. */
+      await page.getByRole("button", { name: "Show all work", exact: true }).click();
+      await sleep(400);
       const size = page.locator('.pa-panel[aria-label="Size"]');
       const width = size.locator('[data-bind="model.width"]');
       await until("the panel shows the model's width", async () => (await width.locator(".pa-track").getAttribute("aria-valuenow")) === "40");

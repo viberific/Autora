@@ -301,7 +301,6 @@ export function OfficeWindow({ sessionId, kind, phone }: { sessionId: string; ki
         <span className="pdf-bar-ico" aria-hidden="true"><IconFile size={14} /></span>
         <span className="pdf-bar-app">{NAME[kind]}</span>
         <span className="pdf-bar-name" title={word.name}>{word.name ?? THING[kind]}</span>
-        <span className="pdf-bar-note">{problem ? "" : "Saved as you go"}</span>
         <div className="spacer" />
         {versions.length > 0 && !phone && (
           <button

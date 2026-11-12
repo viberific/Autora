@@ -199,7 +199,6 @@ export function CadWindow({ sessionId, phone }: { sessionId: string; phone: bool
         <span className="pdf-bar-ico" aria-hidden="true"><IconCube size={14} /></span>
         <span className="pdf-bar-app">3D</span>
         <span className="pdf-bar-name">{shapes === 1 ? "1 shape" : `${shapes} shapes`}</span>
-        <span className="pdf-bar-note">Saved as you go</span>
         <div className="spacer" />
         <LoadButton app="cad" session={sessionId} phone={phone} />
         <SaveButton onSave={keep} phone={phone} disabled={shapes === 0} />

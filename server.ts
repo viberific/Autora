@@ -175,6 +175,7 @@ import { onStudioCommand, studioRoutes, studioState, studioTurnNote, studioVisib
 import { appOfArtifact, appOfFile, appOfTool } from "./src/lib/panacea/flows";
 import { dropPanacea, noteFlow, onPanaceaChange, onPanaceaTouch, panaceaRoutes, panaceaState, panaceaSuggester, panaceaTurnNote, panaceaVisible } from "./server/panacea";
 import { installedWindows, joinProjects, windowOff } from "./server/tools";
+import { capabilityOf } from "./server/capabilities";
 import { dropOfficeDesk, onOfficeChange, onOfficePush, onOfficeTouch, officeBriefing, officeData, officeRoutes, onOfficeCommand, officeState, officeHooks, serveOfficeEditors } from "./server/officedesk";
 import { renderToPdf, webDir as officeWebDir } from "./server/officerender";
 import {
@@ -5679,10 +5680,15 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
               name: use.name, args: use.args,
             }, span);
             const known = tools.map((t) => t.name).join(", ") || "none";
-            const why = spec
-              ? `"${use.name}" exists but its group is not available right now.`
-              : `There is no tool called "${use.name}".`;
-            emitEvent(session, "tool.error", "agent", { error: why }, span);
+            /* Why a tool that exists is not offered, in words the agent can pass on: an editor this server was built
+               without ("not installed") is not the same as one the person switched off on the Tools page. */
+            const editor = spec ? capabilityOf(use.name) : undefined;
+            const missing = editor ? editor.windows.some((w) => installedWindows()[w] === false) : false;
+            const why = !spec ? `There is no tool called "${use.name}".`
+              : editor && missing ? `${editor.name} is not installed on this server, so "${use.name}" cannot be used. Tell the person that plainly (it is not switched off, it was never built here), and offer what can be done without it.`
+              : editor ? `${editor.name} is switched off on the Tools page, so "${use.name}" is not available. Tell the person; they can switch it on there.`
+              : `"${use.name}" exists but its group is not available right now.`;
+            emitEvent(session, "tool.error", "agent", { error: editor ? (missing ? `${editor.name} is not installed on this server.` : `${editor.name} is switched off on the Tools page.`) : why }, span);
             const said = `${why} The tools you have are: ${known}.`;
             reply(false, watched(use.name, use.args, false, said, said));
             return;
@@ -5975,10 +5981,14 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
                 display: { exit_code: outcome.exitCode },
               }, span);
             } else {
+              /* The agent held back from the person's own words (a story's cards, a document that is theirs to write): the
+                 rule working, not a tool that broke. The thread says so plainly instead of showing a failure. */
+              const theirs = /the person's words|is theirs to write|are the person's to write/.test(outcome.summary);
               emitEvent(session, "tool.error", "agent", {
                 // Playwright colours its call log; the thread is not a terminal.
                 error: stripAnsi(outcome.summary),
                 duration_ms: durationMs,
+                ...(theirs ? { held: true, theirs: true } : {}),
               }, span);
             }
           }

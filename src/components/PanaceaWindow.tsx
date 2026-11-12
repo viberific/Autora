@@ -67,6 +67,9 @@ const show = (v: Value | undefined) => {
 /** The canvas value that says which track, part or clip a control acts on. */
 const pickOf = (bind: string) => (isModelBind(bind) ? MODEL_PART : isVideoBind(bind) ? VIDEO_CLIP : isGameBind(bind) ? GAME_OBJECT : MUSIC_TRACK);
 
+/** Whether a canvas's name says nothing the header does not already: the chat's own title, or the name a new chat starts with. */
+const sameName = (name: string, chat: string | undefined) => { const n = name.trim(); return !n || n === (chat ?? "").trim() || n === "New Session" || n === "Canvas"; };
+
 export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene, followTarget, onJump, onCloseWork, navigationHost, nativeActions }: {
   sessionId: string;
   hosted?: readonly HostedWork[];
@@ -370,11 +373,18 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
   }, [edit, live, quietly, tell]);
 
   const hold = doc.hold;
+  const setParams = useCallback((surface: string, values: Record<string, Value>, label: string) => {
+    for (const [name, v] of Object.entries(values)) {
+      const bad = valueProblem(live.current, `@${surface}.${name}`, v);
+      if (bad) { setProblem(`That value does not fit: ${bad}.`); return; }
+    }
+    edit((d) => { for (const [name, v] of Object.entries(values)) setValue(d, `@${surface}.${name}`, v); }, label);
+  }, [edit, live]);
   const api: PanaceaApi = useMemo(() => ({
-    canvas, profile: displayProfile, sessionId, set, act, ask, hold, expand, writeDoc, writeBoard, setMode, refresh: doc.refresh,
+    canvas, profile: displayProfile, sessionId, set, setParams, act, ask, hold, expand, writeDoc, writeBoard, setMode, refresh: doc.refresh,
     value: (key: string) => apps.read(key, canvas.values[pickOf(key)]) ?? valueAt(canvas, key),
     options: apps.options,
-  }), [apps, canvas, displayProfile, sessionId, set, act, ask, hold, expand, writeDoc, writeBoard, setMode, doc.refresh]);
+  }), [apps, canvas, displayProfile, sessionId, set, setParams, act, ask, hold, expand, writeDoc, writeBoard, setMode, doc.refresh]);
 
   // ------------------------------------------------------- panel actions --
 
@@ -616,7 +626,14 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
     // lands as a page that is the person's to write on.
     const table = looksTabular(text) ? tableFrom(splitDelimited(text)) : null;
     if (table) { addSurface({ kind: "data", name: "Pasted table", title: "Pasted table", table, at }); return; }
-    addSurface({ kind: "doc", name: "Pasted text.md", title: "Pasted text", doc: createDoc(text.trim(), "guide"), at });
+    /* Plain words keep their lines: a document reads its text as Markdown, where a single line break is only a space, so
+       pasted notes ran together as one paragraph. Text that is Markdown already (headings, lists, code) is left as it is.
+       The page is called by its first line, as a person would call it. */
+    const plain = text.trim().replace(/\r\n?/g, "\n");
+    const marked = /^(\s*([-*+]|\d+[.)])\s+|#{1,6}\s+|```|>\s)/m.test(plain);
+    const first = plain.split("\n")[0]!.replace(/^#{1,6}\s+/, "").trim();
+    const title = first && first.length <= 48 ? first : "Pasted text";
+    addSurface({ kind: "doc", name: `${title}.md`, title, doc: createDoc(marked ? plain : plain.replace(/\n+/g, "\n\n"), "guide"), at });
   }, [addSurface, putPendingSurface]);
 
   const onRemoveSurface = useCallback((s: Surface) => {
@@ -798,12 +815,14 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
             not in a second bar under it: drawn here, shown there (the slot App.tsx keeps in the header). */}
         {!phone && barHost && createPortal(
           <div className="pa-canvas-bar" data-idle={idleBar ? "" : undefined} {...(idleBar ? ({ inert: "" } as object) : {})}>
-            {nativeOpen && <input className="st-song-name" value={canvas.name} size={Math.max(4, canvas.name.length + 1)} maxLength={80} aria-label="Canvas name"
+            {/* One name in the header, not two: a canvas still called what its chat is (or was, before the chat was named
+                from its first message) shows no name of its own until the pointer or the keys are on its bar. */}
+            {nativeOpen && <input className={`st-song-name${sameName(canvas.name, barHost.dataset.chat) ? " is-same" : ""}`} value={canvas.name} size={Math.max(4, canvas.name.length + 1)} maxLength={80} aria-label="Canvas name"
               title="The canvas's name" disabled={!doc.ready}
               onChange={(e) => { const name = e.target.value; edit((d) => { d.name = name; }, "Renamed the canvas", "name"); }} />}
-            {nativeOpen && <span className={`pdf-bar-note st-save is-${doc.save}`}>{!doc.ready ? doc.notice ? "Not loaded" : "Loading native work…" : doc.save === "saving" ? "Saving…" : doc.save === "error" ? "Not saved" : "Saved as you go"}</span>}
+            {nativeOpen && <span className={`pdf-bar-note st-save is-${doc.save}`}>{!doc.ready ? doc.notice ? "Not loaded" : "Loading native work…" : doc.save === "saving" ? "Saving…" : doc.save === "error" ? "Not saved" : ""}</span>}
             <span ref={saveRef} className="st-save-btn"><LoadButton app="panacea" session={sessionId} phone={phone} onLoaded={loaded} disabled={!sessionId} />{nativeOpen &&
-              <SaveButton onSave={keep} phone={phone} disabled={!doc.ready} label="Save native work" tooltip="Keep native panels and surfaces as .panacea.json. Engine files save on their own work cards." />}</span>
+              <SaveButton onSave={keep} phone={phone} disabled={!doc.ready} label="Save" tooltip="Keep a copy of this canvas in Artifacts, to load again later. Each app's file is kept from its own window." />}</span>
           </div>, barHost)}
         {note && (
           <div className="pdf-problem" role="status">

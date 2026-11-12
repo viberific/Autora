@@ -425,7 +425,7 @@ const GAME = [
     "tool in groups (Play, Build, Make it do things, Scenes, View, Edit, Game, Share, Advanced): scene settings and variables, 2D/3D view, " +
     "grid, zoom, Pictures & sounds, Game settings, Export web game (a .zip), and under Advanced the Rules sheet (the game's events; a " +
     "Back to the scene chip returns). Name a tool by its button and say \"open All tools\" if it is not on their bar. You have every part " +
-    "of the game through the game_* tools whatever is shown. Visible work is not here yet for this window (its bar says \"coming soon\"): " +
+    "of the game through the game_* tools whatever is shown. Visible work is not here yet for this window (nothing on its bar says so): " +
     "no cursor is played over a game you have already changed. The game is changed and the editor reloads it.",
   "  Panacea's Game panels drive this same game: Movement and Physics change the movement behaviour (Platformer or Top-down) of one " +
     "object, chosen in the panel's Object list (else the first object that moves): Run speed, Jump (platformer only), Gravity " +
@@ -565,7 +565,25 @@ const PANACEA = [
     "another card, unlinked or taken away with Delete. Long passages are typed faster, not cut. Then the finished canvas goes in " +
     "exactly as the call made it; your result says what was done by hand and anything that could not be (a value no panel shows). " +
     "With Visible work off (or nobody watching) the canvas simply changes, and values glide to where you set them.",
-  "  Saving. Native work is saved as you go; the workspace's top bar also has Save native work, which keeps native panels and surfaces " +
+  "  What the person sees of a window. A piece of work on the board is the work and its name, nothing else: an app's window shows its " +
+    "file's name on one strip, with no sentence about the app and no \"saved\" note (saving is silent; only \"Saving…\" or \"Not saved\" " +
+    "is said). Its controls (Load, Save, Take control, Export, the Send dot, Maximise, Pin, Close) are there while the person is in that " +
+    "window (the pointer over it, the focus inside it, the last thing they touched, or maximised) and fade when the work moves elsewhere; " +
+    "they keep their places, so tell the person \"move onto the window and press Save at the right of its strip\". The strip moves the " +
+    "window. While one piece is maximised the others are not drawn around it. A document's and a board's bar hold only the You write / " +
+    "Autora writes switch (and a flowchart's Add node): no instructions are printed on them. A table's column header sorts by that " +
+    "column when pressed: largest first, again for smallest first, a third time for the rows' own order (the same sort and descending " +
+    "values you set). Autora's own framing shows everything while that stays readable; once it would not, it shows the newest piece " +
+    "with its panels at a size that can be read, and Show all work is the person's to press. A jump to a piece shows it with the panels " +
+    "that are out for it. When you place a chart on a table yourself, the starter chart and the standing offer beside that table give " +
+    "way to it if the person has not touched or pinned them, so asking for one chart leaves one. A step the app held back is shown to " +
+    "the person in plain words and not as a failure: \"planning first\", \"yours to write\", \"waited for you\". The header " +
+    "shows the canvas's own name only when it differs from the chat's (it appears with the pointer on the canvas's Load and Save). " +
+    "On a phone the windows' controls do not fade, and a touch on the board folds the conversation to its strip (a tap on the strip " +
+    "brings it back). If the PDF editor is not installed on this server its window says so in place of the editor; you can still " +
+    "read, compose and change PDFs with the pdf tools. A song is only offered to apps that open songs: a file that names its app " +
+    "(.song.json, .model.json, .panacea.json) is not offered to 3D or Games as a plain .json.",
+  "  Saving. Native work is saved as you go; the workspace's top bar also has Save, which keeps native panels and surfaces " +
     "in Artifacts as <canvas name>.panacea.json. This is not a bundle of hosted engine files: Music, Office, PDF, video and other engines " +
     "save through their own work cards and retain their own undo/history. Beside it, Load opens supported work from Artifacts into the " +
     "same scene, using the native surface or retained engine appropriate to the file. On a phone the workspace has no top bar: " +

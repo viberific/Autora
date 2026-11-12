@@ -130,7 +130,8 @@ async function main() {
           const k = f.width / ((await frame.evaluate("window.innerWidth")) as number);
           await page.mouse.click(f.x + (st.x + st.w * fx) * k, f.y + (st.y + st.h * fy) * k);
         };
-        await at(0.30, 0.20);
+        // A quarter of the way down: inside the title box whether the window has one strip or two above the slide.
+        await at(0.30, 0.25);
         await until("the text tools to arrive", async () => { const now = await shown(); return now.includes("Bold") && now.includes("Italic") && now.includes("Underline"); });
         if (process.env.OFFICE_SHOTS) await page.screenshot({ path: `${process.env.OFFICE_SHOTS}/slides-picked.png` });
         assert.ok((await shown()).includes("New slide"), "the slide tools stay");

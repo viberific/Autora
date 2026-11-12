@@ -157,10 +157,8 @@ export function GameWindow({ sessionId, phone }: { sessionId: string; phone: boo
         <span className="pdf-bar-ico" aria-hidden="true"><IconGame size={14} /></span>
         <span className="pdf-bar-app">Games</span>
         <span className="pdf-bar-name">{game.name ?? "Your game"}{scenes ? ` · ${scenes === 1 ? "1 scene" : `${scenes} scenes`}` : ""}</span>
-        <span className="pdf-bar-note">{up ? "Saved as you go" : "Starting the engine…"}</span>
+        {!up && <span className="pdf-bar-note">Starting the engine…</span>}
         <div className="spacer" />
-        {/* The agent's hand is not in this editor yet; no cursor is played over a game it already changed. */}
-        <span className="pdf-bar-soon" title="Watching the agent work in the game editor is not here yet: the game changes and the editor reloads it">Visible work: coming soon</span>
         <LoadButton app="game" session={sessionId} phone={phone} />
         <SaveButton onSave={keep} phone={phone} disabled={!up} />
         {phone && (

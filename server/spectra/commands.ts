@@ -163,6 +163,14 @@ const DROPPED = new Set<string>();
 /** Commands with no implementation here, answered with a refusal. */
 const REFUSED = new Set<string>();
 
+/**
+ * A command the desktop editor has and this window does not (its updater, its licence prompts, a write that names no
+ * file). The editor asks a few of these every time it opens and carries on when told no, so the answer is an ordinary
+ * reply that says no (server/spectra.ts answers 200 with the refusal): a 400 for each put four red errors in the
+ * browser's console on every PDF opened, for nothing that had gone wrong.
+ */
+export class NotHere extends Error {}
+
 function str(args: Record<string, any>, ...names: string[]): string {
   for (const name of names) {
     const v = args?.[name];
@@ -332,6 +340,8 @@ export async function runCommand(
       return { base64: slice.toString("base64"), bytes: slice.length };
     }
     case "write_file_binary": {
+      // Asked with no file named (the editor's own scratch save before anything is open): there is nowhere to write it.
+      if (!str(args, "filePath", "path")) throw new NotHere("No file was named to write to.");
       const file = inside(ctx.root, str(args, "filePath", "path"));
       const base64 = str(args, "base64");
       fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -587,7 +597,7 @@ export async function runCommand(
     case "icc_license_text":
     case "list_recent_documents":
       REFUSED.add(command);
-      throw new Error("That is not available in Autora's PDF window.");
+      throw new NotHere("That is not available in Autora's PDF window.");
 
     /* --- 4. journaling and window chatter ------------------------------ */
     case "renderer_ready":

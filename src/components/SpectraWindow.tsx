@@ -47,6 +47,17 @@ export function SpectraWindow({ sessionId, phone }: { sessionId: string; phone: 
   /** The event names the frame has asked to be told about. */
   const wanted = useRef(new Set<string>());
   const [trouble, setTrouble] = useState<string | null>(null);
+  /* Whether this server can run the PDF editor at all (its page and its engine, server/tools.ts installedWindows). When it
+     cannot, the window says so in place of the editor: the editor's own page used to open on a full set of tools and a
+     "Could Not Open" dialog. Unknown until the server answers, and unknown is not "missing". */
+  const [missing, setMissing] = useState(false);
+  useEffect(() => {
+    let live = true;
+    fetch("/api/settings").then((r) => r.json())
+      .then((body: { tools?: { installed?: Record<string, boolean> } }) => { if (live) setMissing(body?.tools?.installed?.pdf === false); })
+      .catch(() => undefined);
+    return () => { live = false; };
+  }, []);
   /** Bumped when the agent changes the document under the editor: the frame is
    *  loaded again, which is the only way it re-reads a file it already has. */
   const [generation, setGeneration] = useState(0);
@@ -206,7 +217,6 @@ export function SpectraWindow({ sessionId, phone }: { sessionId: string; phone: 
         <span className="pdf-bar-ico" aria-hidden="true"><IconFile size={14} /></span>
         <span className="pdf-bar-app">PDF</span>
         <span className="pdf-bar-name" title={desk.name ?? undefined}>{desk.name ?? "PDF"}</span>
-        <span className="pdf-bar-note">Saved as you go</span>
         <div className="spacer" />
         <LoadButton app="pdf" session={sessionId} phone={phone} />
         <SaveButton onSave={keep} phone={phone} disabled={!desk.name} />
@@ -233,15 +243,20 @@ export function SpectraWindow({ sessionId, phone }: { sessionId: string; phone: 
           </button>
         )}
       </div>
-      {trouble && <div className="pdf-problem" role="status">{trouble}</div>}
-      <iframe
+      {trouble && !missing && <div className="pdf-problem" role="status">{trouble}</div>}
+      {missing ? (
+        <div className="pdf-missing" role="status">
+          <b>The PDF editor is not installed on this server.</b>
+          <span>{desk.name ? `${desk.name} is safe in Artifacts, and can be downloaded from there.` : "PDFs can still be read, made and changed by asking Autora."}</span>
+        </div>
+      ) : <iframe
         ref={frame}
         key={generation}
         className="pdf-frame"
         src={`/spectra-editor/index.html?session=${encodeURIComponent(sessionId)}${phone ? "&phone=1" : ""}`}
         title={`${desk.name ?? "PDF"}, in Panacea · PDF`}
         sandbox="allow-scripts allow-downloads allow-modals allow-popups"
-      />
+      />}
     </div>
   );
 }

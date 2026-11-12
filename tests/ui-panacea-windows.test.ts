@@ -54,7 +54,8 @@ async function main() {
 
     await test("a window dragged by its title bar stays where it was put, through a reload", async () => {
       const before = (await rects(page))["engine:studio"]!;
-      const head = page.locator('.pw-engine[data-work="engine:studio"] .pw-engine-head');
+      // One strip: the app's own bar, with the file's name, is the window's title bar (the board's buttons sit at its right end).
+      const head = page.locator('.pw-engine[data-work="engine:studio"] .pw-engine-body .pdf-bar');
       const box = (await head.boundingBox())!;
       await page.mouse.move(box.x + 120, box.y + box.height / 2);
       await page.mouse.down();
@@ -75,7 +76,7 @@ async function main() {
       const z = async (id: string) => (await wins(s)).find((w) => w.id === id)!.z;
       const cadFront = (await z("engine:cad")) > (await z("engine:studio"));
       const target = cadFront ? "engine:studio" : "engine:cad";
-      await page.locator(`.pw-engine[data-work="${target}"] .pw-engine-head`).click({ position: { x: 150, y: 10 } });
+      await page.locator(`.pw-engine[data-work="${target}"] .pw-engine-body .pdf-bar`).click({ position: { x: 150, y: 10 } });
       await until("the clicked window is in front in the canvas", async () => (await z(target)) > (await z(target === "engine:cad" ? "engine:studio" : "engine:cad")));
       const r = await rects(page);
       assert.ok(Number(r[target]!.z) > Number(r[target === "engine:cad" ? "engine:studio" : "engine:cad"]!.z), "and on the page");

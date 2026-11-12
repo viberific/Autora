@@ -6182,6 +6182,9 @@ button.dock-card:hover { border-color: var(--border-strong); }
 /* The install offer sits where the notices do, and is one line of its own: it
    is the only card here that is not about something that just happened. */
 .install-offer { pointer-events: auto; }
+/* On a phone the offer lies over the top of the board, where an app's window has its name and its Maximise, Pin and Close:
+   while a window is open the offer waits (it is back when the board is clear). */
+body:has(.panacea-workspace.is-phone .pw-engine) .install-offer { display: none; }
 .notice.is-info { border-left-color: var(--accent); }
 .notice .notice-act { flex: 0 0 auto; height: 26px; padding: 0 12px; font-size: var(--fs-xs); }
 
@@ -6567,9 +6570,33 @@ button.dock-card:hover { border-color: var(--border-strong); }
 .pw-engine-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--s1); border-bottom: 1px solid var(--border); cursor: grab; }
 .pw-engine-head > span:first-child { display: flex; color: var(--accent-light); }
 .pw-engine-head > b { flex-shrink: 0; font-size: var(--fs-base); }
-.pw-engine-context { flex: 1; min-width: 0; color: var(--text-3); font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pw-engine-head button { border: 0; background: transparent; color: var(--text-2); border-radius: var(--r-sm); padding: 4px; font: inherit; font-size: var(--fs-xs); cursor: pointer; }
 .pw-engine.is-pinned .pw-engine-head { cursor: default; }
+/* A window on the board is its work and its name. Everything else on its bars (Load, Save, Take control, Export, Maximise,
+   Pin, Close, Send) is there while the person is in the window -- the pointer over it, the focus inside it, the last thing
+   touched, or maximised -- and fades when the work moves elsewhere (CLAUDE.md: controls appear when the work needs them).
+   They keep their places, so nothing in the window moves when they come and go. */
+.pw-engine-head > .spacer { flex: 1; }
+/* On a phone a window is the screen and there is no pointer to bring its controls: they stay (the way out of full
+   screen above all). The fade is a desktop's. */
+.panacea-workspace:not(.is-phone) :is(.pw-engine-head > button, .pw-engine-head > .pa-link-dot,
+  .pw-engine-body .pdf-bar > :not(.pdf-bar-ico, .pdf-bar-name, .st-song-name, .pdf-bar-note, .pdf-bar-app, .spacer),
+  .pw-engine-body .app-bar > :is(button, a, .btn)) { opacity: 0; transition: opacity var(--dur-2) var(--ease); }
+.panacea-workspace:not(.is-phone) .pw-engine:is(:hover, :focus-within, .is-active, .is-max) :is(.pw-engine-head > button, .pw-engine-head > .pa-link-dot),
+.panacea-workspace:not(.is-phone) .pw-engine:is(:hover, :focus-within, .is-active, .is-max) .pw-engine-body :is(.pdf-bar, .app-bar) > * { opacity: 1; }
+/* One strip, not two: on a desktop the app's own bar (the file's name) is the window's title strip, and the window's
+   buttons sit at its right end. A window whose app has no bar keeps the board's strip, with the app's name. */
+.panacea-workspace:not(.is-phone) .pw-engine:has(.pw-engine-body .pdf-bar) > .pw-engine-head {
+  position: absolute; top: 0; right: 0; z-index: 2; height: 44px; padding: 0 8px 0 0; gap: 2px; background: transparent; border: 0;
+}
+.panacea-workspace:not(.is-phone) .pw-engine:has(.pw-engine-body .pdf-bar) > .pw-engine-head > :is(.pw-engine-ico, b, .spacer) { display: none; }
+.panacea-workspace:not(.is-phone) .pw-engine-body .pdf-bar { padding-right: 132px; cursor: grab; touch-action: none; user-select: none; }
+.panacea-workspace:not(.is-phone) .pw-engine.is-pinned .pw-engine-body .pdf-bar { cursor: default; }
+.panacea-workspace .pw-engine-body .pdf-bar .pdf-bar-ico { color: var(--accent-light); }
+/* While one piece is maximised it is the work: the rest of the board stays mounted but is not drawn around it. */
+.pa-world:has(.pw-engine.is-max, .pa-surface.is-max) :is(.pw-engine, .pa-surface):not(.is-max) { visibility: hidden; }
+/* A finger needs more to hit than a pointer does. */
+.panacea-workspace.is-phone .pw-engine-head > button { min-width: 36px; min-height: 36px; }
 .pw-engine-body, .pw-engine-body > .app-pane, .pw-engine-body > .stage-pane { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .pw-engine-body > .app-pane { border: 0; }
 .pw-engine .pdf-window.is-full, .pw-engine .app-window.is-full, .pw-engine .cell.widget.is-expanded, .pw-engine .cell.shot.is-max { position: relative; inset: auto; z-index: auto; height: auto; padding: 0; }
@@ -6597,9 +6624,10 @@ button.dock-card:hover { border-color: var(--border-strong); }
 .pw-jump-dock.is-phone.is-open > button:not(.pw-jump-toggle) { animation: paArrive var(--dur-2) var(--ease) both; }
 .pw-full-workspace .conversation-flow__entry .composer { width: 100%; max-width: none; margin: 0; }
 .conversation-flow .cell-note { width: fit-content; max-width: 100%; pointer-events: none; }
-.tool-choice { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.tool-choice { position: relative; display: flex; min-width: 0; }
 .tool-choice > .tool-tile { flex: 1; }
-.tool-new { align-self: flex-end; color: var(--text-3); }
+/* "New" sits inside its tile's right end, so every tile in the grid is the same height. */
+.tool-new { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: var(--text-3); }
 .stage.is-expanded .panacea-workspace, .stage.is-expanded .pw-surfaces { flex: 1; min-height: 0; }
 .panacea-workspace.is-phone .pw-bar { gap: 6px; padding: 6px 8px; flex-wrap: wrap; }
 .panacea-workspace.is-phone .pw-context { padding: 6px 8px; }
@@ -6941,10 +6969,6 @@ button.app-url:hover { border-color: var(--border-strong); color: var(--text); }
   font-size: var(--fs-base); font-weight: 600; color: var(--text);
 }
 .pdf-bar-note { flex: 0 0 auto; font-size: var(--fs-xs); color: var(--text-3); white-space: nowrap; }
-.pdf-bar-soon {
-  flex: 0 0 auto; font-size: var(--fs-xs); color: var(--text-3); white-space: nowrap;
-  padding: 1px 8px; border-radius: var(--r-pill); border: 1px dashed var(--border);
-}
 /* Full screen, and the way back out of it, is the one control in the bar that
    must never give way: it used to shrink to 16px at the end of a full bar, so
    the way out of the phone's full screen was the hardest thing to hit. The
@@ -6956,6 +6980,8 @@ button.app-url:hover { border-color: var(--border-strong); color: var(--text); }
    left edge. */
 .pdf-window.is-phone .pdf-bar > .pdf-full-btn,
 .app-window.is-phone .app-bar > .app-full-btn { order: -1; position: sticky; left: 0; z-index: 2; background: var(--s1); }
+.pdf-missing { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 24px; text-align: center; color: var(--text-2); font-size: var(--fs-sm); }
+.pdf-missing b { color: var(--text); font-size: var(--fs-base); }
 .pdf-problem {
   padding: 7px 12px; font-size: var(--fs-sm); color: var(--warn);
   background: rgba(var(--warn-rgb), 0.08); border-bottom: 1px solid rgba(var(--warn-rgb), 0.25);
@@ -7908,6 +7934,9 @@ body.is-resizing iframe { pointer-events: none; }
 .pa-surface.is-moving { transition: none; box-shadow: var(--shadow-lg); z-index: 3; }
 .pa-surface-max { display: grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: var(--r-xs); background: transparent; color: var(--text-3); cursor: pointer; }
 .pa-surface-max:hover, .pa-surface-max[aria-pressed="true"] { background: var(--s3); color: var(--text); }
+.pa-surface-max, .pa-surface-head .pa-link-dot { opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+.pa-surface:is(:hover, :focus-within, .is-max) :is(.pa-surface-max, .pa-surface-head .pa-link-dot), .pa-surface-max:focus-visible { opacity: 1; }
+.pa-surface:focus-within .pa-surface-x { opacity: 1; }
 .pa-surface.is-max, .pw-engine.is-max { z-index: 4; }
 .pa-resize {
   /* The same size on screen however far out the board is zoomed (--pa-z is the zoom). */
@@ -8078,7 +8107,15 @@ body.is-resizing iframe { pointer-events: none; }
 .pa-panel:hover .pa-head-acts button, .pa-head-acts button:focus-visible, .pa-head-acts button.is-on { opacity: 1; }
 .pa-head-acts button:hover { background: var(--s3); color: var(--text); }
 .pa-head-acts button.is-on { color: var(--accent); }
-.pa-why { margin: 0 var(--pa-pad) 6px; padding: 8px 10px; border-radius: var(--r-sm); background: var(--s2); font-size: var(--fs-sm); color: var(--text-2); animation: paArrive var(--dur-2) var(--ease) both; }
+.pa-panel:has(.pa-why) { z-index: 5; }
+/* The reason is read at the screen's size however far out the board is: zoomed out, it grows from the panel's corner
+   (--pa-z is the zoom), over the panel instead of inside it, so its words are never smaller than the page's own. */
+.pa-why {
+  position: absolute; left: var(--pa-pad); top: 34px; z-index: 6; width: min(280px, calc(100% - 2 * var(--pa-pad)));
+  transform: scale(max(1, calc(1 / var(--pa-z, 1)))); transform-origin: top left;
+  padding: 8px 10px; border-radius: var(--r-sm); background: var(--s2); border: 1px solid var(--border-strong); box-shadow: var(--shadow-lg);
+  font-size: var(--fs-sm); color: var(--text-2);
+}
 .pa-why p { margin: 0 0 6px; line-height: 1.45; }
 .pa-why-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: var(--fs-xs); color: var(--text-3); }
 .pa-why-foot button { border: 0; background: transparent; color: var(--danger); font: inherit; font-weight: 600; cursor: pointer; padding: 2px 4px; border-radius: var(--r-2xs); }
@@ -8259,6 +8296,9 @@ body.is-resizing iframe { pointer-events: none; }
 .pa-table-wrap { flex: 1; min-width: 0; min-height: 0; overflow: auto; max-height: 100%; }
 .pa-panel .pa-table-wrap { max-height: 320px; border: 1px solid var(--border); border-radius: var(--r-sm); }
 .pa-table { width: 100%; border-collapse: collapse; font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+.pa-th-sort { all: unset; cursor: pointer; }
+.pa-th-sort:hover { color: var(--text); }
+.pa-th-sort:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-xs); }
 .pa-table th { position: sticky; top: 0; background: var(--s2); color: var(--text-2); font-weight: 600; text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
 .pa-table td { padding: 5px 10px; border-bottom: 1px solid var(--border); color: var(--text); white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 .pa-table .is-num { text-align: right; }
@@ -8301,6 +8341,8 @@ body.is-resizing iframe { pointer-events: none; }
 .top-canvas-slot { display: contents; }
 .pa-canvas-bar { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; animation: fade var(--dur-2) var(--ease) both; }
 .pa-canvas-bar[data-idle] { display: none; }
+.pa-canvas-bar .st-song-name.is-same { display: none; }
+.pa-canvas-bar:is(:hover, :focus-within) .st-song-name.is-same { display: revert; }
 .pa-canvas-bar .st-song-name { max-width: 200px; }
 @media (max-width: 1240px) { .pa-canvas-bar .pdf-bar-note { display: none; } }
 .pa-history[data-idle] { opacity: 0; pointer-events: none; }

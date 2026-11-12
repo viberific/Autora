@@ -22,8 +22,11 @@ export const LOAD_WHAT: Record<LoadApp, string> = {
   studio: "a song you saved",
   cad: "a model you saved, or a mesh (GLB, OBJ or STL) to add to it",
   game: "a game you saved, or a picture, sound or font for it",
-  panacea: "a canvas, document, workbook (full Sheets), table, photo, PDF, media or saved song, model or game",
+  panacea: "a file to work on",
 };
+
+/** JSON files that name the app they are for. */
+const OWNED_JSON = /\.(song|model|panacea)\.json$/;
 
 /** Whether this app can use this file, by what it is. */
 export function loadable(app: LoadApp, file: { name: string; mime: string }): boolean {
@@ -35,8 +38,10 @@ export function loadable(app: LoadApp, file: { name: string; mime: string }): bo
     case "photo": return /^image\/(png|jpeg|webp|gif|bmp|tiff)$/.test(mime) || /\.(png|jpe?g|webp|gif|bmp|tiff?|psd)$/.test(name);
     case "video": return /^(video|audio|image)\//.test(mime) || /\.(mp4|mov|webm|mkv|mp3|wav|m4a|ogg|aac|png|jpe?g|gif|webp)$/.test(name);
     case "studio": return name.endsWith(".song.json");
-    case "cad": return name.endsWith(".json") || /\.(glb|gltf|obj|stl)$/.test(name);
-    case "game": return name.endsWith(".json") || /^(image|audio|font)\//.test(mime) || /\.(png|jpe?g|gif|webp|svg|mp3|wav|ogg|ttf|otf|woff2?|glb|gltf)$/.test(name);
+    /* A plain .json may be a saved model or a saved game (the server reads it to find out), but one that says whose it is
+       (.song.json, .model.json, .panacea.json) belongs to that app alone: a song was being offered to 3D and to Games. */
+    case "cad": return name.endsWith(".model.json") || (name.endsWith(".json") && !OWNED_JSON.test(name)) || /\.(glb|gltf|obj|stl)$/.test(name);
+    case "game": return (name.endsWith(".json") && !OWNED_JSON.test(name)) || /^(image|audio|font)\//.test(mime) || /\.(png|jpe?g|gif|webp|svg|mp3|wav|ogg|ttf|otf|woff2?|glb|gltf)$/.test(name);
     case "panacea": {
       const route = panaceaFileRoute({ file: name, name });
       // The server reads generic JSON and checks that it is a GDevelop project.

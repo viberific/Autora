@@ -783,7 +783,6 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
         <span className="pdf-bar-ico" aria-hidden="true"><IconVideo size={14} /></span>
         <span className="pdf-bar-app">Video</span>
         <span className="pdf-bar-name" title={desk.name ?? undefined}>{desk.name ?? "Video"}</span>
-        <span className="pdf-bar-note">Saved as you go</span>
         <div className="spacer" />
         <LoadButton app="video" session={sessionId} phone={phone} />
         <SaveButton onSave={keep} phone={phone} disabled={!desk.name} />

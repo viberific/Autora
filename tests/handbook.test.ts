@@ -392,6 +392,12 @@ await test("the Panacea manual says that with Visible work on its changes are do
     assert.ok(p.includes(needle), `the Panacea manual lacks "${needle}"`);
   }
   assert.ok(!p.includes("not done by hand yet"), "the Panacea manual still says writing is not done by hand");
+  // What a window looks like at rest, and what the person no longer sees printed on it (docs/TRY-IT-2026-11-11-PANACEA.md).
+  for (const needle of ["the work and its name, nothing else", "fade when the work moves elsewhere", "column header sorts", "newest piece",
+    "asking for one chart leaves one", "planning first", "yours to write", "folds the conversation to its strip", "says so in place of the editor"]) {
+    assert.ok(p.includes(needle), `the Panacea manual lacks "${needle}"`);
+  }
+  assert.ok(!p.includes("Save native work"), "the canvas's Save is called Save");
 });
 
 await test("the PDF manual says that with Visible work on pdf_edit is done in the window by hand, and what is not", () => {
@@ -432,7 +438,7 @@ await test("the Games manual says Panacea's Game panels drive the game, with an 
 
 await test("the Games manual says Visible work is not here yet, and that no cursor is played over the game", () => {
   const game = manualText("game");
-  assert.ok(game.includes("coming soon") && game.includes("no cursor is played"));
+  assert.ok(game.includes("nothing on its bar says so") && game.includes("no cursor is played"));
 });
 
 await test("the Photo manual says that with Visible work on the edit is done in the window by hand", () => {

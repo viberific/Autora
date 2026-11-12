@@ -134,21 +134,6 @@ import {
 import { SureHost } from "./components/SureHost";
 import { AgentThought } from "./components/AgentThought";
 
-/** What to do first in each thing the chooser opens: said under the box, so a blank screen is never a dead end. */
-const OPENED_NEXT: Record<string, string> = {
-  Canvas: "Drop a photo or a table on it, or tell Autora what to make.",
-  Flowchart: "Double-click the page to add a step, or tell Autora the process.",
-  Music: "Pick a first part, or tell Autora what you want to hear.",
-  PDF: "Load a file to work on, or tell Autora what to do with it.",
-  Video: "Add clips to the timeline, or tell Autora what to cut.",
-  Documents: "Start typing, or tell Autora what to write.",
-  Spreadsheets: "Start entering data, or tell Autora what to calculate.",
-  Presentations: "Start on the first slide, or tell Autora the story.",
-  Images: "Open a photo, or tell Autora what to change.",
-  "3D": "Shape the block, or tell Autora what to model.",
-  Games: "Tell Autora the game, or start with a scene.",
-};
-
 /** A phone or tablet keyboard: Enter stays a new line there (the composer). */
 const TOUCH_KEYBOARD = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 
@@ -1797,6 +1782,19 @@ export function App() {
   const retractChat = useCallback(() => {
     setChatCollapsed((collapsed) => !collapsed);
   }, []);
+  /* On a phone, reaching for the work gives it the screen: a touch on the board folds the conversation to its strip (a tap
+     on the strip brings it back). The sheet covered half of a small screen while the person was trying to use what was
+     under it, and only its handle put it away. */
+  useEffect(() => {
+    if (!phoneLayout || chatCollapsed) return;
+    const reach = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!event.isTrusted || !target?.closest?.(".pa-board") || target.closest(".conversation-flow, .pw-jump-dock")) return;
+      setChatCollapsed(true);
+    };
+    document.addEventListener("pointerdown", reach, true);
+    return () => document.removeEventListener("pointerdown", reach, true);
+  }, [phoneLayout, chatCollapsed]);
   const openPanaceaChooser = useCallback(async () => {
     if (workspaceOpening) return;
     if (toolsOpen) { setToolsOpen(false); return; }
@@ -2208,7 +2206,7 @@ export function App() {
 
           {/* The canvas's own controls (its name, whether it is saved, Load, Save), drawn here by PanaceaWindow: one
               bar at the top, not a second one under it. Empty until there is native work on the canvas. */}
-          {page === "chat" && <div id={CANVAS_BAR_SLOT} className="top-canvas-slot" />}
+          {page === "chat" && <div id={CANVAS_BAR_SLOT} className="top-canvas-slot" data-chat={currentName} />}
 
           {/* Following the agent's work, and watching it work (its mouse and keyboard), where they are always in reach
               rather than in a bar of the workspace's own. */}
@@ -2765,7 +2763,7 @@ export function App() {
                             await nativeWorkspaceActions.current.createFlowchart();
                           }}
                           onOpened={(name, app, mode) => {
-                            tell(`${name} is open. ${OPENED_NEXT[app] ?? "Tell Autora what to do next."}`);
+                            tell(`${name} is open.`);
                             if (mode) pickWindow(mode);
                           }}
                           onAsk={(text) => {

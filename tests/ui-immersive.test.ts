@@ -65,15 +65,17 @@ async function main() {
       await phone.getByRole("button", { name: "Edit", exact: true }).tap();
       await phone.waitForSelector(".office-window.is-full");
       assert.equal(await phone.locator('.pw-engine[data-engine="pdf"]').count(), 1, "the other work stays mounted");
-      await openWorkButtons(phone);
-      await phone.getByRole("navigation", { name: "Jump to work" }).getByRole("button", { name: "Jump to PDF", exact: true }).tap();
-      assert.equal(await phone.locator(".office-window").count(), 1, "jumping did not remove the document");
+      /* Full screen is one piece of work and nothing else: the buttons for moving between pieces are put away with the
+         rest (Board.tsx), and come back with the way out of full screen. */
+      assert.equal(await phone.getByRole("navigation", { name: "Jump to work" }).count(), 0, "no work buttons over a full-screen window");
+      assert.equal(await phone.locator(".office-window").count(), 1, "the document is the one that is full");
       assert.equal(await phone.getByRole("textbox", { name: "Ask Autora", exact: true }).count(), 1, "the full workspace keeps the same centered entry");
     });
 
     await test("leaving full screen takes the layer away", async () => {
-      await phone.tap('.pdf-bar button[aria-label="Back to the conversation"]');
+      await phone.tap('.office-window .pdf-bar button[aria-label="Back to the conversation"]');
       assert.equal(await phone.locator(".immersive").count(), 0);
+      await phone.getByRole("button", { name: "Show the work buttons", exact: true }).waitFor();
     });
     assert.deepEqual(errors, [], "the page threw");
     await phone.close();
@@ -92,7 +94,8 @@ async function main() {
       const follow = alone.getByRole("button", { name: "Follow", exact: true });
       assert.ok(await follow.isVisible(), "Follow is drawn");
       assert.equal(await follow.getAttribute("aria-pressed"), "true");
-      assert.ok(await alone.getByRole("button", { name: "Move conversation", exact: true }).isVisible(), "the conversation floats over the work and can be moved off it");
+      // A phone's conversation is a sheet over the foot of the work (a desktop's is a window that moves): docs/PANACEA.md.
+      assert.ok(await alone.locator(".conversation-flow.is-sheet").isVisible(), "the conversation is a sheet over the work");
     });
     await test("the way out of full screen is the first control in the bar, and Follow is over it in full screen too", async () => {
       const toggle = alone.locator('.pw-engine[data-engine="pdf"] .pdf-bar button.pdf-full-btn:visible');

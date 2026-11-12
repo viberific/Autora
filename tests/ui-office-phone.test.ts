@@ -68,7 +68,7 @@ async function main() {
       assert.match(await page.locator(".attach-chip.is-pointer").innerText(), /Quarterly review/);
       app.seen.length = 0;
       app.decide = (req) => (/You check one action/.test(req.system) ? { text: '{"destructive": false, "requested": true}' } : req.tools.length === 0 ? { text: "SKIP" } : { text: "Noted." });
-      await page.locator("textarea[aria-label=Task]").fill("make this bigger");
+      await page.locator("textarea[aria-label='Ask Autora']").fill("make this bigger");
       await page.locator(".composer-send").click();
       await until("the agent to see it", async () => app.seen.some((r) => /Pointing at “Quarterly review” \(element e_[0-9a-f]+\) on slide 1 of pitch\.pptx/.test(JSON.stringify(r.messages))), 30_000);
       assert.equal(await page.locator(".attach-chip.is-pointer").count(), 0, "the chip goes once sent");
@@ -79,7 +79,7 @@ async function main() {
       await page.touchscreen.tap(box.x + box.width * 0.45, box.y + box.height * 0.2);
       await until("the chip", async () => /shape/i.test(await page.locator(".attach-chip.is-pointer").innerText().catch(() => "")), 20_000);
       app.seen.length = 0;
-      await page.locator("textarea[aria-label=Task]").fill("round the corners");
+      await page.locator("textarea[aria-label='Ask Autora']").fill("round the corners");
       await page.locator(".composer-send").click();
       await until("the agent to see it", async () => app.seen.some((r) => /Pointing at the shape “Quarterly review” \(element e_[0-9a-f]+\) on slide 1/.test(JSON.stringify(r.messages))), 30_000);
     });

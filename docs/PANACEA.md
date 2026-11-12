@@ -7,7 +7,7 @@ their editing, import, export, agent or live-hand abilities.
 
 The **Capabilities** chooser starts a blank file/project. **All work lives in one spatial scene**: native images, data,
 documents and boards, plus every retained engine's real work card, inside the same Board and camera. There are no
-Panacea/Music tabs, no work-mode combobox and no nested canvas application. The **icon dock at the canvas's bottom-left** jumps the
+Panacea/Music tabs, no work-mode combobox and no nested canvas application. The **icon dock at the canvas's top right** jumps the
 camera to actual existing work; **Zoom out** reduces magnification; **Show all work [ ]** fits every native and hosted
 surface without hiding any of them. Hosted card headers can be dragged and pinned. **Follow** may move the camera to
 the agent's work, but never while the person is typing, dragging, pinned or holding a manual camera position.
@@ -61,6 +61,22 @@ it; pressed again it goes back. On a phone an app's card opens at the size of th
 its controls are a usable size. **Where work went** between apps (`lib/panacea/flows.ts`) is drawn as a dashed line between
 the two windows with an arrow halfway along: noted when a tool of one app reads another app's file (`noteFlowsOf` in
 `server.ts`) or a file is loaded into an app (`server/loadfile.ts`), and saved with the canvas.
+
+**A window at rest is its work and its name** (2026-11-11, after `docs/TRY-IT-2026-11-11-PANACEA.md`). An app's window has
+one strip, the app's own bar with the file's name: no sentence about the app, no "Saved as you go" (saving is silent; only
+"Saving…" and "Not saved" are said). Load, Save, Take control, Export, the Send dot, Maximise, Pin and Close are in place but
+unseen until the person is in that window (pointer over it, focus inside it, the last window touched, or maximised), and fade
+when the work moves on (`.pw-engine:is(:hover, :focus-within, .is-active, .is-max)` in `styles.css`; `activeWin` in
+`Board.tsx`). On a desktop the board's own strip is laid over the right end of the app's bar, so there is one row and the
+bar drags the window (`moveWindow`). A maximised piece hides the others (still mounted). Native surfaces' Maximise and Send
+come with the pointer or the focus too; a document's and a board's bar hold only the You write switch. **Autora's own framing
+stays readable**: everything is shown while the zoom stays at or above `READABLE` (0.6); below that the newest piece is
+framed with its panels (`autoFit`), and Show all work is the person's to press. A jump frames the piece with its panels
+(`groupOf`). A new surface that lands under the conversation is not "in view" (the room starts at `insetOf`). When the agent
+places a chart on a table, an untouched starter chart and the standing offer there give way to it (`server/panacea.ts`).
+A table's header sorts by its column (`DataView`, `setParams`). The ⓘ reason is drawn at screen size however far out the
+board is. Steps the app held back (planning, the person's words, something they are using) are shown as plain chips, never
+as failures (`held` on a span, `lib/derive.ts`); a folded step reads as what it did, not its arguments (`stepWords`).
 
 ## What it is made of
 

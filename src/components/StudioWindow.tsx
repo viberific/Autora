@@ -349,7 +349,8 @@ export function StudioWindow({ sessionId, phone }: { sessionId: string; phone: b
           aria-label="Song name"
           onChange={(e) => song.edit((d) => { d.name = e.target.value; }, "name")}
         />
-        <span className={`pdf-bar-note st-save is-${song.save}`}>{song.save === "saving" ? "Saving…" : song.save === "error" ? "Not saved" : "Saved as you go"}</span>
+        {/* Saving is silent when it works: only a save in progress or one that failed is said. */}
+        <span className={`pdf-bar-note st-save is-${song.save}`}>{song.save === "saving" ? "Saving…" : song.save === "error" ? "Not saved" : ""}</span>
         <div className="spacer" />
         <span ref={saveRef} className="st-save-btn">
           <LoadButton app="studio" session={sessionId} phone={phone} />

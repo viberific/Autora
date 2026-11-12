@@ -7,6 +7,8 @@ export type SpanState = {
   name: string;
   args: Record<string, any>;
   status: "running" | "ok" | "error" | "denied";
+  /** Not run, and not a failure: the agent was still planning, the words are the person's, or the person is using the thing. */
+  held?: "planning" | "theirs" | "busy";
   output: string;
   preview: string;
   durationMs: number | null;
@@ -797,7 +799,8 @@ export function derive(events: AutoraEvent[]): Derived {
       case Kind.ToolError: {
         const span = e.span ? spansById.get(e.span) : undefined;
         if (span) {
-          span.status = e.payload.denied ? "denied" : "error";
+          span.status = e.payload.denied || e.payload.held ? "denied" : "error";
+          if (e.payload.held && !e.payload.denied) span.held = e.payload.planning ? "planning" : e.payload.theirs ? "theirs" : "busy";
           span.preview = e.payload.error ?? e.payload.reason ?? "failed";
           span.durationMs = e.payload.duration_ms ?? span.durationMs;
           const shell = shells.get(span.id);

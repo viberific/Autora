@@ -274,6 +274,8 @@ async function main() {
 
     await test("put away, it stays away until the agent works on a PDF again", async () => {
       await page.click('.pw-engine-head button[aria-label="Close PDF work"]');
+      // Closing a window asks first (it can lose the person's place); the answer is theirs.
+      await page.getByRole("alertdialog").getByRole("button", { name: "Close", exact: true }).click();
       await page.waitForSelector(".pdf-window", { state: "detached", timeout: 5_000 });
       assert.equal((await app.api("GET", `/api/pdfdesk/${s}`)).body.open, false);
     });
@@ -305,12 +307,16 @@ async function main() {
       const workspace = (await phone.getByRole("region", { name: "Panacea workspace", exact: true }).boundingBox())!;
       const header = (await phone.locator(".top").boundingBox())!;
       const strip = (await phone.locator(".conversation-flow").boundingBox())!;
-      assert.ok(workspace.width >= 389 && Math.abs(workspace.y - (header.y + header.height)) <= 2 && Math.abs(workspace.y + workspace.height - strip.y) <= 2,
-        `the workspace takes the phone between the top bar and the strip: ${JSON.stringify({ workspace, header, strip })}`);
+      /* The sheet floats over the foot of the canvas, which runs on under it (docs/PANACEA.md): the workspace starts under the
+         top bar and is as wide as the phone; the room for the window is what is above the strip. */
+      assert.ok(workspace.width >= 389 && Math.abs(workspace.y - (header.y + header.height)) <= 2 && workspace.y + workspace.height >= strip.y - 2,
+        `the workspace takes the phone from the top bar down, under the strip: ${JSON.stringify({ workspace, header, strip })}`);
+      const room = strip.y - workspace.y;
       assert.ok(full && full.width > 100 && full.height > 100 && full.x >= workspace.x - 1 && full.y >= workspace.y - 1 &&
         full.x + full.width <= workspace.x + workspace.width + 1 && full.y + full.height <= workspace.y + workspace.height + 1,
       "the real editor is usable inside the workspace rather than a separate full-screen application");
-      assert.ok(engine.width >= workspace.width * 0.75 && engine.height >= workspace.height * 0.75, `maximised in the workspace: ${JSON.stringify({ engine, workspace })}`);
+      assert.ok(engine.width >= workspace.width * 0.75 && engine.height >= room * 0.75 && engine.y + engine.height <= strip.y + 2,
+        `maximised in the room above the strip: ${JSON.stringify({ engine, workspace, strip })}`);
       await phone.tap('.pdf-bar button[aria-label="Back to the conversation"]');
       assert.equal(await phone.locator(".pdf-window.is-full").count(), 0);
       await phone.waitForSelector(".conversation-flow.is-sheet:not(.is-collapsed)", { timeout: 5_000 });

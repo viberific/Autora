@@ -2658,6 +2658,13 @@ function composeImages(ctx: PdfContext): ImageLoader {
   };
 }
 
+/** What an untitled composed document is called: its first heading, as a person would name the file ("document.pdf" names nothing). */
+function firstHeading(doc: { blocks?: unknown }): string | undefined {
+  const blocks = Array.isArray(doc.blocks) ? doc.blocks as Array<{ type?: unknown; text?: unknown }> : [];
+  const text = blocks.find((b) => b?.type === "heading" && typeof b.text === "string" && b.text.trim())?.text;
+  return typeof text === "string" ? text.trim() : undefined;
+}
+
 async function composeTool(args: Record<string, any>, ctx: PdfContext): Promise<PdfOutcome> {
   const desk = ctx.desk?.current() ?? null;
   const previous = desk?.compose ?? null;
@@ -2674,7 +2681,7 @@ async function composeTool(args: Record<string, any>, ctx: PdfContext): Promise<
   const asked = String(args.output ?? "").trim();
   const name = asked
     ? outputName({ data: bytes, name: "document.pdf", artifact: null }, asked, "document")
-    : working?.name ?? cleanName(`${String(next.title ?? "document").replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "document"}.pdf`);
+    : working?.name ?? cleanName(`${String(next.title ?? firstHeading(next) ?? "document").replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "document"}.pdf`);
   const kept = previous && desk ? desk.items : [];
   const orphans = kept.filter((i) => i.pageNumber > made.pages);
   const label = previous
