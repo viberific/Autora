@@ -84,7 +84,7 @@ await test("every 3D recipe is wired: it is offered, and each of its binds is so
     };
     walk(r.tree);
   }
-  for (const gone of ["rotate", "light", "camera", "modifier", "snap", "environment", "render", "measure", "boolean", "symmetry", "extrude", "print"]) assert.equal(recipes.some((r) => r.id === `3d.${gone}`), false, gone);
+  for (const gone of ["rotate", "camera", "modifier", "snap", "render", "measure", "boolean", "symmetry", "extrude", "print", "groom"]) assert.equal(recipes.some((r) => r.id === `3d.${gone}`), false, gone);
 });
 
 // ------------------------------------------------------------------ route --

@@ -342,17 +342,20 @@ const CAD = [
     "groups and a library hold reusable parts; cad_history_undo / redo step back; cad_batch does many in one call. Check a part " +
     "with cad_shape_measure (is it watertight) before cad_export, which gives STL for printing or GLB for games. The person pushes " +
     "and pulls the same model by hand, so call cad_scene_get again before relying on what you saw. Panacea's 3D panels drive this same " +
-    "model: Position, Size, Material, Bevel, Repeat and Parts act on one part, chosen in the panel's Part list (else the first part), " +
-    "by these same tools; Shapes and Export hold the person's pick for you to add or export. Nothing about the model is kept on the " +
+    "model: Position, Size, Material (finish, roughness, metal and, behind More, sheen, light through, glow, opacity), Glass, Texture, Hair " +
+    "(on, style, length, density, curl, colours; frizz, locks and droop behind More), Bevel, Repeat and Parts act on one part, chosen in the panel's " +
+    "Part list (else the first part), by these same tools, and Light acts on the whole scene (cad_scene_look); Shapes and Export hold the person's " +
+    "pick for you to add or export. Nothing about the model is kept on the " +
     "canvas, so panel, window and tools always agree: panacea_set with {\"model.width\": 60} resizes the part and opens this window, " +
-    "and panacea_look shows the model's values. There are no panels for rotation, light, camera, environment or printing: the " +
-    "modeller has none of them (cad_shape_turn turns about the vertical axis only). What to make and how it looks are " +
+    "and panacea_look shows the model's values. A pattern's colour, size and relief need a pattern first, and the hair's numbers need Hair on. " +
+    "There are no panels for rotation, camera, printing or grooming: the modeller has no rotation but about the vertical axis (cad_shape_turn), " +
+    "no camera or printer path, and grooming is the person's brush in the 3D window. What to make and how it looks are " +
     "theirs; the geometry is yours. What the person sees (there is no bottom bar of text buttons and no menu in the top bar any more): a " +
     "slim top bar (undo, redo, what is selected), the model, and a round, coloured tool bar (down the right side on a desktop, along " +
     "the bottom on a phone) that shows only as many tools as fit: Shape, Draw, Move, Group, Repeat, Size & position and Delete on a phone, " +
-    "with Join, Subtract, Isolate, Hide, Material and Export too on a desktop, where they can pin any tool. The last button, All tools, " +
+    "with Join, Subtract, Isolate, Hide, Material, Texture, Hair and Export too on a desktop (Hair is on a phone's bar too), where they can pin any tool. The last button, All tools, " +
     "opens every tool: Shape, Draw, Library; Move, Group, Repeat, Delete; Join, Subtract, Isolate, Hide, Show hidden, Make copies " +
-    "separate; Size & position, Properties, Material, Pick edges, Push & pull; Save to library, Edit inside, Edit object, Separate; Export & file. " +
+    "separate; Size & position, Properties, Sculpt, Pick edges, Push & pull; Material, Texture, Hair, Light; Save to library, Edit inside, Edit object, Separate; Export & file. " +
     "On a desktop a parts pane runs down the left, with three tabs of thumbnails: Shapes (each shape; a tap picks it, a double-click on its " +
     "name renames it), Objects (each group, the same, plus Edit inside) and Library (objects kept for every project, whose globe keeps one " +
     "in every project and whose bin removes it); the bookmark under a shape or an object saves it to the library, and a tap on a Library " +
@@ -366,15 +369,17 @@ const CAD = [
     "onTopOf); cad_shape_draw and cad_shape_cut with Draw (corners tapped and Finish pressed, a rectangle or a circle dragged out, " +
     "on the ground, a picked top face or a picked wall, Cut for a hole); shapes, faces and edges clicked in the view (Shift for each " +
     "after the first, a click again to pick one shape inside its group); sizes and places typed into Size & position; a face's own " +
-    "number typed for cad_face_set and cad_face_push; names, All corners and Duplicate in Properties; colours and finishes in " +
-    "Material; a turn by dragging the ring; a bevel by tapping the edge's handle and dragging Curved edge or Flat bevel; a repeat " +
+    "number typed for cad_face_set and cad_face_push; names, All corners and Duplicate in Properties; colours, finishes and the finish's sliders " +
+    "(More for the rarer ones) in Material for cad_surface_set, its pattern and the pattern's sliders in Texture; Grow hair or Grow fur, Hair or Fur and " +
+    "the hair's sliders and colours in Hair for cad_hair_set; the surroundings and Brightness in Light for cad_scene_look; a turn by dragging the ring; a bevel by tapping the edge's handle and dragging Curved edge or Flat bevel; a repeat " +
     "by stepping its count, dragging its dots and keeping the copies; Join, Subtract (once per cutter), Group, Ungroup, Delete and " +
     "its question, Hide and Show hidden; Save to library, the Library's objects, globe and remove (in the parts pane, or the Library card on a phone), Edit object and Separate; " +
     "Undo and Redo in the top bar; a cad_batch one command at a time; cad_doc_clear by picking everything and Delete. On a desktop the parts pane is used as a person uses it: shapes and objects are picked by their thumbnails (Shift for each after the first; with a long list, by typing the name in Search by name), named by double-clicking the name, saved with the bookmark under the thumbnail, and library objects are added, renamed, kept in every project or removed in its Library tab; cad_group_enter presses Edit inside and cad_group_exit presses Exit group (a view only: the model does not change, and with Visible work off nothing is shown).  To reach " +
     "something your hand may let go of the pick, close a card, fit the model in view, scroll in or out, or look from another " +
     "side, so the person's view can move. Then the finished model goes in, keeping the ids the window gave what the hand made. " +
     "Your result says \"Done by hand in the 3D window\" with each step, and \"Not by hand\" with why for what was not: the " +
-    "window has no control for cad_doc_set, cad_library_import, cad_mesh_import (it reads a file), cad_sculpt_blend, cad_sculpt_loft, cad_sculpt_smooth, cad_library_rename on a phone or a new outline in cad_shape_set, Draw's " +
+    "window has no control for cad_doc_set, cad_library_import, cad_mesh_import (it reads a file), cad_sculpt_blend, cad_sculpt_loft, cad_sculpt_smooth, cad_library_rename on a phone or a new outline in cad_shape_set, " +
+    "a picture in cad_surface_set (Picture… asks for a file from the person's computer), a sheen colour, a chosen hair seed, Draw's " +
     "Cut goes all the way through (a shallower pocket goes in with the finished model), and the curve of a drawn shape's closing " +
     "side; anything the hand could not reach. Calls that only read are not shown. With Visible work off, or nobody watching, " +
     "every call changes the model at speed and the window shows it.",
@@ -385,7 +390,7 @@ const CAD = [
     "cad_sculpt_loft makes a smooth tube along sections (centre, radius, radius2) for legs, a neck, a tail or a horn; cad_sculpt_smooth (id, passes, strength, subdivide 0 to 2) evens out any mesh shape without shrinking it. " +
     "All three make a mesh shape, so move, turn, resize, recolour, group and export work and outline edits do not. The window has no controls for them yet, so with Visible work on they say \"Not by hand\". " +
     "This is creative work: show the person your plan (the parts, the sizes) and ask what they want different before you refine; they decide the character of the form, you do the numbers.",
-  "  The tool bar is contextual. It shows only what the moment needs: with nothing made it is Shape and Draw (and Library once an object is saved), with a shape picked it adds Move, Size & position, Material, Hide, Delete and the rest that apply, Sculpt only for a mesh shape, Join and Subtract only with two or more picked, and Export & file once there is something to export. A tool with nothing to act on is not on the bar, so do not tell the person to press one that is not there: tell them what to pick first, or point to All tools (the grid icon at the bottom of the bar), which lists every tool and says what each needs. " +
+  "  The tool bar is contextual. It shows only what the moment needs: with nothing made it is Shape and Draw (and Library once an object is saved), with a shape picked it adds Move, Size & position, Material, Texture, Hair, Hide, Delete and the rest that apply, Sculpt only for a mesh shape, Hair only for an upright shape, Light once there is something to light, Join and Subtract only with two or more picked, and Export & file once there is something to export. A tool with nothing to act on is not on the bar, so do not tell the person to press one that is not there: tell them what to pick first, or point to All tools (the grid icon at the bottom of the bar), which lists every tool and says what each needs. " +
   "  Who did what. Every change to the model is a command in a log, with who made it (you, or the person in the window) and a short account. cad_history_log reads it: call it with since_revision (the revision you last saw) to learn what the person changed while you were not looking, instead of guessing from the shapes. Some commands are the person's own hand and are not given to you at all (a brush stroke); if you try one you are refused, so suggest it and say where the tool is. The person can go back to before any command; that is a new change on top, so it can be undone and it shows in the log as history_revert. " +
   "  Sculpting by hand. The Sculpt tool (brush icon, Shape group; only with one mesh shape picked) opens a panel with four brushes: Grab " +
     "(drag a part of the surface along), Build (raise it where the person paints; Carve or Shift cuts in), Smooth and Flatten, a Size in mm, a Strength, " +
@@ -401,10 +406,32 @@ const CAD = [
     "(without it a GLB is metres and STL and OBJ are mm, and a speck or a building is fitted to 100 mm), up says which axis is up if it " +
     "arrives lying down, and the reply says how many triangles it has and what size it came out (very large meshes are simplified to " +
     "60000). It stands on the ground, beside what is there. Move, turn, resize (a mesh is scaled whole), colour, group and export work on it like " +
-    "any shape; it has no outline, faces, bevels or holes, so face, edge, cut, join and repeat tools refuse it with the reason, and no " +
-    "textures are read (colour it). The person can add one too: Load in the window's top bar takes a .glb, .gltf, .obj or .stl from Artifacts " +
+    "any shape; it has no outline, faces, bevels or holes, so face, edge, cut, join and repeat tools refuse it with the reason. A GLB's " +
+    "base colour picture comes with it when it is inside the file and every part has a layout; otherwise colour it or give it a surface. The person can add one too: Load in the window's top bar takes a .glb, .gltf, .obj or .stl from Artifacts " +
     "and adds it to the model without replacing it (the .model.json Load still replaces the model). What to make is the person's: " +
     "for something they want to look real, suggest a mesh and ask which; do not pick one for them.",
+  "  Surfaces. A shape is made of a material preset (matte, metal, glossy, glass, neon, frosted, velvet, skin, rubber) with its own numbers " +
+    "on top: cad_surface_set sets any of them (roughness, metalness, opacity, transmission for clear glass and water with ior and thickness, " +
+    "clearcoat for lacquer, sheen for cloth and fuzz, subsurface for light glowing through skin, wax and leaves, glow), and choosing a preset " +
+    "again clears them. A pattern the modeller draws itself (wood, marble, speckle, fabric, scales, brushed, checker, dots) is in the shape's " +
+    "colour and a second colour, every scale mm, with relief; a picture (a PNG or JPEG artifact or path; the host reads it) is laid on every " +
+    "imageScale mm, or once by the layout a GLB brought. A GLB brought in with a picture inside keeps it. In the window: Material (the nine finishes, " +
+    "the colours, Roughness, Metal and Clear, Bends light once it is clear, and More for Thickness, Opacity, Lacquer, Sheen, Light through, Glow and " +
+    "Back to the finish) and Texture (the patterns, Second colour, Size, Relief and Turn once one is on, Picture…, Picture size and Remove picture). " +
+    "A GLB export carries all of it (glTF's glass, cloth, lacquer and glow extensions, the pattern or picture as a texture); STL and OBJ carry the shape only.",
+  "  Hair and fur. cad_hair_set grows hair (strands: separate hairs that fall, curl and gather into locks, for a head of hair, a mane, grass) or fur " +
+    "(a dense short coat, for an animal or a rug) on any upright shape, and changes only what you give: length, density, thickness, curl, frizz, " +
+    "clump (locks), droop, shine, root and tip colours, seed (another number grows another head of hair); remove takes it off. The strands are grown " +
+    "from these numbers whenever the shape is drawn, so it can still be moved, resized and sculpted. In the window the Hair card (one shape picked) " +
+    "has Grow hair and Grow fur, then Hair or Fur, Length, Density, Curl, Root colour and Tip colour, More for Thickness, Frizz, Locks, Droop, Shine " +
+    "and Grow it another way, and Groom: Off, Comb, Cut, Lengthen and Puff with Brush size and Brush strength. With a brush picked, pressing on the " +
+    "shape strokes its hair (one undo step) and dragging empty space turns the view. Grooming is the person's hand: you have no grooming tool (hair_groom " +
+    "is refused to you), their strokes stay when you change the numbers, and clearGrooming forgets them only when they ask. How it looks is theirs: " +
+    "suggest settings and what each does, set the numbers they ask for, and tell them where the brush is. A GLB export carries the hair as its own " +
+    "node under its shape (fur as short strands); STL never does.",
+  "  Light. cad_scene_look sets what the whole scene is lit by and reflects (studio, daylight, sunset, night) and its brightness (exposure 0.3 to 2); " +
+    "the window's Light card has the same. Glass, metal and hair read by what they reflect, so try another light before blaming a material. It is " +
+    "saved with the model and not exported.",
   "  Saving. The model is saved as you go; the window's top bar (Autora 3D, the count of shapes) also has Save, which keeps a copy in Artifacts as a GLB named after the chat, with the model itself beside it as a .model.json (what Load takes back; Load also adds a mesh file, see Meshes). cad_export is still yours for other formats.",
 ].join("\n");
 

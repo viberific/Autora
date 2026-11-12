@@ -8,8 +8,9 @@ export interface Point2D {
   y: number;
 }
 
-export type MaterialType = 'matte' | 'metal' | 'glossy' | 'glass' | 'neon';
+export type MaterialType = 'matte' | 'metal' | 'glossy' | 'glass' | 'neon' | 'frosted' | 'velvet' | 'skin' | 'rubber';
 
+/** A finish to start from: the numbers a shape's surface has until it sets its own (`Body3D.surface`). */
 export interface MaterialPreset {
   id: MaterialType;
   name: string;
@@ -19,6 +20,109 @@ export interface MaterialPreset {
   emissiveIntensity?: number;
   transmission?: number;
   ior?: number;
+  /** How far light travels into a see-through solid, mm. */
+  thickness?: number;
+  clearcoat?: number;
+  /** The soft rim light of cloth and fuzz (velvet, felt, peach skin), 0 to 1. */
+  sheen?: number;
+  /** Light glowing through from under the surface (skin, wax, leaves, marble), 0 to 1. */
+  subsurface?: number;
+  opacity?: number;
+}
+
+/** A pattern drawn on a surface by the modeller itself (no image file needed). */
+export type PatternKind = 'none' | 'wood' | 'marble' | 'noise' | 'weave' | 'scales' | 'checker' | 'brushed' | 'dots';
+
+export interface SurfacePattern {
+  kind: PatternKind;
+  /** The pattern's second colour (the shape's colour is the first), #rrggbb. */
+  color2: string;
+  /** How big one repeat is, mm. */
+  scale: number;
+  /** How much it stands out from the surface as relief, 0 to 1. */
+  bump: number;
+  /** Turns the pattern on the surface, degrees. */
+  angle?: number;
+}
+
+/** An image laid on a surface as its colour: a picture, a scan, a hand-painted texture. */
+export interface SurfaceImage {
+  /** The picture as a data URL (PNG or JPEG). */
+  data: string;
+  /** How big one repeat is, mm. Absent on a mesh that brought its own layout (UVs) from its file: it fits once. */
+  scale?: number;
+  name?: string;
+}
+
+/**
+ * A shape's own surface: every number a finish has, each overriding its preset (`materialType`) when set. A preset chosen
+ * again clears these, so a preset is a place to start and these are the person's own choices on top of it.
+ */
+export interface Surface {
+  roughness?: number;
+  metalness?: number;
+  /** 1 is solid, 0 is invisible. */
+  opacity?: number;
+  /** Clear like glass, 0 to 1. */
+  transmission?: number;
+  /** Index of refraction: 1.33 water, 1.5 glass, 2.4 diamond. */
+  ior?: number;
+  thickness?: number;
+  clearcoat?: number;
+  sheen?: number;
+  sheenColor?: string;
+  /** How brightly it glows in its own colour. */
+  glow?: number;
+  subsurface?: number;
+  pattern?: SurfacePattern;
+  image?: SurfaceImage;
+}
+
+/** One stroke of the person's grooming brush on a shape's hair, kept so the hair can be grown again with it. */
+export interface GroomStroke {
+  /** comb: lays the hair along the stroke; cut: shortens; lengthen: grows; puff: lifts it off the surface. */
+  tool: 'comb' | 'cut' | 'lengthen' | 'puff';
+  /** The path the brush took, `[x, y, height]` triples in mm in the shape's own numbers (as `MeshData`). */
+  path: number[];
+  radius: number;
+  /** 0 to 1. */
+  strength: number;
+}
+
+/**
+ * Hair or fur growing from a shape's surface. The strands are not kept: they are grown from these numbers (and the
+ * person's grooming strokes) whenever the shape is drawn, so the shape can still be moved, resized and sculpted.
+ */
+export interface Hair {
+  /** strands: separate hairs that curl and clump (a head of hair, a mane); fur: a dense short coat (an animal, a rug). */
+  style: 'strands' | 'fur';
+  /** Hairs per square centimetre of surface. */
+  density: number;
+  /** mm. */
+  length: number;
+  /** Width of a hair at its root, mm. */
+  thickness: number;
+  /** 0 straight to 1 tight curls. */
+  curl: number;
+  /** Random wander along each hair, 0 to 1. */
+  frizz: number;
+  /** How much neighbouring hairs gather into locks, 0 to 1. */
+  clump: number;
+  /** How much the hair falls under its own weight, 0 stiff to 1 limp. */
+  droop: number;
+  rootColor: string;
+  tipColor: string;
+  /** The highlight band along the hair, 0 to 1. */
+  shine: number;
+  seed: number;
+  strokes?: GroomStroke[];
+}
+
+/** How the whole scene is lit: the surroundings that glass, metal and hair reflect. */
+export interface SceneLook {
+  environment: 'studio' | 'daylight' | 'sunset' | 'night';
+  /** Overall brightness, 0.3 to 2. */
+  exposure: number;
 }
 
 export type BevelStyle = 'chamfer' | 'round';
@@ -60,6 +164,8 @@ export interface MeshData {
   positions: number[];
   /** Three vertex numbers for each triangle, counter-clockwise seen from outside. */
   indices: number[];
+  /** Where each vertex sits on the surface's image (u, v pairs), when the file had a layout. Ignored once its count no longer matches. */
+  uvs?: number[];
 }
 
 export interface Body3D {
@@ -85,6 +191,10 @@ export interface Body3D {
   mesh?: MeshData;
   color: string;
   materialType: MaterialType;
+  /** The shape's own surface on top of its preset: see Surface. */
+  surface?: Surface;
+  /** Hair or fur growing from it: see Hair. */
+  hair?: Hair;
   visible: boolean;
   createdAt: string;
   groupId?: string;
@@ -233,6 +343,40 @@ export const MATERIAL_PRESETS: MaterialPreset[] = [
     roughness: 0.5,
     metalness: 0.0,
     emissiveIntensity: 1.5
+  },
+  {
+    id: 'frosted',
+    name: 'Frosted Glass',
+    color: '#dbeafe',
+    roughness: 0.45,
+    metalness: 0.0,
+    transmission: 0.9,
+    ior: 1.5,
+    thickness: 10
+  },
+  {
+    id: 'velvet',
+    name: 'Velvet Cloth',
+    color: '#7c3aed',
+    roughness: 0.9,
+    metalness: 0.0,
+    sheen: 1
+  },
+  {
+    id: 'skin',
+    name: 'Soft Skin',
+    color: '#e0a98a',
+    roughness: 0.55,
+    metalness: 0.0,
+    subsurface: 0.6,
+    sheen: 0.2
+  },
+  {
+    id: 'rubber',
+    name: 'Rubber',
+    color: '#1f2937',
+    roughness: 0.95,
+    metalness: 0.0
   }
 ];
 

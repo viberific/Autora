@@ -144,7 +144,7 @@ export function useAutoraEmbed(
     if (!on || !loaded.current || doc === known.current) return;
     // The model that came down, as the app keeps it, is not a change of the person's: sent back late it would undo a
     // change the agent made after it.
-    const content = (d: Doc | null) => (d ? JSON.stringify([d.bodies, d.groups, d.repeats, d.library]) : '');
+    const content = (d: Doc | null) => (d ? JSON.stringify([d.bodies, d.groups, d.repeats, d.library, d.look]) : '');
     if (content(doc) === content(known.current)) {
       known.current = doc;
       return;

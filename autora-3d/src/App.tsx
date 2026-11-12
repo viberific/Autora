@@ -29,6 +29,7 @@ import Rail, { type RailProps, usePhone } from './components/Rail';
 import LeftPane, { type PaneTab } from './components/LeftPane';
 import TopBar, { sculptable } from './components/TopBar';
 import { DEFAULT_BRUSH, type Brush } from './utils/sculpt';
+import { DEFAULT_GROOM, type GroomBrush } from './utils/hair';
 import ConfirmDeleteModal from './components/ConfirmDeleteModal';
 import { useHistory } from './hooks/useHistory';
 import { defaultSession } from './utils/repeat';
@@ -195,6 +196,8 @@ export default function App() {
   /** Which bar menu is open (one at a time). */
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [brush, setBrush] = useState<Brush>(DEFAULT_BRUSH);
+  const [groomBrush, setGroomBrush] = useState<GroomBrush>(DEFAULT_GROOM);
+  const [groomOn, setGroomOn] = useState(false);
   /** The X / Y / Z move arrows, toggled with a two-finger tap. */
   const [moveOn, setMoveOn] = useState(false);
 
@@ -982,12 +985,23 @@ export default function App() {
 
   /** Sculpting is on while its panel is open over a mesh shape: a press on that shape then paints instead of picking. */
   const sculpting = openMenu === 'sculpt' && selectedBodies.length === 1 && sculptable(selectedBodies[0]) ? { bodyId: selectedBodies[0].id, brush } : null;
+  /** Grooming is on while the Hair card is open with a brush picked over a shape with hair: a press then strokes the hair. */
+  const groomable = selectedBodies.length === 1 && !!selectedBodies[0].hair && !selectedBodies[0].frame;
+  const grooming = openMenu === 'hair' && groomOn && groomable ? { bodyId: selectedBodies[0].id, brush: groomBrush } : null;
 
   const railProps: RailProps = {
     openId: openMenu,
     setOpenId: setOpenMenu,
     brush,
     onBrush: (patch: Partial<Brush>) => setBrush((b) => ({ ...b, ...patch })),
+    onSurface: (args) => void runOp((d) => ops.setSurface(d, args)),
+    onHair: (args) => void runOp((d) => ops.setHair(d, args)),
+    groomBrush,
+    onGroomBrush: (patch) => setGroomBrush((b) => ({ ...b, ...patch })),
+    groomOn,
+    onGroomOn: setGroomOn,
+    look: doc.look,
+    onLook: (patch) => void runOp((d) => ops.setLook(d, patch)),
     onFiner: () => {
       const only = selectedBodies.length === 1 ? selectedBodies[0] : null;
       if (only && runOp((d) => ops.smoothShape(d, { id: only.id, subdivide: 1, passes: 0 }))) notify('Surface made finer. Press ⌘Z to undo.');
@@ -1126,6 +1140,9 @@ export default function App() {
                   onToggleMove={() => setMoveOn((v) => !v)}
                   sculpt={sculpting}
                   onSculpt={(id, positions) => void runOp((d) => ops.applySculpt(d, { id, positions }))}
+                  look={doc.look}
+                  groom={grooming}
+                  onGroom={(id, stroke) => void runOp((d) => ops.groomHair(d, { id, stroke }))}
                 />
 
                 {displayBodies.length === 0 && (

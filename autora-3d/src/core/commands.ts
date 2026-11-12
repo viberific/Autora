@@ -67,13 +67,15 @@ export function describeEdit(before: Doc, after: Doc): string {
   const removed = before.bodies.filter((b) => !is.has(b.id) && !b.repeatOf);
   const changed = after.bodies.filter((b) => was.has(b.id) && was.get(b.id) !== b && !b.repeatOf);
   const sculpted = changed.filter((b) => meshOf(b) && meshOf(was.get(b.id)) !== meshOf(b) && meshOf(was.get(b.id))?.indices === meshOf(b)?.indices);
-  const rest = changed.filter((b) => !sculpted.includes(b));
+  const groomed = changed.filter((b) => !sculpted.includes(b) && (b.hair?.strokes?.length ?? 0) > (was.get(b.id)?.hair?.strokes?.length ?? 0));
+  const rest = changed.filter((b) => !sculpted.includes(b) && !groomed.includes(b));
   const names = (list: Body3D[]) => list.slice(0, 3).map((b) => b.name).join(', ') + (list.length > 3 ? ` +${list.length - 3}` : '');
   const out: string[] = [];
   if (added.length) out.push(`added ${names(added)}`);
   if (removed.length) out.push(`removed ${names(removed)}`);
   if (sculpted.length) out.push(`sculpted ${names(sculpted)}`);
+  if (groomed.length) out.push(`groomed the hair of ${names(groomed)}`);
   if (rest.length) out.push(`changed ${names(rest)}`);
-  if (!out.length) out.push(before.groups !== after.groups || before.library !== after.library ? 'changed groups or the library' : 'changed the model');
+  if (!out.length) out.push(before.groups !== after.groups || before.library !== after.library ? 'changed groups or the library' : before.look !== after.look ? 'changed the light' : 'changed the model');
   return clip(out.join('; '));
 }

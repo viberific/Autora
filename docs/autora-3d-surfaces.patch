@@ -1,0 +1,3348 @@
+diff --git a/autora-3d/src/App.tsx b/autora-3d/src/App.tsx
+index 5881fc8..c25396c 100644
+--- a/autora-3d/src/App.tsx
++++ b/autora-3d/src/App.tsx
+@@ -29,6 +29,7 @@ import Rail, { type RailProps, usePhone } from './components/Rail';
+ import LeftPane, { type PaneTab } from './components/LeftPane';
+ import TopBar, { sculptable } from './components/TopBar';
+ import { DEFAULT_BRUSH, type Brush } from './utils/sculpt';
++import { DEFAULT_GROOM, type GroomBrush } from './utils/hair';
+ import ConfirmDeleteModal from './components/ConfirmDeleteModal';
+ import { useHistory } from './hooks/useHistory';
+ import { defaultSession } from './utils/repeat';
+@@ -195,6 +196,8 @@ export default function App() {
+   /** Which bar menu is open (one at a time). */
+   const [openMenu, setOpenMenu] = useState<string | null>(null);
+   const [brush, setBrush] = useState<Brush>(DEFAULT_BRUSH);
++  const [groomBrush, setGroomBrush] = useState<GroomBrush>(DEFAULT_GROOM);
++  const [groomOn, setGroomOn] = useState(false);
+   /** The X / Y / Z move arrows, toggled with a two-finger tap. */
+   const [moveOn, setMoveOn] = useState(false);
+ 
+@@ -982,12 +985,23 @@ export default function App() {
+ 
+   /** Sculpting is on while its panel is open over a mesh shape: a press on that shape then paints instead of picking. */
+   const sculpting = openMenu === 'sculpt' && selectedBodies.length === 1 && sculptable(selectedBodies[0]) ? { bodyId: selectedBodies[0].id, brush } : null;
++  /** Grooming is on while the Hair card is open with a brush picked over a shape with hair: a press then strokes the hair. */
++  const groomable = selectedBodies.length === 1 && !!selectedBodies[0].hair && !selectedBodies[0].frame;
++  const grooming = openMenu === 'hair' && groomOn && groomable ? { bodyId: selectedBodies[0].id, brush: groomBrush } : null;
+ 
+   const railProps: RailProps = {
+     openId: openMenu,
+     setOpenId: setOpenMenu,
+     brush,
+     onBrush: (patch: Partial<Brush>) => setBrush((b) => ({ ...b, ...patch })),
++    onSurface: (args) => void runOp((d) => ops.setSurface(d, args)),
++    onHair: (args) => void runOp((d) => ops.setHair(d, args)),
++    groomBrush,
++    onGroomBrush: (patch) => setGroomBrush((b) => ({ ...b, ...patch })),
++    groomOn,
++    onGroomOn: setGroomOn,
++    look: doc.look,
++    onLook: (patch) => void runOp((d) => ops.setLook(d, patch)),
+     onFiner: () => {
+       const only = selectedBodies.length === 1 ? selectedBodies[0] : null;
+       if (only && runOp((d) => ops.smoothShape(d, { id: only.id, subdivide: 1, passes: 0 }))) notify('Surface made finer. Press ⌘Z to undo.');
+@@ -1126,6 +1140,9 @@ export default function App() {
+                   onToggleMove={() => setMoveOn((v) => !v)}
+                   sculpt={sculpting}
+                   onSculpt={(id, positions) => void runOp((d) => ops.applySculpt(d, { id, positions }))}
++                  look={doc.look}
++                  groom={grooming}
++                  onGroom={(id, stroke) => void runOp((d) => ops.groomHair(d, { id, stroke }))}
+                 />
+ 
+                 {displayBodies.length === 0 && (
+diff --git a/autora-3d/src/agentHand.ts b/autora-3d/src/agentHand.ts
+index 11eeba8..92ca129 100644
+--- a/autora-3d/src/agentHand.ts
++++ b/autora-3d/src/agentHand.ts
+@@ -21,6 +21,7 @@ import type { Doc } from './core/doc';
+ import type { ViewerApi, ViewerHit } from './components/ModelViewer3D';
+ import { MATERIAL_PRESETS, SWATCHES, type Body3D, type DrawSession, type EdgeSel, type FaceSel, type Frame, type Point2D, type RepeatSession } from './types';
+ import { SHAPE_LABELS, type ShapeKind } from './utils/primitives';
++import { PATTERNS, resolveSurface } from './utils/surface';
+ import { selectionBounds } from './utils/transform';
+ import { defaultBevelSize, edgeKey, edgeSize, edgeStyle, edgesAroundFace, edgesOfKind, listEdges, maxBevelSize, primaryEdge } from './utils/edges';
+ import { wallEnds } from './utils/outline';
+@@ -581,7 +582,7 @@ async function setLook(api: HandApi, id: string, look: { name?: string | null; c
+     const preset = MATERIAL_PRESETS.find((m) => m.id === look.material);
+     if (preset) {
+       const mat = await card('Material');
+-      await press(byText(mat, preset.name, true), `Choosing ${preset.name}`);
++      await press(mat.querySelector<HTMLElement>(`button[aria-label="${preset.name}"]`), `Choosing ${preset.name}`);
+       did.push(`chose ${preset.name} in Material`);
+     }
+   }
+@@ -604,6 +605,162 @@ async function setLook(api: HandApi, id: string, look: { name?: string | null; c
+   }
+ }
+ 
++// ---- Surfaces, hair and light --------------------------------------------------------------------
++
++/** Moves a card's slider (found by its name) to a value, as a hand drags it: the pointer goes to it, the value follows. */
++async function slide(scope: HTMLElement, label: string, value: number, did: string[], where: string): Promise<boolean> {
++  let input = scope.querySelector<HTMLInputElement>(`input[type="range"][aria-label="${label}"]`);
++  if (!input) {
++    // Behind More: open it once.
++    const more = Array.from(scope.querySelectorAll<HTMLElement>('button[aria-expanded="false"]')).find((b) => b.textContent?.trim() === 'More');
++    if (more) {
++      await press(more, 'Showing more');
++      input = await waitFor(() => scope.querySelector<HTMLInputElement>(`input[type="range"][aria-label="${label}"]`), 1500);
++    }
++  }
++  if (!input) return false;
++  const p = centre(input);
++  await handGo(p, true, input.parentElement, `Setting ${label.toLowerCase()}`);
++  const lo = Number(input.min);
++  const hi = Number(input.max);
++  const target = Math.min(hi, Math.max(lo, value));
++  // A drag passes through the values on its way, so the person sees the surface change as it goes.
++  const from = Number(input.value);
++  for (let i = 1; i <= 4; i++) {
++    setValue(input, String(from + ((target - from) * i) / 4));
++    input.dispatchEvent(new Event('input', { bubbles: true }));
++    await sleep(40);
++  }
++  input.dispatchEvent(new Event('change', { bubbles: true }));
++  did.push(`set ${label} to ${Math.round(target * 100) / 100} in ${where}`);
++  return true;
++}
++
++/** Sets a card's colour field (found by its name). */
++async function pickColour(scope: HTMLElement, label: string, value: string, did: string[], where: string): Promise<boolean> {
++  const input = scope.querySelector<HTMLInputElement>(`input[type="color"][aria-label="${label}"]`);
++  if (!input) return false;
++  await handGo(centre(input), true, input.parentElement, `Mixing the ${label.toLowerCase()}`);
++  setValue(input, value.toLowerCase());
++  input.dispatchEvent(new Event('input', { bubbles: true }));
++  input.dispatchEvent(new Event('change', { bubbles: true }));
++  did.push(`set ${label} to ${value} in ${where}`);
++  return true;
++}
++
++const pressIn = async (scope: HTMLElement, text: string, words: string, did: string[], said: string, prefix = false) => {
++  const b = byText(scope, text, prefix);
++  if (!b) return false;
++  await press(b, words);
++  did.push(said);
++  return true;
++};
++
++/** The Material card's sliders, by the surface number each sets. */
++const FINISH_SLIDERS: Record<string, string> = {
++  roughness: 'Roughness', metalness: 'Metal', transmission: 'Clear', ior: 'Bends light', thickness: 'Thickness', opacity: 'Opacity',
++  clearcoat: 'Lacquer', sheen: 'Sheen', subsurface: 'Light through', glow: 'Glow',
++};
++const HAIR_SLIDERS: Record<string, string> = {
++  length: 'Length', density: 'Density', curl: 'Curl', thickness: 'Thickness', frizz: 'Frizz', clump: 'Locks', droop: 'Droop', shine: 'Shine',
++};
++
++async function surfaceByHand(api: HandApi, args: Record<string, unknown>, goal: Doc | null, did: string[], skip: string[]): Promise<void> {
++  const list = ids(args.ids).length ? ids(args.ids) : str(args.id) ? [String(args.id)] : [];
++  if (!list.length) throw new Skip('no shape named');
++  for (const id of list) {
++    await pick(api, [id], true);
++    did.push('picked the shape in the view');
++    const want = goal?.bodies.find((b) => b.id === id) ?? null;
++    const resolved = want ? resolveSurface(want) : null;
++    if (str(args.preset)) await setLook(api, id, { material: str(args.preset) }, did);
++    if (str(args.color)) await setLook(api, id, { color: str(args.color) }, did);
++    const numbers = Object.keys(FINISH_SLIDERS).filter((k) => num(args[k]) !== null);
++    if (args.reset === true || numbers.length) {
++      const mat = await card('Material');
++      if (args.reset === true && !(await pressIn(mat, 'Back to the finish', 'Back to the finish', did, 'pressed Back to the finish in Material'))) {
++        const more = Array.from(mat.querySelectorAll<HTMLElement>('button[aria-expanded="false"]')).find((b) => b.textContent?.trim() === 'More');
++        if (more) await press(more, 'Showing more');
++        const back = await waitFor(() => byText(mat, 'Back to the finish'), 1500);
++        if (back) { await press(back, 'Back to the finish'); did.push('pressed Back to the finish in Material'); }
++      }
++      for (const k of numbers) {
++        const value = resolved ? (resolved as unknown as Record<string, number>)[k] : num(args[k])!;
++        if (!(await slide(mat, FINISH_SLIDERS[k], value, did, 'Material'))) skip.push(`${k}: its slider shows only when it matters (Bends light and Thickness need Clear above 0)`);
++      }
++    }
++    if (args.sheenColor !== undefined) skip.push('the sheen colour: the window has no control for it');
++    const tex = args.pattern !== undefined || args.image !== undefined || args.imageScale !== undefined;
++    if (tex) {
++      const card3 = await card('Texture');
++      const p = want?.surface?.pattern;
++      const kind = typeof args.pattern === 'string' ? args.pattern : (args.pattern as { kind?: string } | null)?.kind ?? p?.kind;
++      if (args.pattern !== undefined && kind) {
++        const label = kind === 'none' ? 'None' : PATTERNS.find((x) => x.kind === kind)?.label;
++        const button = label ? card3.querySelector<HTMLElement>('[role="group"][aria-label="Pattern"]') : null;
++        const target = button ? byText(button, label!) : null;
++        if (target && target.getAttribute('aria-pressed') !== 'true') { await press(target, `Choosing ${label}`); did.push(`chose ${label} in Texture`); }
++        if (p) {
++          const given = typeof args.pattern === 'object' && args.pattern ? (args.pattern as Record<string, unknown>) : {};
++          if (given.color2 !== undefined) await pickColour(card3, 'Second colour', p.color2, did, 'Texture');
++          if (given.scale !== undefined) await slide(card3, 'Size', p.scale, did, 'Texture');
++          if (given.bump !== undefined) await slide(card3, 'Relief', p.bump, did, 'Texture');
++          if (given.angle !== undefined) await slide(card3, 'Turn', p.angle ?? 0, did, 'Texture');
++        }
++      }
++      if (args.image === null) await pressIn(card3, 'Remove picture', 'Taking the picture off', did, 'pressed Remove picture in Texture');
++      else if (args.image !== undefined) skip.push('the picture: Picture… asks for a file from this computer, which the hand does not choose');
++      if (num(args.imageScale) !== null && !(await slide(card3, 'Picture size', want?.surface?.image?.scale ?? num(args.imageScale)!, did, 'Texture'))) skip.push('the picture size: there was no picture yet');
++    }
++  }
++}
++
++async function hairByHand(api: HandApi, args: Record<string, unknown>, goal: Doc | null, did: string[], skip: string[]): Promise<void> {
++  const list = ids(args.ids).length ? ids(args.ids) : str(args.id) ? [String(args.id)] : [];
++  if (!list.length) throw new Skip('no shape named');
++  for (const id of list) {
++    await pick(api, [id], true);
++    did.push('picked the shape in the view');
++    const hairCard = await card('Hair');
++    const had = api.doc().bodies.find((b) => b.id === id)?.hair;
++    if (args.remove === true) {
++      if (!(await pressIn(hairCard, 'Remove ', 'Taking the hair off', did, 'pressed Remove in Hair', true))) throw new Skip('there was no hair to remove');
++      continue;
++    }
++    const want = goal?.bodies.find((b) => b.id === id)?.hair;
++    if (!want) throw new Skip('the hair was not worked out');
++    if (!had) {
++      await pressIn(hairCard, want.style === 'fur' ? 'Grow fur' : 'Grow hair', want.style === 'fur' ? 'Growing fur' : 'Growing hair', did, `pressed ${want.style === 'fur' ? 'Grow fur' : 'Grow hair'} in Hair`);
++      await waitFor(() => !!api.doc().bodies.find((b) => b.id === id)?.hair && !!hairCard.querySelector('input[aria-label="Length"]'), 3000);
++    } else if (args.style !== undefined && had.style !== want.style) {
++      const group = hairCard.querySelector<HTMLElement>('[role="group"][aria-label="Style"]');
++      await pressIn(group ?? hairCard, want.style === 'fur' ? 'Fur' : 'Hair', 'Changing the style', did, `chose ${want.style === 'fur' ? 'Fur' : 'Hair'} in Hair`);
++    }
++    for (const [k, label] of Object.entries(HAIR_SLIDERS)) {
++      if (num(args[k]) === null) continue;
++      if (!(await slide(hairCard, label, (want as unknown as Record<string, number>)[k], did, 'Hair'))) skip.push(`${k}: no slider for it`);
++    }
++    if (str(args.rootColor)) await pickColour(hairCard, 'Root colour', want.rootColor, did, 'Hair');
++    if (str(args.tipColor)) await pickColour(hairCard, 'Tip colour', want.tipColor, did, 'Hair');
++    if (num(args.seed) !== null) {
++      if (had && want.seed === had.seed + 1) await pressIn(hairCard, 'Grow it another way', 'Growing it another way', did, 'pressed Grow it another way in Hair');
++      else skip.push('a chosen seed: the window grows the next one with Grow it another way');
++    }
++    if (args.clearGrooming === true) await pressIn(hairCard, 'Undo all grooming', 'Undoing the grooming', did, 'pressed Undo all grooming in Hair');
++  }
++}
++
++async function lightByHand(args: Record<string, unknown>, goal: Doc | null, did: string[]): Promise<void> {
++  const light = await card('Light');
++  const env = str(args.environment);
++  if (env) {
++    const label = env[0].toUpperCase() + env.slice(1);
++    const group = light.querySelector<HTMLElement>('[role="group"][aria-label="Surroundings"]');
++    await pressIn(group ?? light, label, `Choosing ${label}`, did, `chose ${label} in Light`);
++  }
++  if (num(args.exposure) !== null) await slide(light, 'Brightness', goal?.look?.exposure ?? num(args.exposure)!, did, 'Light');
++}
++
+ /** The number a picked face shows by itself: tap it and type. */
+ async function typeFaceNumber(api: HandApi, id: string, face: FaceSel, value: number, did: string[]): Promise<void> {
+   const body = bodyIn(api, id);
+@@ -1297,12 +1454,21 @@ export async function runHand(name: string, args: Record<string, unknown>, api:
+         }
+         break;
+       }
++      case 'surface_set':
++        await surfaceByHand(api, args, goal, did, skip);
++        break;
++      case 'hair_set':
++        await hairByHand(api, args, goal, did, skip);
++        break;
++      case 'scene_look':
++        await lightByHand(args, goal, did);
++        break;
+       case 'history_undo':
+       case 'history_redo': {
+         // The window keeps each step a person makes; the model keeps each of the agent's calls as one. Pressed until the
+         // window is where the model's own history leads.
+         const undo = name === 'history_undo';
+-        const content = (d: Doc) => JSON.stringify([d.bodies, d.groups, d.repeats]);
++        const content = (d: Doc) => JSON.stringify([d.bodies, d.groups, d.repeats, d.look]);
+         const there = goal ? content(goal) : null;
+         const button = () => document.querySelector<HTMLElement>(`header button[aria-label="${undo ? 'Undo (⌘Z)' : 'Redo (⇧⌘Z)'}"]`);
+         let presses = 0;
+diff --git a/autora-3d/src/components/ModelViewer3D.tsx b/autora-3d/src/components/ModelViewer3D.tsx
+index 17ba6c2..57a897b 100644
+--- a/autora-3d/src/components/ModelViewer3D.tsx
++++ b/autora-3d/src/components/ModelViewer3D.tsx
+@@ -8,11 +8,12 @@ import * as THREE from 'three';
+ import { AnimatePresence, motion } from 'motion/react';
+ import { BevelPicker, DrawChip, MeasureReadout, RepeatChip } from './FloatingControls';
+ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
++import { hairObject, hairSignature, lighting, lookSignature, surfaceMaterial } from './surfaceLook';
+ import { Line2 } from 'three/examples/jsm/lines/Line2.js';
+ import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
+ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
+-import { BevelStyle, Body3D, EdgeSel, FaceSel, MATERIAL_PRESETS, DrawForm, DrawSession, Frame, Point2D, RepeatSession, ShapeGroup } from '../types';
++import { BevelStyle, Body3D, EdgeSel, FaceSel, DrawForm, DrawSession, Frame, GroomStroke, Point2D, RepeatSession, SceneLook, ShapeGroup } from '../types';
++import type { GroomBrush } from '../utils/hair';
+ import { withGroupMates } from '../utils/groups';
+ import { Brush, SculptMesh } from '../utils/sculpt';
+ import { buildBodyGeometry, buildBodyShape, featureEdges, getInteriorAnchor } from '../utils/bodyGeometry';
+@@ -162,6 +163,12 @@ export interface ModelViewer3DProps {
+   onToggleMove?: () => void;
+   /** Sculpting: while set, a press on this mesh shape works the surface with the brush instead of picking or moving it. */
+   sculpt?: { bodyId: string; brush: Brush } | null;
++  /** How the scene is lit (the model's look). */
++  look?: SceneLook;
++  /** Grooming: while set, a press on this shape's hair strokes it with the brush instead of picking or moving the shape. */
++  groom?: { bodyId: string; brush: GroomBrush } | null;
++  /** A finished grooming stroke (the person's own command, `hair_groom`). */
++  onGroom?: (id: string, stroke: GroomStroke) => void;
+   /** A finished brush stroke: the shape's surface points after it (the person's own command, `sculpt_apply`). */
+   onSculpt?: (id: string, positions: number[]) => void;
+ }
+@@ -293,40 +300,6 @@ function clearGroup(group: THREE.Group) {
+   }
+ }
+ 
+-function createMaterial(body: Body3D): THREE.Material {
+-  const preset = MATERIAL_PRESETS.find((p) => p.id === body.materialType) || MATERIAL_PRESETS[0];
+-  const color = body.color || preset.color;
+-  const common = {
+-    color,
+-    roughness: preset.roughness,
+-    metalness: preset.metalness,
+-    polygonOffset: true,
+-    polygonOffsetFactor: 1,
+-    polygonOffsetUnits: 1,
+-  };
+-  switch (body.materialType) {
+-    case 'glossy':
+-      return new THREE.MeshPhysicalMaterial({ ...common, clearcoat: 1, clearcoatRoughness: 0.08 });
+-    case 'glass':
+-      return new THREE.MeshPhysicalMaterial({
+-        ...common,
+-        transmission: preset.transmission ?? 0.8,
+-        ior: preset.ior ?? 1.5,
+-        thickness: 8,
+-        transparent: true,
+-        opacity: 0.92,
+-      });
+-    case 'neon':
+-      return new THREE.MeshStandardMaterial({
+-        ...common,
+-        emissive: color,
+-        emissiveIntensity: preset.emissiveIntensity ?? 1.2,
+-      });
+-    default:
+-      return new THREE.MeshStandardMaterial(common);
+-  }
+-}
+-
+ /** Stands a shape on its wall (or leaves it upright). */
+ function placeFrame(root: THREE.Group, body: Body3D) {
+   root.matrixAutoUpdate = false;
+@@ -356,8 +329,6 @@ const bodySignature = (b: Body3D) =>
+     b.elevation,
+     b.edgeBevels,
+     b.cornerBevels,
+-    b.materialType,
+-    b.color,
+   ]);
+ 
+ interface BodyEntry {
+@@ -367,6 +338,9 @@ interface BodyEntry {
+   group: THREE.Group;
+   outline: THREE.LineSegments;
+   signature: string;
++  /** What its material was made from, and its hair: either changes without the shape being built again. */
++  look: string;
++  hair: string;
+ }
+ 
+ export default function ModelViewer3D({
+@@ -405,6 +379,9 @@ export default function ModelViewer3D({
+   onFaceValue,
+   sculpt,
+   onSculpt,
++  look,
++  groom,
++  onGroom,
+ }: ModelViewer3DProps) {
+   const mountRef = useRef<HTMLDivElement | null>(null);
+   /** The circle that shows how far the sculpt brush reaches; moved by the stroke code, not by React. */
+@@ -454,6 +431,7 @@ export default function ModelViewer3D({
+   const popRef = useRef<{ start: number } | null>(null);
+   const popKeyRef = useRef('');
+   const invalidateRef = useRef<(shadows?: boolean) => void>(() => {});
++  const applyLookRef = useRef<(look: SceneLook | undefined) => void>(() => {});
+   const refreshOutlinesRef = useRef<() => void>(() => {});
+   const applyXrayRef = useRef<() => void>(() => {});
+   const clearHoverRef = useRef<() => void>(() => {});
+@@ -505,6 +483,9 @@ export default function ModelViewer3D({
+     onFaceValue,
+     sculpt,
+     onSculpt,
++    look,
++    groom,
++    onGroom,
+   };
+ 
+   // ---- Scene setup (once) -------------------------------------------------
+@@ -517,8 +498,10 @@ export default function ModelViewer3D({
+ 
+     const scene = new THREE.Scene();
+     // The background follows the theme (Autora sends its own when this is its window).
+-    scene.background = new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--color-slate-950').trim() || BACKGROUND);
+-    scene.fog = new THREE.Fog(BACKGROUND, 900, 2800);
++    const backdrop = new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--color-slate-950').trim() || BACKGROUND);
++    const fog = new THREE.Fog(BACKGROUND, 900, 2800);
++    scene.background = backdrop;
++    scene.fog = fog;
+ 
+     const camera = new THREE.PerspectiveCamera(40, width / height, 1, 4000);
+     cameraRef.current = camera;
+@@ -538,15 +521,43 @@ export default function ModelViewer3D({
+     container.appendChild(renderer.domElement);
+     viewportSize.set(width, height);
+ 
+-    // Image-based lighting: without an environment map, metals render near-black.
++    // Image-based lighting: without an environment map, metals render near-black. The model's look chooses which.
+     const pmrem = new THREE.PMREMGenerator(renderer);
+-    const envTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+-    scene.environment = envTexture;
+-    scene.environmentIntensity = 0.55;
+-
++    let envTexture: THREE.Texture | null = null;
++    let lit = '';
+     const key = new THREE.DirectionalLight('#ffffff', 1.15);
+-    key.position.set(240, 420, 260);
++    const applyLook = (look: SceneLook | undefined) => {
++      const want = JSON.stringify(look ?? null);
++      if (want === lit) return;
++      lit = want;
++      const l = lighting(look, pmrem);
++      envTexture?.dispose();
++      envTexture = l.texture;
++      scene.environment = envTexture;
++      scene.environmentIntensity = l.intensity;
++      // Outdoors the surroundings are seen behind the model too (softly), so glass shows what is behind it; the studio keeps the theme's backdrop.
++      if (l.backdrop) {
++        scene.background = envTexture;
++        scene.backgroundBlurriness = 0.5;
++        scene.backgroundIntensity = l.intensity;
++        scene.fog = null;
++      } else {
++        scene.background = backdrop;
++        scene.backgroundBlurriness = 0;
++        scene.backgroundIntensity = 1;
++        scene.fog = fog;
++      }
++      renderer.toneMappingExposure = l.exposure;
++      key.color.set(l.key.color);
++      key.intensity = l.key.intensity;
++      key.position.set(...l.key.position);
++      invalidateRef.current(true);
++    };
++    applyLookRef.current = applyLook;
++    applyLook(live.current.look);
+     key.castShadow = true;
++    // Soft-edged shadows: hair and glass read better without hard pixel steps.
++    key.shadow.radius = 3;
+     key.shadow.mapSize.set(1536, 1536);
+     key.shadow.camera.near = 50;
+     key.shadow.camera.far = 1400;
+@@ -863,6 +874,8 @@ export default function ModelViewer3D({
+         mesh.material = see ? mesh.userData.ghost : mesh.userData.solid;
+         mesh.castShadow = !see;
+         mesh.receiveShadow = !see;
++        // Seeing through a shape means seeing through its hair too.
++        entry.group.children.forEach((c) => { if (c.userData.hair) c.visible = !see; });
+       });
+       refreshOutlines();
+       invalidate(true);
+@@ -915,6 +928,9 @@ export default function ModelViewer3D({
+       } else if (hit?.type === 'edge') {
+         cursor = 'pointer';
+         text = 'Click to select this edge and bevel it · drag to move the shape';
++      } else if (hit?.type === 'body' && live.current.groom?.bodyId === hit.bodyId) {
++        cursor = 'crosshair';
++        text = 'Stroke the hair to groom it · drag empty space to turn the view';
+       } else if (hit?.type === 'body') {
+         const onSelectedFace = sameFace(live.current.selectedFace, hit.face);
+         cursor = onSelectedFace ? 'ns-resize' : 'move';
+@@ -1378,7 +1394,14 @@ export default function ModelViewer3D({
+       const sc = live.current.sculpt;
+       const entry = sc ? entriesRef.current.get(sc.bodyId) : undefined;
+       const mesh = entry?.group.children.find((c): c is THREE.Mesh => c instanceof THREE.Mesh);
+-      return sc && entry && mesh && entry.body.mesh && !entry.body.frame ? { sc, entry, mesh } : null;
++      return sc && entry && mesh && entry.body.mesh && !entry.body.frame ? { sc, entry, mesh, radius: sc.brush.radius } : null;
++    };
++    /** The shape whose hair the grooming brush works, when it is open. */
++    const groomTarget = () => {
++      const g = live.current.groom;
++      const entry = g ? entriesRef.current.get(g.bodyId) : undefined;
++      const mesh = entry?.group.children[0] as THREE.Mesh | undefined;
++      return g && entry && mesh && entry.body.hair && !entry.body.frame ? { g, entry, mesh, radius: g.brush.radius } : null;
+     };
+     /** Where a pointer at this spot meets the sculpted shape: in the world, and in the shape's own numbers (x, y, height). */
+     const sculptHit = (clientX: number, clientY: number, mesh: THREE.Mesh, lift: number) => {
+@@ -1498,6 +1521,66 @@ export default function ModelViewer3D({
+       }
+       live.current.onDragStateChange?.(false);
+     };
++    /**
++     * A grooming stroke: the brush's path over the shape is drawn as a line while it goes, and handed back on release as one
++     * stroke (one undo step); the hair is then grown again with it.
++     */
++    interface Combing {
++      id: string;
++      pointerId: number;
++      lift: number;
++      mesh: THREE.Mesh;
++      path: number[];
++      line: THREE.Line;
++      world: THREE.Vector3[];
++    }
++    let combing: Combing | null = null;
++    const startGroom = (e: PointerEvent): boolean => {
++      const target = groomTarget();
++      if (!target || !e.isPrimary || e.button !== 0) return false;
++      const lift = target.entry.body.elevation ?? 0;
++      const hit = sculptHit(e.clientX, e.clientY, target.mesh, lift);
++      if (!hit) return false; // off the shape: let the view orbit
++      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([hit.world]), new THREE.LineBasicMaterial({ color: ACCENT_LIGHT, depthTest: false, transparent: true, opacity: 0.9 }));
++      line.renderOrder = 40;
++      previewGroupRef.current?.add(line);
++      combing = { id: target.g.bodyId, pointerId: e.pointerId, lift, mesh: target.mesh, path: [...hit.model], line, world: [hit.world] };
++      controls.enabled = false;
++      renderer.domElement.setPointerCapture(e.pointerId);
++      live.current.onDragStateChange?.(true);
++      showRing(e.clientX, e.clientY, hit.world, { radius: target.radius } as Brush);
++      invalidate();
++      return true;
++    };
++    const moveGroom = (e: PointerEvent) => {
++      const st = combing;
++      const g = live.current.groom;
++      if (!st || !g) return;
++      const hit = sculptHit(e.clientX, e.clientY, st.mesh, st.lift);
++      if (!hit) return;
++      const n = st.path.length;
++      const last: [number, number, number] = [st.path[n - 3], st.path[n - 2], st.path[n - 1]];
++      if (Math.hypot(hit.model[0] - last[0], hit.model[1] - last[1], hit.model[2] - last[2]) < Math.max(0.5, g.brush.radius * 0.2) || n >= 600) return;
++      st.path.push(...hit.model);
++      st.world.push(hit.world);
++      st.line.geometry.dispose();
++      st.line.geometry = new THREE.BufferGeometry().setFromPoints(st.world);
++      showRing(e.clientX, e.clientY, hit.world, { radius: g.brush.radius } as Brush);
++      invalidate();
++    };
++    const endGroom = (e: PointerEvent, cancelled: boolean) => {
++      const st = combing;
++      if (!st) return;
++      combing = null;
++      st.line.removeFromParent();
++      disposeObject(st.line);
++      controls.enabled = true;
++      if (renderer.domElement.hasPointerCapture(e.pointerId)) renderer.domElement.releasePointerCapture(e.pointerId);
++      const g = live.current.groom;
++      if (!cancelled && g) live.current.onGroom?.(st.id, { tool: g.brush.tool, path: st.path.map((v) => Math.round(v * 100) / 100), radius: g.brush.radius, strength: g.brush.strength });
++      live.current.onDragStateChange?.(false);
++      invalidate();
++    };
+     /** The brush circle follows the pointer over the shape when nothing is pressed. */
+     const hoverRing = (e: PointerEvent) => {
+       if (ringBusy) return;
+@@ -1506,15 +1589,16 @@ export default function ModelViewer3D({
+       const y = e.clientY;
+       requestAnimationFrame(() => {
+         ringBusy = false;
+-        const target = sculptTarget();
++        const target = sculptTarget() ?? groomTarget();
+         const hit = target && e.pointerType === 'mouse' ? sculptHit(x, y, target.mesh, target.entry.body.elevation ?? 0) : null;
+-        showRing(x, y, hit?.world ?? null, target?.sc.brush);
++        showRing(x, y, hit?.world ?? null, target ? ({ radius: target.radius } as Brush) : undefined);
+       });
+     };
+ 
+     const onPointerDown = (e: PointerEvent) => {
+       if (live.current.draw) return;
+       if (startStroke(e)) return; // the Draw tool reads the pointer while a sketch is open
++      if (startGroom(e)) return;
+       trackTouchDown(e);
+       pickPx = e.pointerType === 'touch' ? EDGE_PICK_TOUCH_PX : EDGE_PICK_PX;
+       // A second finger means the user wants to orbit/pinch: abandon any one-finger drag.
+@@ -1573,7 +1657,11 @@ export default function ModelViewer3D({
+         if (e.pointerId === stroke.pointerId) moveStroke(e);
+         return;
+       }
+-      if (live.current.sculpt) hoverRing(e);
++      if (combing) {
++        if (e.pointerId === combing.pointerId) moveGroom(e);
++        return;
++      }
++      if (live.current.sculpt || live.current.groom) hoverRing(e);
+       trackTouchMove(e);
+       if (drag || candidate) pending = { x: e.clientX, y: e.clientY, shift: e.shiftKey };
+       else if (e.pointerType === 'mouse' && e.buttons === 0) pendingHover = { x: e.clientX, y: e.clientY };
+@@ -1675,6 +1763,10 @@ export default function ModelViewer3D({
+         endStroke(e, false);
+         return;
+       }
++      if (combing) {
++        endGroom(e, false);
++        return;
++      }
+       trackTouchUp(e);
+       finishPointer(e, false);
+     };
+@@ -1683,6 +1775,10 @@ export default function ModelViewer3D({
+         endStroke(e, true);
+         return;
+       }
++      if (combing) {
++        endGroom(e, true);
++        return;
++      }
+       trackTouchUp(e);
+       finishPointer(e, true);
+     };
+@@ -1995,7 +2091,7 @@ export default function ModelViewer3D({
+       entriesRef.current.clear();
+       [bodyGroup, gizmoGroup, helperGroup, previewGroup, hoverGroup].forEach(clearGroup);
+       [shadowCatcher, grid, axisX, axisY].forEach(disposeObject);
+-      envTexture.dispose();
++      envTexture?.dispose();
+       pmrem.dispose();
+       renderer.dispose();
+       renderer.domElement.remove();
+@@ -2025,6 +2121,28 @@ export default function ModelViewer3D({
+       if (existing?.body === body && existing.signature.endsWith('|fast') === fast) return; // untouched object
+       const signature = bodySignature(body) + (fast ? '|fast' : '');
+       if (existing && existing.signature === signature) {
++        const mesh = existing.group.children[0] as THREE.Mesh;
++        const look = lookSignature(body);
++        if (existing.look !== look) {
++          // Only the surface changed: a new material on the same geometry.
++          const solid = surfaceMaterial(body, () => invalidateRef.current(true));
++          (mesh.userData.solid as THREE.Material).dispose();
++          mesh.userData.solid = solid;
++          (mesh.userData.ghost as THREE.MeshStandardMaterial).color.set(body.color);
++          if (!live.current.xray) mesh.material = solid;
++          existing.look = look;
++        }
++        const hair = hairSignature(body);
++        if (existing.hair !== hair && !fast) {
++          existing.group.children.filter((c) => c.userData.hair).forEach((c) => { existing.group.remove(c); disposeObject(c); });
++          const grown = hairObject(mesh.geometry, body);
++          if (grown) {
++            grown.visible = !live.current.xray;
++            existing.group.add(grown);
++          }
++          existing.hair = hair;
++          invalidateRef.current(true);
++        }
+         // Where a wall shape stands is not part of its geometry: a move arrives as a new frame, replacing the drag preview.
+         if (JSON.stringify(existing.body.frame) !== JSON.stringify(body.frame)) {
+           existing.group.position.set(0, 0, 0);
+@@ -2043,7 +2161,7 @@ export default function ModelViewer3D({
+ 
+       const geometry = buildBodyGeometry(body, { fast });
+       if (!geometry) return;
+-      const solid = createMaterial(body);
++      const solid = surfaceMaterial(body, () => invalidateRef.current(true));
+       const mesh = new THREE.Mesh(geometry, solid);
+       mesh.userData.solid = solid;
+       mesh.userData.ghost = new THREE.MeshStandardMaterial({ color: body.color, roughness: 0.6, transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide });
+@@ -2058,11 +2176,17 @@ export default function ModelViewer3D({
+       const bodyGroup = new THREE.Group();
+       bodyGroup.userData.bodyId = id;
+       bodyGroup.add(mesh, outline);
++      // Hair grows from the finished surface; while a shape is dragged (fast) it waits for the drop.
++      const grown = fast ? null : hairObject(geometry, body);
++      if (grown) {
++        grown.visible = !live.current.xray;
++        bodyGroup.add(grown);
++      }
+       const root = new THREE.Group();
+       root.add(bodyGroup);
+       placeFrame(root, body);
+       group.add(root);
+-      entries.set(id, { body, root, group: bodyGroup, outline, signature });
++      entries.set(id, { body, root, group: bodyGroup, outline, signature, look: lookSignature(body), hair: fast ? '' : hairSignature(body) });
+     });
+     applyXrayRef.current();
+ 
+@@ -2079,6 +2203,9 @@ export default function ModelViewer3D({
+   useEffect(() => {
+     applyXrayRef.current();
+   }, [xray, isSceneReady]);
++  useEffect(() => {
++    if (isSceneReady) applyLookRef.current(look);
++  }, [look, isSceneReady]);
+ 
+   const repeating = !!repeat;
+   const drawing = !!draw;
+@@ -2604,8 +2731,8 @@ export default function ModelViewer3D({
+   };
+ 
+   useEffect(() => {
+-    if (!sculpt && brushRingRef.current) brushRingRef.current.style.display = 'none';
+-  }, [sculpt]);
++    if (!sculpt && !groom && brushRingRef.current) brushRingRef.current.style.display = 'none';
++  }, [sculpt, groom]);
+ 
+   const handleSelectCameraAngle = useCallback((face: CubeFace) => frameViewRef.current(face), []);
+ 
+diff --git a/autora-3d/src/components/Rail.tsx b/autora-3d/src/components/Rail.tsx
+index 919cdc8..a1e428e 100644
+--- a/autora-3d/src/components/Rail.tsx
++++ b/autora-3d/src/components/Rail.tsx
+@@ -37,6 +37,9 @@ import {
+   SquareMinus,
+   SquareRoundCorner,
+   Star,
++  Sun,
++  Grid3x3,
++  Wind,
+   Trash2,
+   Triangle,
+   TriangleRight,
+@@ -47,6 +50,10 @@ import {
+ } from 'lucide-react';
+ import { SHAPE_LABELS, ShapeKind } from '../utils/primitives';
+ import Sidebar from './Sidebar';
++import { HairPanel, LightPanel, MaterialPanel, TexturePanel } from './SurfacePanels';
++import type { HairArgs, SurfaceArgs } from '../core/ops';
++import type { GroomBrush } from '../utils/hair';
++import type { SceneLook } from '../types';
+ import { useFading } from '../hooks/useFading';
+ import { EdgePanel, FacePanel, SculptPanel, SizePositionPanel, sculptable, selectionMode, type TopBarProps } from './TopBar';
+ 
+@@ -103,6 +110,17 @@ export interface RailProps extends TopBarProps {
+   onBreakRepeat: () => void;
+   onPattern: () => void;
+   onDelete: () => void;
++  /** What the selected shape is made of: its finish, numbers, pattern and picture. */
++  onSurface: (args: SurfaceArgs) => void;
++  /** Its hair or fur. */
++  onHair: (args: HairArgs) => void;
++  groomBrush: GroomBrush;
++  onGroomBrush: (patch: Partial<GroomBrush>) => void;
++  /** The grooming brush is in the person's hand: a press on the hair strokes it. */
++  groomOn: boolean;
++  onGroomOn: (on: boolean) => void;
++  look: SceneLook | undefined;
++  onLook: (patch: Partial<SceneLook>) => void;
+ }
+ 
+ interface Tool {
+@@ -177,7 +195,10 @@ export default function Rail(props: RailProps) {
+     { id: 'breakrepeat', label: 'Make copies separate', group: 'Combine', icon: Unlink, color: C.note, disabled: !props.repeated, run: props.onBreakRepeat },
+     { id: 'size', label: 'Size & position', group: 'Shape', icon: Move, color: C.insert, phone: true, desktop: true, on: openId === 'size', disabled: n < 1, hint: picked, run: toggleOpen('size') },
+     { id: 'props', label: 'Properties', group: 'Shape', icon: SlidersHorizontal, color: C.select, on: openId === 'props', disabled: !(props.selected.length === 1 && !props.group), hint: picked, run: toggleOpen('props') },
+-    { id: 'material', label: 'Material', group: 'Shape', icon: Palette, color: C.text, desktop: true, on: openId === 'material', disabled: !(props.selected.length === 1 && !props.group), hint: picked, run: toggleOpen('material') },
++    { id: 'material', label: 'Material', group: 'Surface', icon: Palette, color: C.text, desktop: true, on: openId === 'material', disabled: !(props.selected.length === 1 && !props.group), hint: picked, run: toggleOpen('material') },
++    { id: 'texture', label: 'Texture', group: 'Surface', icon: Grid3x3, color: C.gold, desktop: true, on: openId === 'texture', disabled: !(props.selected.length === 1 && !props.group), hint: picked, run: toggleOpen('texture') },
++    { id: 'hair', label: 'Hair', group: 'Surface', icon: Wind, color: C.amber, phone: true, desktop: true, on: openId === 'hair', disabled: !(props.selected.length === 1 && !props.group && !props.selected[0]?.frame), hint: 'Select a shape that stands upright', run: toggleOpen('hair') },
++    { id: 'light', label: 'Light', group: 'Surface', icon: Sun, color: C.amber, on: openId === 'light', disabled: props.bodyCount < 1, run: toggleOpen('light') },
+     { id: 'sculpt', label: 'Sculpt', group: 'Shape', icon: Brush, color: C.draw, phone: true, desktop: true, on: openId === 'sculpt', disabled: !(props.selected.length === 1 && sculptable(props.selected[0])), hint: 'Select a mesh shape', run: toggleOpen('sculpt') },
+     { id: 'edges', label: 'Pick edges', group: 'Shape', icon: SquareDashed, color: C.shape, on: openId === 'edges', disabled: mode !== 'edge', hint: 'Tap an edge of a shape', run: toggleOpen('edges') },
+     { id: 'face', label: 'Push & pull', group: 'Shape', icon: Layers3, color: C.note, on: openId === 'face', disabled: mode !== 'face', hint: 'Tap a face of a shape', run: toggleOpen('face') },
+@@ -294,7 +315,10 @@ export default function Rail(props: RailProps) {
+         );
+       case 'size': return <SizePositionPanel {...props} />;
+       case 'props': return <Sidebar {...sidebar} section="properties" />;
+-      case 'material': return <Sidebar {...sidebar} section="material" />;
++      case 'material': return <MaterialPanel selected={props.selected} onSurface={props.onSurface} />;
++      case 'texture': return <TexturePanel selected={props.selected} onSurface={props.onSurface} />;
++      case 'hair': return <HairPanel selected={props.selected} onHair={props.onHair} groomBrush={props.groomBrush} onGroomBrush={props.onGroomBrush} groomOn={props.groomOn} onGroomOn={props.onGroomOn} />;
++      case 'light': return <LightPanel look={props.look} onLook={props.onLook} />;
+       case 'file': return <Sidebar {...sidebar} section="export" />;
+       case 'edges': return <EdgePanel {...props} />;
+       case 'face': return <FacePanel {...props} />;
+diff --git a/autora-3d/src/components/SurfacePanels.tsx b/autora-3d/src/components/SurfacePanels.tsx
+new file mode 100644
+index 0000000..0e31207
+--- /dev/null
++++ b/autora-3d/src/components/SurfacePanels.tsx
+@@ -0,0 +1,255 @@
++/**
++ * @license
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++/**
++ * The cards for what a shape is made of and what grows on it: Material (a finish to start from, its colour and its numbers),
++ * Texture (a pattern the modeller draws, or a picture), Hair (hair or fur, and the person's grooming brush) and Light (the
++ * surroundings the scene is lit by). Each shows the few controls the work needs now; the rest wait behind More, and a
++ * control that does nothing yet (the bend of light with nothing clear, a picture's size with no picture) is not there.
++ */
++import React, { useRef, useState } from 'react';
++import { Body3D, Hair, MATERIAL_PRESETS, MaterialType, PatternKind, SceneLook, SWATCHES } from '../types';
++import { DEFAULT_PATTERN, PATTERNS, SURFACE_RANGES, imageDataUrl, resolveSurface, type SurfaceNumber } from '../utils/surface';
++import { GROOM_TOOLS, HAIR_RANGES, settleHair, type GroomBrush, type HairNumber } from '../utils/hair';
++import type { SurfaceArgs, HairArgs } from '../core/ops';
++
++const chip = (on: boolean) =>
++  `h-8 px-3 rounded-full text-xs font-medium transition-colors ${on ? 'bg-accent-500 text-white' : 'bg-white/6 text-slate-300 hover:bg-white/12'}`;
++const quiet = 'h-8 px-3.5 rounded-full text-xs font-medium bg-white/6 text-slate-200 hover:bg-white/12 disabled:opacity-40';
++const WIDTH = 'w-[min(19rem,calc(100vw-1.5rem))]';
++
++/** A labelled slider with its value; `label` is also its accessible name, which the agent's hand finds it by. */
++export function Slider({ label, value, min, max, step, onChange, unit = '', percent = false }: { label: string; value: number; min: number; max: number; step: number; onChange: (n: number) => void; unit?: string; percent?: boolean }) {
++  const shown = percent ? `${Math.round(value * 100)}%` : `${Math.round(value * 100) / 100}${unit ? ` ${unit}` : ''}`;
++  return (
++    <label className="flex items-center gap-3 text-xs text-slate-300">
++      <span className="w-20 shrink-0">{label}</span>
++      <input
++        type="range"
++        min={min}
++        max={max}
++        step={step}
++        value={value}
++        aria-label={label}
++        onChange={(e) => onChange(Number(e.target.value))}
++        style={{ ['--fill' as string]: `${((value - min) / (max - min || 1)) * 100}%` }}
++        className="flex-1 min-w-0 accent-accent-500"
++      />
++      <span className="w-12 text-right tabular-nums text-slate-400">{shown}</span>
++    </label>
++  );
++}
++
++function ColourField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
++  return (
++    <label className="flex items-center gap-3 text-xs text-slate-300">
++      <span className="w-20 shrink-0">{label}</span>
++      <span className="relative w-7 h-7 rounded-full border border-white/20 overflow-hidden" style={{ backgroundColor: value }}>
++        <input type="color" value={/^#[0-9a-f]{6}$/i.test(value) ? value : '#888888'} onChange={(e) => onChange(e.target.value)} aria-label={label} className="absolute inset-0 opacity-0 cursor-pointer" />
++      </span>
++      <span className="tabular-nums text-slate-500">{value}</span>
++    </label>
++  );
++}
++
++function More({ open, onToggle }: { open: boolean; onToggle: () => void }) {
++  return (
++    <button type="button" aria-expanded={open} onClick={onToggle} className="self-start text-xs font-medium text-accent-300 hover:text-accent-200">
++      {open ? 'Fewer' : 'More'}
++    </button>
++  );
++}
++
++export interface SurfacePanelProps {
++  selected: Body3D[];
++  onSurface: (args: SurfaceArgs) => void;
++}
++
++/** What one shape is made of: a finish to start from, its colour, and the numbers that matter for that finish. */
++export function MaterialPanel({ selected, onSurface }: SurfacePanelProps) {
++  const [more, setMore] = useState(false);
++  const body = selected.length === 1 ? selected[0] : null;
++  if (!body) return <p className={`p-4 text-xs text-slate-400 ${WIDTH}`}>Select a shape.</p>;
++  const s = resolveSurface(body);
++  const set = (k: SurfaceNumber) => (n: number) => onSurface({ id: body.id, [k]: n });
++  const range = (k: SurfaceNumber) => SURFACE_RANGES[k];
++  const clear = s.transmission > 0;
++  return (
++    <div className={`p-4 flex flex-col gap-3 ${WIDTH}`}>
++      <div className="grid grid-cols-3 gap-1.5" role="group" aria-label="Finish">
++        {MATERIAL_PRESETS.map((m) => (
++          <button key={m.id} type="button" aria-pressed={body.materialType === m.id} title={m.name} aria-label={m.name} onClick={() => onSurface({ id: body.id, preset: m.id as MaterialType })} className={`${chip(body.materialType === m.id)} truncate`}>
++            {m.id[0].toUpperCase() + m.id.slice(1)}
++          </button>
++        ))}
++      </div>
++      <div className="flex flex-wrap gap-2" role="group" aria-label="Colour">
++        {SWATCHES.map((w) => (
++          <button key={w.value} type="button" title={w.name} aria-label={w.name} aria-pressed={body.color.toLowerCase() === w.value.toLowerCase()} onClick={() => onSurface({ id: body.id, color: w.value })} style={{ backgroundColor: w.value }} className={`w-7 h-7 rounded-full border border-white/20 ${body.color.toLowerCase() === w.value.toLowerCase() ? 'ring-2 ring-offset-2 ring-offset-slate-800 ring-accent-400' : ''}`} />
++        ))}
++        <label title="Custom color" className="relative w-7 h-7 rounded-full border border-dashed border-white/30 overflow-hidden cursor-pointer" style={{ background: 'conic-gradient(#f43f5e, #f59e0b, #10b981, #3b82f6, #a855f7, #f43f5e)' }}>
++          <input type="color" value={/^#[0-9a-f]{6}$/i.test(body.color) ? body.color : '#3b82f6'} onChange={(e) => onSurface({ id: body.id, color: e.target.value })} aria-label="Custom color" className="absolute inset-0 opacity-0 cursor-pointer" />
++        </label>
++      </div>
++      <Slider label="Roughness" value={s.roughness} min={0} max={1} step={0.01} percent onChange={set('roughness')} />
++      <Slider label="Metal" value={s.metalness} min={0} max={1} step={0.01} percent onChange={set('metalness')} />
++      <Slider label="Clear" value={s.transmission} min={0} max={1} step={0.01} percent onChange={set('transmission')} />
++      {clear && <Slider label="Bends light" value={s.ior} min={range('ior')[0]} max={range('ior')[1]} step={0.01} onChange={set('ior')} />}
++      <More open={more} onToggle={() => setMore((v) => !v)} />
++      {more && (
++        <>
++          {clear && <Slider label="Thickness" value={s.thickness} min={0} max={100} step={1} unit="mm" onChange={set('thickness')} />}
++          <Slider label="Opacity" value={s.opacity} min={range('opacity')[0]} max={1} step={0.01} percent onChange={set('opacity')} />
++          <Slider label="Lacquer" value={s.clearcoat} min={0} max={1} step={0.01} percent onChange={set('clearcoat')} />
++          <Slider label="Sheen" value={s.sheen} min={0} max={1} step={0.01} percent onChange={set('sheen')} />
++          <Slider label="Light through" value={s.subsurface} min={0} max={1} step={0.01} percent onChange={set('subsurface')} />
++          <Slider label="Glow" value={s.glow} min={0} max={range('glow')[1]} step={0.05} onChange={set('glow')} />
++          {body.surface && Object.keys(body.surface).some((k) => k !== 'pattern' && k !== 'image') && (
++            <button type="button" className={quiet} onClick={() => onSurface({ id: body.id, reset: true })}>Back to the finish</button>
++          )}
++        </>
++      )}
++    </div>
++  );
++}
++
++/** A pattern drawn on the shape, or a picture laid on it. */
++export function TexturePanel({ selected, onSurface }: SurfacePanelProps) {
++  const file = useRef<HTMLInputElement>(null);
++  const [note, setNote] = useState<string | null>(null);
++  const body = selected.length === 1 ? selected[0] : null;
++  if (!body) return <p className={`p-4 text-xs text-slate-400 ${WIDTH}`}>Select a shape.</p>;
++  const pattern = body.surface?.pattern;
++  const image = body.surface?.image;
++  const kind: PatternKind = pattern?.kind ?? 'none';
++  const pick = async (f: File | undefined) => {
++    if (!f) return;
++    const data = imageDataUrl(new Uint8Array(await f.arrayBuffer()));
++    if (!data) return setNote('That is not a PNG or a JPEG.');
++    setNote(null);
++    onSurface({ id: body.id, image: data });
++  };
++  return (
++    <div className={`p-4 flex flex-col gap-3 ${WIDTH}`}>
++      <div className="grid grid-cols-3 gap-1.5" role="group" aria-label="Pattern">
++        {PATTERNS.map((p) => (
++          <button key={p.kind} type="button" aria-pressed={kind === p.kind} onClick={() => onSurface({ id: body.id, pattern: p.kind })} className={chip(kind === p.kind)}>
++            {p.label}
++          </button>
++        ))}
++      </div>
++      {pattern && (
++        <>
++          <ColourField label="Second colour" value={pattern.color2} onChange={(v) => onSurface({ id: body.id, pattern: { color2: v } })} />
++          <Slider label="Size" value={pattern.scale} min={5} max={400} step={1} unit="mm" onChange={(n) => onSurface({ id: body.id, pattern: { scale: n } })} />
++          <Slider label="Relief" value={pattern.bump} min={0} max={1} step={0.01} percent onChange={(n) => onSurface({ id: body.id, pattern: { bump: n } })} />
++          <Slider label="Turn" value={pattern.angle ?? DEFAULT_PATTERN.angle ?? 0} min={0} max={359} step={1} unit="°" onChange={(n) => onSurface({ id: body.id, pattern: { angle: n } })} />
++        </>
++      )}
++      <div className="flex items-center gap-2">
++        <button type="button" className={quiet} onClick={() => file.current?.click()}>{image ? 'Another picture' : 'Picture…'}</button>
++        {image && <button type="button" className={quiet} onClick={() => onSurface({ id: body.id, image: null })}>Remove picture</button>}
++        <input ref={file} type="file" accept="image/png,image/jpeg" aria-label="Picture file" className="hidden" onChange={(e) => { void pick(e.target.files?.[0]); e.target.value = ''; }} />
++      </div>
++      {image && <Slider label="Picture size" value={image.scale ?? 100} min={5} max={1000} step={1} unit="mm" onChange={(n) => onSurface({ id: body.id, imageScale: n })} />}
++      {note && <p className="text-xs text-amber-300">{note}</p>}
++    </div>
++  );
++}
++
++export interface HairPanelProps {
++  selected: Body3D[];
++  onHair: (args: HairArgs) => void;
++  groomBrush: GroomBrush;
++  onGroomBrush: (patch: Partial<GroomBrush>) => void;
++  groomOn: boolean;
++  onGroomOn: (on: boolean) => void;
++}
++
++/** Hair or fur on one shape: how it grows (the agent may set these too), and the grooming brush (the person's alone). */
++export function HairPanel({ selected, onHair, groomBrush, onGroomBrush, groomOn, onGroomOn }: HairPanelProps) {
++  const [more, setMore] = useState(false);
++  const body = selected.length === 1 ? selected[0] : null;
++  if (!body) return <p className={`p-4 text-xs text-slate-400 ${WIDTH}`}>Select a shape.</p>;
++  if (body.frame) return <p className={`p-4 text-xs text-slate-400 ${WIDTH}`}>Hair grows on shapes that stand upright, not on a wall.</p>;
++  if (!body.hair) {
++    return (
++      <div className={`p-4 flex gap-2 ${WIDTH}`}>
++        <button type="button" className={quiet} onClick={() => onHair({ id: body.id, style: 'strands' })}>Grow hair</button>
++        <button type="button" className={quiet} onClick={() => onHair({ id: body.id, style: 'fur' })}>Grow fur</button>
++      </div>
++    );
++  }
++  const h: Hair = settleHair(body.hair);
++  const set = (k: HairNumber) => (n: number) => onHair({ id: body.id, [k]: n });
++  const r = (k: HairNumber) => HAIR_RANGES[k];
++  const maxLength = h.style === 'fur' ? 60 : 400;
++  return (
++    <div className={`p-4 flex flex-col gap-3 ${WIDTH}`}>
++      <div className="flex gap-1.5" role="group" aria-label="Style">
++        <button type="button" aria-pressed={h.style === 'strands'} className={chip(h.style === 'strands')} onClick={() => onHair({ id: body.id, style: 'strands' })}>Hair</button>
++        <button type="button" aria-pressed={h.style === 'fur'} className={chip(h.style === 'fur')} onClick={() => onHair({ id: body.id, style: 'fur' })}>Fur</button>
++      </div>
++      <Slider label="Length" value={Math.min(h.length, maxLength)} min={1} max={maxLength} step={1} unit="mm" onChange={set('length')} />
++      <Slider label="Density" value={h.density} min={r('density')[0]} max={r('density')[1]} step={0.1} onChange={set('density')} />
++      <Slider label="Curl" value={h.curl} min={0} max={1} step={0.01} percent onChange={set('curl')} />
++      <ColourField label="Root colour" value={h.rootColor} onChange={(v) => onHair({ id: body.id, rootColor: v })} />
++      <ColourField label="Tip colour" value={h.tipColor} onChange={(v) => onHair({ id: body.id, tipColor: v })} />
++      <More open={more} onToggle={() => setMore((v) => !v)} />
++      {more && (
++        <>
++          <Slider label="Thickness" value={h.thickness} min={r('thickness')[0]} max={r('thickness')[1]} step={0.05} unit="mm" onChange={set('thickness')} />
++          <Slider label="Frizz" value={h.frizz} min={0} max={1} step={0.01} percent onChange={set('frizz')} />
++          <Slider label="Locks" value={h.clump} min={0} max={1} step={0.01} percent onChange={set('clump')} />
++          <Slider label="Droop" value={h.droop} min={0} max={1} step={0.01} percent onChange={set('droop')} />
++          <Slider label="Shine" value={h.shine} min={0} max={1} step={0.01} percent onChange={set('shine')} />
++          <button type="button" className={quiet} onClick={() => onHair({ id: body.id, seed: h.seed + 1 })}>Grow it another way</button>
++        </>
++      )}
++      <div className="pt-2 border-t border-white/8 flex flex-col gap-2">
++        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Groom">
++          <button type="button" aria-pressed={!groomOn} className={chip(!groomOn)} onClick={() => onGroomOn(false)}>Off</button>
++          {GROOM_TOOLS.map((t) => (
++            <button key={t.tool} type="button" title={t.hint} aria-pressed={groomOn && groomBrush.tool === t.tool} className={chip(groomOn && groomBrush.tool === t.tool)} onClick={() => { onGroomBrush({ tool: t.tool }); onGroomOn(true); }}>
++              {t.label}
++            </button>
++          ))}
++        </div>
++        {groomOn && (
++          <>
++            <Slider label="Brush size" value={groomBrush.radius} min={1} max={150} step={1} unit="mm" onChange={(n) => onGroomBrush({ radius: n })} />
++            <Slider label="Brush strength" value={groomBrush.strength} min={0.05} max={1} step={0.05} percent onChange={(n) => onGroomBrush({ strength: n })} />
++          </>
++        )}
++        <div className="flex gap-2">
++          {!!h.strokes?.length && <button type="button" className={quiet} onClick={() => onHair({ id: body.id, clearGrooming: true })}>Undo all grooming</button>}
++          <button type="button" className={quiet} onClick={() => { onGroomOn(false); onHair({ id: body.id, remove: true }); }}>Remove {h.style === 'fur' ? 'fur' : 'hair'}</button>
++        </div>
++      </div>
++    </div>
++  );
++}
++
++const ENVIRONMENTS: { value: SceneLook['environment']; label: string }[] = [
++  { value: 'studio', label: 'Studio' },
++  { value: 'daylight', label: 'Daylight' },
++  { value: 'sunset', label: 'Sunset' },
++  { value: 'night', label: 'Night' },
++];
++
++/** The surroundings the whole scene is lit by, and how bright. */
++export function LightPanel({ look, onLook }: { look: SceneLook | undefined; onLook: (patch: Partial<SceneLook>) => void }) {
++  const env = look?.environment ?? 'studio';
++  return (
++    <div className={`p-4 flex flex-col gap-3 ${WIDTH}`}>
++      <div className="grid grid-cols-4 gap-1.5" role="group" aria-label="Surroundings">
++        {ENVIRONMENTS.map((e) => (
++          <button key={e.value} type="button" aria-pressed={env === e.value} className={`${chip(env === e.value)} px-1.5`} onClick={() => onLook({ environment: e.value })}>{e.label}</button>
++        ))}
++      </div>
++      <Slider label="Brightness" value={look?.exposure ?? 1} min={0.3} max={2} step={0.05} onChange={(n) => onLook({ exposure: n })} />
++    </div>
++  );
++}
+diff --git a/autora-3d/src/components/surfaceLook.ts b/autora-3d/src/components/surfaceLook.ts
+new file mode 100644
+index 0000000..89b5e6a
+--- /dev/null
++++ b/autora-3d/src/components/surfaceLook.ts
+@@ -0,0 +1,297 @@
++/**
++ * @license
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++/**
++ * How a shape's surface and hair are drawn in the viewer: the three.js material for a surface (its numbers, pattern,
++ * relief and picture), the hair or fur grown on it, and the surroundings the scene is lit by. The page's side of
++ * utils/surface.ts and utils/hair.ts (pictures load through the browser here).
++ */
++import * as THREE from 'three';
++import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
++import { Body3D, SceneLook } from '../types';
++import { furLayers, furPattern, furRepeat, furShell, hairGeometry, settleHair, type GroomAt } from '../utils/hair';
++import { patternPixels, resolveSurface, textureRepeat } from '../utils/surface';
++
++// Textures are shared between shapes and kept: a material's dispose never takes them with it.
++const patternCache = new Map<string, { map: THREE.DataTexture; bump: THREE.DataTexture }>();
++const imageCache = new Map<string, THREE.Texture>();
++const CACHE_MOST = 32;
++
++const keep = <T>(cache: Map<string, T>, key: string, make: () => T): T => {
++  const hit = cache.get(key);
++  if (hit) {
++    // Most recently used last, so the oldest is the one let go.
++    cache.delete(key);
++    cache.set(key, hit);
++    return hit;
++  }
++  const made = make();
++  cache.set(key, made);
++  if (cache.size > CACHE_MOST) cache.delete(cache.keys().next().value as string);
++  return made;
++};
++
++const tiled = (t: THREE.Texture, repeat: number, angle = 0) => {
++  const c = t.clone();
++  c.wrapS = c.wrapT = THREE.RepeatWrapping;
++  c.repeat.set(repeat, repeat);
++  c.rotation = THREE.MathUtils.degToRad(angle);
++  c.needsUpdate = true;
++  return c;
++};
++
++function patternTextures(kind: string, color: string, color2: string) {
++  return keep(patternCache, `${kind}|${color}|${color2}`, () => {
++    const px = patternPixels(kind as never, color, color2);
++    const map = new THREE.DataTexture(px.rgba, px.size, px.size, THREE.RGBAFormat);
++    map.colorSpace = THREE.SRGBColorSpace;
++    map.generateMipmaps = true;
++    map.minFilter = THREE.LinearMipmapLinearFilter;
++    map.magFilter = THREE.LinearFilter;
++    map.anisotropy = 4;
++    map.needsUpdate = true;
++    const h = new Uint8Array(px.size * px.size * 4);
++    for (let i = 0; i < px.height.length; i++) h.set([px.height[i], px.height[i], px.height[i], 255], i * 4);
++    const bump = new THREE.DataTexture(h, px.size, px.size, THREE.RGBAFormat);
++    bump.generateMipmaps = true;
++    bump.minFilter = THREE.LinearMipmapLinearFilter;
++    bump.needsUpdate = true;
++    return { map, bump };
++  });
++}
++
++function imageTexture(data: string, loaded: () => void): THREE.Texture {
++  return keep(imageCache, data, () => {
++    const t = new THREE.TextureLoader().load(data, () => loaded());
++    t.colorSpace = THREE.SRGBColorSpace;
++    t.anisotropy = 4;
++    return t;
++  });
++}
++
++/** Cloth catches light in a paler shade of its own colour. */
++export const sheenFrom = (color: string) => `#${new THREE.Color(color).lerp(new THREE.Color('#ffffff'), 0.45).getHexString()}`;
++
++/** The material a shape is drawn with. `loaded` is called when a picture it uses has arrived, so the view draws again. */
++export function surfaceMaterial(body: Body3D, loaded: () => void): THREE.Material {
++  const s = resolveSurface(body);
++  const params: THREE.MeshPhysicalMaterialParameters = {
++    color: s.color,
++    roughness: s.roughness,
++    metalness: s.metalness,
++    polygonOffset: true,
++    polygonOffsetFactor: 1,
++    polygonOffsetUnits: 1,
++  };
++  if (s.pattern) {
++    const tex = patternTextures(s.pattern.kind, s.color, s.pattern.color2);
++    const repeat = textureRepeat(body, 'pattern');
++    params.map = tiled(tex.map, repeat, s.pattern.angle);
++    // The pattern carries the colour, so the shape's own colour must not tint it twice.
++    params.color = '#ffffff';
++    if (s.pattern.bump > 0) {
++      params.bumpMap = tiled(tex.bump, repeat, s.pattern.angle);
++      params.bumpScale = s.pattern.bump * 3;
++    }
++  }
++  if (s.image) {
++    params.map = tiled(imageTexture(s.image.data, loaded), textureRepeat(body, 'image'));
++  }
++  if (s.opacity < 1) {
++    params.transparent = true;
++    params.opacity = s.opacity;
++    params.depthWrite = false;
++  }
++  if (s.glow > 0) {
++    params.emissive = new THREE.Color(s.color);
++    params.emissiveIntensity = s.glow;
++    if (params.map) params.emissiveMap = params.map;
++  }
++  const physical = s.transmission > 0 || s.clearcoat > 0 || s.sheen > 0 || s.subsurface > 0;
++  if (!physical) return new THREE.MeshStandardMaterial(params);
++  if (s.transmission > 0) {
++    // A trace of the glass's own colour stays on it, so clear glass still reads against a dark backdrop.
++    params.transmission = Math.min(s.transmission, 0.94);
++    if (s.opacity === 1) {
++      params.transparent = true;
++      params.opacity = 0.92;
++    }
++    params.ior = s.ior;
++    params.thickness = s.thickness;
++    params.attenuationColor = new THREE.Color(s.color);
++    params.attenuationDistance = Math.max(10, s.thickness * 6);
++    params.specularIntensity = 1;
++  }
++  if (s.clearcoat > 0) {
++    params.clearcoat = s.clearcoat;
++    params.clearcoatRoughness = 0.08;
++  }
++  if (s.sheen > 0) {
++    params.sheen = s.sheen;
++    params.sheenColor = new THREE.Color(s.sheenColor || sheenFrom(s.color));
++    params.sheenRoughness = 0.6;
++  }
++  if (s.subsurface > 0 && s.transmission === 0) {
++    // Light through the skin: a soft, rough transmission tinted by the colour and fading fast, with a warm sheen at the rim.
++    params.transmission = s.subsurface * 0.45;
++    params.thickness = 20;
++    params.ior = 1.4;
++    params.attenuationColor = new THREE.Color(s.color).lerp(new THREE.Color('#ff3b1f'), 0.35);
++    params.attenuationDistance = 6;
++    params.roughness = Math.max(s.roughness, 0.45);
++    if (s.sheen === 0) {
++      params.sheen = s.subsurface * 0.5;
++      params.sheenColor = new THREE.Color(s.color).lerp(new THREE.Color('#ffffff'), 0.4);
++    }
++  }
++  return new THREE.MeshPhysicalMaterial(params);
++}
++
++/** What about a shape's look rebuilds its material (not its geometry). */
++export const lookSignature = (b: Body3D) => JSON.stringify([b.materialType, b.color, b.surface]);
++/** What about a shape's hair grows it again. */
++export const hairSignature = (b: Body3D) => (b.hair ? JSON.stringify(b.hair) : '');
++
++const furTexture = new Map<string, THREE.DataTexture>();
++const furPatternOf = (seed: number) =>
++  keep(furTexture, String(seed), () => {
++    const t = new THREE.DataTexture(furPattern(seed), 128, 128, THREE.RGBAFormat);
++    t.wrapS = t.wrapT = THREE.RepeatWrapping;
++    t.magFilter = THREE.NearestFilter;
++    t.minFilter = THREE.NearestMipmapLinearFilter;
++    t.generateMipmaps = true;
++    t.needsUpdate = true;
++    return t;
++  });
++
++/**
++ * The hair grown on a shape, as an object to add beside its mesh: ribbons for strands, layers for fur. It is never picked
++ * (a press goes through to the shape), and is grown in the shape's own space so it moves with it.
++ */
++export function hairObject(geometry: THREE.BufferGeometry, body: Body3D): THREE.Object3D | null {
++  if (!body.hair) return null;
++  const hair = settleHair(body.hair);
++  const holder = new THREE.Group();
++  holder.userData.hair = true;
++  holder.raycast = () => {};
++  if (hair.style === 'fur') {
++    const layers = furLayers(geometry.getAttribute('position').count / 3);
++    const pattern = furPatternOf(hair.seed);
++    const root = new THREE.Color(hair.rootColor);
++    const tip = new THREE.Color(hair.tipColor);
++    let groom: GroomAt[] | undefined;
++    for (let i = 1; i <= layers; i++) {
++      const h = i / layers;
++      const shell = furShell(geometry, hair, h, body.elevation ?? 0, groom);
++      groom = shell.groom;
++      const alpha = pattern.clone();
++      alpha.repeat.set(furRepeat(hair), furRepeat(hair));
++      alpha.needsUpdate = true;
++      // Deeper in the coat is darker: light reaches the tips, not the roots.
++      const color = root.clone().lerp(tip, h).multiplyScalar(0.55 + 0.45 * h);
++      const material = new THREE.MeshStandardMaterial({ color, roughness: 1 - hair.shine * 0.4, metalness: 0, alphaMap: alpha, alphaTest: 0.08 + h * 0.85, side: THREE.DoubleSide });
++      const mesh = new THREE.Mesh(shell.geometry, material);
++      mesh.raycast = () => {};
++      mesh.castShadow = i === 1;
++      mesh.receiveShadow = true;
++      holder.add(mesh);
++    }
++    return holder;
++  }
++  const strands = hairGeometry(geometry, hair, body.elevation ?? 0);
++  if (!strands) return null;
++  const material = new THREE.MeshPhysicalMaterial({
++    vertexColors: true,
++    roughness: 0.55 - hair.shine * 0.3,
++    metalness: 0,
++    // The highlight a hair has runs across it: an anisotropic sheen along its length (the tangent).
++    anisotropy: 0.6 + hair.shine * 0.35,
++    sheen: 0.3,
++    sheenColor: new THREE.Color(hair.tipColor),
++    side: THREE.DoubleSide,
++  });
++  const mesh = new THREE.Mesh(strands, material);
++  mesh.raycast = () => {};
++  mesh.castShadow = true;
++  mesh.receiveShadow = true;
++  holder.add(mesh);
++  return holder;
++}
++
++// ---- The surroundings ------------------------------------------------------------------------------
++
++/** A sky dome with a sun, for the outdoor and night lights: a scene PMREM turns into reflections and light. */
++function skyScene(top: string, horizon: string, ground: string, sun: string, sunAt: THREE.Vector3, sunSize: number, sunPower: number): THREE.Scene {
++  const scene = new THREE.Scene();
++  const geo = new THREE.SphereGeometry(100, 48, 24);
++  const colors: number[] = [];
++  const pos = geo.getAttribute('position');
++  const t = new THREE.Color(top);
++  const h = new THREE.Color(horizon);
++  const g = new THREE.Color(ground);
++  const c = new THREE.Color();
++  for (let i = 0; i < pos.count; i++) {
++    const y = pos.getY(i) / 100;
++    if (y >= 0) c.copy(h).lerp(t, Math.pow(y, 0.6));
++    else c.copy(h).lerp(g, Math.min(1, -y * 4));
++    colors.push(c.r, c.g, c.b);
++  }
++  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
++  scene.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
++  const disc = new THREE.Mesh(new THREE.SphereGeometry(sunSize, 16, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(sun).multiplyScalar(sunPower) }));
++  disc.position.copy(sunAt);
++  scene.add(disc);
++  return scene;
++}
++
++export interface Lighting {
++  texture: THREE.Texture;
++  intensity: number;
++  /** The sun's colour, strength and direction for the light that casts shadows. */
++  key: { color: string; intensity: number; position: [number, number, number] };
++  exposure: number;
++  /** Shown behind the model as well (outdoors); the studio keeps the window's own backdrop. */
++  backdrop: boolean;
++}
++
++/** The light a scene's look gives. `pmrem` turns a scene into an environment map. */
++export function lighting(look: SceneLook | undefined, pmrem: THREE.PMREMGenerator): Lighting {
++  const env = look?.environment ?? 'studio';
++  const exposure = 0.95 * (look?.exposure ?? 1);
++  switch (env) {
++    case 'daylight':
++      return {
++        texture: pmrem.fromScene(skyScene('#3d7ccf', '#cfe3f5', '#5b5a52', '#fff6e0', new THREE.Vector3(40, 70, 30), 5, 40), 0.02).texture,
++        intensity: 0.7,
++        key: { color: '#fff4dc', intensity: 1.6, position: [240, 480, 200] },
++        exposure,
++        backdrop: true,
++      };
++    case 'sunset':
++      return {
++        texture: pmrem.fromScene(skyScene('#27355f', '#f29a5c', '#3a2a25', '#ffb36b', new THREE.Vector3(80, 12, -40), 7, 30), 0.03).texture,
++        intensity: 0.6,
++        key: { color: '#ffb070', intensity: 1.5, position: [420, 120, -200] },
++        exposure,
++        backdrop: true,
++      };
++    case 'night':
++      return {
++        texture: pmrem.fromScene(skyScene('#05070f', '#1b2440', '#07080b', '#bcd0ff', new THREE.Vector3(-40, 60, 50), 3, 6), 0.03).texture,
++        intensity: 0.35,
++        key: { color: '#9fb6ff', intensity: 0.55, position: [-220, 420, 260] },
++        exposure,
++        backdrop: true,
++      };
++    default:
++      return {
++        texture: pmrem.fromScene(new RoomEnvironment(), 0.04).texture,
++        intensity: 0.55,
++        key: { color: '#ffffff', intensity: 1.15, position: [240, 420, 260] },
++        exposure,
++        backdrop: false,
++      };
++  }
++}
+diff --git a/autora-3d/src/core/agent.ts b/autora-3d/src/core/agent.ts
+index 40163fa..8e88305 100644
+--- a/autora-3d/src/core/agent.ts
++++ b/autora-3d/src/core/agent.ts
+@@ -49,7 +49,9 @@ export interface ExecuteOptions {
+ 
+ const personsOwn = (name: string) => toolByName(name)?.authority === 'person';
+ const refusal = (name: string) =>
+-  new AgentError(`${name} is the person's own hand, not a tool for you: shaping a form by hand is theirs to do.`, 'Suggest what to change and tell them where the tool is (the Sculpt tool in the 3D window).');
++  name.startsWith('hair_')
++    ? new AgentError(`${name} is the person's own hand, not a tool for you: styling hair by hand is theirs to do.`, 'Suggest how to groom it and tell them where the brush is (Groom in the Hair card of the 3D window). hair_set changes how it grows.')
++    : new AgentError(`${name} is the person's own hand, not a tool for you: shaping a form by hand is theirs to do.`, 'Suggest what to change and tell them where the tool is (the Sculpt tool in the 3D window).');
+ 
+ const READ_ONLY = new Set(TOOL_SPECS.filter((t) => t.readOnly).map((t) => t.name));
+ 
+diff --git a/autora-3d/src/core/commands.ts b/autora-3d/src/core/commands.ts
+index 01fc8c2..26d1e37 100644
+--- a/autora-3d/src/core/commands.ts
++++ b/autora-3d/src/core/commands.ts
+@@ -67,13 +67,15 @@ export function describeEdit(before: Doc, after: Doc): string {
+   const removed = before.bodies.filter((b) => !is.has(b.id) && !b.repeatOf);
+   const changed = after.bodies.filter((b) => was.has(b.id) && was.get(b.id) !== b && !b.repeatOf);
+   const sculpted = changed.filter((b) => meshOf(b) && meshOf(was.get(b.id)) !== meshOf(b) && meshOf(was.get(b.id))?.indices === meshOf(b)?.indices);
+-  const rest = changed.filter((b) => !sculpted.includes(b));
++  const groomed = changed.filter((b) => !sculpted.includes(b) && (b.hair?.strokes?.length ?? 0) > (was.get(b.id)?.hair?.strokes?.length ?? 0));
++  const rest = changed.filter((b) => !sculpted.includes(b) && !groomed.includes(b));
+   const names = (list: Body3D[]) => list.slice(0, 3).map((b) => b.name).join(', ') + (list.length > 3 ? ` +${list.length - 3}` : '');
+   const out: string[] = [];
+   if (added.length) out.push(`added ${names(added)}`);
+   if (removed.length) out.push(`removed ${names(removed)}`);
+   if (sculpted.length) out.push(`sculpted ${names(sculpted)}`);
++  if (groomed.length) out.push(`groomed the hair of ${names(groomed)}`);
+   if (rest.length) out.push(`changed ${names(rest)}`);
+-  if (!out.length) out.push(before.groups !== after.groups || before.library !== after.library ? 'changed groups or the library' : 'changed the model');
++  if (!out.length) out.push(before.groups !== after.groups || before.library !== after.library ? 'changed groups or the library' : before.look !== after.look ? 'changed the light' : 'changed the model');
+   return clip(out.join('; '));
+ }
+diff --git a/autora-3d/src/core/doc.ts b/autora-3d/src/core/doc.ts
+index 39d2143..496349f 100644
+--- a/autora-3d/src/core/doc.ts
++++ b/autora-3d/src/core/doc.ts
+@@ -3,7 +3,7 @@
+  * SPDX-License-Identifier: Apache-2.0
+  */
+ 
+-import { Body3D, LibraryItem, Point2D, RepeatLink, ShapeGroup } from '../types';
++import { Body3D, LibraryItem, Point2D, RepeatLink, SceneLook, ShapeGroup } from '../types';
+ import { syncInstances } from '../utils/library';
+ import { normalizeGroups } from '../utils/groups';
+ import { syncRepeats } from '../utils/repeat';
+@@ -16,6 +16,8 @@ export interface Doc {
+   repeats: RepeatLink[];
+   /** Reusable objects kept in this project. Placed copies (groups with `place`) follow them. */
+   library: LibraryItem[];
++  /** How the scene is lit (absent: the studio light). */
++  look?: SceneLook;
+ }
+ 
+ /** Makes ids. Each caller supplies its own so ids stay unique (the app uses time, an agent session a counter). */
+@@ -60,7 +62,8 @@ export function parseDoc(raw: unknown): Doc | null {
+   if (!raw || typeof raw !== 'object') return null;
+   const d = raw as Partial<Doc>;
+   if (!Array.isArray(d.bodies) || !Array.isArray(d.groups)) return null;
+-  return settle({ bodies: d.bodies, groups: d.groups, repeats: Array.isArray(d.repeats) ? d.repeats : [], library: Array.isArray(d.library) ? d.library : [] });
++  const look = d.look && typeof d.look === 'object' && typeof d.look.environment === 'string' ? { look: d.look } : {};
++  return settle({ bodies: d.bodies, groups: d.groups, repeats: Array.isArray(d.repeats) ? d.repeats : [], library: Array.isArray(d.library) ? d.library : [], ...look });
+ }
+ 
+ /** A counter-based id generator that never reuses an id already in `doc`. */
+diff --git a/autora-3d/src/core/engine.ts b/autora-3d/src/core/engine.ts
+index b1dc264..4f46a86 100644
+--- a/autora-3d/src/core/engine.ts
++++ b/autora-3d/src/core/engine.ts
+@@ -134,6 +134,6 @@ export class Engine implements AgentHost {
+   }
+ 
+   toJSON() {
+-    return { bodies: this.doc.bodies, groups: this.doc.groups, repeats: this.doc.repeats, library: this.doc.library };
++    return { bodies: this.doc.bodies, groups: this.doc.groups, repeats: this.doc.repeats, library: this.doc.library, ...(this.doc.look ? { look: this.doc.look } : {}) };
+   }
+ }
+diff --git a/autora-3d/src/core/inspect.ts b/autora-3d/src/core/inspect.ts
+index 2829e37..d29b34a 100644
+--- a/autora-3d/src/core/inspect.ts
++++ b/autora-3d/src/core/inspect.ts
+@@ -4,8 +4,10 @@
+  */
+ 
+ import * as THREE from 'three';
+-import { Body3D, EdgeBevel, Frame, Point2D } from '../types';
++import { Body3D, EdgeBevel, Frame, Point2D, SceneLook } from '../types';
+ import { buildBodyGeometry } from '../utils/bodyGeometry';
++import { describeSurface, hasOwnUVs } from '../utils/surface';
++import { describeHair } from '../utils/hair';
+ import { listEdges } from '../utils/edges';
+ import { faceMeasure } from '../utils/faces';
+ import { frameMatrix } from '../utils/frame';
+@@ -53,7 +55,11 @@ export interface ShapeSummary {
+   /** Present on a shape drawn on a wall. */
+   wall?: Frame;
+   /** Present on a shape brought in from a mesh file: it has a triangle surface, not an outline (corners 4 is just the box it fills). */
+-  mesh?: { triangles: number };
++  mesh?: { triangles: number; laidOut?: boolean };
++  /** What its surface is, when it has its own numbers, a pattern or a picture on top of its material. */
++  surface?: string;
++  /** Its hair or fur, in a few words. */
++  hair?: string;
+ }
+ 
+ /** The corners of a shape, in the world, top and bottom. */
+@@ -111,7 +117,9 @@ export function summarize(doc: Doc, body: Body3D): ShapeSummary {
+   if (body.instanceOf) out.linkedTo = body.instanceOf;
+   if (link) out.repeat = { kind: link.kind, count: link.count, gap: round2(spacing(link)), follow: link.follow, start: link.start, end: link.end, bend: link.bend };
+   if (body.frame) out.wall = body.frame;
+-  if (body.mesh) out.mesh = { triangles: body.mesh.indices.length / 3 };
++  if (body.mesh) out.mesh = { triangles: body.mesh.indices.length / 3, ...(hasOwnUVs(body) ? { laidOut: true } : {}) };
++  if (body.surface) out.surface = describeSurface(body);
++  if (body.hair) out.hair = describeHair(body.hair);
+   return out;
+ }
+ 
+@@ -226,6 +234,8 @@ export function meshReport(body: Body3D): MeshReport | null {
+ }
+ 
+ export interface SceneSummary {
++  /** How the scene is lit, when it is not the studio light it starts with. */
++  light?: SceneLook;
+   shapes: ShapeSummary[];
+   groups: { id: string; name: string; shapes: string[]; joined: boolean; parent?: string; library?: string; linked?: boolean; place?: { x: number; y: number; z: number; degrees: number } }[];
+   bounds: { min: Vec3; max: Vec3 } | null;
+@@ -240,6 +250,7 @@ export function sceneSummary(doc: Doc, options: { includeCopies?: boolean } = {}
+     groups: doc.groups.map((g) => ({ id: g.id, name: g.name, shapes: g.bodyIds, joined: !!g.joined, parent: g.parentId, library: g.libraryId, linked: g.place ? true : undefined, place: g.place ? { x: g.place.x, y: g.place.y, z: g.place.z, degrees: round2((g.place.angle * 180) / Math.PI) } : undefined })),
+     bounds: boundsOf(doc.bodies.filter((b) => b.visible)),
+     units: 'millimetres. x is to the right, y is away from the front of the view, z is up. A shape stands on its bottom (z) and rises to its top.',
++    ...(doc.look ? { light: doc.look } : {}),
+   };
+   return out;
+ }
+diff --git a/autora-3d/src/core/ops.ts b/autora-3d/src/core/ops.ts
+index 54d4b7a..18f89fc 100644
+--- a/autora-3d/src/core/ops.ts
++++ b/autora-3d/src/core/ops.ts
+@@ -3,7 +3,9 @@
+  * SPDX-License-Identifier: Apache-2.0
+  */
+ 
+-import { Body3D, DrawSession, EdgeSel, FaceSel, Frame, LibraryItem, MaterialType, Point2D, RepeatLink, RepeatSession, ShapeGroup, SWATCHES } from '../types';
++import { Body3D, DrawSession, EdgeSel, FaceSel, Frame, GroomStroke, Hair, LibraryItem, MATERIAL_PRESETS, MaterialType, PatternKind, Point2D, RepeatLink, RepeatSession, SceneLook, ShapeGroup, Surface, SWATCHES } from '../types';
++import { DEFAULT_PATTERN, MAX_IMAGE_BYTES, PATTERN_KINDS, SURFACE_NUMBERS, SURFACE_RANGES, imageBytes, resolveSurface as finishOf, type ResolvedSurface } from '../utils/surface';
++import { DEFAULT_HAIR, FUR_START, HAIR_NUMBERS, HAIR_RANGES, MAX_STROKES, settleHair } from '../utils/hair';
+ import { BodyTransform, resizeBody, scaleMeshHeight, selectionBounds, transformBody } from '../utils/transform';
+ import { MeshError, meshFormatOf, placeMesh, readMesh, type MeshFormat, type RawMesh } from '../utils/meshImport';
+ import { boundsOf } from '../utils/sculpt';
+@@ -23,7 +25,7 @@ import { Doc, IdGen, settle } from './doc';
+ import { fail } from './errors';
+ 
+ const round2 = (n: number) => Math.round(n * 100) / 100;
+-const MATERIALS: MaterialType[] = ['matte', 'metal', 'glossy', 'glass', 'neon'];
++const MATERIALS: MaterialType[] = MATERIAL_PRESETS.map((p) => p.id);
+ /** The tallest a shape may be through the agent API (the sliders in the app stop at 600). */
+ export const API_MAX_HEIGHT = 5000;
+ 
+@@ -251,8 +253,10 @@ export function importMesh(doc: Doc, ids: IdGen, a: ImportMeshArgs): OpResult<{
+     mesh: placed.mesh,
+     extrusionHeight: placed.height,
+     elevation: round2(elevation),
+-    color: colorOf(a.color ?? placed.color, SWATCHES[(count - 1) % SWATCHES.length].value),
++    // A file that brought its own picture shows it as it is: its colour is white, so nothing tints it.
++    color: colorOf(a.color ?? (placed.image ? '#ffffff' : placed.color), SWATCHES[(count - 1) % SWATCHES.length].value),
+     materialType: materialOf(a.material, 'matte'),
++    ...(placed.image ? { surface: { image: { data: placed.image, name: 'from the file' } } } : {}),
+     visible: true,
+     createdAt: new Date().toISOString(),
+   };
+@@ -260,6 +264,7 @@ export function importMesh(doc: Doc, ids: IdGen, a: ImportMeshArgs): OpResult<{
+   const ys = placed.points.map((p) => p.y);
+   const notes = [
+     placed.from ? `The file had ${placed.from} triangles; it was simplified to ${placed.triangles} to stay light.` : '',
++    placed.image ? 'Its picture (texture) came with it and is laid on as the file had it.' : '',
+     a.size === undefined ? `Scaled by ${round2(placed.scale)} to millimetres (the file's own units); pass size to set its longest side.` : '',
+   ].filter(Boolean);
+   return {
+@@ -1211,7 +1216,8 @@ export function smoothShape(doc: Doc, a: SmoothArgs) {
+   const points = [{ x: lo.x, y: lo.y }, { x: hi.x, y: lo.y }, { x: hi.x, y: hi.y }, { x: lo.x, y: hi.y }].map((q) => ({ x: round2(q.x), y: round2(q.y) }));
+   const positions = p.map((n) => Math.round(n * 1000) / 1000);
+   return {
+-    doc: replace(doc, b.id, { mesh: { positions, indices: mesh.indices }, points, basePoints: points, extrusionHeight: Math.max(1, round2(top)) }),
++    // Smoothing alone keeps every vertex, so a picture's layout still fits; splitting triangles makes new ones, and it goes.
++    doc: replace(doc, b.id, { mesh: { positions, indices: mesh.indices, ...(split === 0 && b.mesh.uvs ? { uvs: b.mesh.uvs } : {}) }, points, basePoints: points, extrusionHeight: Math.max(1, round2(top)) }),
+     result: { id: b.id, triangles: mesh.indices.length / 3 },
+   };
+ }
+@@ -1230,7 +1236,168 @@ export function applySculpt(doc: Doc, a: ApplySculptArgs) {
+   if (a.positions.some((n) => typeof n !== 'number' || !Number.isFinite(n))) return fail('positions must all be finite numbers.');
+   const { points, height } = boundsOf(a.positions);
+   return {
+-    doc: replace(doc, b.id, { mesh: { positions: a.positions, indices: b.mesh.indices }, points, basePoints: points, extrusionHeight: height }),
++    doc: replace(doc, b.id, { mesh: { ...b.mesh, positions: a.positions }, points, basePoints: points, extrusionHeight: height }),
+     result: { id: b.id },
+   };
+ }
++
++// ---- Surfaces ------------------------------------------------------------------------------------
++
++export interface SurfaceArgs {
++  ids?: string[];
++  id?: string;
++  /** Start from a preset: it clears the shape's own numbers. */
++  preset?: MaterialType;
++  color?: string;
++  roughness?: number;
++  metalness?: number;
++  opacity?: number;
++  transmission?: number;
++  ior?: number;
++  thickness?: number;
++  clearcoat?: number;
++  sheen?: number;
++  sheenColor?: string;
++  glow?: number;
++  subsurface?: number;
++  /** A pattern drawn on it ("none" takes it off); its fields are kept from the last one when not given. */
++  pattern?: PatternKind | { kind?: PatternKind; color2?: string; scale?: number; bump?: number; angle?: number };
++  /** A picture laid on it: a data URL (the host reads a file into one), or null to take it off. */
++  image?: string | null;
++  imageScale?: number;
++  /** Put every number back to the preset's. */
++  reset?: boolean;
++}
++
++const idsOf = (a: { ids?: unknown; id?: unknown }): string[] => {
++  const list = Array.isArray(a.ids) ? a.ids : a.id !== undefined ? [a.id] : [];
++  if (!list.length) return fail('Give the shape (id) or shapes (ids).');
++  return list.map((x) => String(x));
++};
++
++const inRange = (v: unknown, name: string, [lo, hi]: readonly [number, number]) => {
++  const n = num(v, name);
++  if (n < lo || n > hi) return fail(`${name} must be between ${lo} and ${hi}, got ${n}.`);
++  return Math.round(n * 1000) / 1000;
++};
++
++/** Changes what shapes are made of: a preset to start from, then any of its numbers, a pattern, or a picture. */
++export function setSurface(doc: Doc, a: SurfaceArgs): OpResult<{ ids: string[]; surface: ResolvedSurface }> {
++  const list = idsOf(a);
++  const bodies = list.map((id) => editable(doc, id));
++  let next = doc;
++  for (const b of bodies) {
++    const patch: Partial<Body3D> = {};
++    let surface: Surface = a.preset !== undefined || a.reset ? {} : { ...(b.surface ?? {}) };
++    if (a.preset !== undefined) {
++      patch.materialType = materialOf(a.preset, b.materialType);
++      // A preset is a place to start: its pattern and picture are not numbers of the finish, so they stay.
++      if (b.surface?.pattern) surface.pattern = b.surface.pattern;
++      if (b.surface?.image) surface.image = b.surface.image;
++    } else if (a.reset) {
++      if (b.surface?.pattern) surface.pattern = b.surface.pattern;
++      if (b.surface?.image) surface.image = b.surface.image;
++    }
++    if (a.color !== undefined) patch.color = colorOf(a.color, b.color);
++    for (const k of SURFACE_NUMBERS) {
++      const v = (a as Record<string, unknown>)[k];
++      if (v !== undefined) surface[k] = inRange(v, k, SURFACE_RANGES[k]);
++    }
++    if (a.sheenColor !== undefined) surface.sheenColor = colorOf(a.sheenColor, surface.sheenColor ?? '#ffffff');
++    if (a.pattern !== undefined) {
++      const given = typeof a.pattern === 'string' ? { kind: a.pattern } : a.pattern ?? {};
++      const kind = (given.kind ?? surface.pattern?.kind ?? 'wood') as PatternKind;
++      if (!PATTERN_KINDS.includes(kind)) return fail(`pattern must be one of ${PATTERN_KINDS.join(', ')}.`);
++      if (kind === 'none') delete surface.pattern;
++      else {
++        const was = surface.pattern ?? { kind, ...DEFAULT_PATTERN };
++        const scale = given.scale !== undefined ? inRange(given.scale, 'pattern.scale', [2, 2000]) : was.scale;
++        const bump = given.bump !== undefined ? inRange(given.bump, 'pattern.bump', [0, 1]) : was.bump;
++        const angle = given.angle !== undefined ? ((num(given.angle, 'pattern.angle') % 360) + 360) % 360 : was.angle ?? 0;
++        surface.pattern = { kind, color2: colorOf(given.color2, was.color2), scale, bump, angle };
++      }
++    }
++    if (a.image === null) delete surface.image;
++    else if (a.image !== undefined) {
++      if (typeof a.image !== 'string') return fail('image must be the picture (the host reads a file into it), or null to take it off.');
++      const pic = imageBytes(a.image);
++      if (!pic) return fail('The image must be a PNG or a JPEG.');
++      if (pic.bytes.length > MAX_IMAGE_BYTES) return fail(`The image is ${Math.round(pic.bytes.length / 1024)} KB; the most a surface keeps is ${MAX_IMAGE_BYTES / 1024 / 1024} MB.`, 'Make it smaller first (2048 pixels across is plenty).');
++      surface.image = { data: a.image, ...(a.imageScale !== undefined ? { scale: inRange(a.imageScale, 'imageScale', [2, 5000]) } : {}) };
++    } else if (a.imageScale !== undefined) {
++      if (!surface.image) return fail(`"${b.id}" has no image to scale.`, 'Give image first.');
++      surface.image = { ...surface.image, scale: inRange(a.imageScale, 'imageScale', [2, 5000]) };
++    }
++    patch.surface = Object.keys(surface).length ? surface : undefined;
++    next = replace(next, b.id, patch);
++  }
++  const first = next.bodies.find((b) => b.id === bodies[0].id)!;
++  return { doc: next, result: { ids: list, surface: { ...finishOf(first), ...(first.surface?.image ? { image: { data: '(picture)', scale: first.surface.image.scale } } : {}) } } };
++}
++
++// ---- Hair ----------------------------------------------------------------------------------------
++
++export type HairArgs = { ids?: string[]; id?: string; remove?: boolean } & Partial<Omit<Hair, 'strokes'>> & { clearGrooming?: boolean };
++
++/** Grows hair or fur on shapes, or changes it (only what is given), or takes it off. The grooming the person did stays. */
++export function setHair(doc: Doc, a: HairArgs): OpResult<{ ids: string[]; hair?: Hair }> {
++  const list = idsOf(a);
++  const bodies = list.map((id) => editable(doc, id));
++  let next = doc;
++  for (const b of bodies) {
++    if (a.remove) {
++      next = replace(next, b.id, { hair: undefined });
++      continue;
++    }
++    if (b.frame) return fail(`"${b.id}" stands on a wall; hair grows on shapes that stand upright.`);
++    const style = a.style ?? b.hair?.style ?? 'strands';
++    if (style !== 'strands' && style !== 'fur') return fail('style must be "strands" or "fur".');
++    // Changing to fur from nothing (or from hair) starts from a coat's numbers; anything given still wins.
++    const base: Hair = b.hair && b.hair.style === style ? b.hair : { ...DEFAULT_HAIR, ...(style === 'fur' ? FUR_START : {}), seed: b.hair?.seed ?? DEFAULT_HAIR.seed, ...(b.hair?.strokes ? { strokes: b.hair.strokes } : {}) };
++    const hair: Hair = { ...base, style };
++    for (const k of HAIR_NUMBERS) {
++      const v = (a as Record<string, unknown>)[k];
++      if (v !== undefined) hair[k] = inRange(v, k, HAIR_RANGES[k]);
++    }
++    if (a.rootColor !== undefined) hair.rootColor = colorOf(a.rootColor, hair.rootColor);
++    if (a.tipColor !== undefined) hair.tipColor = colorOf(a.tipColor, hair.tipColor);
++    if (a.seed !== undefined) hair.seed = Math.round(num(a.seed, 'seed'));
++    if (a.clearGrooming) delete hair.strokes;
++    next = replace(next, b.id, { hair: settleHair(hair) });
++  }
++  const first = next.bodies.find((b) => b.id === bodies[0].id)!;
++  return { doc: next, result: { ids: list, ...(first.hair ? { hair: { ...first.hair, ...(first.hair.strokes ? { strokes: [] as GroomStroke[] } : {}) } } : {}) } };
++}
++
++export interface GroomArgs {
++  id: string;
++  stroke: GroomStroke;
++}
++
++/** The person's grooming stroke on a shape's hair: kept with the hair, so it is grown again the same way. */
++export function groomHair(doc: Doc, a: GroomArgs): OpResult<{ id: string; strokes: number }> {
++  const b = editable(doc, a.id);
++  if (!b.hair) return fail(`"${b.id}" has no hair to groom.`);
++  const s = a.stroke;
++  if (!s || !['comb', 'cut', 'lengthen', 'puff'].includes(s.tool)) return fail('stroke.tool must be comb, cut, lengthen or puff.');
++  if (!Array.isArray(s.path) || s.path.length < 3 || s.path.length % 3 || s.path.some((n) => typeof n !== 'number' || !Number.isFinite(n))) return fail('stroke.path must be [x, y, height] triples of numbers.');
++  const stroke: GroomStroke = { tool: s.tool, path: s.path.slice(0, 600).map((n) => Math.round(n * 100) / 100), radius: inRange(s.radius, 'stroke.radius', [0.5, 500]), strength: inRange(s.strength, 'stroke.strength', [0, 1]) };
++  const strokes = [...(b.hair.strokes ?? []), stroke].slice(-MAX_STROKES);
++  return { doc: replace(doc, b.id, { hair: { ...b.hair, strokes } }), result: { id: b.id, strokes: strokes.length } };
++}
++
++// ---- The scene's light ---------------------------------------------------------------------------
++
++export const ENVIRONMENTS: SceneLook['environment'][] = ['studio', 'daylight', 'sunset', 'night'];
++export const DEFAULT_LOOK: SceneLook = { environment: 'studio', exposure: 1 };
++
++/** The surroundings the scene is lit by and reflects, and how bright it is. Saved with the model; exported files do not carry it. */
++export function setLook(doc: Doc, a: Partial<SceneLook>): OpResult<SceneLook> {
++  const was = doc.look ?? DEFAULT_LOOK;
++  if (a.environment !== undefined && !ENVIRONMENTS.includes(a.environment)) return fail(`environment must be one of ${ENVIRONMENTS.join(', ')}.`);
++  const look: SceneLook = {
++    environment: a.environment ?? was.environment,
++    exposure: a.exposure !== undefined ? inRange(a.exposure, 'exposure', [0.3, 2]) : was.exposure,
++  };
++  return { doc: { ...doc, look }, result: look };
++}
+diff --git a/autora-3d/src/core/tools.ts b/autora-3d/src/core/tools.ts
+index 0c8dbe4..79e33a9 100644
+--- a/autora-3d/src/core/tools.ts
++++ b/autora-3d/src/core/tools.ts
+@@ -3,7 +3,8 @@
+  * SPDX-License-Identifier: Apache-2.0
+  */
+ 
+-import { Body3D } from '../types';
++import { Body3D, MATERIAL_PRESETS } from '../types';
++import { PATTERN_KINDS } from '../utils/surface';
+ import { Doc, IdGen } from './doc';
+ import { fail } from './errors';
+ import { AgentError } from './errors';
+@@ -50,7 +51,8 @@ const sketch = {
+   center: { ...point, description: 'circle: its centre.' },
+   radius: { type: 'number', description: 'circle: radius, mm.' },
+ };
+-const material = { type: 'string', enum: ['matte', 'metal', 'glossy', 'glass', 'neon'] };
++const material = { type: 'string', enum: MATERIAL_PRESETS.map((p) => p.id), description: 'A finish to start from: matte, metal, glossy, glass, neon, frosted (frosted glass), velvet (cloth with a soft sheen), skin (soft, light glows through) or rubber. surface_set fine-tunes it.' };
++const unit = (what: string) => ({ type: 'number', minimum: 0, maximum: 1, description: what });
+ const color = { type: 'string', description: 'Hex colour such as "#3b82f6".' };
+ 
+ const obj = (properties: Record<string, unknown>, required: string[] = []) => ({ type: 'object', properties, required, additionalProperties: false });
+@@ -144,7 +146,7 @@ export const TOOL_SPECS: ToolSpec[] = [
+   {
+     name: 'mesh_import',
+     description:
+-      'Bring in a triangle mesh from a file as ONE shape: .glb/.gltf, .obj or .stl (a free CC0 model from Poly Pizza, Quaternius or Sketchfab, or one made in Blender). It arrives as the real surface, so organic forms (an animal, a face, a scan) are possible, which stock shapes and extruded outlines cannot give. It stands on the ground; size sets its longest side in mm (without it a GLB is read in metres, STL and OBJ in mm, and a result that is a speck or a building is fitted to 100 mm). Very large meshes are simplified to 60000 triangles. Move, turn, resize (shape_resize scales it whole), recolour, group and export work on it; it has no outline, faces, bevels or holes, and cannot be joined or cut with the outline tools. Textures are not read: colour it with color or material.',
++      'Bring in a triangle mesh from a file as ONE shape: .glb/.gltf, .obj or .stl (a free CC0 model from Poly Pizza, Quaternius or Sketchfab, or one made in Blender). It arrives as the real surface, so organic forms (an animal, a face, a scan) are possible, which stock shapes and extruded outlines cannot give. It stands on the ground; size sets its longest side in mm (without it a GLB is read in metres, STL and OBJ in mm, and a result that is a speck or a building is fitted to 100 mm). Very large meshes are simplified to 60000 triangles. Move, turn, resize (shape_resize scales it whole), recolour, group and export work on it; it has no outline, faces, bevels or holes, and cannot be joined or cut with the outline tools. A GLB\'s base colour picture (texture) comes with it when it is inside the file and every part has a layout (UVs); otherwise colour it with color, material or surface_set.',
+     inputSchema: obj({
+       file: { type: 'string', description: 'The mesh file: an artifact id (file_...) or a path on the host. The host reads it.' },
+       format: { type: 'string', enum: ['glb', 'obj', 'stl'], description: 'Only if the file name does not say (glTF counts as glb).' },
+@@ -229,6 +231,72 @@ export const TOOL_SPECS: ToolSpec[] = [
+     inputSchema: obj({ id: { type: 'string' }, positions: { type: 'array', items: { type: 'number' }, description: 'Every surface point after the stroke, [x, y, height] triples in mm.' } }, ['id', 'positions']),
+     authority: 'person',
+   },
++  {
++    name: 'surface_set',
++    description:
++      'Change what shapes are made of, beyond the material presets: start from a preset (it clears earlier fine-tuning) and/or set any number of the finish, a pattern the modeller draws itself, or a picture laid on it. Glass: transmission 1, roughness 0 (clear) to 0.5 (frosted), ior 1.33 water / 1.5 glass / 2.4 diamond, thickness in mm. Cloth and fuzz: sheen. Skin, wax, leaves, marble: subsurface. Light: glow. A pattern is in the shape\'s colour and color2, repeating every scale mm, with bump for relief. A picture: image (an artifact id or path; the host reads it, PNG or JPEG), repeating every imageScale mm (a mesh whose file had a layout fits it once). Several shapes at once with ids.',
++    inputSchema: obj({
++      id: { type: 'string' },
++      ids,
++      preset: material,
++      color,
++      roughness: unit('0 mirror-smooth to 1 fully matte.'),
++      metalness: unit('0 non-metal to 1 metal.'),
++      opacity: { type: 'number', minimum: 0.05, maximum: 1, description: 'How solid it is: 1 solid, lower fades it out (not glass: use transmission).' },
++      transmission: unit('How clear it is, like glass or water.'),
++      ior: { type: 'number', minimum: 1, maximum: 2.5, description: 'How much a clear surface bends light.' },
++      thickness: { type: 'number', minimum: 0, maximum: 200, description: 'How thick a clear or glowing-through solid is, mm: thicker tints and bends more.' },
++      clearcoat: unit('A clear lacquer layer on top (car paint, varnish).'),
++      sheen: unit('The soft rim light of cloth, velvet, felt and fuzz.'),
++      sheenColor: color,
++      glow: { type: 'number', minimum: 0, maximum: 5, description: 'How brightly it glows in its own colour.' },
++      subsurface: unit('Light glowing through from under the surface: skin, wax, jade, leaves.'),
++      pattern: {
++        description: 'A pattern drawn on it: a kind, or the kind with its settings. "none" takes it off.',
++        oneOf: [
++          { type: 'string', enum: PATTERN_KINDS },
++          obj({ kind: { type: 'string', enum: PATTERN_KINDS }, color2: { ...color, description: 'The second colour of the pattern (the first is the shape\'s colour).' }, scale: { type: 'number', description: 'How big one repeat is, mm (default 60).' }, bump: unit('Relief: how much it stands out from the surface.'), angle: { type: 'number', description: 'Turns the pattern, degrees.' } }),
++        ],
++      },
++      image: { oneOf: [{ type: 'string' }, { type: 'null' }], description: 'A picture to lay on it: an artifact id (file_...) or a path; the host reads it. null takes it off.' },
++      imageScale: { type: 'number', description: 'How big one repeat of the picture is, mm (default 100).' },
++      reset: { type: 'boolean', description: 'Put every number back to the material preset\'s (keeps the pattern and picture).' },
++    }),
++  },
++  {
++    name: 'hair_set',
++    description:
++      'Grow hair or fur on shapes, change it, or take it off (remove: true). style "strands" is separate hairs that fall, curl and gather into locks (a head of hair, a mane, a tail, grass); "fur" is a dense short coat (an animal, a teddy, a rug, moss). Give only what should change; the rest keeps its value. Lengths in mm, density in hairs per cm². Grooming (combing, cutting and puffing where the hair goes) is the person\'s, with the brush in the window\'s Hair card; their strokes stay when you change the numbers. Suggest settings and explain them, but the look is theirs to decide.',
++    inputSchema: obj({
++      id: { type: 'string' },
++      ids,
++      style: { type: 'string', enum: ['strands', 'fur'] },
++      length: { type: 'number', minimum: 1, maximum: 400, description: 'mm (default 40 for strands, 8 for fur).' },
++      density: { type: 'number', minimum: 0.2, maximum: 80, description: 'Hairs per cm² (default 30 strands, 40 fur).' },
++      thickness: { type: 'number', minimum: 0.05, maximum: 3, description: 'Width of a hair at its root, mm.' },
++      curl: unit('0 straight, 0.3 wavy, 1 tight curls.'),
++      frizz: unit('Random wander along each hair.'),
++      clump: unit('How much neighbouring hairs gather into locks.'),
++      droop: unit('How much it falls under its own weight: 0 stiff, 1 limp.'),
++      shine: unit('The highlight band along the hair.'),
++      rootColor: color,
++      tipColor: color,
++      seed: { type: 'integer', description: 'Another number grows another, equally good, head of hair.' },
++      clearGrooming: { type: 'boolean', description: 'Forget the person\'s grooming strokes. Only when they ask.' },
++      remove: { type: 'boolean', description: 'Take the hair off.' },
++    }),
++  },
++  {
++    name: 'hair_groom',
++    description: 'The person\'s grooming stroke on a shape\'s hair (comb, cut, lengthen, puff). Not for the agent: styling hair by hand is the person\'s.',
++    inputSchema: obj({ id: { type: 'string' }, stroke: obj({ tool: { type: 'string', enum: ['comb', 'cut', 'lengthen', 'puff'] }, path: { type: 'array', items: { type: 'number' } }, radius: { type: 'number' }, strength: { type: 'number' } }, ['tool', 'path', 'radius', 'strength']) }, ['id', 'stroke']),
++    authority: 'person',
++  },
++  {
++    name: 'scene_look',
++    description: 'How the whole scene is lit: the surroundings glass, metal and hair reflect ("studio" soft and even, "daylight" sky and sun, "sunset" warm and low, "night" dark and blue) and exposure (overall brightness, 0.3 to 2, default 1). Saved with the model; exported files do not carry it.',
++    inputSchema: obj({ environment: { type: 'string', enum: ['studio', 'daylight', 'sunset', 'night'] }, exposure: { type: 'number', minimum: 0.3, maximum: 2 } }),
++  },
+   {
+     name: 'shape_resize',
+     description: 'Set a shape\'s overall width (x), depth (y) and/or height (z). Corners and bevels stay valid. A mesh from a file is scaled to match.',
+@@ -420,6 +488,14 @@ export function runDocTool(ctx: ToolContext, name: string, rawArgs: unknown): To
+       return done(ops.sculptLoft(doc, ids, a as unknown as ops.LoftArgs));
+     case 'sculpt_smooth':
+       return done(ops.smoothShape(doc, a as unknown as ops.SmoothArgs));
++    case 'surface_set':
++      return done(ops.setSurface(doc, a as ops.SurfaceArgs));
++    case 'hair_set':
++      return done(ops.setHair(doc, a as ops.HairArgs));
++    case 'hair_groom':
++      return done(ops.groomHair(doc, a as unknown as ops.GroomArgs));
++    case 'scene_look':
++      return done(ops.setLook(doc, a));
+     case 'shape_resize':
+       return done(ops.resizeShape(doc, a as { id: string }));
+     case 'face_set':
+diff --git a/autora-3d/src/embed.ts b/autora-3d/src/embed.ts
+index 0e24203..1aed112 100644
+--- a/autora-3d/src/embed.ts
++++ b/autora-3d/src/embed.ts
+@@ -144,7 +144,7 @@ export function useAutoraEmbed(
+     if (!on || !loaded.current || doc === known.current) return;
+     // The model that came down, as the app keeps it, is not a change of the person's: sent back late it would undo a
+     // change the agent made after it.
+-    const content = (d: Doc | null) => (d ? JSON.stringify([d.bodies, d.groups, d.repeats, d.library]) : '');
++    const content = (d: Doc | null) => (d ? JSON.stringify([d.bodies, d.groups, d.repeats, d.library, d.look]) : '');
+     if (content(doc) === content(known.current)) {
+       known.current = doc;
+       return;
+diff --git a/autora-3d/src/types.ts b/autora-3d/src/types.ts
+index 2c950e6..a8aeb55 100644
+--- a/autora-3d/src/types.ts
++++ b/autora-3d/src/types.ts
+@@ -8,8 +8,9 @@ export interface Point2D {
+   y: number;
+ }
+ 
+-export type MaterialType = 'matte' | 'metal' | 'glossy' | 'glass' | 'neon';
++export type MaterialType = 'matte' | 'metal' | 'glossy' | 'glass' | 'neon' | 'frosted' | 'velvet' | 'skin' | 'rubber';
+ 
++/** A finish to start from: the numbers a shape's surface has until it sets its own (`Body3D.surface`). */
+ export interface MaterialPreset {
+   id: MaterialType;
+   name: string;
+@@ -19,6 +20,109 @@ export interface MaterialPreset {
+   emissiveIntensity?: number;
+   transmission?: number;
+   ior?: number;
++  /** How far light travels into a see-through solid, mm. */
++  thickness?: number;
++  clearcoat?: number;
++  /** The soft rim light of cloth and fuzz (velvet, felt, peach skin), 0 to 1. */
++  sheen?: number;
++  /** Light glowing through from under the surface (skin, wax, leaves, marble), 0 to 1. */
++  subsurface?: number;
++  opacity?: number;
++}
++
++/** A pattern drawn on a surface by the modeller itself (no image file needed). */
++export type PatternKind = 'none' | 'wood' | 'marble' | 'noise' | 'weave' | 'scales' | 'checker' | 'brushed' | 'dots';
++
++export interface SurfacePattern {
++  kind: PatternKind;
++  /** The pattern's second colour (the shape's colour is the first), #rrggbb. */
++  color2: string;
++  /** How big one repeat is, mm. */
++  scale: number;
++  /** How much it stands out from the surface as relief, 0 to 1. */
++  bump: number;
++  /** Turns the pattern on the surface, degrees. */
++  angle?: number;
++}
++
++/** An image laid on a surface as its colour: a picture, a scan, a hand-painted texture. */
++export interface SurfaceImage {
++  /** The picture as a data URL (PNG or JPEG). */
++  data: string;
++  /** How big one repeat is, mm. Absent on a mesh that brought its own layout (UVs) from its file: it fits once. */
++  scale?: number;
++  name?: string;
++}
++
++/**
++ * A shape's own surface: every number a finish has, each overriding its preset (`materialType`) when set. A preset chosen
++ * again clears these, so a preset is a place to start and these are the person's own choices on top of it.
++ */
++export interface Surface {
++  roughness?: number;
++  metalness?: number;
++  /** 1 is solid, 0 is invisible. */
++  opacity?: number;
++  /** Clear like glass, 0 to 1. */
++  transmission?: number;
++  /** Index of refraction: 1.33 water, 1.5 glass, 2.4 diamond. */
++  ior?: number;
++  thickness?: number;
++  clearcoat?: number;
++  sheen?: number;
++  sheenColor?: string;
++  /** How brightly it glows in its own colour. */
++  glow?: number;
++  subsurface?: number;
++  pattern?: SurfacePattern;
++  image?: SurfaceImage;
++}
++
++/** One stroke of the person's grooming brush on a shape's hair, kept so the hair can be grown again with it. */
++export interface GroomStroke {
++  /** comb: lays the hair along the stroke; cut: shortens; lengthen: grows; puff: lifts it off the surface. */
++  tool: 'comb' | 'cut' | 'lengthen' | 'puff';
++  /** The path the brush took, `[x, y, height]` triples in mm in the shape's own numbers (as `MeshData`). */
++  path: number[];
++  radius: number;
++  /** 0 to 1. */
++  strength: number;
++}
++
++/**
++ * Hair or fur growing from a shape's surface. The strands are not kept: they are grown from these numbers (and the
++ * person's grooming strokes) whenever the shape is drawn, so the shape can still be moved, resized and sculpted.
++ */
++export interface Hair {
++  /** strands: separate hairs that curl and clump (a head of hair, a mane); fur: a dense short coat (an animal, a rug). */
++  style: 'strands' | 'fur';
++  /** Hairs per square centimetre of surface. */
++  density: number;
++  /** mm. */
++  length: number;
++  /** Width of a hair at its root, mm. */
++  thickness: number;
++  /** 0 straight to 1 tight curls. */
++  curl: number;
++  /** Random wander along each hair, 0 to 1. */
++  frizz: number;
++  /** How much neighbouring hairs gather into locks, 0 to 1. */
++  clump: number;
++  /** How much the hair falls under its own weight, 0 stiff to 1 limp. */
++  droop: number;
++  rootColor: string;
++  tipColor: string;
++  /** The highlight band along the hair, 0 to 1. */
++  shine: number;
++  seed: number;
++  strokes?: GroomStroke[];
++}
++
++/** How the whole scene is lit: the surroundings that glass, metal and hair reflect. */
++export interface SceneLook {
++  environment: 'studio' | 'daylight' | 'sunset' | 'night';
++  /** Overall brightness, 0.3 to 2. */
++  exposure: number;
+ }
+ 
+ export type BevelStyle = 'chamfer' | 'round';
+@@ -60,6 +164,8 @@ export interface MeshData {
+   positions: number[];
+   /** Three vertex numbers for each triangle, counter-clockwise seen from outside. */
+   indices: number[];
++  /** Where each vertex sits on the surface's image (u, v pairs), when the file had a layout. Ignored once its count no longer matches. */
++  uvs?: number[];
+ }
+ 
+ export interface Body3D {
+@@ -85,6 +191,10 @@ export interface Body3D {
+   mesh?: MeshData;
+   color: string;
+   materialType: MaterialType;
++  /** The shape's own surface on top of its preset: see Surface. */
++  surface?: Surface;
++  /** Hair or fur growing from it: see Hair. */
++  hair?: Hair;
+   visible: boolean;
+   createdAt: string;
+   groupId?: string;
+@@ -233,6 +343,40 @@ export const MATERIAL_PRESETS: MaterialPreset[] = [
+     roughness: 0.5,
+     metalness: 0.0,
+     emissiveIntensity: 1.5
++  },
++  {
++    id: 'frosted',
++    name: 'Frosted Glass',
++    color: '#dbeafe',
++    roughness: 0.45,
++    metalness: 0.0,
++    transmission: 0.9,
++    ior: 1.5,
++    thickness: 10
++  },
++  {
++    id: 'velvet',
++    name: 'Velvet Cloth',
++    color: '#7c3aed',
++    roughness: 0.9,
++    metalness: 0.0,
++    sheen: 1
++  },
++  {
++    id: 'skin',
++    name: 'Soft Skin',
++    color: '#e0a98a',
++    roughness: 0.55,
++    metalness: 0.0,
++    subsurface: 0.6,
++    sheen: 0.2
++  },
++  {
++    id: 'rubber',
++    name: 'Rubber',
++    color: '#1f2937',
++    roughness: 0.95,
++    metalness: 0.0
+   }
+ ];
+ 
+diff --git a/autora-3d/src/utils/bodyGeometry.ts b/autora-3d/src/utils/bodyGeometry.ts
+index d815369..ddf24ed 100644
+--- a/autora-3d/src/utils/bodyGeometry.ts
++++ b/autora-3d/src/utils/bodyGeometry.ts
+@@ -4,6 +4,7 @@
+  */
+ 
+ import * as THREE from 'three';
++import { addBoxUVs } from './surface';
+ import { Brush, Evaluator, SUBTRACTION } from 'three-bvh-csg';
+ import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+ import { BevelStyle, Body3D, Point2D } from '../types';
+@@ -337,8 +338,16 @@ export function buildBodyGeometry(body: Body3D, options: { fast?: boolean } = {}
+     // An imported mesh is the solid itself: no outline to push up, no bevels. Organic forms read best smooth, so only sharp folds crease.
+     const raw = meshGeometry(body);
+     if (!raw) return null;
++    if (raw.getAttribute('uv')) {
++      // It brought its own layout for an image: keep it, smooth-shaded across the vertices the file shared.
++      raw.computeVertexNormals();
++      const laid = raw.toNonIndexed();
++      raw.dispose();
++      return laid;
++    }
+     const shaded = toCreasedNormals(raw, THREE.MathUtils.degToRad(55));
+     raw.dispose();
++    addBoxUVs(shaded);
+     return shaded;
+   }
+   const shape = buildBodyShape(body);
+@@ -397,6 +406,14 @@ export function buildBodyGeometry(body: Body3D, options: { fast?: boolean } = {}
+   const smooth = bevels.length || cornerCutters.length ? cleanMesh(geometry, crease, cutIsExact) : toCreasedNormals(geometry, crease);
+   if (smooth !== geometry) geometry.dispose();
+   smooth.translate(0, body.elevation ?? 0, 0);
++  // Where a pattern or an image sits on it.
++  if (smooth.getIndex()) {
++    const flat = smooth.toNonIndexed();
++    smooth.dispose();
++    addBoxUVs(flat);
++    return flat;
++  }
++  addBoxUVs(smooth);
+   return smooth;
+ }
+ /**
+diff --git a/autora-3d/src/utils/glb.ts b/autora-3d/src/utils/glb.ts
+index 5d4eb1e..cf5f799 100644
+--- a/autora-3d/src/utils/glb.ts
++++ b/autora-3d/src/utils/glb.ts
+@@ -4,9 +4,11 @@
+  */
+ 
+ import * as THREE from 'three';
+-import { Body3D, MATERIAL_PRESETS, ShapeGroup } from '../types';
++import { Body3D, ShapeGroup } from '../types';
+ import { buildBodyGeometry } from './bodyGeometry';
+ import { frameMatrix } from './frame';
++import { encodePng, imageBytes, patternPixels, resolveSurface, textureRepeat } from './surface';
++import { hairGeometry, settleHair } from './hair';
+ 
+ export interface GlbOptions {
+   /** Scene units per metre of output. Default 0.001: our mm become glTF metres, which is what game engines expect. */
+@@ -27,7 +29,8 @@ const pad = (n: number) => (4 - (n % 4)) % 4;
+ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array | null {
+   const unit = options.scale ?? 0.001;
+   const pivot = options.pivot ?? 'scene';
+-  type Part = { body: Body3D; pos: Float32Array; nrm: Float32Array; idx: Uint32Array; min: THREE.Vector3; max: THREE.Vector3 };
++  /** One mesh to write: a shape's solid, or the hair grown on it (`hair`), which carries a colour per vertex. */
++  type Part = { body: Body3D; pos: Float32Array; nrm: Float32Array; idx: Uint32Array; min: THREE.Vector3; max: THREE.Vector3; uv?: Float32Array; col?: Float32Array; hair?: boolean };
+   const parts: Part[] = [];
+   for (const body of bodies) {
+     if (!body.visible) continue;
+@@ -62,7 +65,46 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
+       tmp.computeVertexNormals();
+       nrm.set(tmp.getAttribute('normal').array as Float32Array);
+     }
+-    parts.push({ body, pos, nrm, idx, min, max });
++    // A pattern or picture repeats every so many mm: glTF has no repeat of its own here, so it is written into the UVs.
++    const s = resolveSurface(body);
++    const uvAttr = g.getAttribute('uv');
++    let uv: Float32Array | undefined;
++    if (uvAttr && (s.pattern || s.image)) {
++      const repeat = textureRepeat(body, s.image ? 'image' : 'pattern');
++      const turn = s.image ? 0 : THREE.MathUtils.degToRad(s.pattern?.angle ?? 0);
++      const [c, sn] = [Math.cos(turn), Math.sin(turn)];
++      uv = new Float32Array(uvAttr.count * 2);
++      for (let i = 0; i < uvAttr.count; i++) {
++        const u = uvAttr.getX(i) * repeat;
++        const w = uvAttr.getY(i) * repeat;
++        // glTF's v runs down the picture.
++        uv[i * 2] = u * c - w * sn;
++        uv[i * 2 + 1] = 1 - (u * sn + w * c);
++      }
++    }
++    parts.push({ body, pos, nrm, idx, min, max, uv });
++    if (body.hair) {
++      // The hair is grown as it is drawn (fur too, as short strands): its own node beside the shape, coloured root to tip.
++      const strands = hairGeometry(g, settleHair(body.hair), body.elevation ?? 0);
++      if (strands) {
++        const hp = strands.getAttribute('position');
++        const hn = strands.getAttribute('normal');
++        const hc = strands.getAttribute('color');
++        const hpos = new Float32Array(hp.count * 3);
++        const hnrm = new Float32Array(hp.count * 3);
++        const hmin = new THREE.Vector3(Infinity, Infinity, Infinity);
++        const hmax = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
++        for (let i = 0; i < hp.count; i++) {
++          v.fromBufferAttribute(hp, i).applyMatrix4(m);
++          hpos.set([v.x, v.y, v.z], i * 3);
++          hmin.min(v);
++          hmax.max(v);
++          v.fromBufferAttribute(hn, i).applyMatrix3(normalMatrix).normalize();
++          hnrm.set([v.x, v.y, v.z], i * 3);
++        }
++        parts.push({ body, pos: hpos, nrm: hnrm, idx: new Uint32Array(strands.getIndex()!.array), min: hmin, max: hmax, col: new Float32Array(hc.array as Float32Array), hair: true });
++      }
++    }
+   }
+   if (!parts.length) return null;
+ 
+@@ -73,14 +115,88 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
+   const nodes: object[] = [];
+   const partNode = new Map<string, number>();
+   const partOrigin = new Map<string, THREE.Vector3>();
++  const hairNodes = new Set<number>();
++  const extensions = new Set<string>();
++
++  /** A picture inside the file, once per picture. */
++  const imageIndex = new Map<string, number>();
++  const addImage = (key: string, bytes: Uint8Array, mime: string) => {
++    const known = imageIndex.get(key);
++    if (known !== undefined) return known;
++    images.push({ bufferView: addView(bytes, 0), mimeType: mime });
++    textures.push({ source: images.length - 1, sampler: 0 });
++    imageIndex.set(key, textures.length - 1);
++    return textures.length - 1;
++  };
++
++  /** A shape's surface as glTF PBR, with the extensions engines read for glass, cloth, lacquer and glow. */
++  const surfaceMaterial = (body: Body3D, laidOut: boolean): Record<string, any> => {
++    const s = resolveSurface(body);
++    const c = new THREE.Color(s.color); // THREE.Color reads hex as sRGB and stores linear
++    const m: Record<string, any> = {
++      name: `${body.name}_${body.materialType}`.replace(/\s+/g, '_'),
++      pbrMetallicRoughness: { baseColorFactor: [c.r, c.g, c.b, s.opacity], metallicFactor: s.metalness, roughnessFactor: s.roughness },
++    };
++    const ext: Record<string, any> = {};
++    if (laidOut && s.image) {
++      const pic = imageBytes(s.image.data);
++      if (pic) m.pbrMetallicRoughness.baseColorTexture = { index: addImage(s.image.data.slice(0, 64) + s.image.data.length, pic.bytes, pic.mime) };
++    } else if (laidOut && s.pattern) {
++      const px = patternPixels(s.pattern.kind, s.color, s.pattern.color2);
++      m.pbrMetallicRoughness.baseColorTexture = { index: addImage(`pattern|${s.pattern.kind}|${s.color}|${s.pattern.color2}`, encodePng(px.size, px.size, px.rgba), 'image/png') };
++      m.pbrMetallicRoughness.baseColorFactor = [1, 1, 1, s.opacity];
++    }
++    if (s.opacity < 1) m.alphaMode = 'BLEND';
++    if (s.transmission > 0) {
++      ext.KHR_materials_transmission = { transmissionFactor: s.transmission };
++      ext.KHR_materials_ior = { ior: s.ior };
++      ext.KHR_materials_volume = { thicknessFactor: s.thickness * unit, attenuationColor: [c.r, c.g, c.b], attenuationDistance: Math.max(10, s.thickness * 6) * unit };
++      // An engine that reads none of that still shows it see-through.
++      if (s.opacity === 1) {
++        m.pbrMetallicRoughness.baseColorFactor[3] = Math.max(0.2, 1 - s.transmission * 0.7);
++        m.alphaMode = 'BLEND';
++      }
++    }
++    if (s.clearcoat > 0) ext.KHR_materials_clearcoat = { clearcoatFactor: s.clearcoat, clearcoatRoughnessFactor: 0.08 };
++    if (s.sheen > 0) {
++      const sc = s.sheenColor ? new THREE.Color(s.sheenColor) : c.clone().lerp(new THREE.Color(1, 1, 1), 0.45);
++      ext.KHR_materials_sheen = { sheenColorFactor: [sc.r * s.sheen, sc.g * s.sheen, sc.b * s.sheen], sheenRoughnessFactor: 0.6 };
++    }
++    if (s.subsurface > 0) ext.KHR_materials_diffuse_transmission = { diffuseTransmissionFactor: s.subsurface * 0.5, diffuseTransmissionColorFactor: [c.r, c.g, c.b] };
++    if (s.glow > 0) {
++      m.emissiveFactor = [c.r, c.g, c.b];
++      if (s.glow > 1) ext.KHR_materials_emissive_strength = { emissiveStrength: s.glow };
++    }
++    if (Object.keys(ext).length) {
++      m.extensions = ext;
++      Object.keys(ext).forEach((k) => extensions.add(k));
++    }
++    return m;
++  };
++
++  /** Hair: its colour is per vertex (root to tip), both sides drawn, with a little sheen. */
++  const hairMaterial = (body: Body3D): Record<string, any> => {
++    const h = settleHair(body.hair!);
++    const tip = new THREE.Color(h.tipColor);
++    extensions.add('KHR_materials_sheen');
++    return {
++      name: `${body.name}_hair`.replace(/\s+/g, '_'),
++      doubleSided: true,
++      pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: 0.55 - h.shine * 0.3 },
++      extensions: { KHR_materials_sheen: { sheenColorFactor: [tip.r * 0.4, tip.g * 0.4, tip.b * 0.4], sheenRoughnessFactor: 0.4 } },
++    };
++  };
+   const meshes: object[] = [];
+   const materials: object[] = [];
++  const textures: object[] = [];
++  const images: object[] = [];
+   const accessors: object[] = [];
+   const views: object[] = [];
+   const chunks: Uint8Array[] = [];
+   let offset = 0;
+   const addView = (bytes: Uint8Array, target: number) => {
+-    views.push({ buffer: 0, byteOffset: offset, byteLength: bytes.length, target });
++    // A picture's bytes are not vertex data: its view has no target.
++    views.push({ buffer: 0, byteOffset: offset, byteLength: bytes.length, ...(target ? { target } : {}) });
+     const padded = new Uint8Array(bytes.length + pad(bytes.length));
+     padded.set(bytes);
+     chunks.push(padded);
+@@ -108,23 +224,34 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
+     accessors.push({ bufferView: addView(new Uint8Array(q.nrm.buffer), 34962), componentType: 5126, count: q.nrm.length / 3, type: 'VEC3' });
+     accessors.push({ bufferView: addView(new Uint8Array(q.idx.buffer), 34963), componentType: 5125, count: q.idx.length, type: 'SCALAR' });
+ 
+-    const preset = MATERIAL_PRESETS.find((m) => m.id === q.body.materialType) || MATERIAL_PRESETS[0];
+-    const c = new THREE.Color(q.body.color || preset.color); // THREE.Color reads hex as sRGB and stores linear
+-    const material: Record<string, any> = {
+-      name: `${q.body.name}_${q.body.materialType}`.replace(/\s+/g, '_'),
+-      pbrMetallicRoughness: { baseColorFactor: [c.r, c.g, c.b, 1], metallicFactor: preset.metalness, roughnessFactor: preset.roughness },
+-    };
+-    if (q.body.materialType === 'glass') {
+-      material.pbrMetallicRoughness.baseColorFactor[3] = 0.35;
+-      material.alphaMode = 'BLEND';
+-    }
+-    if (q.body.materialType === 'neon') material.emissiveFactor = [c.r, c.g, c.b];
++    const material = q.hair ? hairMaterial(q.body) : surfaceMaterial(q.body, !!q.uv);
+     materials.push(material);
+-    meshes.push({ name: q.body.name.replace(/\s+/g, '_'), primitives: [{ attributes: { POSITION: aPos, NORMAL: aPos + 1 }, indices: aPos + 2, material: materials.length - 1, mode: 4 }] });
+-    const node: Record<string, any> = { name: q.body.name.replace(/\s+/g, '_'), mesh: meshes.length - 1 };
++    const attributes: Record<string, number> = { POSITION: aPos, NORMAL: aPos + 1 };
++    if (q.uv) {
++      attributes.TEXCOORD_0 = accessors.length;
++      accessors.push({ bufferView: addView(new Uint8Array(q.uv.buffer), 34962), componentType: 5126, count: q.uv.length / 2, type: 'VEC2' });
++    }
++    if (q.col) {
++      attributes.COLOR_0 = accessors.length;
++      accessors.push({ bufferView: addView(new Uint8Array(q.col.buffer), 34962), componentType: 5126, count: q.col.length / 3, type: 'VEC3' });
++    }
++    const label = (q.hair ? `${q.body.name}_hair` : q.body.name).replace(/\s+/g, '_');
++    meshes.push({ name: label, primitives: [{ attributes, indices: aPos + 2, material: materials.length - 1, mode: 4 }] });
++    const node: Record<string, any> = { name: label, mesh: meshes.length - 1 };
+     if (pivot === 'shape') node.translation = [origin.x * unit, origin.y * unit, origin.z * unit];
+     // With "asset" the shift is baked in, so the node stays at the origin.
+     nodes.push(node);
++    if (q.hair) {
++      // The hair hangs off its shape's node, so it moves with it in an engine.
++      const owner = partNode.get(q.body.id);
++      if (owner !== undefined) {
++        const o = partOrigin.get(q.body.id)!;
++        if (pivot === 'shape') node.translation = [(origin.x - o.x) * unit, (origin.y - o.y) * unit, (origin.z - o.z) * unit];
++        ((nodes[owner] as Record<string, any>).children ??= []).push(nodes.length - 1);
++        hairNodes.add(nodes.length - 1);
++      }
++      continue;
++    }
+     partNode.set(q.body.id, nodes.length - 1);
+     partOrigin.set(q.body.id, origin.clone());
+   }
+@@ -168,10 +295,12 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
+   const json = {
+     asset: { version: '2.0', generator: 'Autora 3D' },
+     scene: 0,
+-    scenes: [{ nodes: nodes.map((_, i) => i).filter((i) => !placed.has(i)) }],
++    scenes: [{ nodes: nodes.map((_, i) => i).filter((i) => !placed.has(i) && !hairNodes.has(i)) }],
+     nodes,
+     meshes,
+     materials,
++    ...(textures.length ? { textures, images, samplers: [{ magFilter: 9729, minFilter: 9987, wrapS: 10497, wrapT: 10497 }] } : {}),
++    ...(extensions.size ? { extensionsUsed: [...extensions] } : {}),
+     accessors,
+     bufferViews: views,
+     buffers: [{ byteLength: offset }],
+diff --git a/autora-3d/src/utils/hair.ts b/autora-3d/src/utils/hair.ts
+new file mode 100644
+index 0000000..a5fc34a
+--- /dev/null
++++ b/autora-3d/src/utils/hair.ts
+@@ -0,0 +1,478 @@
++/**
++ * @license
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++/**
++ * Hair and fur grown from a shape's surface. A shape keeps only the numbers (`Body3D.hair`) and the person's grooming
++ * strokes; the strands are grown from them, seeded, whenever the shape is drawn or exported, so the same settings always
++ * grow the same hair and the shape underneath stays free to move, resize and sculpt. Needs no DOM: the viewer, the GLB
++ * export and the headless engine grow the same hair.
++ *
++ * Space: a body's geometry as `buildBodyGeometry` makes it (Y up, mm, standing on its elevation). Grooming strokes are
++ * kept in the shape's own numbers (`[x, y, height]`, like `MeshData`) and turned into that space here.
++ */
++import * as THREE from 'three';
++import { GroomStroke, Hair } from '../types';
++
++export const DEFAULT_HAIR: Hair = {
++  style: 'strands',
++  density: 30,
++  length: 40,
++  thickness: 0.3,
++  curl: 0,
++  frizz: 0.15,
++  clump: 0.45,
++  droop: 0.6,
++  rootColor: '#2b1a10',
++  tipColor: '#6b4428',
++  shine: 0.6,
++  seed: 1,
++};
++
++/** What changes when a coat of fur is asked for rather than a head of hair. */
++export const FUR_START: Partial<Hair> = { style: 'fur', density: 40, length: 8, thickness: 0.25, curl: 0, frizz: 0.3, clump: 0.1, droop: 0.15 };
++
++export const HAIR_RANGES = {
++  density: [0.2, 80],
++  length: [1, 400],
++  thickness: [0.05, 3],
++  curl: [0, 1],
++  frizz: [0, 1],
++  clump: [0, 1],
++  droop: [0, 1],
++  shine: [0, 1],
++} as const satisfies Record<string, readonly [number, number]>;
++export type HairNumber = keyof typeof HAIR_RANGES;
++export const HAIR_NUMBERS = Object.keys(HAIR_RANGES) as HairNumber[];
++
++export const GROOM_TOOLS: { tool: GroomStroke['tool']; label: string; hint: string }[] = [
++  { tool: 'comb', label: 'Comb', hint: 'Lay the hair down the way you stroke' },
++  { tool: 'cut', label: 'Cut', hint: 'Shorten the hair under the brush' },
++  { tool: 'lengthen', label: 'Lengthen', hint: 'Grow the hair under the brush' },
++  { tool: 'puff', label: 'Puff', hint: 'Lift the hair off the surface' },
++];
++
++/** The most strands grown for one shape; past it they are spread wider and drawn thicker, so the coat still looks full. */
++export const MAX_STRANDS = 12000;
++/** The most strokes a shape keeps: the oldest go first. */
++export const MAX_STROKES = 200;
++
++/** Settles hair numbers into their ranges, filling in what is missing. */
++export function settleHair(h: Partial<Hair>): Hair {
++  const out = { ...DEFAULT_HAIR, ...h } as Hair;
++  for (const k of HAIR_NUMBERS) {
++    const [lo, hi] = HAIR_RANGES[k];
++    const v = Number(out[k]);
++    out[k] = Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : DEFAULT_HAIR[k];
++  }
++  out.seed = Math.round(Number.isFinite(out.seed) ? out.seed : 1);
++  if (out.style !== 'fur') out.style = 'strands';
++  return out;
++}
++
++const rng = (seed: number) => {
++  let a = (seed * 2654435761) >>> 0 || 1;
++  return () => {
++    a = (a + 0x6d2b79f5) >>> 0;
++    let t = a;
++    t = Math.imul(t ^ (t >>> 15), t | 1);
++    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
++    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
++  };
++};
++
++/** A stroke's path in the geometry's space. */
++const strokePath = (s: GroomStroke, lift: number): THREE.Vector3[] => {
++  const out: THREE.Vector3[] = [];
++  for (let i = 0; i + 2 < s.path.length; i += 3) out.push(new THREE.Vector3(s.path[i], s.path[i + 2] + lift, -s.path[i + 1]));
++  return out;
++};
++
++/** What the grooming strokes do at one place on the surface. */
++export interface GroomAt {
++  /** Multiplies the hair's length. */
++  length: number;
++  /** Where the hair is laid (along the surface), mm per mm of hair. */
++  comb: THREE.Vector3;
++  /** Lifts it off the surface. */
++  lift: number;
++}
++
++export function groomer(strokes: GroomStroke[] | undefined, lift: number) {
++  const paths = (strokes ?? []).map((s) => ({ s, pts: strokePath(s, lift) })).filter((p) => p.pts.length > 0);
++  const seg = new THREE.Vector3();
++  const rel = new THREE.Vector3();
++  return (p: THREE.Vector3, n: THREE.Vector3): GroomAt => {
++    const out: GroomAt = { length: 1, comb: new THREE.Vector3(), lift: 0 };
++    for (const { s, pts } of paths) {
++      // The nearest point of the stroke's path, and which way the brush was going there.
++      let best = Infinity;
++      const dir = new THREE.Vector3();
++      for (let i = 0; i < pts.length; i++) {
++        const a = pts[i];
++        const b = pts[Math.min(pts.length - 1, i + 1)];
++        seg.subVectors(b, a);
++        const len2 = seg.lengthSq();
++        const t = len2 > 0 ? Math.min(1, Math.max(0, rel.subVectors(p, a).dot(seg) / len2)) : 0;
++        const d = rel.copy(a).addScaledVector(seg, t).distanceTo(p);
++        if (d < best) {
++          best = d;
++          if (len2 > 0) dir.copy(seg).normalize();
++          else if (i > 0) dir.subVectors(a, pts[i - 1]).normalize();
++        }
++      }
++      if (best >= s.radius) continue;
++      const w = Math.pow(1 - best / s.radius, 2) * Math.min(1, Math.max(0, s.strength));
++      switch (s.tool) {
++        case 'comb': {
++          // Along the surface only: a comb lays hair down, it does not push it into the shape.
++          const along = dir.clone().addScaledVector(n, -dir.dot(n));
++          if (along.lengthSq() > 1e-8) out.comb.addScaledVector(along.normalize(), w * 1.6);
++          out.lift -= w * 0.5;
++          break;
++        }
++        case 'cut': out.length *= 1 - 0.85 * w; break;
++        case 'lengthen': out.length *= 1 + 1.2 * w; break;
++        case 'puff': out.lift += w * 1.5; break;
++      }
++    }
++    out.length = Math.min(4, Math.max(0.03, out.length));
++    return out;
++  };
++}
++
++interface Root {
++  p: THREE.Vector3;
++  n: THREE.Vector3;
++}
++
++/** Roots spread evenly over the surface (each triangle gets its share by area). */
++function sampleRoots(geometry: THREE.BufferGeometry, count: number, random: () => number): Root[] {
++  const pos = geometry.getAttribute('position');
++  const nrm = geometry.getAttribute('normal');
++  const idx = geometry.getIndex();
++  const tris = idx ? idx.count / 3 : pos.count / 3;
++  const at = (i: number) => (idx ? idx.getX(i) : i);
++  const cum = new Float64Array(tris);
++  const a = new THREE.Vector3();
++  const b = new THREE.Vector3();
++  const c = new THREE.Vector3();
++  let total = 0;
++  for (let t = 0; t < tris; t++) {
++    a.fromBufferAttribute(pos, at(t * 3));
++    b.fromBufferAttribute(pos, at(t * 3 + 1));
++    c.fromBufferAttribute(pos, at(t * 3 + 2));
++    total += b.sub(a).cross(c.sub(a)).length() / 2;
++    cum[t] = total;
++  }
++  const roots: Root[] = [];
++  if (!(total > 0)) return roots;
++  const na = new THREE.Vector3();
++  const nb = new THREE.Vector3();
++  const nc = new THREE.Vector3();
++  for (let k = 0; k < count; k++) {
++    const pick = random() * total;
++    let lo = 0;
++    let hi = tris - 1;
++    while (lo < hi) {
++      const mid = (lo + hi) >> 1;
++      if (cum[mid] < pick) lo = mid + 1;
++      else hi = mid;
++    }
++    let u = random();
++    let v = random();
++    if (u + v > 1) { u = 1 - u; v = 1 - v; }
++    const w = 1 - u - v;
++    a.fromBufferAttribute(pos, at(lo * 3));
++    b.fromBufferAttribute(pos, at(lo * 3 + 1));
++    c.fromBufferAttribute(pos, at(lo * 3 + 2));
++    const p = new THREE.Vector3().addScaledVector(a, w).addScaledVector(b, u).addScaledVector(c, v);
++    let n: THREE.Vector3;
++    if (nrm) {
++      na.fromBufferAttribute(nrm, at(lo * 3));
++      nb.fromBufferAttribute(nrm, at(lo * 3 + 1));
++      nc.fromBufferAttribute(nrm, at(lo * 3 + 2));
++      n = new THREE.Vector3().addScaledVector(na, w).addScaledVector(nb, u).addScaledVector(nc, v);
++    } else n = b.clone().sub(a).cross(c.clone().sub(a));
++    if (n.lengthSq() < 1e-12) n.set(0, 1, 0);
++    roots.push({ p, n: n.normalize() });
++  }
++  return roots;
++}
++
++/** The number of strands a coat has on this much surface, and how much thicker each is drawn past the cap. */
++export function strandBudget(areaMm2: number, hair: Hair): { count: number; widen: number } {
++  const wanted = Math.max(1, Math.round((areaMm2 / 100) * hair.density));
++  const count = Math.min(MAX_STRANDS, wanted);
++  return { count, widen: Math.sqrt(wanted / count) };
++}
++
++const surfaceArea = (geometry: THREE.BufferGeometry) => {
++  const pos = geometry.getAttribute('position');
++  const idx = geometry.getIndex();
++  const n = idx ? idx.count : pos.count;
++  const a = new THREE.Vector3();
++  const b = new THREE.Vector3();
++  const c = new THREE.Vector3();
++  let total = 0;
++  for (let i = 0; i + 2 < n; i += 3) {
++    a.fromBufferAttribute(pos, idx ? idx.getX(i) : i);
++    b.fromBufferAttribute(pos, idx ? idx.getX(i + 1) : i + 1);
++    c.fromBufferAttribute(pos, idx ? idx.getX(i + 2) : i + 2);
++    total += b.sub(a).cross(c.sub(a)).length() / 2;
++  }
++  return total;
++};
++
++export interface Strands {
++  /** Each strand's points, root first. */
++  strands: THREE.Vector3[][];
++  /** The surface normal at each root. */
++  normals: THREE.Vector3[];
++  /** How much wider each is drawn than `thickness` (more surface than the cap allows). */
++  widen: number;
++}
++
++/**
++ * Grows the strands: from each root out along the surface's normal, laid by the comb, falling with droop, curling round
++ * its own line, wandering with frizz, and gathering into locks with its neighbours (clump).
++ */
++export function growStrands(geometry: THREE.BufferGeometry, hairIn: Hair, lift = 0, segments?: number): Strands {
++  const hair = settleHair(hairIn);
++  const random = rng(hair.seed);
++  const { count, widen } = strandBudget(surfaceArea(geometry), hair);
++  const roots = sampleRoots(geometry, count, random);
++  const groom = groomer(hair.strokes, lift);
++  const steps = segments ?? (hair.style === 'fur' ? 4 : hair.curl > 0.2 ? 14 : 9);
++  const down = new THREE.Vector3(0, -1, 0);
++  // The shape's body, as the ellipsoid in its box: hair that falls over the shape is kept outside it.
++  geometry.computeBoundingBox();
++  const box = geometry.boundingBox!;
++  const centre = box.getCenter(new THREE.Vector3());
++  const half = box.getSize(new THREE.Vector3()).multiplyScalar(0.5).max(new THREE.Vector3(0.5, 0.5, 0.5));
++  const rel = new THREE.Vector3();
++
++  const grow = (r: Root, rand: () => number): THREE.Vector3[] => {
++    const g = groom(r.p, r.n);
++    const length = hair.length * g.length * (0.8 + rand() * 0.4);
++    const seg = length / steps;
++    const tilt = new THREE.Vector3(rand() - 0.5, rand() - 0.5, rand() - 0.5).multiplyScalar(0.25 + hair.frizz * 0.5);
++    const start = r.n.clone().multiplyScalar(1 + Math.max(-0.8, g.lift)).add(g.comb).add(tilt).normalize();
++    // A frame round the hair's first direction, for its curl.
++    const side = Math.abs(start.y) < 0.9 ? new THREE.Vector3(0, 1, 0).cross(start).normalize() : new THREE.Vector3(1, 0, 0).cross(start).normalize();
++    const up = start.clone().cross(side).normalize();
++    const turns = 1 + hair.curl * 5;
++    const radius = hair.curl * length * 0.07;
++    const phase = rand() * Math.PI * 2;
++    const fall = hair.droop * Math.max(0, 1 - Math.max(0, g.lift) * 0.6);
++    // Where it falls to: down and away from the middle of the shape (hair from the crown falls outward, not back into the head).
++    const away = new THREE.Vector3(r.p.x - centre.x, 0, r.p.z - centre.z);
++    if (away.lengthSq() < 1e-6) away.set(Math.cos(rand() * 6.283), 0, Math.sin(rand() * 6.283));
++    const fallTo = away.normalize().multiplyScalar(0.45).add(down).normalize();
++    const pts: THREE.Vector3[] = [r.p.clone()];
++    const spine = r.p.clone();
++    const wander = new THREE.Vector3();
++    for (let i = 1; i <= steps; i++) {
++      const t = i / steps;
++      const bend = Math.min(1, fall * 1.8 * Math.pow(t, 0.7));
++      const dir = start.clone().lerp(fallTo, bend).addScaledVector(g.comb, t * 0.8).normalize();
++      spine.addScaledVector(dir, seg);
++      wander.add(new THREE.Vector3(rand() - 0.5, rand() - 0.5, rand() - 0.5).multiplyScalar(hair.frizz * seg * 0.5));
++      const a = phase + t * turns * Math.PI * 2;
++      const ramp = Math.min(1, t * 3);
++      const q = spine.clone().add(wander).addScaledVector(side, Math.cos(a) * radius * ramp).addScaledVector(up, Math.sin(a) * radius * ramp);
++      // Keep the hair outside the surface it grows from, and outside the body it falls over.
++      const outward = q.clone().sub(r.p).dot(r.n);
++      if (outward < 0) q.addScaledVector(r.n, -outward + 0.05);
++      rel.subVectors(q, centre);
++      const inside = Math.hypot(rel.x / half.x, rel.y / half.y, rel.z / half.z);
++      if (inside < 1.03 && inside > 1e-6) {
++        q.copy(centre).addScaledVector(rel, 1.03 / inside);
++        spine.copy(q).sub(wander);
++      }
++      pts.push(q);
++    }
++    return pts;
++  };
++
++  const own = roots.map((r) => grow(r, random));
++  if (hair.clump > 0.01 && roots.length > 8) {
++    // Locks: every strand drifts toward a nearby guide strand along its length, meeting it toward the tips.
++    const guides: number[] = [];
++    const every = Math.max(6, Math.round(14 - hair.clump * 8));
++    for (let i = 0; i < roots.length; i += every) guides.push(i);
++    const cell = Math.max(1, hair.length * 0.6);
++    const grid = new Map<string, number[]>();
++    const keyOf = (p: THREE.Vector3) => `${Math.floor(p.x / cell)},${Math.floor(p.y / cell)},${Math.floor(p.z / cell)}`;
++    guides.forEach((gi) => {
++      const k = keyOf(roots[gi].p);
++      const list = grid.get(k);
++      if (list) list.push(gi);
++      else grid.set(k, [gi]);
++    });
++    const nearest = (p: THREE.Vector3): number => {
++      const cx = Math.floor(p.x / cell);
++      const cy = Math.floor(p.y / cell);
++      const cz = Math.floor(p.z / cell);
++      let best = -1;
++      let bd = Infinity;
++      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
++        for (const gi of grid.get(`${cx + dx},${cy + dy},${cz + dz}`) ?? []) {
++          const d = roots[gi].p.distanceToSquared(p);
++          if (d < bd) { bd = d; best = gi; }
++        }
++      }
++      return best;
++    };
++    const guided = own.map((pts, i) => {
++      const gi = nearest(roots[i].p);
++      if (gi < 0 || gi === i) return pts;
++      const guide = own[gi];
++      return pts.map((q, s) => {
++        const t = s / steps;
++        const k = hair.clump * Math.pow(t, 0.8);
++        const target = guide[Math.min(s, guide.length - 1)].clone().sub(roots[gi].p).add(roots[i].p).lerp(guide[Math.min(s, guide.length - 1)], t);
++        return q.clone().lerp(target, k);
++      });
++    });
++    return { strands: guided, normals: roots.map((r) => r.n), widen };
++  }
++  return { strands: own, normals: roots.map((r) => r.n), widen };
++}
++
++const colorOf = (hex: string) => new THREE.Color(/^#[0-9a-f]{6}$/i.test(hex) ? hex : '#888888');
++
++/**
++ * The strands as flat ribbons: a pair of points across each step of every strand, tapering to the tip, with a colour
++ * from root to tip, a tangent along the hair (for the highlight that runs across a strand) and UVs (u across, v along).
++ * Returns null when nothing grew.
++ */
++export function hairGeometry(geometry: THREE.BufferGeometry, hairIn: Hair, lift = 0): THREE.BufferGeometry | null {
++  const hair = settleHair(hairIn);
++  const { strands, normals, widen } = growStrands(geometry, hair, lift);
++  if (!strands.length) return null;
++  const per = strands[0].length;
++  const verts = strands.length * per * 2;
++  const position = new Float32Array(verts * 3);
++  const normal = new Float32Array(verts * 3);
++  const tangent = new Float32Array(verts * 4);
++  const color = new Float32Array(verts * 3);
++  const uv = new Float32Array(verts * 2);
++  const index = new Uint32Array(strands.length * (per - 1) * 6);
++  const root = colorOf(hair.rootColor);
++  const tip = colorOf(hair.tipColor);
++  const c = new THREE.Color();
++  const t3 = new THREE.Vector3();
++  const side = new THREE.Vector3();
++  const nrm = new THREE.Vector3();
++  let v = 0;
++  let k = 0;
++  strands.forEach((pts, s) => {
++    const n0 = normals[s];
++    const first = v;
++    for (let i = 0; i < per; i++) {
++      const t = i / (per - 1);
++      t3.subVectors(pts[Math.min(per - 1, i + 1)], pts[Math.max(0, i - 1)]);
++      if (t3.lengthSq() < 1e-12) t3.copy(n0);
++      t3.normalize();
++      side.crossVectors(t3, n0);
++      if (side.lengthSq() < 1e-8) side.crossVectors(t3, Math.abs(t3.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0));
++      side.normalize();
++      nrm.crossVectors(side, t3).normalize();
++      const half = (hair.thickness * widen * (1 - 0.85 * t)) / 2;
++      c.copy(root).lerp(tip, Math.pow(t, 0.8));
++      for (const sgn of [-1, 1]) {
++        const p = pts[i];
++        position.set([p.x + side.x * half * sgn, p.y + side.y * half * sgn, p.z + side.z * half * sgn], v * 3);
++        normal.set([nrm.x, nrm.y, nrm.z], v * 3);
++        tangent.set([t3.x, t3.y, t3.z, 1], v * 4);
++        color.set([c.r, c.g, c.b], v * 3);
++        uv.set([sgn < 0 ? 0 : 1, t], v * 2);
++        v++;
++      }
++    }
++    for (let i = 0; i < per - 1; i++) {
++      const a = first + i * 2;
++      index.set([a, a + 1, a + 2, a + 1, a + 3, a + 2], k);
++      k += 6;
++    }
++  });
++  const g = new THREE.BufferGeometry();
++  g.setAttribute('position', new THREE.BufferAttribute(position, 3));
++  g.setAttribute('normal', new THREE.BufferAttribute(normal, 3));
++  g.setAttribute('tangent', new THREE.BufferAttribute(tangent, 4));
++  g.setAttribute('color', new THREE.BufferAttribute(color, 3));
++  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
++  g.setIndex(new THREE.BufferAttribute(index, 1));
++  g.computeBoundingSphere();
++  return g;
++}
++
++/** How many layers a fur coat is drawn in. Fewer on a heavy surface, so it stays quick. */
++export const furLayers = (triangles: number) => (triangles > 30000 ? 8 : triangles > 12000 ? 12 : 18);
++
++/**
++ * Fur as layers (shells): copies of the surface pushed out along its normals, each a little further, laid by the comb and
++ * falling with droop, so a dense short coat is drawn without a separate hair for every strand. Layer `h` runs 0 (skin) to 1
++ * (tips). The geometry must be non-indexed with normals, as `buildBodyGeometry` makes it.
++ */
++export function furShell(geometry: THREE.BufferGeometry, hairIn: Hair, h: number, lift = 0, groomCache?: GroomAt[]): { geometry: THREE.BufferGeometry; groom: GroomAt[] } {
++  const hair = settleHair(hairIn);
++  const pos = geometry.getAttribute('position');
++  const nrm = geometry.getAttribute('normal');
++  const uvs = geometry.getAttribute('uv');
++  const groom = groomer(hair.strokes, lift);
++  const p = new THREE.Vector3();
++  const n = new THREE.Vector3();
++  const cache = groomCache ?? Array.from({ length: pos.count }, (_, i) => groom(p.fromBufferAttribute(pos, i).clone(), n.fromBufferAttribute(nrm, i).clone().normalize()));
++  const out = new Float32Array(pos.count * 3);
++  for (let i = 0; i < pos.count; i++) {
++    p.fromBufferAttribute(pos, i);
++    n.fromBufferAttribute(nrm, i).normalize();
++    const g = cache[i];
++    const len = hair.length * g.length * h;
++    const up = 1 + Math.max(-0.7, g.lift);
++    p.addScaledVector(n, len * up).addScaledVector(g.comb, len * h * 0.7);
++    p.y -= hair.droop * len * h * 0.6 * Math.max(0, 1 - Math.max(0, g.lift));
++    out.set([p.x, p.y, p.z], i * 3);
++  }
++  const shell = new THREE.BufferGeometry();
++  shell.setAttribute('position', new THREE.BufferAttribute(out, 3));
++  shell.setAttribute('normal', nrm.clone());
++  if (uvs) shell.setAttribute('uv', uvs.clone());
++  return { geometry: shell, groom: cache };
++}
++
++/**
++ * The strand pattern a fur layer is cut from: one value per strand cell, so each layer keeps the cells whose value is above
++ * its height and the strands thin out toward their tips. RGBA, the value in every channel.
++ */
++export function furPattern(seed: number, size = 128): Uint8Array {
++  const random = rng(seed + 17);
++  const out = new Uint8Array(size * size * 4);
++  for (let i = 0; i < size * size; i++) {
++    const v = Math.round(Math.pow(random(), 0.7) * 255);
++    out.set([v, v, v, 255], i * 4);
++  }
++  return out;
++}
++
++/** UV repeats of the fur pattern for its density: one cell per strand (UVs are 100 mm a unit, see surface.ts). */
++export const furRepeat = (hair: Hair, size = 128) => (100 / (10 / Math.sqrt(Math.max(0.2, hair.density)))) / size;
++
++/** A few words for the agent's summaries. */
++export function describeHair(h: Hair): string {
++  const s = settleHair(h);
++  const curl = s.curl > 0.6 ? 'curly' : s.curl > 0.25 ? 'wavy' : 'straight';
++  const strokes = s.strokes?.length ? `, groomed (${s.strokes.length} strokes)` : '';
++  return `${s.style === 'fur' ? 'fur' : 'hair'} ${Math.round(s.length)} mm, ${curl}, ${s.density}/cm²${strokes}`;
++}
++
++/** The person's grooming brush: what it does, how far it reaches and how hard. */
++export interface GroomBrush {
++  tool: GroomStroke['tool'];
++  radius: number;
++  strength: number;
++}
++export const DEFAULT_GROOM: GroomBrush = { tool: 'comb', radius: 15, strength: 0.7 };
+diff --git a/autora-3d/src/utils/meshImport.ts b/autora-3d/src/utils/meshImport.ts
+index 4389257..ec73781 100644
+--- a/autora-3d/src/utils/meshImport.ts
++++ b/autora-3d/src/utils/meshImport.ts
+@@ -4,6 +4,7 @@
+  */
+ 
+ import * as THREE from 'three';
++import { imageDataUrl, MAX_IMAGE_BYTES } from './surface';
+ import { Body3D, MeshData, Point2D } from '../types';
+ 
+ // Reads a triangle mesh from a file (GLB/glTF, OBJ or STL) and turns it into a shape. No DOM, so the headless engine and the
+@@ -17,6 +18,10 @@ export interface RawMesh {
+   indices: number[];
+   /** A colour the file gave (glTF base colour), as #rrggbb. */
+   color?: string;
++  /** Where each vertex sits on the file's picture (u, v pairs), when every part of it had a layout. */
++  uvs?: number[];
++  /** The file's base colour picture, as a data URL (glTF `baseColorTexture`, PNG or JPEG inside the file). */
++  image?: string;
+ }
+ 
+ /** Most triangles a shape keeps. A mesh with more is simplified (vertex clustering), which keeps its silhouette. */
+@@ -97,30 +102,38 @@ function joinSeams(mesh: RawMesh): RawMesh {
+   const key = new Map<string, number>();
+   const into = new Array<number>(mesh.positions.length / 3);
+   const positions: number[] = [];
++  const uvs = mesh.uvs && mesh.uvs.length / 2 === into.length ? mesh.uvs : undefined;
++  const welded: number[] = [];
+   for (let i = 0; i < into.length; i++) {
+     const [x, y, z] = [mesh.positions[i * 3], mesh.positions[i * 3 + 1], mesh.positions[i * 3 + 2]];
+-    const k = `${Math.round(x * 1e5)},${Math.round(y * 1e5)},${Math.round(z * 1e5)}`;
++    // With a picture's layout a seam in it stays a seam: two vertices at one place with different UVs are kept apart.
++    const at = uvs ? `,${Math.round(uvs[i * 2] * 1e5)},${Math.round(uvs[i * 2 + 1] * 1e5)}` : '';
++    const k = `${Math.round(x * 1e5)},${Math.round(y * 1e5)},${Math.round(z * 1e5)}${at}`;
+     let n = key.get(k);
+     if (n === undefined) {
+       n = positions.length / 3;
+       key.set(k, n);
+       positions.push(x, y, z);
++      if (uvs) welded.push(uvs[i * 2], uvs[i * 2 + 1]);
+     }
+     into[i] = n;
+   }
+   const indices = dropFlat(mesh.indices.map((i) => into[i]));
+   const used = new Map<number, number>();
+   const kept: number[] = [];
++  const keptUv: number[] = [];
+   const out = indices.map((i) => {
+     let n = used.get(i);
+     if (n === undefined) {
+       n = kept.length / 3;
+       used.set(i, n);
+       kept.push(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
++      if (uvs) keptUv.push(welded[i * 2], welded[i * 2 + 1]);
+     }
+     return n;
+   });
+-  return { ...mesh, positions: kept, indices: out };
++  const { uvs: _drop, ...rest } = mesh;
++  return { ...rest, positions: kept, indices: out, ...(uvs ? { uvs: keptUv } : {}) };
+ }
+ 
+ function dropFlat(indices: number[]): number[] {
+@@ -237,7 +250,29 @@ function readGltf(data: Uint8Array): RawMesh {
+ 
+   const positions: number[] = [];
+   const indices: number[] = [];
++  const uvs: number[] = [];
++  let laidOut = true;
+   let color: string | undefined;
++  let image: string | undefined;
++
++  /** The base colour picture a material names, when it is inside the file as a PNG or JPEG. */
++  const pictureOf = (materialIndex: number | undefined): string | undefined => {
++    const tex = materialIndex === undefined ? undefined : json.materials?.[materialIndex]?.pbrMetallicRoughness?.baseColorTexture;
++    if (!tex || (tex.texCoord ?? 0) !== 0) return undefined;
++    const img: Json | undefined = json.images?.[json.textures?.[tex.index]?.source];
++    if (!img) return undefined;
++    let bytes: Uint8Array | null = null;
++    if (typeof img.uri === 'string') {
++      const m = /^data:image\/(?:png|jpeg);base64,(.*)$/.exec(img.uri);
++      if (m) bytes = Uint8Array.from(atob(m[1]), (c) => c.charCodeAt(0));
++    } else if (img.bufferView !== undefined) {
++      const view: Json | undefined = json.bufferViews?.[img.bufferView];
++      const buf = view ? buffers[view.buffer] : undefined;
++      if (view && buf) bytes = buf.subarray(view.byteOffset ?? 0, (view.byteOffset ?? 0) + view.byteLength);
++    }
++    if (!bytes || bytes.length > MAX_IMAGE_BYTES) return undefined;
++    return imageDataUrl(bytes) ?? undefined;
++  };
+ 
+   const take = (meshIndex: number, world: THREE.Matrix4) => {
+     const mesh: Json = json.meshes?.[meshIndex];
+@@ -252,6 +287,12 @@ function readGltf(data: Uint8Array): RawMesh {
+         v.set(values[i], values[i + 1], values[i + 2]).applyMatrix4(world);
+         positions.push(v.x, v.y, v.z);
+       }
++      if (prim.attributes.TEXCOORD_0 !== undefined && laidOut) {
++        const t = read(prim.attributes.TEXCOORD_0).values;
++        // glTF's v runs down the picture; a texture's runs up.
++        for (let i = 0; i + 1 < t.length; i += 2) uvs.push(t[i], 1 - t[i + 1]);
++      } else laidOut = false;
++      if (!image) image = pictureOf(prim.material);
+       const order = prim.indices !== undefined ? read(prim.indices).values : Array.from({ length: values.length / 3 }, (_, i) => i);
+       const tri: number[] = [];
+       if (mode === 4) tri.push(...order);
+@@ -288,7 +329,8 @@ function readGltf(data: Uint8Array): RawMesh {
+   const roots: number[] = scene?.nodes ?? (json.nodes ?? []).map((_: unknown, i: number) => i);
+   for (const root of roots) visit(root, new THREE.Matrix4(), new Set());
+   if (!roots.length && json.meshes?.length) json.meshes.forEach((_: unknown, i: number) => take(i, new THREE.Matrix4()));
+-  return { positions, indices, color };
++  const layout = laidOut && uvs.length / 2 === positions.length / 3 && uvs.length > 0;
++  return { positions, indices, color, ...(layout ? { uvs } : {}), ...(layout && image ? { image } : {}) };
+ }
+ 
+ /** glTF colours are linear; the shape's colour is sRGB, as a colour picker shows it. */
+@@ -336,7 +378,9 @@ export function simplify(mesh: RawMesh, max = MAX_TRIANGLES): RawMesh {
+     const indices = dropFlat(mesh.indices.map((i) => remap[i]));
+     if (indices.length / 3 <= max || cells < 8) {
+       const positions = counts.flatMap((c, n) => [sums[n * 3] / c, sums[n * 3 + 1] / c, sums[n * 3 + 2] / c]);
+-      return { ...mesh, positions, indices };
++      // Clustering merges vertices from all over a picture: its layout no longer fits, so it goes (and the picture with it).
++      const { uvs: _u, image: _i, ...rest } = mesh;
++      return { ...rest, positions, indices };
+     }
+     cells = Math.floor(cells * 0.85);
+   }
+@@ -368,6 +412,8 @@ export interface MeshShape {
+   /** How many the file had, when it was simplified. */
+   from?: number;
+   color?: string;
++  /** The file's own picture, laid on by its own UVs (in `mesh.uvs`). */
++  image?: string;
+ }
+ 
+ /** The units a format is normally written in, relative to millimetres. */
+@@ -421,7 +467,7 @@ export function placeMesh(raw: RawMesh, format: MeshFormat, at: MeshPlacement =
+     positions[i * 3 + 2] = r3((z[i] - lo[2]) * scale);
+   }
+   return {
+-    mesh: { positions, indices: mesh.indices },
++    mesh: { positions, indices: mesh.indices, ...(mesh.uvs && mesh.uvs.length / 2 === n ? { uvs: mesh.uvs } : {}) },
+     points: [
+       { x: r3(cx - half.x), y: r3(cy - half.y) },
+       { x: r3(cx + half.x), y: r3(cy - half.y) },
+@@ -433,6 +479,7 @@ export function placeMesh(raw: RawMesh, format: MeshFormat, at: MeshPlacement =
+     triangles: mesh.indices.length / 3,
+     ...(mesh.indices.length < raw.indices.length ? { from: total } : {}),
+     color: raw.color,
++    ...(mesh.uvs && mesh.image ? { image: mesh.image } : {}),
+   };
+ }
+ 
+@@ -450,6 +497,7 @@ export function meshGeometry(body: Body3D): THREE.BufferGeometry | null {
+   }
+   const geometry = new THREE.BufferGeometry();
+   geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
++  if (m.uvs && m.uvs.length === n * 2) geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(m.uvs), 2));
+   geometry.setIndex(new THREE.BufferAttribute(n > 65535 ? new Uint32Array(m.indices) : new Uint16Array(m.indices), 1));
+   return geometry;
+ }
+diff --git a/autora-3d/src/utils/surface.ts b/autora-3d/src/utils/surface.ts
+new file mode 100644
+index 0000000..d03d54c
+--- /dev/null
++++ b/autora-3d/src/utils/surface.ts
+@@ -0,0 +1,402 @@
++/**
++ * @license
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++/**
++ * A shape's surface: what it is made of (its finish, from a preset with the shape's own numbers on top), the patterns the
++ * modeller draws itself, and where an image or pattern sits on the shape (UVs). Needs no DOM, so the viewer, the GLB
++ * export and the headless engine share one idea of every surface.
++ */
++import * as THREE from 'three';
++import { Body3D, MATERIAL_PRESETS, PatternKind, Surface, SurfaceImage, SurfacePattern } from '../types';
++
++/** Every number a surface has, resolved: the preset's, with the shape's own on top. */
++export interface ResolvedSurface {
++  color: string;
++  roughness: number;
++  metalness: number;
++  opacity: number;
++  transmission: number;
++  ior: number;
++  thickness: number;
++  clearcoat: number;
++  sheen: number;
++  sheenColor: string;
++  glow: number;
++  subsurface: number;
++  pattern?: SurfacePattern;
++  image?: SurfaceImage;
++}
++
++/** The range each number of a surface may take. The engine holds values to these; the window's sliders run over them. */
++export const SURFACE_RANGES = {
++  roughness: [0, 1],
++  metalness: [0, 1],
++  opacity: [0.05, 1],
++  transmission: [0, 1],
++  ior: [1, 2.5],
++  thickness: [0, 200],
++  clearcoat: [0, 1],
++  sheen: [0, 1],
++  glow: [0, 5],
++  subsurface: [0, 1],
++} as const satisfies Record<string, readonly [number, number]>;
++export type SurfaceNumber = keyof typeof SURFACE_RANGES;
++export const SURFACE_NUMBERS = Object.keys(SURFACE_RANGES) as SurfaceNumber[];
++
++export const PATTERNS: { kind: PatternKind; label: string }[] = [
++  { kind: 'none', label: 'None' },
++  { kind: 'wood', label: 'Wood' },
++  { kind: 'marble', label: 'Marble' },
++  { kind: 'noise', label: 'Speckle' },
++  { kind: 'weave', label: 'Fabric' },
++  { kind: 'scales', label: 'Scales' },
++  { kind: 'brushed', label: 'Brushed' },
++  { kind: 'checker', label: 'Checker' },
++  { kind: 'dots', label: 'Dots' },
++];
++export const PATTERN_KINDS = PATTERNS.map((p) => p.kind);
++
++/** A pattern as it starts when a person or the agent picks one. */
++export const DEFAULT_PATTERN: Omit<SurfacePattern, 'kind'> = { color2: '#3f2a1d', scale: 60, bump: 0.3, angle: 0 };
++
++export const presetOf = (body: Pick<Body3D, 'materialType'>) => MATERIAL_PRESETS.find((p) => p.id === body.materialType) ?? MATERIAL_PRESETS[0];
++
++export function resolveSurface(body: Pick<Body3D, 'materialType' | 'color' | 'surface'>): ResolvedSurface {
++  const p = presetOf(body);
++  const s: Surface = body.surface ?? {};
++  const pick = (k: SurfaceNumber, base: number) => (typeof s[k] === 'number' && Number.isFinite(s[k]) ? (s[k] as number) : base);
++  return {
++    color: body.color || p.color,
++    roughness: pick('roughness', p.roughness),
++    metalness: pick('metalness', p.metalness),
++    opacity: pick('opacity', p.opacity ?? 1),
++    transmission: pick('transmission', p.transmission ?? 0),
++    ior: pick('ior', p.ior ?? 1.5),
++    thickness: pick('thickness', p.thickness ?? (p.transmission ? 8 : 0)),
++    clearcoat: pick('clearcoat', p.clearcoat ?? (p.id === 'glossy' ? 1 : 0)),
++    sheen: pick('sheen', p.sheen ?? 0),
++    // Empty: a paler shade of the shape's own colour, as cloth has.
++    sheenColor: s.sheenColor ?? '',
++    glow: pick('glow', p.emissiveIntensity ?? 0),
++    subsurface: pick('subsurface', p.subsurface ?? 0),
++    ...(s.pattern && s.pattern.kind !== 'none' ? { pattern: s.pattern } : {}),
++    ...(s.image ? { image: s.image } : {}),
++  };
++}
++
++/** A few words for what a surface is, for the agent's summaries and the window's chips. */
++export function describeSurface(body: Pick<Body3D, 'materialType' | 'color' | 'surface'>): string {
++  const r = resolveSurface(body);
++  const words: string[] = [presetOf(body).name];
++  if (body.surface && SURFACE_NUMBERS.some((k) => body.surface![k] !== undefined)) words.push('adjusted');
++  if (r.pattern) words.push(`${PATTERNS.find((p) => p.kind === r.pattern!.kind)?.label.toLowerCase()} pattern`);
++  if (r.image) words.push('image');
++  return words.join(', ');
++}
++
++// ---- Where a picture sits on a shape ------------------------------------------------------------
++
++/** Millimetres per unit of UV: textures are scaled against this (a repeat of `scale` mm is `UV_MM / scale` repeats). */
++export const UV_MM = 100;
++
++/**
++ * Lays every triangle onto the side of a box it faces most (box projection), so a pattern or an image sits on any shape
++ * without seams across a face. The geometry must be non-indexed (each triangle its own three corners).
++ */
++export function addBoxUVs(geometry: THREE.BufferGeometry): void {
++  const pos = geometry.getAttribute('position');
++  if (!pos || geometry.getIndex()) return;
++  const uv = new Float32Array(pos.count * 2);
++  const a = new THREE.Vector3();
++  const b = new THREE.Vector3();
++  const c = new THREE.Vector3();
++  const n = new THREE.Vector3();
++  for (let t = 0; t + 2 < pos.count; t += 3) {
++    a.fromBufferAttribute(pos, t);
++    b.fromBufferAttribute(pos, t + 1);
++    c.fromBufferAttribute(pos, t + 2);
++    n.subVectors(b, a).cross(c.clone().sub(a));
++    const ax = Math.abs(n.x);
++    const ay = Math.abs(n.y);
++    const az = Math.abs(n.z);
++    for (let k = 0; k < 3; k++) {
++      const p = k === 0 ? a : k === 1 ? b : c;
++      let u: number;
++      let v: number;
++      if (ay >= ax && ay >= az) { u = p.x; v = n.y > 0 ? -p.z : p.z; }
++      else if (ax >= az) { u = n.x > 0 ? -p.z : p.z; v = p.y; }
++      else { u = n.z > 0 ? p.x : -p.x; v = p.y; }
++      uv[(t + k) * 2] = u / UV_MM;
++      uv[(t + k) * 2 + 1] = v / UV_MM;
++    }
++  }
++  geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
++}
++
++/** True when a mesh shape's own UVs (from its file) still fit its surface. */
++export const hasOwnUVs = (body: Pick<Body3D, 'mesh'>) => !!body.mesh?.uvs && body.mesh.uvs.length / 2 === body.mesh.positions.length / 3;
++
++/** How many times a texture repeats per unit of UV on this shape. */
++export function textureRepeat(body: Pick<Body3D, 'mesh' | 'surface'>, which: 'pattern' | 'image'): number {
++  const s = body.surface;
++  if (which === 'image') {
++    if (hasOwnUVs(body) && !s?.image?.scale) return 1;
++    return UV_MM / Math.max(1, s?.image?.scale ?? 100);
++  }
++  return UV_MM / Math.max(1, s?.pattern?.scale ?? DEFAULT_PATTERN.scale);
++}
++
++// ---- Patterns -------------------------------------------------------------------------------------
++
++/** A pattern as pixels: colour (RGBA, sRGB) and relief (0..255), one tile that repeats without a seam. */
++export interface PatternPixels {
++  size: number;
++  rgba: Uint8Array;
++  height: Uint8Array;
++}
++
++const fract = (x: number) => x - Math.floor(x);
++const mixc = (a: number, b: number, t: number) => a + (b - a) * t;
++const smooth = (t: number) => t * t * (3 - 2 * t);
++
++/** Value noise that repeats every `period` cells, so the tile has no seam. */
++function tiledNoise(seed: number) {
++  const hash = (x: number, y: number) => {
++    let h = (x * 374761393 + y * 668265263 + seed * 2147483647) | 0;
++    h = Math.imul(h ^ (h >>> 13), 1274126177);
++    return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
++  };
++  const noise = (u: number, v: number, period: number) => {
++    const x = u * period;
++    const y = v * period;
++    const x0 = Math.floor(x);
++    const y0 = Math.floor(y);
++    const tx = smooth(x - x0);
++    const ty = smooth(y - y0);
++    const w = (i: number) => ((i % period) + period) % period;
++    const a = hash(w(x0), w(y0));
++    const b = hash(w(x0 + 1), w(y0));
++    const c = hash(w(x0), w(y0 + 1));
++    const d = hash(w(x0 + 1), w(y0 + 1));
++    return mixc(mixc(a, b, tx), mixc(c, d, tx), ty);
++  };
++  const fbm = (u: number, v: number, base = 4, octaves = 4) => {
++    let sum = 0;
++    let amp = 0.5;
++    let total = 0;
++    for (let o = 0; o < octaves; o++) {
++      sum += noise(u, v, base << o) * amp;
++      total += amp;
++      amp *= 0.5;
++    }
++    return sum / total;
++  };
++  return { noise, fbm };
++}
++
++const rgbOf = (hex: string): [number, number, number] => {
++  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
++  const n = m ? parseInt(m[1], 16) : 0x888888;
++  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
++};
++
++/**
++ * Draws one tile of a pattern in the shape's colour and the pattern's second colour. `t` is how much of the second colour
++ * a pixel has and `h` its relief. Seeded, so the same pattern always draws the same.
++ */
++export function patternPixels(kind: PatternKind, color: string, color2: string, size = 256, seed = 7): PatternPixels {
++  const { noise, fbm } = tiledNoise(seed);
++  const c1 = rgbOf(color);
++  const c2 = rgbOf(color2);
++  const rgba = new Uint8Array(size * size * 4);
++  const height = new Uint8Array(size * size);
++  for (let y = 0; y < size; y++) {
++    for (let x = 0; x < size; x++) {
++      const u = x / size;
++      const v = y / size;
++      let t = 0;
++      let h = 0.5;
++      switch (kind) {
++        case 'wood': {
++          // Rings across the grain, wobbling with the wood's own unevenness, and fine streaks along it.
++          const r = u * 6 + (fbm(u, v, 2, 3) - 0.5) * 2.2;
++          const ring = fract(r);
++          const grain = noise(u, v, 64) * 0.25;
++          t = Math.min(1, Math.pow(ring, 3) * 0.85 + grain);
++          h = 1 - t * 0.8;
++          break;
++        }
++        case 'marble': {
++          const s = Math.sin((u + v) * Math.PI * 2 * 2 + fbm(u, v, 4, 5) * 9);
++          const vein = Math.pow(1 - Math.abs(s), 6);
++          t = Math.min(1, vein + fbm(u, v, 8, 3) * 0.12);
++          h = 0.5 + (1 - vein) * 0.1;
++          break;
++        }
++        case 'noise': {
++          const f = fbm(u, v, 16, 3);
++          t = smooth(Math.min(1, Math.max(0, (f - 0.35) * 2.2)));
++          h = f;
++          break;
++        }
++        case 'weave': {
++          // Threads over and under: each cell is a thread across or along, whichever is on top there.
++          const n = 8;
++          const cx = Math.floor(u * n);
++          const cy = Math.floor(v * n);
++          const along = (cx + cy) % 2 === 0;
++          const across = along ? fract(v * n) : fract(u * n);
++          const round = Math.sin(across * Math.PI);
++          t = along ? 0.15 + (1 - round) * 0.5 : 0.65 + (1 - round) * 0.35;
++          h = round * 0.9 + noise(u, v, 128) * 0.1;
++          break;
++        }
++        case 'scales': {
++          // Rows of overlapping round scales, each row half a scale along from the last.
++          const n = 6;
++          const row = Math.floor(v * n);
++          const su = u * n + (row % 2) * 0.5;
++          const sv = fract(v * n);
++          const du = fract(su) - 0.5;
++          const d = Math.hypot(du, sv) / 0.75;
++          const edge = smooth(Math.min(1, Math.max(0, d)));
++          t = edge * 0.9;
++          h = 1 - edge;
++          break;
++        }
++        case 'brushed': {
++          // Streaks along the surface: noise stretched far along one way.
++          const s = noise(u * 0.02, v, 256) * 0.6 + noise(u * 0.05, v, 128) * 0.4;
++          t = s * 0.6;
++          h = s;
++          break;
++        }
++        case 'checker': {
++          t = (Math.floor(u * 2) + Math.floor(v * 2)) % 2;
++          h = 0.5;
++          break;
++        }
++        case 'dots': {
++          const n = 4;
++          const d = Math.hypot(fract(u * n) - 0.5, fract(v * n) - 0.5);
++          const dot = 1 - smooth(Math.min(1, Math.max(0, (d - 0.22) / 0.04)));
++          t = dot;
++          h = 0.5 + dot * 0.4;
++          break;
++        }
++        default:
++          t = 0;
++      }
++      const i = y * size + x;
++      rgba[i * 4] = Math.round(mixc(c1[0], c2[0], t));
++      rgba[i * 4 + 1] = Math.round(mixc(c1[1], c2[1], t));
++      rgba[i * 4 + 2] = Math.round(mixc(c1[2], c2[2], t));
++      rgba[i * 4 + 3] = 255;
++      height[i] = Math.round(Math.min(1, Math.max(0, h)) * 255);
++    }
++  }
++  return { size, rgba, height };
++}
++
++// ---- Pictures as files (for GLB) -------------------------------------------------------------------
++
++const CRC = (() => {
++  const t = new Uint32Array(256);
++  for (let n = 0; n < 256; n++) {
++    let c = n;
++    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
++    t[n] = c >>> 0;
++  }
++  return t;
++})();
++const crc32 = (bytes: Uint8Array) => {
++  let c = 0xffffffff;
++  for (let i = 0; i < bytes.length; i++) c = CRC[(c ^ bytes[i]) & 255] ^ (c >>> 8);
++  return (c ^ 0xffffffff) >>> 0;
++};
++
++/** An uncompressed PNG (deflate's stored blocks): no zlib needed, so it is written the same in the page and in Node. */
++export function encodePng(width: number, height: number, rgba: Uint8Array): Uint8Array {
++  const rowLen = width * 4 + 1;
++  const raw = new Uint8Array(rowLen * height);
++  for (let y = 0; y < height; y++) {
++    raw[y * rowLen] = 0;
++    raw.set(rgba.subarray(y * width * 4, (y + 1) * width * 4), y * rowLen + 1);
++  }
++  const blocks = Math.ceil(raw.length / 65535) || 1;
++  const z = new Uint8Array(2 + raw.length + blocks * 5 + 4);
++  z[0] = 0x78;
++  z[1] = 0x01;
++  let o = 2;
++  for (let b = 0; b < blocks; b++) {
++    const part = raw.subarray(b * 65535, Math.min(raw.length, (b + 1) * 65535));
++    z[o++] = b === blocks - 1 ? 1 : 0;
++    z[o++] = part.length & 255;
++    z[o++] = part.length >> 8;
++    z[o++] = ~part.length & 255;
++    z[o++] = (~part.length >> 8) & 255;
++    z.set(part, o);
++    o += part.length;
++  }
++  let s1 = 1;
++  let s2 = 0;
++  for (let i = 0; i < raw.length; i++) {
++    s1 = (s1 + raw[i]) % 65521;
++    s2 = (s2 + s1) % 65521;
++  }
++  const adler = ((s2 << 16) | s1) >>> 0;
++  z[o++] = adler >>> 24;
++  z[o++] = (adler >>> 16) & 255;
++  z[o++] = (adler >>> 8) & 255;
++  z[o++] = adler & 255;
++
++  const chunk = (type: string, data: Uint8Array) => {
++    const out = new Uint8Array(12 + data.length);
++    const dv = new DataView(out.buffer);
++    dv.setUint32(0, data.length);
++    for (let i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
++    out.set(data, 8);
++    dv.setUint32(8 + data.length, crc32(out.subarray(4, 8 + data.length)));
++    return out;
++  };
++  const ihdr = new Uint8Array(13);
++  const hv = new DataView(ihdr.buffer);
++  hv.setUint32(0, width);
++  hv.setUint32(4, height);
++  ihdr[8] = 8;
++  ihdr[9] = 6;
++  const parts = [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', z), chunk('IEND', new Uint8Array(0))];
++  const total = parts.reduce((n, p) => n + p.length, 0);
++  const png = new Uint8Array(total);
++  let at = 0;
++  for (const p of parts) {
++    png.set(p, at);
++    at += p.length;
++  }
++  return png;
++}
++
++/** The largest picture a surface keeps, as bytes. */
++export const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
++
++/** The bytes and type of an image data URL, or null when it is not a PNG or JPEG one. */
++export function imageBytes(dataUrl: string): { mime: 'image/png' | 'image/jpeg'; bytes: Uint8Array } | null {
++  const m = /^data:(image\/(?:png|jpeg));base64,([A-Za-z0-9+/=\s]+)$/.exec(dataUrl);
++  if (!m) return null;
++  const bin = atob(m[2].replace(/\s+/g, ''));
++  const bytes = new Uint8Array(bin.length);
++  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
++  return { mime: m[1] as 'image/png' | 'image/jpeg', bytes };
++}
++
++/** An image file's bytes as a data URL, when they are a PNG or a JPEG (read from the bytes, not a name). */
++export function imageDataUrl(bytes: Uint8Array): string | null {
++  const png = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
++  const jpg = bytes[0] === 0xff && bytes[1] === 0xd8;
++  if (!png && !jpg) return null;
++  let bin = '';
++  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
++  return `data:image/${png ? 'png' : 'jpeg'};base64,${btoa(bin)}`;
++}
+diff --git a/autora-3d/src/utils/transform.ts b/autora-3d/src/utils/transform.ts
+index cd864be..bf5576e 100644
+--- a/autora-3d/src/utils/transform.ts
++++ b/autora-3d/src/utils/transform.ts
+@@ -27,7 +27,7 @@ function mapMesh(mesh: MeshData, f: (p: Point2D) => Point2D): MeshData {
+     positions[i] = Math.round(p.x * 1000) / 1000;
+     positions[i + 1] = Math.round(p.y * 1000) / 1000;
+   }
+-  return { positions, indices: mesh.indices };
++  return { ...mesh, positions };
+ }
+ 
+ /** A mesh shape's height changed to `height`, every height in the mesh scaled with it. */
+@@ -36,7 +36,7 @@ export function scaleMeshHeight(body: Body3D, height: number): Partial<Body3D> {
+   const k = height / Math.max(1e-6, body.extrusionHeight);
+   const positions = body.mesh.positions.slice();
+   for (let i = 2; i < positions.length; i += 3) positions[i] = Math.round(positions[i] * k * 1000) / 1000;
+-  return { mesh: { positions, indices: body.mesh.indices }, extrusionHeight: height };
++  return { mesh: { ...body.mesh, positions }, extrusionHeight: height };
+ }
+ 
+ /** Rigid move/rotate of a body. Edge bevels and corner radii are index-based, so they carry over unchanged. */

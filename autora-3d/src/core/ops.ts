@@ -3,7 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Body3D, DrawSession, EdgeSel, FaceSel, Frame, LibraryItem, MaterialType, Point2D, RepeatLink, RepeatSession, ShapeGroup, SWATCHES } from '../types';
+import { Body3D, DrawSession, EdgeSel, FaceSel, Frame, GroomStroke, Hair, LibraryItem, MATERIAL_PRESETS, MaterialType, PatternKind, Point2D, RepeatLink, RepeatSession, SceneLook, ShapeGroup, Surface, SWATCHES } from '../types';
+import { DEFAULT_PATTERN, MAX_IMAGE_BYTES, PATTERN_KINDS, SURFACE_NUMBERS, SURFACE_RANGES, imageBytes, resolveSurface as finishOf, type ResolvedSurface } from '../utils/surface';
+import { DEFAULT_HAIR, FUR_START, HAIR_NUMBERS, HAIR_RANGES, MAX_STROKES, settleHair } from '../utils/hair';
 import { BodyTransform, resizeBody, scaleMeshHeight, selectionBounds, transformBody } from '../utils/transform';
 import { MeshError, meshFormatOf, placeMesh, readMesh, type MeshFormat, type RawMesh } from '../utils/meshImport';
 import { boundsOf } from '../utils/sculpt';
@@ -23,7 +25,7 @@ import { Doc, IdGen, settle } from './doc';
 import { fail } from './errors';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
-const MATERIALS: MaterialType[] = ['matte', 'metal', 'glossy', 'glass', 'neon'];
+const MATERIALS: MaterialType[] = MATERIAL_PRESETS.map((p) => p.id);
 /** The tallest a shape may be through the agent API (the sliders in the app stop at 600). */
 export const API_MAX_HEIGHT = 5000;
 
@@ -251,8 +253,10 @@ export function importMesh(doc: Doc, ids: IdGen, a: ImportMeshArgs): OpResult<{ 
     mesh: placed.mesh,
     extrusionHeight: placed.height,
     elevation: round2(elevation),
-    color: colorOf(a.color ?? placed.color, SWATCHES[(count - 1) % SWATCHES.length].value),
+    // A file that brought its own picture shows it as it is: its colour is white, so nothing tints it.
+    color: colorOf(a.color ?? (placed.image ? '#ffffff' : placed.color), SWATCHES[(count - 1) % SWATCHES.length].value),
     materialType: materialOf(a.material, 'matte'),
+    ...(placed.image ? { surface: { image: { data: placed.image, name: 'from the file' } } } : {}),
     visible: true,
     createdAt: new Date().toISOString(),
   };
@@ -260,6 +264,7 @@ export function importMesh(doc: Doc, ids: IdGen, a: ImportMeshArgs): OpResult<{ 
   const ys = placed.points.map((p) => p.y);
   const notes = [
     placed.from ? `The file had ${placed.from} triangles; it was simplified to ${placed.triangles} to stay light.` : '',
+    placed.image ? 'Its picture (texture) came with it and is laid on as the file had it.' : '',
     a.size === undefined ? `Scaled by ${round2(placed.scale)} to millimetres (the file's own units); pass size to set its longest side.` : '',
   ].filter(Boolean);
   return {
@@ -1211,7 +1216,8 @@ export function smoothShape(doc: Doc, a: SmoothArgs) {
   const points = [{ x: lo.x, y: lo.y }, { x: hi.x, y: lo.y }, { x: hi.x, y: hi.y }, { x: lo.x, y: hi.y }].map((q) => ({ x: round2(q.x), y: round2(q.y) }));
   const positions = p.map((n) => Math.round(n * 1000) / 1000);
   return {
-    doc: replace(doc, b.id, { mesh: { positions, indices: mesh.indices }, points, basePoints: points, extrusionHeight: Math.max(1, round2(top)) }),
+    // Smoothing alone keeps every vertex, so a picture's layout still fits; splitting triangles makes new ones, and it goes.
+    doc: replace(doc, b.id, { mesh: { positions, indices: mesh.indices, ...(split === 0 && b.mesh.uvs ? { uvs: b.mesh.uvs } : {}) }, points, basePoints: points, extrusionHeight: Math.max(1, round2(top)) }),
     result: { id: b.id, triangles: mesh.indices.length / 3 },
   };
 }
@@ -1230,7 +1236,168 @@ export function applySculpt(doc: Doc, a: ApplySculptArgs) {
   if (a.positions.some((n) => typeof n !== 'number' || !Number.isFinite(n))) return fail('positions must all be finite numbers.');
   const { points, height } = boundsOf(a.positions);
   return {
-    doc: replace(doc, b.id, { mesh: { positions: a.positions, indices: b.mesh.indices }, points, basePoints: points, extrusionHeight: height }),
+    doc: replace(doc, b.id, { mesh: { ...b.mesh, positions: a.positions }, points, basePoints: points, extrusionHeight: height }),
     result: { id: b.id },
   };
+}
+
+// ---- Surfaces ------------------------------------------------------------------------------------
+
+export interface SurfaceArgs {
+  ids?: string[];
+  id?: string;
+  /** Start from a preset: it clears the shape's own numbers. */
+  preset?: MaterialType;
+  color?: string;
+  roughness?: number;
+  metalness?: number;
+  opacity?: number;
+  transmission?: number;
+  ior?: number;
+  thickness?: number;
+  clearcoat?: number;
+  sheen?: number;
+  sheenColor?: string;
+  glow?: number;
+  subsurface?: number;
+  /** A pattern drawn on it ("none" takes it off); its fields are kept from the last one when not given. */
+  pattern?: PatternKind | { kind?: PatternKind; color2?: string; scale?: number; bump?: number; angle?: number };
+  /** A picture laid on it: a data URL (the host reads a file into one), or null to take it off. */
+  image?: string | null;
+  imageScale?: number;
+  /** Put every number back to the preset's. */
+  reset?: boolean;
+}
+
+const idsOf = (a: { ids?: unknown; id?: unknown }): string[] => {
+  const list = Array.isArray(a.ids) ? a.ids : a.id !== undefined ? [a.id] : [];
+  if (!list.length) return fail('Give the shape (id) or shapes (ids).');
+  return list.map((x) => String(x));
+};
+
+const inRange = (v: unknown, name: string, [lo, hi]: readonly [number, number]) => {
+  const n = num(v, name);
+  if (n < lo || n > hi) return fail(`${name} must be between ${lo} and ${hi}, got ${n}.`);
+  return Math.round(n * 1000) / 1000;
+};
+
+/** Changes what shapes are made of: a preset to start from, then any of its numbers, a pattern, or a picture. */
+export function setSurface(doc: Doc, a: SurfaceArgs): OpResult<{ ids: string[]; surface: ResolvedSurface }> {
+  const list = idsOf(a);
+  const bodies = list.map((id) => editable(doc, id));
+  let next = doc;
+  for (const b of bodies) {
+    const patch: Partial<Body3D> = {};
+    let surface: Surface = a.preset !== undefined || a.reset ? {} : { ...(b.surface ?? {}) };
+    if (a.preset !== undefined) {
+      patch.materialType = materialOf(a.preset, b.materialType);
+      // A preset is a place to start: its pattern and picture are not numbers of the finish, so they stay.
+      if (b.surface?.pattern) surface.pattern = b.surface.pattern;
+      if (b.surface?.image) surface.image = b.surface.image;
+    } else if (a.reset) {
+      if (b.surface?.pattern) surface.pattern = b.surface.pattern;
+      if (b.surface?.image) surface.image = b.surface.image;
+    }
+    if (a.color !== undefined) patch.color = colorOf(a.color, b.color);
+    for (const k of SURFACE_NUMBERS) {
+      const v = (a as Record<string, unknown>)[k];
+      if (v !== undefined) surface[k] = inRange(v, k, SURFACE_RANGES[k]);
+    }
+    if (a.sheenColor !== undefined) surface.sheenColor = colorOf(a.sheenColor, surface.sheenColor ?? '#ffffff');
+    if (a.pattern !== undefined) {
+      const given = typeof a.pattern === 'string' ? { kind: a.pattern } : a.pattern ?? {};
+      const kind = (given.kind ?? surface.pattern?.kind ?? 'wood') as PatternKind;
+      if (!PATTERN_KINDS.includes(kind)) return fail(`pattern must be one of ${PATTERN_KINDS.join(', ')}.`);
+      if (kind === 'none') delete surface.pattern;
+      else {
+        const was = surface.pattern ?? { kind, ...DEFAULT_PATTERN };
+        const scale = given.scale !== undefined ? inRange(given.scale, 'pattern.scale', [2, 2000]) : was.scale;
+        const bump = given.bump !== undefined ? inRange(given.bump, 'pattern.bump', [0, 1]) : was.bump;
+        const angle = given.angle !== undefined ? ((num(given.angle, 'pattern.angle') % 360) + 360) % 360 : was.angle ?? 0;
+        surface.pattern = { kind, color2: colorOf(given.color2, was.color2), scale, bump, angle };
+      }
+    }
+    if (a.image === null) delete surface.image;
+    else if (a.image !== undefined) {
+      if (typeof a.image !== 'string') return fail('image must be the picture (the host reads a file into it), or null to take it off.');
+      const pic = imageBytes(a.image);
+      if (!pic) return fail('The image must be a PNG or a JPEG.');
+      if (pic.bytes.length > MAX_IMAGE_BYTES) return fail(`The image is ${Math.round(pic.bytes.length / 1024)} KB; the most a surface keeps is ${MAX_IMAGE_BYTES / 1024 / 1024} MB.`, 'Make it smaller first (2048 pixels across is plenty).');
+      surface.image = { data: a.image, ...(a.imageScale !== undefined ? { scale: inRange(a.imageScale, 'imageScale', [2, 5000]) } : {}) };
+    } else if (a.imageScale !== undefined) {
+      if (!surface.image) return fail(`"${b.id}" has no image to scale.`, 'Give image first.');
+      surface.image = { ...surface.image, scale: inRange(a.imageScale, 'imageScale', [2, 5000]) };
+    }
+    patch.surface = Object.keys(surface).length ? surface : undefined;
+    next = replace(next, b.id, patch);
+  }
+  const first = next.bodies.find((b) => b.id === bodies[0].id)!;
+  return { doc: next, result: { ids: list, surface: { ...finishOf(first), ...(first.surface?.image ? { image: { data: '(picture)', scale: first.surface.image.scale } } : {}) } } };
+}
+
+// ---- Hair ----------------------------------------------------------------------------------------
+
+export type HairArgs = { ids?: string[]; id?: string; remove?: boolean } & Partial<Omit<Hair, 'strokes'>> & { clearGrooming?: boolean };
+
+/** Grows hair or fur on shapes, or changes it (only what is given), or takes it off. The grooming the person did stays. */
+export function setHair(doc: Doc, a: HairArgs): OpResult<{ ids: string[]; hair?: Hair }> {
+  const list = idsOf(a);
+  const bodies = list.map((id) => editable(doc, id));
+  let next = doc;
+  for (const b of bodies) {
+    if (a.remove) {
+      next = replace(next, b.id, { hair: undefined });
+      continue;
+    }
+    if (b.frame) return fail(`"${b.id}" stands on a wall; hair grows on shapes that stand upright.`);
+    const style = a.style ?? b.hair?.style ?? 'strands';
+    if (style !== 'strands' && style !== 'fur') return fail('style must be "strands" or "fur".');
+    // Changing to fur from nothing (or from hair) starts from a coat's numbers; anything given still wins.
+    const base: Hair = b.hair && b.hair.style === style ? b.hair : { ...DEFAULT_HAIR, ...(style === 'fur' ? FUR_START : {}), seed: b.hair?.seed ?? DEFAULT_HAIR.seed, ...(b.hair?.strokes ? { strokes: b.hair.strokes } : {}) };
+    const hair: Hair = { ...base, style };
+    for (const k of HAIR_NUMBERS) {
+      const v = (a as Record<string, unknown>)[k];
+      if (v !== undefined) hair[k] = inRange(v, k, HAIR_RANGES[k]);
+    }
+    if (a.rootColor !== undefined) hair.rootColor = colorOf(a.rootColor, hair.rootColor);
+    if (a.tipColor !== undefined) hair.tipColor = colorOf(a.tipColor, hair.tipColor);
+    if (a.seed !== undefined) hair.seed = Math.round(num(a.seed, 'seed'));
+    if (a.clearGrooming) delete hair.strokes;
+    next = replace(next, b.id, { hair: settleHair(hair) });
+  }
+  const first = next.bodies.find((b) => b.id === bodies[0].id)!;
+  return { doc: next, result: { ids: list, ...(first.hair ? { hair: { ...first.hair, ...(first.hair.strokes ? { strokes: [] as GroomStroke[] } : {}) } } : {}) } };
+}
+
+export interface GroomArgs {
+  id: string;
+  stroke: GroomStroke;
+}
+
+/** The person's grooming stroke on a shape's hair: kept with the hair, so it is grown again the same way. */
+export function groomHair(doc: Doc, a: GroomArgs): OpResult<{ id: string; strokes: number }> {
+  const b = editable(doc, a.id);
+  if (!b.hair) return fail(`"${b.id}" has no hair to groom.`);
+  const s = a.stroke;
+  if (!s || !['comb', 'cut', 'lengthen', 'puff'].includes(s.tool)) return fail('stroke.tool must be comb, cut, lengthen or puff.');
+  if (!Array.isArray(s.path) || s.path.length < 3 || s.path.length % 3 || s.path.some((n) => typeof n !== 'number' || !Number.isFinite(n))) return fail('stroke.path must be [x, y, height] triples of numbers.');
+  const stroke: GroomStroke = { tool: s.tool, path: s.path.slice(0, 600).map((n) => Math.round(n * 100) / 100), radius: inRange(s.radius, 'stroke.radius', [0.5, 500]), strength: inRange(s.strength, 'stroke.strength', [0, 1]) };
+  const strokes = [...(b.hair.strokes ?? []), stroke].slice(-MAX_STROKES);
+  return { doc: replace(doc, b.id, { hair: { ...b.hair, strokes } }), result: { id: b.id, strokes: strokes.length } };
+}
+
+// ---- The scene's light ---------------------------------------------------------------------------
+
+export const ENVIRONMENTS: SceneLook['environment'][] = ['studio', 'daylight', 'sunset', 'night'];
+export const DEFAULT_LOOK: SceneLook = { environment: 'studio', exposure: 1 };
+
+/** The surroundings the scene is lit by and reflects, and how bright it is. Saved with the model; exported files do not carry it. */
+export function setLook(doc: Doc, a: Partial<SceneLook>): OpResult<SceneLook> {
+  const was = doc.look ?? DEFAULT_LOOK;
+  if (a.environment !== undefined && !ENVIRONMENTS.includes(a.environment)) return fail(`environment must be one of ${ENVIRONMENTS.join(', ')}.`);
+  const look: SceneLook = {
+    environment: a.environment ?? was.environment,
+    exposure: a.exposure !== undefined ? inRange(a.exposure, 'exposure', [0.3, 2]) : was.exposure,
+  };
+  return { doc: { ...doc, look }, result: look };
 }

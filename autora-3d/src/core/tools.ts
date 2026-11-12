@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Body3D } from '../types';
+import { Body3D, MATERIAL_PRESETS } from '../types';
+import { PATTERN_KINDS } from '../utils/surface';
 import { Doc, IdGen } from './doc';
 import { fail } from './errors';
 import { AgentError } from './errors';
@@ -50,7 +51,8 @@ const sketch = {
   center: { ...point, description: 'circle: its centre.' },
   radius: { type: 'number', description: 'circle: radius, mm.' },
 };
-const material = { type: 'string', enum: ['matte', 'metal', 'glossy', 'glass', 'neon'] };
+const material = { type: 'string', enum: MATERIAL_PRESETS.map((p) => p.id), description: 'A finish to start from: matte, metal, glossy, glass, neon, frosted (frosted glass), velvet (cloth with a soft sheen), skin (soft, light glows through) or rubber. surface_set fine-tunes it.' };
+const unit = (what: string) => ({ type: 'number', minimum: 0, maximum: 1, description: what });
 const color = { type: 'string', description: 'Hex colour such as "#3b82f6".' };
 
 const obj = (properties: Record<string, unknown>, required: string[] = []) => ({ type: 'object', properties, required, additionalProperties: false });
@@ -144,7 +146,7 @@ export const TOOL_SPECS: ToolSpec[] = [
   {
     name: 'mesh_import',
     description:
-      'Bring in a triangle mesh from a file as ONE shape: .glb/.gltf, .obj or .stl (a free CC0 model from Poly Pizza, Quaternius or Sketchfab, or one made in Blender). It arrives as the real surface, so organic forms (an animal, a face, a scan) are possible, which stock shapes and extruded outlines cannot give. It stands on the ground; size sets its longest side in mm (without it a GLB is read in metres, STL and OBJ in mm, and a result that is a speck or a building is fitted to 100 mm). Very large meshes are simplified to 60000 triangles. Move, turn, resize (shape_resize scales it whole), recolour, group and export work on it; it has no outline, faces, bevels or holes, and cannot be joined or cut with the outline tools. Textures are not read: colour it with color or material.',
+      'Bring in a triangle mesh from a file as ONE shape: .glb/.gltf, .obj or .stl (a free CC0 model from Poly Pizza, Quaternius or Sketchfab, or one made in Blender). It arrives as the real surface, so organic forms (an animal, a face, a scan) are possible, which stock shapes and extruded outlines cannot give. It stands on the ground; size sets its longest side in mm (without it a GLB is read in metres, STL and OBJ in mm, and a result that is a speck or a building is fitted to 100 mm). Very large meshes are simplified to 60000 triangles. Move, turn, resize (shape_resize scales it whole), recolour, group and export work on it; it has no outline, faces, bevels or holes, and cannot be joined or cut with the outline tools. A GLB\'s base colour picture (texture) comes with it when it is inside the file and every part has a layout (UVs); otherwise colour it with color, material or surface_set.',
     inputSchema: obj({
       file: { type: 'string', description: 'The mesh file: an artifact id (file_...) or a path on the host. The host reads it.' },
       format: { type: 'string', enum: ['glb', 'obj', 'stl'], description: 'Only if the file name does not say (glTF counts as glb).' },
@@ -228,6 +230,72 @@ export const TOOL_SPECS: ToolSpec[] = [
     description: 'The person\'s brush stroke on a mesh shape: its surface points after the stroke. Not for the agent: shaping a form by hand is the person\'s.',
     inputSchema: obj({ id: { type: 'string' }, positions: { type: 'array', items: { type: 'number' }, description: 'Every surface point after the stroke, [x, y, height] triples in mm.' } }, ['id', 'positions']),
     authority: 'person',
+  },
+  {
+    name: 'surface_set',
+    description:
+      'Change what shapes are made of, beyond the material presets: start from a preset (it clears earlier fine-tuning) and/or set any number of the finish, a pattern the modeller draws itself, or a picture laid on it. Glass: transmission 1, roughness 0 (clear) to 0.5 (frosted), ior 1.33 water / 1.5 glass / 2.4 diamond, thickness in mm. Cloth and fuzz: sheen. Skin, wax, leaves, marble: subsurface. Light: glow. A pattern is in the shape\'s colour and color2, repeating every scale mm, with bump for relief. A picture: image (an artifact id or path; the host reads it, PNG or JPEG), repeating every imageScale mm (a mesh whose file had a layout fits it once). Several shapes at once with ids.',
+    inputSchema: obj({
+      id: { type: 'string' },
+      ids,
+      preset: material,
+      color,
+      roughness: unit('0 mirror-smooth to 1 fully matte.'),
+      metalness: unit('0 non-metal to 1 metal.'),
+      opacity: { type: 'number', minimum: 0.05, maximum: 1, description: 'How solid it is: 1 solid, lower fades it out (not glass: use transmission).' },
+      transmission: unit('How clear it is, like glass or water.'),
+      ior: { type: 'number', minimum: 1, maximum: 2.5, description: 'How much a clear surface bends light.' },
+      thickness: { type: 'number', minimum: 0, maximum: 200, description: 'How thick a clear or glowing-through solid is, mm: thicker tints and bends more.' },
+      clearcoat: unit('A clear lacquer layer on top (car paint, varnish).'),
+      sheen: unit('The soft rim light of cloth, velvet, felt and fuzz.'),
+      sheenColor: color,
+      glow: { type: 'number', minimum: 0, maximum: 5, description: 'How brightly it glows in its own colour.' },
+      subsurface: unit('Light glowing through from under the surface: skin, wax, jade, leaves.'),
+      pattern: {
+        description: 'A pattern drawn on it: a kind, or the kind with its settings. "none" takes it off.',
+        oneOf: [
+          { type: 'string', enum: PATTERN_KINDS },
+          obj({ kind: { type: 'string', enum: PATTERN_KINDS }, color2: { ...color, description: 'The second colour of the pattern (the first is the shape\'s colour).' }, scale: { type: 'number', description: 'How big one repeat is, mm (default 60).' }, bump: unit('Relief: how much it stands out from the surface.'), angle: { type: 'number', description: 'Turns the pattern, degrees.' } }),
+        ],
+      },
+      image: { oneOf: [{ type: 'string' }, { type: 'null' }], description: 'A picture to lay on it: an artifact id (file_...) or a path; the host reads it. null takes it off.' },
+      imageScale: { type: 'number', description: 'How big one repeat of the picture is, mm (default 100).' },
+      reset: { type: 'boolean', description: 'Put every number back to the material preset\'s (keeps the pattern and picture).' },
+    }),
+  },
+  {
+    name: 'hair_set',
+    description:
+      'Grow hair or fur on shapes, change it, or take it off (remove: true). style "strands" is separate hairs that fall, curl and gather into locks (a head of hair, a mane, a tail, grass); "fur" is a dense short coat (an animal, a teddy, a rug, moss). Give only what should change; the rest keeps its value. Lengths in mm, density in hairs per cm². Grooming (combing, cutting and puffing where the hair goes) is the person\'s, with the brush in the window\'s Hair card; their strokes stay when you change the numbers. Suggest settings and explain them, but the look is theirs to decide.',
+    inputSchema: obj({
+      id: { type: 'string' },
+      ids,
+      style: { type: 'string', enum: ['strands', 'fur'] },
+      length: { type: 'number', minimum: 1, maximum: 400, description: 'mm (default 40 for strands, 8 for fur).' },
+      density: { type: 'number', minimum: 0.2, maximum: 80, description: 'Hairs per cm² (default 30 strands, 40 fur).' },
+      thickness: { type: 'number', minimum: 0.05, maximum: 3, description: 'Width of a hair at its root, mm.' },
+      curl: unit('0 straight, 0.3 wavy, 1 tight curls.'),
+      frizz: unit('Random wander along each hair.'),
+      clump: unit('How much neighbouring hairs gather into locks.'),
+      droop: unit('How much it falls under its own weight: 0 stiff, 1 limp.'),
+      shine: unit('The highlight band along the hair.'),
+      rootColor: color,
+      tipColor: color,
+      seed: { type: 'integer', description: 'Another number grows another, equally good, head of hair.' },
+      clearGrooming: { type: 'boolean', description: 'Forget the person\'s grooming strokes. Only when they ask.' },
+      remove: { type: 'boolean', description: 'Take the hair off.' },
+    }),
+  },
+  {
+    name: 'hair_groom',
+    description: 'The person\'s grooming stroke on a shape\'s hair (comb, cut, lengthen, puff). Not for the agent: styling hair by hand is the person\'s.',
+    inputSchema: obj({ id: { type: 'string' }, stroke: obj({ tool: { type: 'string', enum: ['comb', 'cut', 'lengthen', 'puff'] }, path: { type: 'array', items: { type: 'number' } }, radius: { type: 'number' }, strength: { type: 'number' } }, ['tool', 'path', 'radius', 'strength']) }, ['id', 'stroke']),
+    authority: 'person',
+  },
+  {
+    name: 'scene_look',
+    description: 'How the whole scene is lit: the surroundings glass, metal and hair reflect ("studio" soft and even, "daylight" sky and sun, "sunset" warm and low, "night" dark and blue) and exposure (overall brightness, 0.3 to 2, default 1). Saved with the model; exported files do not carry it.',
+    inputSchema: obj({ environment: { type: 'string', enum: ['studio', 'daylight', 'sunset', 'night'] }, exposure: { type: 'number', minimum: 0.3, maximum: 2 } }),
   },
   {
     name: 'shape_resize',
@@ -420,6 +488,14 @@ export function runDocTool(ctx: ToolContext, name: string, rawArgs: unknown): To
       return done(ops.sculptLoft(doc, ids, a as unknown as ops.LoftArgs));
     case 'sculpt_smooth':
       return done(ops.smoothShape(doc, a as unknown as ops.SmoothArgs));
+    case 'surface_set':
+      return done(ops.setSurface(doc, a as ops.SurfaceArgs));
+    case 'hair_set':
+      return done(ops.setHair(doc, a as ops.HairArgs));
+    case 'hair_groom':
+      return done(ops.groomHair(doc, a as unknown as ops.GroomArgs));
+    case 'scene_look':
+      return done(ops.setLook(doc, a));
     case 'shape_resize':
       return done(ops.resizeShape(doc, a as { id: string }));
     case 'face_set':

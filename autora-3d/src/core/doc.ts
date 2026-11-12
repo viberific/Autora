@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Body3D, LibraryItem, Point2D, RepeatLink, ShapeGroup } from '../types';
+import { Body3D, LibraryItem, Point2D, RepeatLink, SceneLook, ShapeGroup } from '../types';
 import { syncInstances } from '../utils/library';
 import { normalizeGroups } from '../utils/groups';
 import { syncRepeats } from '../utils/repeat';
@@ -16,6 +16,8 @@ export interface Doc {
   repeats: RepeatLink[];
   /** Reusable objects kept in this project. Placed copies (groups with `place`) follow them. */
   library: LibraryItem[];
+  /** How the scene is lit (absent: the studio light). */
+  look?: SceneLook;
 }
 
 /** Makes ids. Each caller supplies its own so ids stay unique (the app uses time, an agent session a counter). */
@@ -60,7 +62,8 @@ export function parseDoc(raw: unknown): Doc | null {
   if (!raw || typeof raw !== 'object') return null;
   const d = raw as Partial<Doc>;
   if (!Array.isArray(d.bodies) || !Array.isArray(d.groups)) return null;
-  return settle({ bodies: d.bodies, groups: d.groups, repeats: Array.isArray(d.repeats) ? d.repeats : [], library: Array.isArray(d.library) ? d.library : [] });
+  const look = d.look && typeof d.look === 'object' && typeof d.look.environment === 'string' ? { look: d.look } : {};
+  return settle({ bodies: d.bodies, groups: d.groups, repeats: Array.isArray(d.repeats) ? d.repeats : [], library: Array.isArray(d.library) ? d.library : [], ...look });
 }
 
 /** A counter-based id generator that never reuses an id already in `doc`. */

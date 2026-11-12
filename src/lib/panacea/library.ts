@@ -14,7 +14,7 @@
  * Shared by the server and the page, so written without DOM or Node types.
  */
 import { MUSIC_TRACK } from "./apps/music";
-import { MATERIALS, MODEL_PART } from "./apps/model";
+import { LIGHTS, MATERIALS, MODEL_PART, PATTERN_KINDS } from "./apps/model";
 import { VIDEO_CLIP } from "./apps/video";
 import { GAME_OBJECT } from "./apps/game";
 import { INSTRUMENTS, NOTE_NAMES, SCALE_NAMES } from "../studio/model";
@@ -252,14 +252,19 @@ const VIDEO: Recipe[] = [
   r("video", "broll", "B-roll ideas", "ask for shots to cut in", "b-roll ideas shots cutaway", row(ask("Suggest b-roll", "Suggest b-roll shots that would fit this edit."), ask("Where to cut", "Where would cuts help the pacing?"))),
 ];
 
-// Every control here acts on the model in Autora 3D (src/lib/panacea/apps/model.ts), on the part picked in its Part list.
-// The modeller has no absolute rotation, light, camera, environment, render quality or printer path, so there are no
-// panels for them. Shapes and Export hold what the person picked for the agent to act on.
+// Every control here acts on the model in Autora 3D (src/lib/panacea/apps/model.ts), on the part picked in its Part list
+// (Light acts on the whole scene). The modeller has no absolute rotation, camera, render quality or printer path, so there
+// are no panels for them. Shapes and Export hold what the person picked for the agent to act on. Hair has no grooming
+// brush here: styling it by hand is the person's, in the 3D window's Hair card.
 const PART = () => sel(MODEL_PART, "Part", "parts");
 const THREE_D: Recipe[] = [
   r("3d", "move", "Position", "where a part sits", "position move transform translate", stack(PART(), sl("model.x", "X", { min: -500, max: 500, centre: true, unit: "mm" }), sl("model.y", "Y", { min: -500, max: 500, centre: true, unit: "mm" }), sl("model.z", "Z (underside)", { min: -500, max: 500, centre: true, unit: "mm" }))),
   r("3d", "size", "Size", "how big a part is", "scale size resize width depth height", stack(PART(), sl("model.width", "Width", { min: 1, max: 500, unit: "mm" }), sl("model.depth", "Depth", { min: 1, max: 500, unit: "mm" }), sl("model.height", "Height", { min: 1, max: 500, unit: "mm" }))),
-  r("3d", "material", "Material", "colour and finish", "material colour finish metal glass glossy", stack(PART(), col("model.color", "Colour"), seg("model.material", "Finish", [...MATERIALS]))),
+  r("3d", "material", "Material", "colour and finish", "material colour finish metal glass glossy velvet skin rubber", stack(PART(), col("model.color", "Colour"), sel("model.material", "Finish", [...MATERIALS]), sl("model.roughness", "Roughness", { min: 0, max: 1, step: 0.01 }), sl("model.metal", "Metal", { min: 0, max: 1, step: 0.01 }), adv(sl("model.sheen", "Sheen", { min: 0, max: 1, step: 0.01 })), adv(sl("model.through", "Light through", { min: 0, max: 1, step: 0.01 })), adv(sl("model.glow", "Glow", { min: 0, max: 5, step: 0.05 })), adv(sl("model.opacity", "Opacity", { min: 0.05, max: 1, step: 0.01 })))),
+  r("3d", "glass", "Glass", "clear, frosted or tinted", "glass clear transparent frosted water crystal refraction ior", stack(PART(), sl("model.clear", "Clear", { min: 0, max: 1, step: 0.01 }), sl("model.roughness", "Frost", { min: 0, max: 1, step: 0.01 }), sl("model.ior", "Bends light", { min: 1, max: 2.5, step: 0.01 }), col("model.color", "Tint"))),
+  r("3d", "texture", "Texture", "a pattern on the surface", "texture pattern wood marble fabric scales checker surface", stack(PART(), sel("model.pattern", "Pattern", [...PATTERN_KINDS]), col("model.patterncolor", "Second colour"), sl("model.patternsize", "Size", { min: 5, max: 400, unit: "mm" }), sl("model.relief", "Relief", { min: 0, max: 1, step: 0.01 }))),
+  r("3d", "hair", "Hair", "hair or fur that grows on a part", "hair fur strands coat mane beard grass fluffy", stack(PART(), tg("model.hair", "Hair"), seg("model.hairstyle", "Style", ["strands", "fur"]), sl("model.hairlength", "Length", { min: 1, max: 400, unit: "mm" }), sl("model.hairdensity", "Density", { min: 0.2, max: 80, step: 0.1 }), sl("model.haircurl", "Curl", { min: 0, max: 1, step: 0.01 }), col("model.haircolor", "Root colour"), col("model.hairtip", "Tip colour"), adv(sl("model.hairfrizz", "Frizz", { min: 0, max: 1, step: 0.01 })), adv(sl("model.hairlocks", "Locks", { min: 0, max: 1, step: 0.01 })), adv(sl("model.hairdroop", "Droop", { min: 0, max: 1, step: 0.01 })))),
+  r("3d", "environment", "Light", "how the scene is lit", "light lighting environment studio daylight sunset night brightness", stack(seg("model.light", "Surroundings", [...LIGHTS]), sl("model.brightness", "Brightness", { min: 0.3, max: 2, step: 0.05 }))),
   r("3d", "bevel", "Bevel", "round or flatten the edges", "bevel round edges fillet chamfer", stack(PART(), sl("model.bevel", "Size", { min: 0, max: 20, step: 0.5, unit: "mm" }), seg("model.bevelstyle", "Style", ["round", "chamfer"]))),
   r("3d", "array", "Repeat", "copies in a row", "array repeat copies pattern", stack(PART(), st("model.count", "Copies", { min: 1, max: 50 }), sl("model.gap", "Spacing", { min: 1, max: 200, unit: "mm" }), sl("model.dir", "Direction", { min: 0, max: 359, unit: "°" }))),
   r("3d", "parts", "Parts", "pick a part, show or hide it", "parts outliner objects list visible hide", stack(PART(), tg("model.visible", "Shown"))),

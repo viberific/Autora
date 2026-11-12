@@ -498,6 +498,18 @@ export async function runCadTool(
       given.commands = given.commands.map((c: any) =>
         c && typeof c.tool === "string" ? { ...c, tool: c.tool.replace(/^cad_/, "") } : c);
     }
+    // A picture for a surface is named the same way; it reaches the model as the picture itself, never through the conversation.
+    try {
+      if (name === "surface_set") readPicture(given, hooks.cwd ?? process.cwd());
+      if (name === "batch" && Array.isArray(given.commands)) {
+        for (const c of given.commands as Array<{ tool?: unknown; args?: Record<string, unknown> }>) {
+          if (c?.tool === "surface_set" && c.args && typeof c.args === "object") c.args = readPicture({ ...c.args }, hooks.cwd ?? process.cwd());
+        }
+      }
+    } catch (err) {
+      if (err instanceof FileRefError) return { ok: false, summary: err.message };
+      throw err;
+    }
     if (name === "mesh_import" && typeof given.file === "string" && given.data === undefined) {
       // The model names a file; the bytes never go through the conversation.
       try {
@@ -594,6 +606,18 @@ export function cadModel(session: string): ModelDoc | null {
   return (entries.get(session)?.engine?.getDoc() as unknown as ModelDoc | undefined) ?? null;
 }
 
+/** A surface_set's `image` names a file (an artifact or a path): it becomes the picture, as a data URL, before the model sees it. */
+function readPicture(args: Record<string, unknown>, cwd: string): Record<string, unknown> {
+  const ref = args.image;
+  if (typeof ref !== "string" || ref.startsWith("data:")) return args;
+  const f = readFileRef(ref, cwd, "picture", "cad_surface_set");
+  const png = f.data[0] === 0x89 && f.data[1] === 0x50 && f.data[2] === 0x4e && f.data[3] === 0x47;
+  const jpg = f.data[0] === 0xff && f.data[1] === 0xd8;
+  if (!png && !jpg) throw new FileRefError(`${f.name} is not a PNG or a JPEG; a surface's picture must be one.`);
+  args.image = `data:image/${png ? "png" : "jpeg"};base64,${f.data.toString("base64")}`;
+  return args;
+}
+
 /** Which of the model's tools exist, for the capability briefing. */
 export function cadBriefing(on: boolean): string {
   if (!on) {
@@ -605,6 +629,7 @@ export function cadBriefing(on: boolean): string {
     "the extruded shapes cannot make those, so for organic forms build them or import a free CC0 mesh). " +
     "cad_sculpt_blend makes ONE smooth organic shape by melting spheres, tapered capsules and ellipsoids together (an animal's body, neck, head and legs; mirror reflects half of it), " +
     "cad_sculpt_loft a smooth tube through changing cross-sections (a leg, tail, horn), and cad_sculpt_smooth evens out any mesh shape. " +
+    "cad_surface_set: glass, velvet, skin, patterns, pictures; cad_hair_set: hair or fur (the person grooms it); cad_scene_look: the light. " +
     "Shapes are flat outlines pushed up to a height, in millimetres, x right, y away, z up. Model what the person asks to " +
     "make, print or design with these, not code. The window opens beside the chat on first use and the person can work " +
     "in it too: call cad_scene_get again before relying on what you saw earlier. Check a part with cad_shape_measure " +

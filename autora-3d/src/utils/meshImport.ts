@@ -4,6 +4,7 @@
  */
 
 import * as THREE from 'three';
+import { imageDataUrl, MAX_IMAGE_BYTES } from './surface';
 import { Body3D, MeshData, Point2D } from '../types';
 
 // Reads a triangle mesh from a file (GLB/glTF, OBJ or STL) and turns it into a shape. No DOM, so the headless engine and the
@@ -17,6 +18,10 @@ export interface RawMesh {
   indices: number[];
   /** A colour the file gave (glTF base colour), as #rrggbb. */
   color?: string;
+  /** Where each vertex sits on the file's picture (u, v pairs), when every part of it had a layout. */
+  uvs?: number[];
+  /** The file's base colour picture, as a data URL (glTF `baseColorTexture`, PNG or JPEG inside the file). */
+  image?: string;
 }
 
 /** Most triangles a shape keeps. A mesh with more is simplified (vertex clustering), which keeps its silhouette. */
@@ -97,30 +102,38 @@ function joinSeams(mesh: RawMesh): RawMesh {
   const key = new Map<string, number>();
   const into = new Array<number>(mesh.positions.length / 3);
   const positions: number[] = [];
+  const uvs = mesh.uvs && mesh.uvs.length / 2 === into.length ? mesh.uvs : undefined;
+  const welded: number[] = [];
   for (let i = 0; i < into.length; i++) {
     const [x, y, z] = [mesh.positions[i * 3], mesh.positions[i * 3 + 1], mesh.positions[i * 3 + 2]];
-    const k = `${Math.round(x * 1e5)},${Math.round(y * 1e5)},${Math.round(z * 1e5)}`;
+    // With a picture's layout a seam in it stays a seam: two vertices at one place with different UVs are kept apart.
+    const at = uvs ? `,${Math.round(uvs[i * 2] * 1e5)},${Math.round(uvs[i * 2 + 1] * 1e5)}` : '';
+    const k = `${Math.round(x * 1e5)},${Math.round(y * 1e5)},${Math.round(z * 1e5)}${at}`;
     let n = key.get(k);
     if (n === undefined) {
       n = positions.length / 3;
       key.set(k, n);
       positions.push(x, y, z);
+      if (uvs) welded.push(uvs[i * 2], uvs[i * 2 + 1]);
     }
     into[i] = n;
   }
   const indices = dropFlat(mesh.indices.map((i) => into[i]));
   const used = new Map<number, number>();
   const kept: number[] = [];
+  const keptUv: number[] = [];
   const out = indices.map((i) => {
     let n = used.get(i);
     if (n === undefined) {
       n = kept.length / 3;
       used.set(i, n);
       kept.push(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
+      if (uvs) keptUv.push(welded[i * 2], welded[i * 2 + 1]);
     }
     return n;
   });
-  return { ...mesh, positions: kept, indices: out };
+  const { uvs: _drop, ...rest } = mesh;
+  return { ...rest, positions: kept, indices: out, ...(uvs ? { uvs: keptUv } : {}) };
 }
 
 function dropFlat(indices: number[]): number[] {
@@ -237,7 +250,29 @@ function readGltf(data: Uint8Array): RawMesh {
 
   const positions: number[] = [];
   const indices: number[] = [];
+  const uvs: number[] = [];
+  let laidOut = true;
   let color: string | undefined;
+  let image: string | undefined;
+
+  /** The base colour picture a material names, when it is inside the file as a PNG or JPEG. */
+  const pictureOf = (materialIndex: number | undefined): string | undefined => {
+    const tex = materialIndex === undefined ? undefined : json.materials?.[materialIndex]?.pbrMetallicRoughness?.baseColorTexture;
+    if (!tex || (tex.texCoord ?? 0) !== 0) return undefined;
+    const img: Json | undefined = json.images?.[json.textures?.[tex.index]?.source];
+    if (!img) return undefined;
+    let bytes: Uint8Array | null = null;
+    if (typeof img.uri === 'string') {
+      const m = /^data:image\/(?:png|jpeg);base64,(.*)$/.exec(img.uri);
+      if (m) bytes = Uint8Array.from(atob(m[1]), (c) => c.charCodeAt(0));
+    } else if (img.bufferView !== undefined) {
+      const view: Json | undefined = json.bufferViews?.[img.bufferView];
+      const buf = view ? buffers[view.buffer] : undefined;
+      if (view && buf) bytes = buf.subarray(view.byteOffset ?? 0, (view.byteOffset ?? 0) + view.byteLength);
+    }
+    if (!bytes || bytes.length > MAX_IMAGE_BYTES) return undefined;
+    return imageDataUrl(bytes) ?? undefined;
+  };
 
   const take = (meshIndex: number, world: THREE.Matrix4) => {
     const mesh: Json = json.meshes?.[meshIndex];
@@ -252,6 +287,12 @@ function readGltf(data: Uint8Array): RawMesh {
         v.set(values[i], values[i + 1], values[i + 2]).applyMatrix4(world);
         positions.push(v.x, v.y, v.z);
       }
+      if (prim.attributes.TEXCOORD_0 !== undefined && laidOut) {
+        const t = read(prim.attributes.TEXCOORD_0).values;
+        // glTF's v runs down the picture; a texture's runs up.
+        for (let i = 0; i + 1 < t.length; i += 2) uvs.push(t[i], 1 - t[i + 1]);
+      } else laidOut = false;
+      if (!image) image = pictureOf(prim.material);
       const order = prim.indices !== undefined ? read(prim.indices).values : Array.from({ length: values.length / 3 }, (_, i) => i);
       const tri: number[] = [];
       if (mode === 4) tri.push(...order);
@@ -288,7 +329,8 @@ function readGltf(data: Uint8Array): RawMesh {
   const roots: number[] = scene?.nodes ?? (json.nodes ?? []).map((_: unknown, i: number) => i);
   for (const root of roots) visit(root, new THREE.Matrix4(), new Set());
   if (!roots.length && json.meshes?.length) json.meshes.forEach((_: unknown, i: number) => take(i, new THREE.Matrix4()));
-  return { positions, indices, color };
+  const layout = laidOut && uvs.length / 2 === positions.length / 3 && uvs.length > 0;
+  return { positions, indices, color, ...(layout ? { uvs } : {}), ...(layout && image ? { image } : {}) };
 }
 
 /** glTF colours are linear; the shape's colour is sRGB, as a colour picker shows it. */
@@ -336,7 +378,9 @@ export function simplify(mesh: RawMesh, max = MAX_TRIANGLES): RawMesh {
     const indices = dropFlat(mesh.indices.map((i) => remap[i]));
     if (indices.length / 3 <= max || cells < 8) {
       const positions = counts.flatMap((c, n) => [sums[n * 3] / c, sums[n * 3 + 1] / c, sums[n * 3 + 2] / c]);
-      return { ...mesh, positions, indices };
+      // Clustering merges vertices from all over a picture: its layout no longer fits, so it goes (and the picture with it).
+      const { uvs: _u, image: _i, ...rest } = mesh;
+      return { ...rest, positions, indices };
     }
     cells = Math.floor(cells * 0.85);
   }
@@ -368,6 +412,8 @@ export interface MeshShape {
   /** How many the file had, when it was simplified. */
   from?: number;
   color?: string;
+  /** The file's own picture, laid on by its own UVs (in `mesh.uvs`). */
+  image?: string;
 }
 
 /** The units a format is normally written in, relative to millimetres. */
@@ -421,7 +467,7 @@ export function placeMesh(raw: RawMesh, format: MeshFormat, at: MeshPlacement = 
     positions[i * 3 + 2] = r3((z[i] - lo[2]) * scale);
   }
   return {
-    mesh: { positions, indices: mesh.indices },
+    mesh: { positions, indices: mesh.indices, ...(mesh.uvs && mesh.uvs.length / 2 === n ? { uvs: mesh.uvs } : {}) },
     points: [
       { x: r3(cx - half.x), y: r3(cy - half.y) },
       { x: r3(cx + half.x), y: r3(cy - half.y) },
@@ -433,6 +479,7 @@ export function placeMesh(raw: RawMesh, format: MeshFormat, at: MeshPlacement = 
     triangles: mesh.indices.length / 3,
     ...(mesh.indices.length < raw.indices.length ? { from: total } : {}),
     color: raw.color,
+    ...(mesh.uvs && mesh.image ? { image: mesh.image } : {}),
   };
 }
 
@@ -450,6 +497,7 @@ export function meshGeometry(body: Body3D): THREE.BufferGeometry | null {
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  if (m.uvs && m.uvs.length === n * 2) geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(m.uvs), 2));
   geometry.setIndex(new THREE.BufferAttribute(n > 65535 ? new Uint32Array(m.indices) : new Uint16Array(m.indices), 1));
   return geometry;
 }
