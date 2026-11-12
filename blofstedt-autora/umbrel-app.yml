@@ -208,22 +208,10 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  3D models can now be made of much more than five finishes. A shape can be
-  clear or frosted glass, water, velvet, skin, rubber and more, with sliders
-  for roughness, metal, clarity, sheen, light shining through and glow. It can
-  carry a pattern drawn for you (wood, marble, fabric, scales, brushed metal,
-  checks, dots) or a picture of your own, with grey pictures for relief and
-  for rough and polished patches, and a GLB you bring in keeps its texture. Any shape can grow hair or fur: choose length, density, curl, locks
-  and colours, then comb, cut, lengthen or puff it yourself with the new
-  grooming brush, mirrored to the other side if you like. Hair rests on the
-  shapes it falls onto instead of passing through them. The scene can be lit as a studio, daylight, a sunset or
-  night. GLB exports carry the glass, cloth, glow, textures and hair to game
-  engines (hair is thinned to a size engines take, or left out if you ask).
-  Hair regrows once a slider stops, so dragging stays smooth, and a picture
-  is uploaded once rather than with every edit. The agent can set all of this for you, and Panacea's 3D panels
-  have new Glass, Texture, Hair and Light controls. Anything you model can
-  now go into your game as a 3D object with real physics (it falls, rolls,
-  bounces and collides): send it from the 3D window or ask for it, say how
-  it should feel (heavy, bouncy, slippery, stays put) and fine-tune it in
-  Panacea's 3D physics panel. It keeps following the model as you change it.
-  Pictures, sounds and models you add to a game now load when you press Play.
+  Autora Pages and Autora Sheets now show their formatting tools right beside
+  what you are working on, not in a fixed bar on the right. Nothing appears
+  until you interact with the document or spreadsheet; then the card comes to
+  the cursor with the tools that apply. For Sheets the formula bar travels with
+  the card when you edit a cell. Highlighting text or selecting cells adds an
+  Ask Autora button to the card — type an instruction and it runs directly on
+  the selection.

@@ -19,8 +19,14 @@
   let phone = false;
   try { phone = new URLSearchParams(location.search).get("phone") === "1"; } catch { /* no address: the desktop editor */ }
   const root = document.documentElement;
-  root.classList.add("autora-rail-ui", phone ? "autora-phone" : "autora-desktop");
   const app = /\/(docs|sheets|slides)\//.exec(location.pathname)?.[1] ?? "docs";
+  /* Pages and Sheets on a desktop have no bar at all: their tools are a card that comes to what the person picks, beside it and
+     never over it, and goes when the pick does (docs/TOOL-RAIL.md, "Pages and Sheets: the card"). Sheets' formula bar rides in
+     that card. Slides, and every phone, keep the bar. */
+  const card = !phone && (app === "docs" || app === "sheets");
+  root.classList.add("autora-rail-ui", phone ? "autora-phone" : card ? "autora-card" : "autora-desktop", `autora-${app}`);
+  /* Last pointer-up position over the editor canvas: the card opens here (sheets = last click on grid; docs = end of selection). */
+  let lastPointer = null;
 
   const css = `
     html.autora-rail-ui .ribbon, html.autora-rail-ui header.excel-header { max-height: 0 !important; min-height: 0 !important; overflow: hidden !important; visibility: hidden; border: 0 !important; padding: 0 !important; }
@@ -51,6 +57,22 @@
     html.autora-phone .ribbon-tab { min-height: 40px; padding: 0 12px; border-radius: 12px; }
     html.autora-phone .slide-list { width: 76px !important; min-width: 0 !important; }
     html.autora-phone .thumb-resizer, html.autora-phone .notes-pane { display: none !important; }
+    /* The card (Pages and Sheets on a desktop): nothing on screen until something is picked; then one small card beside the pick. */
+    html.autora-card aside.styles-pane, html.autora-card aside.comments-pane, html.autora-card aside.format-pane { right: 12px; top: 12px; bottom: 12px; width: 300px !important; }
+    html.autora-card aside.nav-pane { left: 12px; top: 12px; bottom: 12px; }
+    html.autora-card.rail-ribbon .ribbon, html.autora-card.rail-ribbon header.excel-header { left: var(--rb-x, 8px); top: var(--rb-y, 8px); width: min(680px, calc(100vw - 16px)); }
+    html.autora-card #autora-rail { left: 0; top: 0; flex-direction: row; flex-wrap: wrap; justify-content: flex-start; max-width: min(436px, calc(100vw - 16px)); gap: 2px; padding: 4px; border-radius: 12px;
+      opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .12s, visibility 0s .12s; }
+    html.autora-card #autora-rail[data-open="1"] { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity .12s; }
+    html.autora-card.autora-sheets #autora-rail { width: min(436px, calc(100vw - 16px)); }
+    html.autora-card #autora-rail button.rb { width: 30px; height: 30px; }
+    html.autora-card #autora-rail button.rb svg { width: 16px; height: 16px; }
+    html.autora-card #autora-rail button.rb[data-need="0"] { display: none; }
+    html.autora-card #autora-rail .div { width: 1px; height: 20px; margin: 0 2px; align-self: center; }
+    html.autora-card #autora-rail .fx-slot { flex: 0 0 100%; height: var(--fx-h, 28px); }
+    /* Sheets' formula bar (Univer's own, name box and all) leaves its strip at the top and sits in the card's first row; out of sight with the card. */
+    html.autora-card [data-u-comp="formula-bar"] { position: fixed !important; z-index: 72; left: -10000px; top: 0; width: var(--fx-w, 428px) !important; box-sizing: border-box; border-radius: 8px; overflow: hidden; }
+    html.autora-card.fx-on [data-u-comp="formula-bar"] { left: var(--fx-x); top: var(--fx-y); }
     @keyframes autora-flash { 0%, 100% { box-shadow: 0 0 0 0 rgba(110,91,255,0); } 30% { box-shadow: 0 0 0 4px rgba(110,91,255,.85); } }
     .autora-flash { animation: autora-flash 1.4s ease-in-out 2; border-radius: 6px; }
 
@@ -100,6 +122,24 @@
     .ar-pin { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer; background: transparent; color: #7a8297; }
     .ar-pin svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     .ar-pin.on { color: #fff; background: var(--tc); }
+
+    /* Ask Autora button and popover (card mode: appears when there is a selection). */
+    #autora-ask-btn { flex: none; display: flex; align-items: center; gap: 4px; padding: 0 10px; height: 30px; border: 0; border-radius: 999px; background: linear-gradient(135deg,#6e5bff,#2563eb); color: #fff; font: 600 11.5px/1 inherit; cursor: pointer; white-space: nowrap; }
+    html.autora-card #autora-ask-btn { height: 26px; font-size: 11px; }
+    #autora-ask-btn svg { width: 14px; height: 14px; fill: none; stroke: none; }
+    #autora-ask-btn:hover { opacity: .9; }
+    #autora-ask-pop { position: fixed; z-index: 100; background: #0e1016; border: 1px solid rgba(255,255,255,.18); border-radius: 14px; padding: 10px 12px; box-shadow: 0 20px 50px -10px #000; width: min(300px,calc(100vw - 24px)); display: flex; flex-direction: column; gap: 8px; font-family: inherit; }
+    #autora-ask-pop-title { font-size: 12px; font-weight: 600; color: #edeff5; }
+    #autora-ask-pop-sub { font-size: 11px; color: #7a8297; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #autora-ask-input { background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12); border-radius: 8px; padding: 7px 10px; color: #edeff5; font: inherit; font-size: 12.5px; outline: none; width: 100%; box-sizing: border-box; }
+    #autora-ask-input:focus { border-color: rgba(110,91,255,.6); box-shadow: 0 0 0 3px rgba(110,91,255,.18); }
+    #autora-ask-foot { display: flex; gap: 6px; justify-content: flex-end; }
+    #autora-ask-foot button { border: 0; border-radius: 8px; padding: 5px 12px; font: inherit; font-size: 12px; cursor: pointer; }
+    .ask-cancel { background: rgba(255,255,255,.06); color: #98a1b6; }
+    .ask-cancel:hover { background: rgba(255,255,255,.12); }
+    .ask-send { background: #6e5bff; color: #fff; font-weight: 500; }
+    .ask-send:hover:not(:disabled) { background: #5a48e8; }
+    .ask-send:disabled { opacity: .4; cursor: default; }
   `;
   const style = document.createElement("style");
   style.textContent = css;
@@ -193,7 +233,7 @@
 
   /* ------------------------------------------------------------ the editor's own buttons */
   const named = (el) => ["data-tip", "aria-label", "title"].map((a) => (el.getAttribute(a) || "").trim().toLowerCase()).filter(Boolean);
-  const mine = (el) => el.closest("#autora-rail, #autora-grid") || el.classList.contains("ai-entry");
+  const mine = (el) => el.closest("#autora-rail, #autora-grid, #autora-ask-pop") || el.classList.contains("ai-entry");
   /** The editor's button whose name starts with one of `starts`, never one of ours and never an AI one. */
   function find(starts) {
     for (const el of document.querySelectorAll("button, [role=button]")) {
@@ -291,7 +331,17 @@
   function setAnchor(on) { root.classList.toggle("rail-ribbon", on); }
   let busy = false;
   /** Press a tool: the editor's own button, on the right ribbon tab, with a drop-down opening beside the bar. */
-  async function run(tool) {
+  /** In the card, the (unseen) ribbon is moved so the control about to be pressed sits where `at` is: its drop-down opens there, by the card. */
+  async function lineUp(el, at) {
+    const box = document.querySelector(".ribbon, header.excel-header");
+    if (!el || !box || !at) return;
+    await wait(30);
+    const r = el.getBoundingClientRect(), b = box.getBoundingClientRect();
+    root.style.setProperty("--rb-x", `${Math.round(at.left - (r.left - b.left))}px`);
+    root.style.setProperty("--rb-y", `${Math.round(at.top - (r.top - b.top))}px`);
+    await wait(30);
+  }
+  async function run(tool, at = null) {
     if (busy) return;
     busy = true;
     try {
@@ -303,6 +353,7 @@
       const el = tool.auto
         ? (controlsOfTab().find((c) => c.names.join("|") === tool.names.join("|") || c.label === tool.label) || {}).el
         : find(tool.starts);
+      if (card && opens) await lineUp(el, at || cardSpot());
       press(el);
       // A command that does not open anything leaves the Home tab as it found it, so the common tools can read their state again.
       if (tab !== "home" && !opens) { await wait(200); await showTab("home"); }
@@ -317,6 +368,105 @@
     setTimeout(() => { setAnchor(false); if (curTab !== "home") void showTab("home"); }, 400);
   }, true);
 
+  /* ---------------------------------------------------------------- card positioning (docs / sheets desktop) */
+  /*
+   * Ask Autora contract (host op: "ask-selection"):
+   *   payload: { app: "docs"|"sheets"|"slides", range: string, text: string, instruction: string }
+   *   The shell's OfficeWindow.tsx handles "ask-selection" by posting to /api/sessions/:id/message
+   *   with a prefixed user message: "[Autora App: range] instruction\n<selection>text</selection>"
+   *   Another engine opts in by calling window.__autora.host("ask-selection", payload) with the same shape.
+   */
+  function cardSpot() {
+    if (app === "docs") {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount) {
+        const r = sel.getRangeAt(0).getBoundingClientRect();
+        if (r.width || r.height) return r;
+      }
+    }
+    if (lastPointer) return { left: lastPointer.x, top: lastPointer.y, right: lastPointer.x, bottom: lastPointer.y, width: 0, height: 0 };
+    return null;
+  }
+
+  function placeCard(spot) {
+    if (!bar || !spot) return;
+    const margin = 10;
+    const cardW = bar.offsetWidth || 200;
+    const cardH = bar.offsetHeight || 48;
+    let left = spot.left;
+    let top = (spot.bottom != null ? spot.bottom : spot.top) + 10;
+    if (left + cardW > window.innerWidth - margin) left = Math.max(margin, window.innerWidth - cardW - margin);
+    if (top + cardH > window.innerHeight - margin) top = Math.max(margin, (spot.top || 0) - cardH - 10);
+    if (left < margin) left = margin;
+    bar.style.left = `${Math.round(left)}px`;
+    bar.style.top = `${Math.round(top)}px`;
+  }
+
+  function openCard(spot) {
+    if (!card || !bar) return;
+    if (spot) placeCard(spot);
+    bar.setAttribute("data-open", "1");
+  }
+
+  function closeCard() {
+    if (!card || !bar) return;
+    bar.setAttribute("data-open", "0");
+    root.classList.remove("fx-on");
+    closeAsk();
+  }
+
+  if (card) {
+    // Open the card when the person interacts with the grid (sheets) or the document (docs).
+    document.addEventListener("pointerup", (e) => {
+      if (!bar || !e.target || mine(e.target)) return;
+      const inWork = !!(
+        (app === "sheets" && e.target.closest?.("#univer-container, .spreadsheet, [data-u-comp]")) ||
+        (app === "docs" && e.target.closest?.(".ProseMirror, [contenteditable='true']"))
+      );
+      if (inWork) {
+        lastPointer = { x: e.clientX, y: e.clientY };
+        setTimeout(() => { const c = readContext(); if (c.doc) openCard(cardSpot()); }, 60);
+      }
+    }, true);
+
+    // Close when the person clicks outside both the editor and our card.
+    document.addEventListener("pointerdown", (e) => {
+      if (!bar || bar.getAttribute("data-open") !== "1" || !e.target || mine(e.target)) return;
+      const keepOpen = !!(
+        (app === "sheets" && e.target.closest?.("#univer-container, .spreadsheet, [data-u-comp]")) ||
+        (app === "docs" && e.target.closest?.(".ProseMirror, [contenteditable='true']"))
+      );
+      if (!keepOpen) setTimeout(closeCard, 50);
+    }, true);
+
+    // For docs: also open/update card position when the selection changes.
+    if (app === "docs") {
+      document.addEventListener("selectionchange", () => {
+        if (!bar) return;
+        const sel = window.getSelection();
+        const surface = document.querySelector(".ProseMirror");
+        if (sel && surface && sel.anchorNode && surface.contains(sel.anchorNode)) {
+          const spot = (() => {
+            if (!sel.rangeCount) return null;
+            const r = sel.getRangeAt(0).getBoundingClientRect();
+            return (r.width || r.height) ? r : null;
+          })();
+          if (spot) lastPointer = { x: spot.right || spot.left, y: spot.bottom || spot.top };
+          setTimeout(() => { const c = readContext(); if (c.doc) openCard(spot || cardSpot()); }, 50);
+        } else if (bar.getAttribute("data-open") === "1") {
+          setTimeout(() => {
+            const sel2 = window.getSelection();
+            const s2 = document.querySelector(".ProseMirror");
+            if (!sel2 || !s2 || !sel2.anchorNode || !s2.contains(sel2.anchorNode)) closeCard();
+          }, 200);
+        }
+      });
+    }
+
+    // Escape closes the card.
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && bar && bar.getAttribute("data-open") === "1" && !grid) closeCard(); }, true);
+  }
+
   /* ------------------------------------------------------- the bar follows the work */
   /*
    * What the work needs on the bar now (docs/TOOL-RAIL.md, "The bar follows the work"). A tool with a rule is there when its rule says so;
@@ -326,6 +476,7 @@
   const RULES = {
     docs: {
       // Words that are picked: what can be done to them.
+      bold: (c) => c.selected, italic: (c) => c.selected, underline: (c) => c.selected,
       strike: (c) => c.selected, highlight: (c) => c.selected, color: (c) => c.selected, larger: (c) => c.selected, smaller: (c) => c.selected,
       clearfmt: (c) => c.selected, painter: (c) => c.selected, cut: (c) => c.selected, copy: (c) => c.selected,
       // A paragraph with words in it: how it sits and is spaced; a list item or picked paragraphs: how far in.
@@ -409,10 +560,11 @@
     if (!RULES || !bar) return;
     const c = steady(readContext());
     reportPick(c);
-    let free = room();
+    // The card shows all needed tools with no space limit; the fixed bar respects room().
+    let free = card ? Infinity : room();
     for (const b of bar.querySelectorAll("button[data-tool]")) {
       const yes = needed(byId.get(b.dataset.tool), c) && free > 0;
-      if (yes) free--;
+      if (yes && free !== Infinity) free--;
       const want = yes ? "1" : "0";
       if (b.dataset.need !== want) b.dataset.need = want;
     }
@@ -458,6 +610,12 @@
   function drawBar() {
     if (!bar) return;
     bar.textContent = "";
+    // In the sheets card, the formula bar occupies the first full row.
+    if (card && app === "sheets") {
+      const fxSlot = document.createElement("div");
+      fxSlot.className = "fx-slot";
+      bar.appendChild(fxSlot);
+    }
     for (const id of RULES ? shownIds() : shownIds().slice(0, room())) {
       const tool = byId.get(id);
       const b = document.createElement("button");
@@ -470,12 +628,24 @@
       b.setAttribute("aria-label", tool.label);
       b.innerHTML = iconOf(tool);
       swallow(b);
-      b.addEventListener("click", () => void run(tool));
+      b.addEventListener("click", () => void run(tool, bar ? bar.getBoundingClientRect() : null));
       if (RULES) b.dataset.need = "1";
       bar.appendChild(b);
     }
     // Marked before the first frame is drawn, so nothing fades that was never in; a transition runs on each change from there.
     if (RULES) applyNeed();
+    // Ask Autora button: shown in the card when there is something selected.
+    if (card) {
+      const askBtn = document.createElement("button");
+      askBtn.type = "button";
+      askBtn.id = "autora-ask-btn";
+      askBtn.setAttribute("aria-label", "Ask Autora");
+      // Sparkle icon (filled paths, no stroke)
+      askBtn.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z" fill="currentColor"/><path d="M19 15l.85 2.3L22 18.15l-2.15.85L19 21.3l-.85-2.3-2.15-.85 2.15-.85L19 15z" fill="currentColor"/></svg>Ask Autora`;
+      swallow(askBtn);
+      askBtn.addEventListener("click", openAsk);
+      bar.appendChild(askBtn);
+    }
     const div = document.createElement("i");
     div.className = "div";
     bar.appendChild(div);
@@ -604,6 +774,71 @@
   function closeGrid() { grid?.remove(); grid = null; fillGrid = null; }
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && grid) closeGrid(); }, true);
 
+  /* ---------------------------------------------------------------- Ask Autora popover */
+  let askPop = null;
+  function openAsk() {
+    closeAsk();
+    const c = readContext();
+    const range = String(c.pick || "");
+    askPop = document.createElement("div");
+    askPop.id = "autora-ask-pop";
+    askPop.setAttribute("role", "dialog");
+    askPop.setAttribute("aria-label", "Ask Autora");
+    const title = document.createElement("div");
+    title.id = "autora-ask-pop-title";
+    title.textContent = "Ask Autora";
+    askPop.appendChild(title);
+    if (range) {
+      const sub = document.createElement("div");
+      sub.id = "autora-ask-pop-sub";
+      sub.textContent = range;
+      askPop.appendChild(sub);
+    }
+    const input = document.createElement("input");
+    input.type = "text";
+    input.id = "autora-ask-input";
+    input.placeholder = "What would you like to do?";
+    input.setAttribute("aria-label", "Instruction");
+    askPop.appendChild(input);
+    const foot = document.createElement("div");
+    foot.id = "autora-ask-foot";
+    const cancel = document.createElement("button");
+    cancel.type = "button"; cancel.className = "ask-cancel"; cancel.textContent = "Cancel";
+    cancel.addEventListener("click", closeAsk);
+    const send = document.createElement("button");
+    send.type = "button"; send.className = "ask-send"; send.textContent = "Send →";
+    send.disabled = true;
+    input.addEventListener("input", () => { send.disabled = input.value.trim().length === 0; });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.isComposing && !send.disabled) { e.preventDefault(); doAsk(input.value.trim(), range); }
+      if (e.key === "Escape") { e.preventDefault(); closeAsk(); }
+    });
+    send.addEventListener("click", () => { if (!send.disabled) doAsk(input.value.trim(), range); });
+    foot.appendChild(cancel); foot.appendChild(send);
+    askPop.appendChild(foot);
+    // Position below/above the bar.
+    if (bar) {
+      const br = bar.getBoundingClientRect();
+      const popW = Math.min(300, window.innerWidth - 24);
+      let popLeft = Math.max(8, Math.min(br.left, window.innerWidth - popW - 8));
+      const popBelow = br.bottom + 8;
+      const popAbove = br.top - 8 - 170; // estimated height
+      const top = popBelow + 170 <= window.innerHeight - 8 ? popBelow : Math.max(8, popAbove);
+      askPop.style.left = `${Math.round(popLeft)}px`;
+      askPop.style.top = `${Math.round(top)}px`;
+    }
+    document.body.appendChild(askPop);
+    setTimeout(() => input.focus(), 30);
+  }
+  function closeAsk() { askPop?.remove(); askPop = null; }
+  function doAsk(instruction, range) {
+    if (!instruction) return;
+    closeAsk();
+    try {
+      void window.__autora.host("ask-selection", { app, range, text: range, instruction }).catch(() => undefined);
+    } catch { /* no host */ }
+  }
+
   function build() {
     if (document.getElementById("autora-rail") || !document.body) return;
     bar = document.createElement("nav");
@@ -615,6 +850,31 @@
     setInterval(paint, 400);
     // Once the editor is up, read every command from the ribbon, unseen, so All tools has the lot.
     const ready = setInterval(() => { if (find(["undo"])) { clearInterval(ready); setTimeout(() => void scan(), 800); } }, 500);
+
+    // Sheets card: position the formula bar inside the card when a cell enters edit mode.
+    if (card && app === "sheets") {
+      document.addEventListener("focusin", (e) => {
+        if (!bar || bar.getAttribute("data-open") !== "1") return;
+        const fb = e.target && e.target.closest && e.target.closest("[data-u-comp='formula-bar']");
+        if (!fb) return;
+        const slot = bar.querySelector(".fx-slot");
+        if (slot) {
+          const sr = slot.getBoundingClientRect(), fbEl = document.querySelector("[data-u-comp='formula-bar']");
+          root.style.setProperty("--fx-x", `${Math.round(sr.left)}px`);
+          root.style.setProperty("--fx-y", `${Math.round(sr.top)}px`);
+          root.style.setProperty("--fx-w", `${Math.round(sr.width)}px`);
+          root.style.setProperty("--fx-h", `${Math.round(fbEl ? fbEl.offsetHeight : 32)}px`);
+        }
+        root.classList.add("fx-on");
+      }, true);
+      document.addEventListener("focusout", (e) => {
+        const fb = e.target && e.target.closest && e.target.closest("[data-u-comp='formula-bar']");
+        if (!fb) return;
+        setTimeout(() => {
+          if (!document.activeElement?.closest?.("[data-u-comp='formula-bar']")) root.classList.remove("fx-on");
+        }, 100);
+      }, true);
+    }
   }
   if (document.body) build();
   else document.addEventListener("DOMContentLoaded", build, { once: true });

@@ -176,6 +176,26 @@ export function OfficeWindow({ sessionId, kind, phone }: { sessionId: string; ki
               reply(true, {});
               break;
             }
+            case "ask-selection": {
+              // "Ask Autora" with a selection from the editor (Ask Autora contract in office/shim/rail.js).
+              // Sends a prefixed user message to this session's chat, starting a new turn.
+              const instruction = String(payload.instruction ?? "").trim();
+              const range = String(payload.range ?? "");
+              if (!instruction) { reply(true, {}); break; }
+              const appName = kind === "docx" ? "Pages" : kind === "xlsx" ? "Sheets" : "Slides";
+              const prefix = range ? `[Autora ${appName}: ${range}] ` : `[Autora ${appName}] `;
+              const selectedText = String(payload.text ?? "");
+              const body = selectedText
+                ? `${prefix}${instruction}\n<selection>\n${selectedText}\n</selection>`
+                : `${prefix}${instruction}`;
+              void fetch(`/api/sessions/${encodeURIComponent(sessionId)}/message`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text: body }),
+              }).catch(() => undefined);
+              reply(true, {});
+              break;
+            }
             case "export-pdf": {
               const res = await fetch(api("/pdf"), { method: "POST" });
               if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `the server answered ${res.status}`);
