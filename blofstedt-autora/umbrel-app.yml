@@ -221,4 +221,9 @@ releaseNotes: >-
   engines (hair is thinned to a size engines take, or left out if you ask).
   Hair regrows once a slider stops, so dragging stays smooth, and a picture
   is uploaded once rather than with every edit. The agent can set all of this for you, and Panacea's 3D panels
-  have new Glass, Texture, Hair and Light controls.
+  have new Glass, Texture, Hair and Light controls. Anything you model can
+  now go into your game as a 3D object with real physics (it falls, rolls,
+  bounces and collides): send it from the 3D window or ask for it, say how
+  it should feel (heavy, bouncy, slippery, stays put) and fine-tune it in
+  Panacea's 3D physics panel. It keeps following the model as you change it.
+  Pictures, sounds and models you add to a game now load when you press Play.

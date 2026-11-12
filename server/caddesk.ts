@@ -882,3 +882,71 @@ export function serveCad(app: Express, dist: string): void {
     ...staticDir(path.join(dist, "autora-3d"), { fallthrough: false }),
   );
 }
+
+// ------------------------------------------------------------------ to a game --
+
+type ModelBody = { id: string; name: string; visible: boolean; points: Array<{ x: number; y: number }>; extrusionHeight: number; elevation?: number; groupId?: string; repeatOf?: string; frame?: unknown };
+type ModelGroup = { id: string; name: string; bodyIds: string[] };
+
+/** A part of the chat's model as a game takes it: a GLB of the shapes (centred on the ground), its size, and what it was made of. */
+interface ModelForGame {
+  glb: Buffer;
+  /** Its size, mm: x across, y deep, z tall. */
+  size: { x: number; y: number; z: number };
+  /** The shapes it was made of (their ids), so it can be made again when they change. */
+  shapes: string[];
+  /** A name for it: the group's or the shape's, or "Model". */
+  name: string;
+}
+
+/**
+ * The shapes `pick` names in this chat's model (shape or group ids or names; nothing means everything visible), as one GLB a
+ * game can use. Shapes and their copies, groups whole, hidden ones left out. An error says what was not found.
+ */
+export async function modelForGame(session: string, pick: string[] = [], hair = true): Promise<ModelForGame | { error: string }> {
+  if (!validSession(session)) return { error: "Autora 3D needs a chat to work in." };
+  if (!cadAvailable()) return { error: "Autora 3D is not built on this server." };
+  const engine = await engineOf(session);
+  const doc = engine.getDoc() as unknown as { bodies: ModelBody[]; groups: ModelGroup[]; repeats: unknown[]; library: unknown[] };
+  const visible = doc.bodies.filter((b) => b.visible);
+  if (!visible.length) return { error: "The 3D model has nothing visible to send. Make or show something in Autora 3D first." };
+  const wanted = new Set<string>();
+  const missing: string[] = [];
+  let name = "";
+  for (const raw of pick) {
+    const p = raw.trim();
+    const group = doc.groups.find((g) => g.id === p || g.name.toLowerCase() === p.toLowerCase());
+    const body = doc.bodies.find((b) => b.id === p || b.name.toLowerCase() === p.toLowerCase());
+    if (group) { group.bodyIds.forEach((id) => wanted.add(id)); name ||= group.name; }
+    else if (body) { wanted.add(body.id); name ||= body.name; }
+    else missing.push(p);
+  }
+  if (missing.length) return { error: `The model has no shape or group called ${missing.map((m) => `"${m}"`).join(", ")}. Shapes: ${doc.bodies.filter((b) => !b.repeatOf).slice(0, 12).map((b) => b.name).join(", ")}; groups: ${doc.groups.map((g) => g.name).join(", ") || "none"}.` };
+  // A live repeat's copies go with their shape.
+  const chosen = pick.length ? visible.filter((b) => wanted.has(b.id) || (b.repeatOf && wanted.has(b.repeatOf))) : visible;
+  if (!chosen.length) return { error: "Those shapes are hidden; show them first." };
+  const c = await loadCore();
+  const ids = new Set(chosen.map((b) => b.id));
+  const part = c.parseDoc({ ...doc, bodies: chosen, groups: doc.groups.filter((g) => g.bodyIds.some((id) => ids.has(id))).map((g) => ({ ...g, bodyIds: g.bodyIds.filter((id) => ids.has(id)) })), repeats: [] });
+  if (!part) return { error: "That part of the model could not be read." };
+  const res = await new c.Engine(part).execute("export", { format: "glb", pivot: "asset", hair });
+  const out = res.result as { data?: string } | undefined;
+  if (!res.ok || !out?.data) return { error: asAgentSees(res.error ?? "The model could not be exported.") };
+  const xs = chosen.flatMap((b) => b.points.map((p) => p.x));
+  const ys = chosen.flatMap((b) => b.points.map((p) => p.y));
+  const lo = Math.min(...chosen.map((b) => b.elevation ?? 0));
+  const hi = Math.max(...chosen.map((b) => (b.elevation ?? 0) + b.extrusionHeight));
+  const round = (n: number) => Math.round(n * 100) / 100;
+  return {
+    glb: Buffer.from(out.data, "base64"),
+    size: { x: round(Math.max(...xs) - Math.min(...xs)), y: round(Math.max(...ys) - Math.min(...ys)), z: round(hi - lo) },
+    shapes: chosen.filter((b) => !b.repeatOf).map((b) => b.id),
+    name: name || (chosen.length === 1 ? chosen[0].name : "Model"),
+  };
+}
+
+/** Be told when a chat's model changes (any change, by anyone): what follows the model elsewhere (a game) updates from it. */
+export async function onModelChange(session: string, fn: () => void): Promise<() => void> {
+  const engine = await engineOf(session);
+  return engine.subscribe(() => fn());
+}

@@ -22,7 +22,7 @@ import {
 } from './types';
 import ModelViewer3D, { ViewerApi } from './components/ModelViewer3D';
 import { installBridge } from './core/bridge';
-import { embedded, useAutoraEmbed } from './embed';
+import { embedded, sendToGame, useAutoraEmbed } from './embed';
 import type { AgentHost } from './core/agent';
 import Sidebar from './components/Sidebar';
 import Rail, { type RailProps, usePhone } from './components/Rail';
@@ -942,7 +942,25 @@ export default function App() {
   }, []);
 
   // ---- Render -------------------------------------------------------------
+  // Inside Autora: what Autora says once the shapes are in the game.
+  useEffect(() => {
+    if (!embedded()) return;
+    const onDone = (e: MessageEvent) => {
+      const m = e.data as { autora3d?: string; text?: unknown } | null;
+      if (e.origin === window.location.origin && m?.autora3d === 'toGameDone' && typeof m.text === 'string') notify(m.text);
+    };
+    window.addEventListener('message', onDone);
+    return () => window.removeEventListener('message', onDone);
+  }, [notify]);
+
   const sidebarProps = {
+    onSendToGame: embedded()
+      ? (physics: 'none' | 'falls' | 'fixed') => {
+          const picked = selectedBodyIds.length ? selectedBodyIds : selectedBodyId ? [selectedBodyId] : [];
+          sendToGame(picked, physics);
+          notify('Sending to the game…');
+        }
+      : undefined,
     bodies,
     isolatedIds,
     selectedBodyId,

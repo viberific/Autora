@@ -158,6 +158,56 @@ export const gameSPECS: ToolSpec[] = [
     },
   },
   {
+    name: "game_from_model",
+    group: "files",
+    risky: true,
+    description:
+      "Bring part of this chat's Autora 3D model into the game as a 3D object (it keeps its look: colours, materials, textures), " +
+      "optionally with real 3D physics (rigid bodies on GDevelop's Jolt engine: it falls, collides, rolls, bounces, is pushed). " +
+      "`shapes` are 3D shape or group names or ids (none: everything visible). The object follows the model from then on: when " +
+      "the person changes those shapes in Autora 3D, the game's object is updated (its physics and placements stay). Call again with " +
+      "`object` to change its physics, size or shapes. `physics` describes how it should behave: `feel` is words (heavy, light, " +
+      "bouncy, dead, slippery, grippy, floaty, rolling, fixed, moved, upright) and numbers win over words: body (dynamic: falls and " +
+      "is pushed; static: never moves, like a floor or a wall; kinematic: moved by events), shape (box, sphere, capsule, cylinder, " +
+      "or mesh: the exact model, for a static body only), density, friction (0 to 1), bounce (0 to 1), gravity (times the world's), " +
+      "damping, upright (never tips). `physics: false` takes it off. `place` puts one in the scene (true: the middle of the screen; " +
+      "or {x, y, z} in pixels, z up); a dynamic body starts a little above the floor. `ground: true` adds a floor that stays put. " +
+      "`scale` is pixels per mm (default 1; GDevelop's physics counts 100 pixels as a metre). How it feels is the person's: suggest, " +
+      "and set what they ask; every number stays theirs to change in Panacea's 3D physics panel or the editor.",
+    parameters: {
+      type: "object",
+      properties: {
+        shapes: { type: "array", items: { type: "string" }, description: "3D shape or group names or ids. Default: everything visible." },
+        object: { type: "string", description: "The game object's name: a new one, or one made from the model before, to update it." },
+        scene: { type: "string", description: "The scene. Default: the first." },
+        physics: {
+          description: "How it behaves: words and numbers, or false to take physics off.",
+          oneOf: [
+            { type: "boolean", enum: [false] },
+            {
+              type: "object",
+              properties: {
+                feel: { type: "array", items: { type: "string", enum: ["heavy", "light", "bouncy", "dead", "slippery", "grippy", "floaty", "rolling", "fixed", "moved", "upright"] } },
+                body: { type: "string", enum: ["dynamic", "static", "kinematic"] },
+                shape: { type: "string", enum: ["box", "sphere", "capsule", "cylinder", "mesh"] },
+                density: { type: "number", minimum: 0.01, maximum: 100 },
+                friction: { type: "number", minimum: 0, maximum: 1 },
+                bounce: { type: "number", minimum: 0, maximum: 1 },
+                gravity: { type: "number", minimum: -5, maximum: 5 },
+                damping: { type: "number", minimum: 0, maximum: 10 },
+                upright: { type: "boolean" },
+              },
+            },
+          ],
+        },
+        place: { description: "Put one in the scene: true (the middle of the screen) or {x, y, z} in pixels. Default: true for a new object.", oneOf: [{ type: "boolean" }, { type: "object", properties: { x: { type: "number" }, y: { type: "number" }, z: { type: "number" } } }] },
+        ground: { type: "boolean", description: "Add a floor that stays put (once), so falling things land." },
+        scale: { type: "number", description: "Pixels per mm. Default 1." },
+        follow: { type: "boolean", description: "Keep following the 3D model (default true). false: the object stays as it is now." },
+      },
+    },
+  },
+  {
     name: "game_import",
     group: "files",
     description:

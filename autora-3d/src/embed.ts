@@ -28,6 +28,14 @@ import { halt, setBoardDraws, setWho, show, type Cue, type Who } from './agentCu
  */
 
 /** Whether this page is Autora's frame rather than a page of its own. */
+/**
+ * Asks Autora to bring shapes into the chat's game (Autora Games), with physics or without: frame -> parent
+ * { autora3d: 'toGame', shapes, physics }. Autora answers { autora3d: 'toGameDone', ok, text }.
+ */
+export function sendToGame(shapes: string[], physics: 'none' | 'falls' | 'fixed'): void {
+  window.parent.postMessage({ autora3d: 'toGame', shapes, physics }, window.location.origin);
+}
+
 export const embedded = (): boolean => {
   try {
     return new URLSearchParams(window.location.search).get('embed') === 'autora' && window.parent !== window;

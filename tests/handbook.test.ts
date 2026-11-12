@@ -165,6 +165,15 @@ await test("the 3D manual teaches surfaces, hair and light: where each control i
   assert.ok(!cad.includes("no textures are read"), "the manual no longer says textures are not read");
 });
 
+await test("the Games and 3D manuals teach the bridge: game_from_model, the feel words, following the model, the person's Send", () => {
+  const games = manualText("game");
+  for (const needle of ["game_from_model", "Physics3D", "bouncy", "physics:false", "ground:true", "follows the model", "mesh for a static body only", "3D physics panel"]) {
+    assert.ok(games.includes(needle), `the Games manual lacks "${needle}"`);
+  }
+  const cad = manualText("cad");
+  for (const needle of ["game_from_model", "Send to the game", "Stays put", "follows this model"]) assert.ok(cad.includes(needle), `the 3D manual lacks "${needle}"`);
+});
+
 await test("the 3D manual teaches the command log: who did what, history_log since a revision, and the person's own commands", () => {
   const cad = manualText("cad");
   for (const needle of ["Who did what", "cad_history_log", "since_revision", "the person's own hand and are not given to you", "history_revert"]) {

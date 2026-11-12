@@ -139,11 +139,20 @@ export function CadWindow({ sessionId, phone }: { sessionId: string; phone: bool
         void load();
       } else if (msg.autora3d === "changed" && msg.doc) {
         void save(msg.doc);
+      } else if (msg.autora3d === "toGame") {
+        // The person sent shapes to the game: Autora Games makes them an object (and opens beside this window).
+        const m = msg as { shapes?: unknown; physics?: unknown };
+        void fetch(`/api/game/${encodeURIComponent(sessionId)}/from-model`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ shapes: m.shapes, physics: m.physics }) })
+          .then(async (res) => {
+            const body = (await res.json().catch(() => null)) as { did?: string; error?: string } | null;
+            post({ autora3d: "toGameDone", ok: res.ok, text: res.ok ? "In the game. It follows this model as you change it." : body?.error ?? `Autora answered ${res.status}` });
+          })
+          .catch(() => post({ autora3d: "toGameDone", ok: false, text: "Could not reach Autora Games." }));
       }
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [load, post, save]);
+  }, [load, post, save, sessionId]);
 
   // What the agent did: the server says the model moved on, and who moved it.
   useEffect(

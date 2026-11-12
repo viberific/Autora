@@ -9,6 +9,7 @@ import {
   Boxes,
   Copy,
   Download,
+  Gamepad2,
   Eye,
   EyeOff,
   FileJson,
@@ -46,6 +47,8 @@ interface SidebarProps {
   onShowAll: () => void;
   /** Show only this section, without the header and tabs (used inside the bar menus). */
   section?: Tab;
+  /** Inside Autora: bring the picked shapes (or everything) into the chat's game, with physics or without. */
+  onSendToGame?: (physics: 'none' | 'falls' | 'fixed') => void;
 }
 
 export type Tab = 'properties' | 'material' | 'export';
@@ -167,7 +170,9 @@ export default function Sidebar({
   onIsolate,
   onShowAll,
   section,
+  onSendToGame,
 }: SidebarProps) {
+  const [gamePhysics, setGamePhysics] = useState<'none' | 'falls' | 'fixed'>('falls');
   const [tabState, setTab] = useState<Tab>('properties');
   const tab = section ?? tabState;
   const [exportNote, setExportNote] = useState<string | null>(null);
@@ -431,6 +436,22 @@ export default function Sidebar({
               </button>
             </div>
             {exportNote && <p className="text-xs text-amber-300">{exportNote}</p>}
+
+            {onSendToGame && (
+              // Into the chat's game: the object follows this model from then on.
+              <div className="mt-2 pt-4 border-t border-white/8 flex flex-col gap-2">
+                <div className="flex gap-1.5" role="group" aria-label="Physics in the game">
+                  {([['none', 'Just looks'], ['falls', 'Falls'], ['fixed', 'Stays put']] as const).map(([v, label]) => (
+                    <button key={v} type="button" aria-pressed={gamePhysics === v} onClick={() => setGamePhysics(v)} className={`h-8 px-3 rounded-full text-xs font-medium transition-colors ${gamePhysics === v ? 'bg-accent-500 text-white' : 'bg-white/6 text-slate-300 hover:bg-white/12'}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <button type="button" onClick={() => onSendToGame(gamePhysics)} disabled={bodies.length === 0} className={secondaryButton}>
+                  <Gamepad2 size={15} /> {selectedBodyIds.length || selectedBodyId ? 'Send the pick to the game' : 'Send to the game'}
+                </button>
+              </div>
+            )}
 
             <div className="mt-2 pt-4 border-t border-white/8 flex flex-col gap-2">
               <button type="button" onClick={onLoadDemo} className={secondaryButton}>

@@ -793,6 +793,23 @@ Spectra's fetched renderer is most of what is on disk.
   by `autora.css` under `html.autora-rail-ui`. Play runs in the window: the overlay `BrowserPreviewWindow.js`
   returns an iframe's window as the preview window. The Asset Store is gone from the Add object dialog, the effects
   dialog and the resource picker (patches), since it cannot load offline.
+  **From Autora 3D, with physics** (`src/lib/gamephysics.ts`, pure; `modelToGame` in `server/gamedesk.ts`; `modelForGame` in
+  `server/caddesk.ts`): `game_from_model` (and the 3D window's Export & file → Send to the game, `POST /api/game/:s/from-model`, which the
+  frame asks for with `{autora3d:'toGame'}` through `CadWindow.tsx`) exports the picked shapes (or everything visible) as a GLB centred on its
+  footprint on the ground, keeps it as a `model3D` resource, and makes or updates a `Scene3D::Model3DObject` (size = mm × `scale` px;
+  `rotationX` 90 stands a y-up GLB in GDevelop's z-up world; `originLocation` BottomCenterZ so an instance's z is where it stands, and
+  `centerLocation` ObjectCenter because Physics3D centres its body on the object's centre: with the model's origin it rests half its
+  height above the floor). Physics is GDevelop's `Physics3D::Physics3DBehavior` (Jolt), named `Physics3D` with `object3D: "Object3D"` (the
+  3D capability every 3D object has by default), from the person's words (`FEELS`) and numbers (`physicsOf`, which refuses a moving mesh
+  body: Jolt's mesh shapes are static only); the scene gets the shared world once (`{name, type, gravityX/Y/Z, worldScale}` as
+  GDevelop's Layout serialises it), `ground: true` a static Cube3D floor. A made object is a link in the game's saved `models` (shapes,
+  resource, scale): `followModel` watches the 3D engine (`onModelChange`) and `refreshFromModel` makes linked objects again 1.5 s after the
+  model is still, keeping physics and placements; a link whose shapes are gone stops. Panacea's "3D physics" Game panel binds
+  `game.body/weight/bounce/grip/fall/upright` on the picked body (`src/lib/panacea/apps/game.ts`). **Trap, fixed in `patches.mjs`:**
+  GDevelop's in-browser preview copier tracks only full URLs, so any file Autora keeps (`/api/game/<chat>/assets/...`: pictures, sounds,
+  models) was left out of a preview ("Copy not done") and failed to load; `copyFile` now fetches it and stores it with the preview.
+  Tests: `tests/game-physics.test.ts`; `tests/ui-game-physics.test.ts` plays it in GDevelop's engine and reads the body's height off the
+  page title as it falls, bounces and comes to rest.
 - `photo/` + `server/photodesk.ts`: **Autora Photo**, PhotoCraft (github.com/storytold/photocraft, MIT OR Apache-2.0; ArtCraft's name and
   logo are its authors') in a window beside the chat, and the agent's `photo_*` tools. PhotoCraft is a Rust image editor (layers, masks,
   adjustment layers, layer styles, type, brushes, real PSD files) with 500+ commands in one registry that its UI, its command line and its

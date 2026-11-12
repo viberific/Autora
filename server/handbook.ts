@@ -434,6 +434,9 @@ const CAD = [
   "  Light. cad_scene_look sets what the whole scene is lit by and reflects (studio, daylight, sunset, night) and its brightness (exposure 0.3 to 2); " +
     "the window's Light card has the same. Glass, metal and hair read by what they reflect, so try another light before blaming a material. It is " +
     "saved with the model and not exported.",
+  "  Into a game. game_from_model (a Games tool) brings shapes of this model into the chat's game as a 3D object, with real physics " +
+    "if asked; the person does the same from Export & file: Just looks, Falls or Stays put, then Send to the game (the picked shapes, or " +
+    "everything). The game's object follows this model from then on: change the shapes here and it is updated there, its physics kept.",
   "  Saving. The model is saved as you go; the window's top bar (Autora 3D, the count of shapes) also has Save, which keeps a copy in Artifacts as a GLB named after the chat, with the model itself beside it as a .model.json (what Load takes back; Load also adds a mesh file, see Meshes). cad_export is still yours for other formats.",
 ].join("\n");
 
@@ -456,6 +459,18 @@ const GAME = [
     "Back to the scene chip returns). Name a tool by its button and say \"open All tools\" if it is not on their bar. You have every part " +
     "of the game through the game_* tools whatever is shown. Visible work is not here yet for this window (nothing on its bar says so): " +
     "no cursor is played over a game you have already changed. The game is changed and the editor reloads it.",
+  "  3D models and physics. game_from_model brings shapes of the chat's Autora 3D model (by shape or group name; none means everything " +
+    "visible) into the game as a 3D object (Scene3D::Model3DObject, kept as a GLB resource, standing on its z, its size the model's mm in " +
+    "pixels at scale), with rigid-body physics on GDevelop's Physics3D behaviour (Jolt) when asked: physics.feel is the person's words " +
+    "(heavy, light, bouncy, dead, slippery, grippy, floaty, rolling, fixed, moved, upright) and numbers win (body dynamic, static or " +
+    "kinematic; shape box, sphere, capsule, cylinder, or mesh for a static body only; density, friction, bounce, gravity, damping, " +
+    "upright); physics:false takes it off. place puts one in the scene (a falling one starts above the floor), ground:true adds a static " +
+    "floor once, and the scene's shared physics world (gravity -9.8 on z, 100 pixels a metre) is made with the first body. The object " +
+    "follows the model: when those shapes change in Autora 3D it is made again (its physics and placements stay); call it again with " +
+    "object to change its physics or shapes, follow:false to let go. A 3D scene is seen from above by the default camera, so set a 3D " +
+    "camera for a side view. The person sends shapes from the 3D window's Export & file (Just looks, Falls or Stays put), and Panacea's " +
+    "3D physics panel (Body, Weight, Bounce, Grip, Gravity, Stays upright) moves the same numbers on the object picked. How it feels is " +
+    "theirs: suggest, set what they ask, never decide it for them.",
   "  Panacea's Game panels drive this same game: Movement and Physics change the movement behaviour (Platformer or Top-down) of one " +
     "object, chosen in the panel's Object list (else the first object that moves): Run speed, Jump (platformer only), Gravity " +
     "(platformer only) and Grip ↔ slippery, which is the behaviour's deceleration, so slippery is its braking taken away. Nothing " +
