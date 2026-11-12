@@ -1784,12 +1784,13 @@ export function App() {
   }, []);
   /* On a phone, reaching for the work gives it the screen: a touch on the board folds the conversation to its strip (a tap
      on the strip brings it back). The sheet covered half of a small screen while the person was trying to use what was
-     under it, and only its handle put it away. */
+     under it, and only its handle put it away. A window's own strip is not the work: its "Back to the conversation"
+     is how the person asks for the conversation, and must not fold it. */
   useEffect(() => {
     if (!phoneLayout || chatCollapsed) return;
     const reach = (event: PointerEvent) => {
       const target = event.target as HTMLElement | null;
-      if (!event.isTrusted || !target?.closest?.(".pa-board") || target.closest(".conversation-flow, .pw-jump-dock")) return;
+      if (!event.isTrusted || !target?.closest?.(".pa-board") || target.closest(".conversation-flow, .pw-jump-dock, .pdf-bar, .app-bar, .pw-engine-head")) return;
       setChatCollapsed(true);
     };
     document.addEventListener("pointerdown", reach, true);
