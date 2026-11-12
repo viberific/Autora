@@ -31,14 +31,37 @@ Fixed, with tests (`tests/ui-panacea-rest.test.ts`, `tests/panacea-rest.test.ts`
 | P2-15 | `office_create`'s description gives the real shape of a slide's `elements` |
 | **App-like windows** (asked for with the fix) | One strip per window (the app's bar is the title bar, the board's buttons at its right end); all controls fade unless the person is in the window |
 
-Not done, still open: P1-5's PDF window when its engine is missing; P1-7's sheet on a phone (does not retract on a tap, to-do
-header clipped) and the remaining small buttons inside the editors; P2-5's second name in the header; P2-6's file names in the
-dock's labels; P2-8's "Card colour" with nothing selected; P2-11; P2-12's empty bubble and where the finished list lands;
-P2-13's `document.pdf`; P2-14 (console errors from the fetched editors); P3-1 to P3-7. Also seen while fixing: with every
-editor built, these fail on `main` too, unchanged by this work: `ui-panacea-connect` ("Music has no node": a song can now go
-to Video), `ui-video` and `ui-pdfwindow` (they press Close and do not answer its "Close …?" question), `ui-office` (two
-"Hand back" buttons), `ui-office-rail`, `ui-office-phone`, `ui-office-engines`, `ui-immersive` (the Jump dock is hidden while a phone's window is full
-screen) and `toolbudget` (the briefing is 31,078 characters here against a budget of 29,000).
+Second pass (same release), after "did you fix everything?":
+
+| Finding | What changed |
+|---|---|
+| P1-5 (window half) | The PDF window says "The PDF editor is not installed on this server" in place of the editor; `installed.pdf` now needs the page and the engine |
+| P1-7 | A touch on the board folds a phone's conversation to its strip; on a phone the windows' controls do not fade (the way out of full screen was among them) |
+| P2-5 | One name in the header: the canvas's own name shows only when it differs from the chat's |
+| P2-6 | A Jump button's tip names the work ("Budget.xlsx (Spreadsheets)") |
+| P2-11 | A message the person sends takes the thread to its end, wherever they had scrolled |
+| P2-12 | A reply with nothing in it is not drawn as an empty bubble |
+| P2-13 | A composed PDF with no title is named by its first heading ("Lumen-one-pager.pdf") |
+| P2-14 | Sheets' font 404 fixed in the Office build (`office/vite/editor.mjs`); the PDF editor's four refused start-up commands answer 200 with the refusal (`NotHere`); a new video no longer logs "Project with id new not found" |
+| New, found while fixing | A saved song was offered to 3D and Games as a plain `.json` (`src/lib/loadable.ts`) |
+
+Tests that were failing on `main` with every editor built, now passing: `ui-video`, `ui-pdfwindow`, `ui-office`,
+`ui-office-phone`, `ui-panacea-connect`, `ui-immersive` (each was a stale expectation, except `connect`, which was the song
+bug above).
+
+Still open, and why:
+- **P2-8 "Card colour" with nothing selected: not a defect.** With no card selected it sets the colour of the next card
+  (`BoardView` `newCard`); I misread it. The counts in the Board panel still repeat the board's header.
+- **P2-14, Games:** GDevelop's editor still tries `api.gdevelop.io` (shop, assets, announcements) and the frame's policy
+  refuses it, by design; each refusal is logged by GDevelop itself. Silencing it means stubbing its network layer in the overlay.
+- **P2-12:** where the finished to-do list lands in the thread.
+- **P3-1** (no light theme: a product decision), **P3-2** (the context gauge has a tooltip but no label), **P3-4**, **P3-5**,
+  **P3-6**, **P3-7**.
+- **Not verified in a real browser:** the pointer over a window whose editor is a frame (PDF, Office, Video, Games). Headless
+  Chromium does not report it; those windows show their controls while the frame has the focus (`activeWin`).
+- **Tests still failing here and on `main`:** `ui-office-rail` and `ui-office-engines` (Playwright reports the editor's All
+  tools button "outside of the viewport" although it is on screen), and `toolbudget` (this machine's briefing is 31,078
+  characters against 29,000; the test's own notes put CI at about 28,800).
 
 ## How this was tested
 
