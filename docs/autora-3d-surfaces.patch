@@ -261,10 +261,10 @@ index 11eeba8..92ca129 100644
          const button = () => document.querySelector<HTMLElement>(`header button[aria-label="${undo ? 'Undo (⌘Z)' : 'Redo (⇧⌘Z)'}"]`);
          let presses = 0;
 diff --git a/autora-3d/src/components/ModelViewer3D.tsx b/autora-3d/src/components/ModelViewer3D.tsx
-index 17ba6c2..57a897b 100644
+index 17ba6c2..28174dd 100644
 --- a/autora-3d/src/components/ModelViewer3D.tsx
 +++ b/autora-3d/src/components/ModelViewer3D.tsx
-@@ -8,11 +8,12 @@ import * as THREE from 'three';
+@@ -8,11 +8,15 @@ import * as THREE from 'three';
  import { AnimatePresence, motion } from 'motion/react';
  import { BevelPicker, DrawChip, MeasureReadout, RepeatChip } from './FloatingControls';
  import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -275,11 +275,14 @@ index 17ba6c2..57a897b 100644
  import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 -import { BevelStyle, Body3D, EdgeSel, FaceSel, MATERIAL_PRESETS, DrawForm, DrawSession, Frame, Point2D, RepeatSession, ShapeGroup } from '../types';
 +import { BevelStyle, Body3D, EdgeSel, FaceSel, DrawForm, DrawSession, Frame, GroomStroke, Point2D, RepeatSession, SceneLook, ShapeGroup } from '../types';
-+import type { GroomBrush } from '../utils/hair';
++import { SCENE_STRANDS, type GroomBrush } from '../utils/hair';
++
++/** How long the model must be still before its hair is grown again. */
++const HAIR_SETTLE_MS = 160;
  import { withGroupMates } from '../utils/groups';
  import { Brush, SculptMesh } from '../utils/sculpt';
  import { buildBodyGeometry, buildBodyShape, featureEdges, getInteriorAnchor } from '../utils/bodyGeometry';
-@@ -162,6 +163,12 @@ export interface ModelViewer3DProps {
+@@ -162,6 +166,12 @@ export interface ModelViewer3DProps {
    onToggleMove?: () => void;
    /** Sculpting: while set, a press on this mesh shape works the surface with the brush instead of picking or moving it. */
    sculpt?: { bodyId: string; brush: Brush } | null;
@@ -292,7 +295,7 @@ index 17ba6c2..57a897b 100644
    /** A finished brush stroke: the shape's surface points after it (the person's own command, `sculpt_apply`). */
    onSculpt?: (id: string, positions: number[]) => void;
  }
-@@ -293,40 +300,6 @@ function clearGroup(group: THREE.Group) {
+@@ -293,40 +303,6 @@ function clearGroup(group: THREE.Group) {
    }
  }
  
@@ -333,7 +336,7 @@ index 17ba6c2..57a897b 100644
  /** Stands a shape on its wall (or leaves it upright). */
  function placeFrame(root: THREE.Group, body: Body3D) {
    root.matrixAutoUpdate = false;
-@@ -356,8 +329,6 @@ const bodySignature = (b: Body3D) =>
+@@ -356,8 +332,6 @@ const bodySignature = (b: Body3D) =>
      b.elevation,
      b.edgeBevels,
      b.cornerBevels,
@@ -342,7 +345,7 @@ index 17ba6c2..57a897b 100644
    ]);
  
  interface BodyEntry {
-@@ -367,6 +338,9 @@ interface BodyEntry {
+@@ -367,6 +341,9 @@ interface BodyEntry {
    group: THREE.Group;
    outline: THREE.LineSegments;
    signature: string;
@@ -352,7 +355,7 @@ index 17ba6c2..57a897b 100644
  }
  
  export default function ModelViewer3D({
-@@ -405,6 +379,9 @@ export default function ModelViewer3D({
+@@ -405,6 +382,9 @@ export default function ModelViewer3D({
    onFaceValue,
    sculpt,
    onSculpt,
@@ -362,15 +365,45 @@ index 17ba6c2..57a897b 100644
  }: ModelViewer3DProps) {
    const mountRef = useRef<HTMLDivElement | null>(null);
    /** The circle that shows how far the sculpt brush reaches; moved by the stroke code, not by React. */
-@@ -454,6 +431,7 @@ export default function ModelViewer3D({
+@@ -454,6 +434,37 @@ export default function ModelViewer3D({
    const popRef = useRef<{ start: number } | null>(null);
    const popKeyRef = useRef('');
    const invalidateRef = useRef<(shadows?: boolean) => void>(() => {});
 +  const applyLookRef = useRef<(look: SceneLook | undefined) => void>(() => {});
++  const hairTimer = useRef<number | undefined>(undefined);
++  useEffect(() => () => window.clearTimeout(hairTimer.current), []);
++
++  /**
++   * Grows the hair the model asks for, on the surfaces as they are now: only where it changed (its numbers, or the surface it
++   * grows from), sharing one strand budget between every shape with hair, so a scene of many furry things stays quick.
++   * Grown in one go after the model settles (HAIR_SETTLE_MS), keeping the old hair on screen until then.
++   */
++  const growHair = () => {
++    const entries = [...entriesRef.current.values()];
++    const strands = entries.filter((e) => e.body.hair && e.body.hair.style !== 'fur' && !e.signature.endsWith('|fast')).length;
++    const most = Math.max(200, Math.floor(SCENE_STRANDS / Math.max(1, strands)));
++    let grew = false;
++    for (const e of entries) {
++      const mesh = e.group.children[0] as THREE.Mesh;
++      const want = e.body.hair && !e.signature.endsWith('|fast') ? `${hairSignature(e.body)}|${most}` : '';
++      if (e.hair === want && e.group.userData.hairOn === mesh.geometry) continue;
++      e.group.children.filter((c) => c.userData.hair).forEach((c) => { e.group.remove(c); disposeObject(c); });
++      e.hair = want;
++      e.group.userData.hairOn = mesh.geometry;
++      grew = true;
++      if (!want) continue;
++      const grown = hairObject(mesh.geometry, e.body, most);
++      if (grown) {
++        grown.visible = !live.current.xray;
++        e.group.add(grown);
++      }
++    }
++    if (grew) invalidateRef.current(true);
++  };
    const refreshOutlinesRef = useRef<() => void>(() => {});
    const applyXrayRef = useRef<() => void>(() => {});
    const clearHoverRef = useRef<() => void>(() => {});
-@@ -505,6 +483,9 @@ export default function ModelViewer3D({
+@@ -505,6 +516,9 @@ export default function ModelViewer3D({
      onFaceValue,
      sculpt,
      onSculpt,
@@ -380,7 +413,7 @@ index 17ba6c2..57a897b 100644
    };
  
    // ---- Scene setup (once) -------------------------------------------------
-@@ -517,8 +498,10 @@ export default function ModelViewer3D({
+@@ -517,8 +531,10 @@ export default function ModelViewer3D({
  
      const scene = new THREE.Scene();
      // The background follows the theme (Autora sends its own when this is its window).
@@ -393,7 +426,7 @@ index 17ba6c2..57a897b 100644
  
      const camera = new THREE.PerspectiveCamera(40, width / height, 1, 4000);
      cameraRef.current = camera;
-@@ -538,15 +521,43 @@ export default function ModelViewer3D({
+@@ -538,15 +554,43 @@ export default function ModelViewer3D({
      container.appendChild(renderer.domElement);
      viewportSize.set(width, height);
  
@@ -443,7 +476,7 @@ index 17ba6c2..57a897b 100644
      key.shadow.mapSize.set(1536, 1536);
      key.shadow.camera.near = 50;
      key.shadow.camera.far = 1400;
-@@ -863,6 +874,8 @@ export default function ModelViewer3D({
+@@ -863,6 +907,8 @@ export default function ModelViewer3D({
          mesh.material = see ? mesh.userData.ghost : mesh.userData.solid;
          mesh.castShadow = !see;
          mesh.receiveShadow = !see;
@@ -452,7 +485,7 @@ index 17ba6c2..57a897b 100644
        });
        refreshOutlines();
        invalidate(true);
-@@ -915,6 +928,9 @@ export default function ModelViewer3D({
+@@ -915,6 +961,9 @@ export default function ModelViewer3D({
        } else if (hit?.type === 'edge') {
          cursor = 'pointer';
          text = 'Click to select this edge and bevel it · drag to move the shape';
@@ -462,7 +495,7 @@ index 17ba6c2..57a897b 100644
        } else if (hit?.type === 'body') {
          const onSelectedFace = sameFace(live.current.selectedFace, hit.face);
          cursor = onSelectedFace ? 'ns-resize' : 'move';
-@@ -1378,7 +1394,14 @@ export default function ModelViewer3D({
+@@ -1378,7 +1427,14 @@ export default function ModelViewer3D({
        const sc = live.current.sculpt;
        const entry = sc ? entriesRef.current.get(sc.bodyId) : undefined;
        const mesh = entry?.group.children.find((c): c is THREE.Mesh => c instanceof THREE.Mesh);
@@ -478,7 +511,16 @@ index 17ba6c2..57a897b 100644
      };
      /** Where a pointer at this spot meets the sculpted shape: in the world, and in the shape's own numbers (x, y, height). */
      const sculptHit = (clientX: number, clientY: number, mesh: THREE.Mesh, lift: number) => {
-@@ -1498,6 +1521,66 @@ export default function ModelViewer3D({
+@@ -1431,6 +1487,8 @@ export default function ModelViewer3D({
+       mesh.geometry.dispose();
+       mesh.geometry = geometry;
+       entry.outline.visible = false;
++      // The hair stood on the old surface: it goes while the surface moves, and grows back on the finished one.
++      entry.group.children.forEach((c) => { if (c.userData.hair) c.visible = false; });
+       const normal = camera.getWorldDirection(new THREE.Vector3()).negate();
+       stroke = { id: sc.bodyId, mesh, sm, attr, lift, pointerId: e.pointerId, last: hit.model, plane: new THREE.Plane().setFromNormalAndCoplanarPoint(normal, hit.world), start: hit.world, changed: false };
+       controls.enabled = false;
+@@ -1498,6 +1556,66 @@ export default function ModelViewer3D({
        }
        live.current.onDragStateChange?.(false);
      };
@@ -545,7 +587,7 @@ index 17ba6c2..57a897b 100644
      /** The brush circle follows the pointer over the shape when nothing is pressed. */
      const hoverRing = (e: PointerEvent) => {
        if (ringBusy) return;
-@@ -1506,15 +1589,16 @@ export default function ModelViewer3D({
+@@ -1506,15 +1624,16 @@ export default function ModelViewer3D({
        const y = e.clientY;
        requestAnimationFrame(() => {
          ringBusy = false;
@@ -564,7 +606,7 @@ index 17ba6c2..57a897b 100644
        trackTouchDown(e);
        pickPx = e.pointerType === 'touch' ? EDGE_PICK_TOUCH_PX : EDGE_PICK_PX;
        // A second finger means the user wants to orbit/pinch: abandon any one-finger drag.
-@@ -1573,7 +1657,11 @@ export default function ModelViewer3D({
+@@ -1573,7 +1692,11 @@ export default function ModelViewer3D({
          if (e.pointerId === stroke.pointerId) moveStroke(e);
          return;
        }
@@ -577,7 +619,7 @@ index 17ba6c2..57a897b 100644
        trackTouchMove(e);
        if (drag || candidate) pending = { x: e.clientX, y: e.clientY, shift: e.shiftKey };
        else if (e.pointerType === 'mouse' && e.buttons === 0) pendingHover = { x: e.clientX, y: e.clientY };
-@@ -1675,6 +1763,10 @@ export default function ModelViewer3D({
+@@ -1675,6 +1798,10 @@ export default function ModelViewer3D({
          endStroke(e, false);
          return;
        }
@@ -588,7 +630,7 @@ index 17ba6c2..57a897b 100644
        trackTouchUp(e);
        finishPointer(e, false);
      };
-@@ -1683,6 +1775,10 @@ export default function ModelViewer3D({
+@@ -1683,6 +1810,10 @@ export default function ModelViewer3D({
          endStroke(e, true);
          return;
        }
@@ -599,7 +641,7 @@ index 17ba6c2..57a897b 100644
        trackTouchUp(e);
        finishPointer(e, true);
      };
-@@ -1995,7 +2091,7 @@ export default function ModelViewer3D({
+@@ -1995,7 +2126,7 @@ export default function ModelViewer3D({
        entriesRef.current.clear();
        [bodyGroup, gizmoGroup, helperGroup, previewGroup, hoverGroup].forEach(clearGroup);
        [shadowCatcher, grid, axisX, axisY].forEach(disposeObject);
@@ -608,7 +650,7 @@ index 17ba6c2..57a897b 100644
        pmrem.dispose();
        renderer.dispose();
        renderer.domElement.remove();
-@@ -2025,6 +2121,28 @@ export default function ModelViewer3D({
+@@ -2025,6 +2156,18 @@ export default function ModelViewer3D({
        if (existing?.body === body && existing.signature.endsWith('|fast') === fast) return; // untouched object
        const signature = bodySignature(body) + (fast ? '|fast' : '');
        if (existing && existing.signature === signature) {
@@ -623,21 +665,11 @@ index 17ba6c2..57a897b 100644
 +          if (!live.current.xray) mesh.material = solid;
 +          existing.look = look;
 +        }
-+        const hair = hairSignature(body);
-+        if (existing.hair !== hair && !fast) {
-+          existing.group.children.filter((c) => c.userData.hair).forEach((c) => { existing.group.remove(c); disposeObject(c); });
-+          const grown = hairObject(mesh.geometry, body);
-+          if (grown) {
-+            grown.visible = !live.current.xray;
-+            existing.group.add(grown);
-+          }
-+          existing.hair = hair;
-+          invalidateRef.current(true);
-+        }
++        // A change to the hair alone: the old hair stays until it has settled (growHair).
          // Where a wall shape stands is not part of its geometry: a move arrives as a new frame, replacing the drag preview.
          if (JSON.stringify(existing.body.frame) !== JSON.stringify(body.frame)) {
            existing.group.position.set(0, 0, 0);
-@@ -2043,7 +2161,7 @@ export default function ModelViewer3D({
+@@ -2043,7 +2186,7 @@ export default function ModelViewer3D({
  
        const geometry = buildBodyGeometry(body, { fast });
        if (!geometry) return;
@@ -646,26 +678,21 @@ index 17ba6c2..57a897b 100644
        const mesh = new THREE.Mesh(geometry, solid);
        mesh.userData.solid = solid;
        mesh.userData.ghost = new THREE.MeshStandardMaterial({ color: body.color, roughness: 0.6, transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide });
-@@ -2058,11 +2176,17 @@ export default function ModelViewer3D({
-       const bodyGroup = new THREE.Group();
-       bodyGroup.userData.bodyId = id;
-       bodyGroup.add(mesh, outline);
-+      // Hair grows from the finished surface; while a shape is dragged (fast) it waits for the drop.
-+      const grown = fast ? null : hairObject(geometry, body);
-+      if (grown) {
-+        grown.visible = !live.current.xray;
-+        bodyGroup.add(grown);
-+      }
-       const root = new THREE.Group();
+@@ -2062,9 +2205,12 @@ export default function ModelViewer3D({
        root.add(bodyGroup);
        placeFrame(root, body);
        group.add(root);
 -      entries.set(id, { body, root, group: bodyGroup, outline, signature });
-+      entries.set(id, { body, root, group: bodyGroup, outline, signature, look: lookSignature(body), hair: fast ? '' : hairSignature(body) });
++      entries.set(id, { body, root, group: bodyGroup, outline, signature, look: lookSignature(body), hair: '' });
      });
      applyXrayRef.current();
++    // Hair is grown once the model has settled, not on every frame of a slider or a drag (see growHair).
++    window.clearTimeout(hairTimer.current);
++    hairTimer.current = window.setTimeout(growHair, HAIR_SETTLE_MS);
  
-@@ -2079,6 +2203,9 @@ export default function ModelViewer3D({
+     // A newly added shape may land outside the view: bring everything back into frame, keeping the angle.
+     const known = knownIdsRef.current;
+@@ -2079,6 +2225,9 @@ export default function ModelViewer3D({
    useEffect(() => {
      applyXrayRef.current();
    }, [xray, isSceneReady]);
@@ -675,7 +702,7 @@ index 17ba6c2..57a897b 100644
  
    const repeating = !!repeat;
    const drawing = !!draw;
-@@ -2604,8 +2731,8 @@ export default function ModelViewer3D({
+@@ -2604,8 +2753,8 @@ export default function ModelViewer3D({
    };
  
    useEffect(() => {
@@ -687,7 +714,7 @@ index 17ba6c2..57a897b 100644
    const handleSelectCameraAngle = useCallback((face: CubeFace) => frameViewRef.current(face), []);
  
 diff --git a/autora-3d/src/components/Rail.tsx b/autora-3d/src/components/Rail.tsx
-index 919cdc8..a1e428e 100644
+index 919cdc8..2f463fc 100644
 --- a/autora-3d/src/components/Rail.tsx
 +++ b/autora-3d/src/components/Rail.tsx
 @@ -37,6 +37,9 @@ import {
@@ -741,24 +768,43 @@ index 919cdc8..a1e428e 100644
      { id: 'sculpt', label: 'Sculpt', group: 'Shape', icon: Brush, color: C.draw, phone: true, desktop: true, on: openId === 'sculpt', disabled: !(props.selected.length === 1 && sculptable(props.selected[0])), hint: 'Select a mesh shape', run: toggleOpen('sculpt') },
      { id: 'edges', label: 'Pick edges', group: 'Shape', icon: SquareDashed, color: C.shape, on: openId === 'edges', disabled: mode !== 'edge', hint: 'Tap an edge of a shape', run: toggleOpen('edges') },
      { id: 'face', label: 'Push & pull', group: 'Shape', icon: Layers3, color: C.note, on: openId === 'face', disabled: mode !== 'face', hint: 'Tap a face of a shape', run: toggleOpen('face') },
-@@ -294,7 +315,10 @@ export default function Rail(props: RailProps) {
+@@ -212,6 +233,9 @@ export default function Rail(props: RailProps) {
+     if (t.id === 'shapes' || t.id === 'draw') return true;
+     if (t.id === 'library') return props.library.length > 0;
+     if (t.id === 'file') return props.bodyCount > 0;
++    // Texture and Hair stand on the bar once the shape has a pattern, a picture or hair; until then Material leads to them.
++    if (t.id === 'texture') return !t.disabled && !!(props.selected[0]?.surface?.pattern || props.selected[0]?.surface?.image);
++    if (t.id === 'hair') return !t.disabled && !!props.selected[0]?.hair;
+     return !t.disabled;
+   };
+   const wanted = ids.filter((id) => needed(byId.get(id)!));
+@@ -246,6 +270,8 @@ export default function Rail(props: RailProps) {
+ 
+   const press = (t: Tool) => { setGrid(false); t.run(); };
+   const sidebar = props.sidebar;
++  // A shape's own cards go with the shape: picked away, they close.
++  const one = props.selected.length === 1 && !props.group;
+   const panel = (() => {
+     switch (auto) {
+       case 'shapes':
+@@ -294,7 +320,10 @@ export default function Rail(props: RailProps) {
          );
        case 'size': return <SizePositionPanel {...props} />;
        case 'props': return <Sidebar {...sidebar} section="properties" />;
 -      case 'material': return <Sidebar {...sidebar} section="material" />;
-+      case 'material': return <MaterialPanel selected={props.selected} onSurface={props.onSurface} />;
-+      case 'texture': return <TexturePanel selected={props.selected} onSurface={props.onSurface} />;
-+      case 'hair': return <HairPanel selected={props.selected} onHair={props.onHair} groomBrush={props.groomBrush} onGroomBrush={props.onGroomBrush} groomOn={props.groomOn} onGroomOn={props.onGroomOn} />;
++      case 'material': return one ? <MaterialPanel selected={props.selected} onSurface={props.onSurface} onOpen={setOpenId} /> : null;
++      case 'texture': return one ? <TexturePanel selected={props.selected} onSurface={props.onSurface} /> : null;
++      case 'hair': return !one || props.selected[0].frame ? null : <HairPanel selected={props.selected} onHair={props.onHair} groomBrush={props.groomBrush} onGroomBrush={props.onGroomBrush} groomOn={props.groomOn} onGroomOn={props.onGroomOn} />;
 +      case 'light': return <LightPanel look={props.look} onLook={props.onLook} />;
        case 'file': return <Sidebar {...sidebar} section="export" />;
        case 'edges': return <EdgePanel {...props} />;
        case 'face': return <FacePanel {...props} />;
 diff --git a/autora-3d/src/components/SurfacePanels.tsx b/autora-3d/src/components/SurfacePanels.tsx
 new file mode 100644
-index 0000000..0e31207
+index 0000000..cd468b6
 --- /dev/null
 +++ b/autora-3d/src/components/SurfacePanels.tsx
-@@ -0,0 +1,255 @@
+@@ -0,0 +1,264 @@
 +/**
 + * @license
 + * SPDX-License-Identifier: Apache-2.0
@@ -826,13 +872,15 @@ index 0000000..0e31207
 +export interface SurfacePanelProps {
 +  selected: Body3D[];
 +  onSurface: (args: SurfaceArgs) => void;
++  /** Opens another card of the bar (Texture, Hair): how they are reached before the shape has a pattern or hair. */
++  onOpen?: (id: 'texture' | 'hair') => void;
 +}
 +
 +/** What one shape is made of: a finish to start from, its colour, and the numbers that matter for that finish. */
-+export function MaterialPanel({ selected, onSurface }: SurfacePanelProps) {
++export function MaterialPanel({ selected, onSurface, onOpen }: SurfacePanelProps) {
 +  const [more, setMore] = useState(false);
 +  const body = selected.length === 1 ? selected[0] : null;
-+  if (!body) return <p className={`p-4 text-xs text-slate-400 ${WIDTH}`}>Select a shape.</p>;
++  if (!body) return null;
 +  const s = resolveSurface(body);
 +  const set = (k: SurfaceNumber) => (n: number) => onSurface({ id: body.id, [k]: n });
 +  const range = (k: SurfaceNumber) => SURFACE_RANGES[k];
@@ -872,6 +920,13 @@ index 0000000..0e31207
 +          )}
 +        </>
 +      )}
++      {onOpen && (!body.surface?.pattern && !body.surface?.image || (!body.hair && !body.frame)) && (
++        // Texture and Hair join the bar once the shape has a pattern or hair; until then they are reached from here.
++        <div className="flex gap-2 pt-2 border-t border-white/8">
++          {!body.surface?.pattern && !body.surface?.image && <button type="button" className={quiet} onClick={() => onOpen('texture')}>Texture…</button>}
++          {!body.hair && !body.frame && <button type="button" className={quiet} onClick={() => onOpen('hair')}>Hair…</button>}
++        </div>
++      )}
 +    </div>
 +  );
 +}
@@ -881,7 +936,7 @@ index 0000000..0e31207
 +  const file = useRef<HTMLInputElement>(null);
 +  const [note, setNote] = useState<string | null>(null);
 +  const body = selected.length === 1 ? selected[0] : null;
-+  if (!body) return <p className={`p-4 text-xs text-slate-400 ${WIDTH}`}>Select a shape.</p>;
++  if (!body) return null;
 +  const pattern = body.surface?.pattern;
 +  const image = body.surface?.image;
 +  const kind: PatternKind = pattern?.kind ?? 'none';
@@ -933,8 +988,8 @@ index 0000000..0e31207
 +export function HairPanel({ selected, onHair, groomBrush, onGroomBrush, groomOn, onGroomOn }: HairPanelProps) {
 +  const [more, setMore] = useState(false);
 +  const body = selected.length === 1 ? selected[0] : null;
-+  if (!body) return <p className={`p-4 text-xs text-slate-400 ${WIDTH}`}>Select a shape.</p>;
-+  if (body.frame) return <p className={`p-4 text-xs text-slate-400 ${WIDTH}`}>Hair grows on shapes that stand upright, not on a wall.</p>;
++  if (!body) return null;
++  if (body.frame) return null;
 +  if (!body.hair) {
 +    return (
 +      <div className={`p-4 flex gap-2 ${WIDTH}`}>
@@ -1016,7 +1071,7 @@ index 0000000..0e31207
 +}
 diff --git a/autora-3d/src/components/surfaceLook.ts b/autora-3d/src/components/surfaceLook.ts
 new file mode 100644
-index 0000000..89b5e6a
+index 0000000..c7562ba
 --- /dev/null
 +++ b/autora-3d/src/components/surfaceLook.ts
 @@ -0,0 +1,297 @@
@@ -1033,7 +1088,7 @@ index 0000000..89b5e6a
 +import * as THREE from 'three';
 +import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 +import { Body3D, SceneLook } from '../types';
-+import { furLayers, furPattern, furRepeat, furShell, hairGeometry, settleHair, type GroomAt } from '../utils/hair';
++import { furLayers, furPattern, furRepeat, furShell, hairGeometry, MAX_STRANDS, settleHair, type GroomAt } from '../utils/hair';
 +import { patternPixels, resolveSurface, textureRepeat } from '../utils/surface';
 +
 +// Textures are shared between shapes and kept: a material's dispose never takes them with it.
@@ -1192,7 +1247,7 @@ index 0000000..89b5e6a
 + * The hair grown on a shape, as an object to add beside its mesh: ribbons for strands, layers for fur. It is never picked
 + * (a press goes through to the shape), and is grown in the shape's own space so it moves with it.
 + */
-+export function hairObject(geometry: THREE.BufferGeometry, body: Body3D): THREE.Object3D | null {
++export function hairObject(geometry: THREE.BufferGeometry, body: Body3D, most = MAX_STRANDS): THREE.Object3D | null {
 +  if (!body.hair) return null;
 +  const hair = settleHair(body.hair);
 +  const holder = new THREE.Group();
@@ -1222,7 +1277,7 @@ index 0000000..89b5e6a
 +    }
 +    return holder;
 +  }
-+  const strands = hairGeometry(geometry, hair, body.elevation ?? 0);
++  const strands = hairGeometry(geometry, hair, body.elevation ?? 0, most);
 +  if (!strands) return null;
 +  const material = new THREE.MeshPhysicalMaterial({
 +    vertexColors: true,
@@ -1318,7 +1373,7 @@ index 0000000..89b5e6a
 +  }
 +}
 diff --git a/autora-3d/src/core/agent.ts b/autora-3d/src/core/agent.ts
-index 40163fa..8e88305 100644
+index 40163fa..972ee75 100644
 --- a/autora-3d/src/core/agent.ts
 +++ b/autora-3d/src/core/agent.ts
 @@ -49,7 +49,9 @@ export interface ExecuteOptions {
@@ -1332,6 +1387,15 @@ index 40163fa..8e88305 100644
  
  const READ_ONLY = new Set(TOOL_SPECS.filter((t) => t.readOnly).map((t) => t.name));
  
+@@ -138,7 +140,7 @@ function runOne(host: AgentHost, doc: Doc, ids: IdGen, name: string, args: unkno
+         return { doc, result: { format: 'stl', filename: 'craft3d.stl', encoding: 'base64', bytes: bytes.length, data: toBase64(bytes) }, changed: false };
+       }
+       if (a.format === 'glb') {
+-        const bytes = glbBytes(bodies, { scale: a.scale, pivot: a.pivot, groups: doc.groups });
++        const bytes = glbBytes(bodies, { scale: a.scale, pivot: a.pivot, groups: doc.groups, hair: a.hair !== false });
+         if (!bytes) throw new AgentError('Nothing visible to export.');
+         return { doc, result: { format: 'glb', filename: 'craft3d.glb', encoding: 'base64', bytes: bytes.length, data: toBase64(bytes) }, changed: false };
+       }
 diff --git a/autora-3d/src/core/commands.ts b/autora-3d/src/core/commands.ts
 index 01fc8c2..26d1e37 100644
 --- a/autora-3d/src/core/commands.ts
@@ -1355,10 +1419,10 @@ index 01fc8c2..26d1e37 100644
    return clip(out.join('; '));
  }
 diff --git a/autora-3d/src/core/doc.ts b/autora-3d/src/core/doc.ts
-index 39d2143..496349f 100644
+index 39d2143..4f37b1b 100644
 --- a/autora-3d/src/core/doc.ts
 +++ b/autora-3d/src/core/doc.ts
-@@ -3,7 +3,7 @@
+@@ -3,10 +3,11 @@
   * SPDX-License-Identifier: Apache-2.0
   */
  
@@ -1367,7 +1431,11 @@ index 39d2143..496349f 100644
  import { syncInstances } from '../utils/library';
  import { normalizeGroups } from '../utils/groups';
  import { syncRepeats } from '../utils/repeat';
-@@ -16,6 +16,8 @@ export interface Doc {
++import { sharePictures } from '../utils/surface';
+ 
+ /** Everything that is saved: the shapes, how they are grouped, and the live repeats that make some of them. */
+ export interface Doc {
+@@ -16,6 +17,8 @@ export interface Doc {
    repeats: RepeatLink[];
    /** Reusable objects kept in this project. Placed copies (groups with `place`) follow them. */
    library: LibraryItem[];
@@ -1376,7 +1444,20 @@ index 39d2143..496349f 100644
  }
  
  /** Makes ids. Each caller supplies its own so ids stay unique (the app uses time, an agent session a counter). */
-@@ -60,7 +62,8 @@ export function parseDoc(raw: unknown): Doc | null {
+@@ -24,7 +27,11 @@ export type IdGen = (kind: string) => string;
+ export const emptyDoc = (): Doc => ({ bodies: [], groups: [], repeats: [], library: [] });
+ 
+ /** Settles a document: live-repeat copies are always rebuilt to match their source and path. */
+-export const settle = (d: Doc): Doc => {
++export const settle = (raw: Doc): Doc => {
++  // One copy of each surface picture, however many models (history, the command log) hold it.
++  const bodies = sharePictures(raw.bodies);
++  const library = raw.library.some((i) => i.bodies.some((b) => b.surface?.image)) ? raw.library.map((i) => { const b = sharePictures(i.bodies); return b === i.bodies ? i : { ...i, bodies: b }; }) : raw.library;
++  const d = bodies === raw.bodies && library.every((i, n) => i === raw.library[n]) ? raw : { ...raw, bodies, library };
+   const placed = syncInstances(d.bodies, d.groups, d.library);
+   const synced = syncRepeats(placed.bodies, d.repeats);
+   const grouped = normalizeGroups(synced.bodies, placed.groups);
+@@ -60,7 +67,8 @@ export function parseDoc(raw: unknown): Doc | null {
    if (!raw || typeof raw !== 'object') return null;
    const d = raw as Partial<Doc>;
    if (!Array.isArray(d.bodies) || !Array.isArray(d.groups)) return null;
@@ -1680,7 +1761,7 @@ index 54d4b7a..18f89fc 100644
 +  return { doc: { ...doc, look }, result: look };
 +}
 diff --git a/autora-3d/src/core/tools.ts b/autora-3d/src/core/tools.ts
-index 0c8dbe4..79e33a9 100644
+index 0c8dbe4..ba2c1c9 100644
 --- a/autora-3d/src/core/tools.ts
 +++ b/autora-3d/src/core/tools.ts
 @@ -3,7 +3,8 @@
@@ -1785,6 +1866,17 @@ index 0c8dbe4..79e33a9 100644
    {
      name: 'shape_resize',
      description: 'Set a shape\'s overall width (x), depth (y) and/or height (z). Corners and bevels stay valid. A mesh from a file is scaled to match.',
+@@ -341,8 +409,8 @@ export const TOOL_SPECS: ToolSpec[] = [
+   { name: 'history_redo', description: 'Redo the last undone change.', inputSchema: obj({}) },
+   {
+     name: 'export',
+-    description: 'Export the visible shapes. format "stl" (binary, Z-up, returned as base64), "glb" (binary glTF for game engines: metres, Y-up, keeps colours and materials, returned as base64), "obj" (text) or "json" (the document). glb options: scale (output metres per scene mm, default 0.001) and pivot ("scene" as placed, "asset" centred on the ground, "shape" one pivot per shape at the centre of its base).',
+-    inputSchema: obj({ format: { type: 'string', enum: ['stl', 'glb', 'obj', 'json'] }, scale: { type: 'number' }, pivot: { type: 'string', enum: ['scene', 'asset', 'shape'] } }, ['format']),
++    description: 'Export the visible shapes. format "stl" (binary, Z-up, returned as base64), "glb" (binary glTF for game engines: metres, Y-up, keeps colours, materials, textures and hair, returned as base64), "obj" (text) or "json" (the document). glb options: scale (output metres per scene mm, default 0.001), pivot ("scene" as placed, "asset" centred on the ground, "shape" one pivot per shape at the centre of its base) and hair (false leaves hair and fur out; with it each shape\'s hair is thinned to a size an engine takes). STL and OBJ never carry hair.',
++    inputSchema: obj({ format: { type: 'string', enum: ['stl', 'glb', 'obj', 'json'] }, scale: { type: 'number' }, pivot: { type: 'string', enum: ['scene', 'asset', 'shape'] }, hair: { type: 'boolean' } }, ['format']),
+     readOnly: true,
+   },
+   {
 @@ -420,6 +488,14 @@ export function runDocTool(ctx: ToolContext, name: string, rawArgs: unknown): To
        return done(ops.sculptLoft(doc, ids, a as unknown as ops.LoftArgs));
      case 'sculpt_smooth':
@@ -2044,7 +2136,7 @@ index d815369..ddf24ed 100644
  }
  /**
 diff --git a/autora-3d/src/utils/glb.ts b/autora-3d/src/utils/glb.ts
-index 5d4eb1e..cf5f799 100644
+index 5d4eb1e..8808f58 100644
 --- a/autora-3d/src/utils/glb.ts
 +++ b/autora-3d/src/utils/glb.ts
 @@ -4,9 +4,11 @@
@@ -2056,11 +2148,20 @@ index 5d4eb1e..cf5f799 100644
  import { buildBodyGeometry } from './bodyGeometry';
  import { frameMatrix } from './frame';
 +import { encodePng, imageBytes, patternPixels, resolveSurface, textureRepeat } from './surface';
-+import { hairGeometry, settleHair } from './hair';
++import { EXPORT_STRANDS, EXPORT_STRANDS_TOTAL, hairGeometry, settleHair } from './hair';
  
  export interface GlbOptions {
    /** Scene units per metre of output. Default 0.001: our mm become glTF metres, which is what game engines expect. */
-@@ -27,7 +29,8 @@ const pad = (n: number) => (4 - (n % 4)) % 4;
+@@ -19,6 +21,8 @@ export interface GlbOptions {
+   pivot?: 'scene' | 'asset' | 'shape';
+   /** The document's groups: each becomes a named parent node holding its shapes and inner groups (so "head" arrives as "head"). */
+   groups?: ShapeGroup[];
++  /** Write the hair and fur (default true). Each shape's is capped (EXPORT_STRANDS, and EXPORT_STRANDS_TOTAL for the file). */
++  hair?: boolean;
+ }
+ 
+ const pad = (n: number) => (4 - (n % 4)) % 4;
+@@ -27,8 +31,12 @@ const pad = (n: number) => (4 - (n % 4)) % 4;
  export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array | null {
    const unit = options.scale ?? 0.001;
    const pivot = options.pivot ?? 'scene';
@@ -2068,9 +2169,13 @@ index 5d4eb1e..cf5f799 100644
 +  /** One mesh to write: a shape's solid, or the hair grown on it (`hair`), which carries a colour per vertex. */
 +  type Part = { body: Body3D; pos: Float32Array; nrm: Float32Array; idx: Uint32Array; min: THREE.Vector3; max: THREE.Vector3; uv?: Float32Array; col?: Float32Array; hair?: boolean };
    const parts: Part[] = [];
++  const withHair = options.hair === false ? 0 : bodies.filter((b) => b.visible && b.hair).length;
++  // One file's hair stays a size an engine takes: each shape's share of the file's cap, and never more than a shape's own cap.
++  const most = Math.max(100, Math.min(EXPORT_STRANDS, Math.floor(EXPORT_STRANDS_TOTAL / Math.max(1, withHair))));
    for (const body of bodies) {
      if (!body.visible) continue;
-@@ -62,7 +65,46 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
+     const g = buildBodyGeometry(body);
+@@ -62,7 +70,46 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
        tmp.computeVertexNormals();
        nrm.set(tmp.getAttribute('normal').array as Float32Array);
      }
@@ -2093,9 +2198,9 @@ index 5d4eb1e..cf5f799 100644
 +      }
 +    }
 +    parts.push({ body, pos, nrm, idx, min, max, uv });
-+    if (body.hair) {
++    if (body.hair && options.hair !== false) {
 +      // The hair is grown as it is drawn (fur too, as short strands): its own node beside the shape, coloured root to tip.
-+      const strands = hairGeometry(g, settleHair(body.hair), body.elevation ?? 0);
++      const strands = hairGeometry(g, settleHair(body.hair), body.elevation ?? 0, most);
 +      if (strands) {
 +        const hp = strands.getAttribute('position');
 +        const hn = strands.getAttribute('normal');
@@ -2118,7 +2223,7 @@ index 5d4eb1e..cf5f799 100644
    }
    if (!parts.length) return null;
  
-@@ -73,14 +115,88 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
+@@ -73,14 +120,88 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
    const nodes: object[] = [];
    const partNode = new Map<string, number>();
    const partOrigin = new Map<string, THREE.Vector3>();
@@ -2208,7 +2313,7 @@ index 5d4eb1e..cf5f799 100644
      const padded = new Uint8Array(bytes.length + pad(bytes.length));
      padded.set(bytes);
      chunks.push(padded);
-@@ -108,23 +224,34 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
+@@ -108,23 +229,34 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
      accessors.push({ bufferView: addView(new Uint8Array(q.nrm.buffer), 34962), componentType: 5126, count: q.nrm.length / 3, type: 'VEC3' });
      accessors.push({ bufferView: addView(new Uint8Array(q.idx.buffer), 34963), componentType: 5125, count: q.idx.length, type: 'SCALAR' });
  
@@ -2256,7 +2361,7 @@ index 5d4eb1e..cf5f799 100644
      partNode.set(q.body.id, nodes.length - 1);
      partOrigin.set(q.body.id, origin.clone());
    }
-@@ -168,10 +295,12 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
+@@ -168,10 +300,12 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
    const json = {
      asset: { version: '2.0', generator: 'Autora 3D' },
      scene: 0,
@@ -2272,10 +2377,10 @@ index 5d4eb1e..cf5f799 100644
      buffers: [{ byteLength: offset }],
 diff --git a/autora-3d/src/utils/hair.ts b/autora-3d/src/utils/hair.ts
 new file mode 100644
-index 0000000..a5fc34a
+index 0000000..186aa12
 --- /dev/null
 +++ b/autora-3d/src/utils/hair.ts
-@@ -0,0 +1,478 @@
+@@ -0,0 +1,486 @@
 +/**
 + * @license
 + * SPDX-License-Identifier: Apache-2.0
@@ -2480,9 +2585,9 @@ index 0000000..a5fc34a
 +}
 +
 +/** The number of strands a coat has on this much surface, and how much thicker each is drawn past the cap. */
-+export function strandBudget(areaMm2: number, hair: Hair): { count: number; widen: number } {
++export function strandBudget(areaMm2: number, hair: Hair, most = MAX_STRANDS): { count: number; widen: number } {
 +  const wanted = Math.max(1, Math.round((areaMm2 / 100) * hair.density));
-+  const count = Math.min(MAX_STRANDS, wanted);
++  const count = Math.max(1, Math.min(MAX_STRANDS, most, wanted));
 +  return { count, widen: Math.sqrt(wanted / count) };
 +}
 +
@@ -2516,10 +2621,10 @@ index 0000000..a5fc34a
 + * Grows the strands: from each root out along the surface's normal, laid by the comb, falling with droop, curling round
 + * its own line, wandering with frizz, and gathering into locks with its neighbours (clump).
 + */
-+export function growStrands(geometry: THREE.BufferGeometry, hairIn: Hair, lift = 0, segments?: number): Strands {
++export function growStrands(geometry: THREE.BufferGeometry, hairIn: Hair, lift = 0, segments?: number, most = MAX_STRANDS): Strands {
 +  const hair = settleHair(hairIn);
 +  const random = rng(hair.seed);
-+  const { count, widen } = strandBudget(surfaceArea(geometry), hair);
++  const { count, widen } = strandBudget(surfaceArea(geometry), hair, most);
 +  const roots = sampleRoots(geometry, count, random);
 +  const groom = groomer(hair.strokes, lift);
 +  const steps = segments ?? (hair.style === 'fur' ? 4 : hair.curl > 0.2 ? 14 : 9);
@@ -2626,9 +2731,9 @@ index 0000000..a5fc34a
 + * from root to tip, a tangent along the hair (for the highlight that runs across a strand) and UVs (u across, v along).
 + * Returns null when nothing grew.
 + */
-+export function hairGeometry(geometry: THREE.BufferGeometry, hairIn: Hair, lift = 0): THREE.BufferGeometry | null {
++export function hairGeometry(geometry: THREE.BufferGeometry, hairIn: Hair, lift = 0, most = MAX_STRANDS): THREE.BufferGeometry | null {
 +  const hair = settleHair(hairIn);
-+  const { strands, normals, widen } = growStrands(geometry, hair, lift);
++  const { strands, normals, widen } = growStrands(geometry, hair, lift, undefined, most);
 +  if (!strands.length) return null;
 +  const per = strands[0].length;
 +  const verts = strands.length * per * 2;
@@ -2688,7 +2793,15 @@ index 0000000..a5fc34a
 +}
 +
 +/** How many layers a fur coat is drawn in. Fewer on a heavy surface, so it stays quick. */
-+export const furLayers = (triangles: number) => (triangles > 30000 ? 8 : triangles > 12000 ? 12 : 18);
++export const furLayers = (triangles: number) => Math.max(4, Math.min(16, Math.floor(FUR_VERTICES / Math.max(1, triangles * 3))));
++
++/** The most vertices all the layers of one coat of fur add up to: a heavy surface gets fewer layers, so it stays quick to draw. */
++export const FUR_VERTICES = 360000;
++/** The most strands drawn in the whole scene at once, shared between the shapes with hair. Exports have their own cap. */
++export const SCENE_STRANDS = 16000;
++/** The most strands written for one shape in a file, and for the whole file. */
++export const EXPORT_STRANDS = 4000;
++export const EXPORT_STRANDS_TOTAL = 16000;
 +
 +/**
 + * Fur as layers (shells): copies of the surface pushed out along its normals, each a little further, laid by the comb and
@@ -2918,10 +3031,10 @@ index 4389257..ec73781 100644
  }
 diff --git a/autora-3d/src/utils/surface.ts b/autora-3d/src/utils/surface.ts
 new file mode 100644
-index 0000000..d03d54c
+index 0000000..85cf062
 --- /dev/null
 +++ b/autora-3d/src/utils/surface.ts
-@@ -0,0 +1,402 @@
+@@ -0,0 +1,437 @@
 +/**
 + * @license
 + * SPDX-License-Identifier: Apache-2.0
@@ -3324,6 +3437,115 @@ index 0000000..d03d54c
 +  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
 +  return `data:image/${png ? 'png' : 'jpeg'};base64,${btoa(bin)}`;
 +}
++
++// ---- One copy of each picture -------------------------------------------------------------------
++
++/** The pictures in use, each kept once: the same picture arriving again (a save, an undo, the agent's call) is this one. */
++const canonical = new Map<string, string>();
++/** Image records already pointing at the kept copy (strings cannot be told apart by identity, their holders can). */
++const shared = new WeakSet<object>();
++
++/**
++ * Makes every picture in these shapes the one copy kept of it, so models that differ only elsewhere (a history of edits,
++ * an undo stack, the command log) share one picture instead of holding a copy each. Each image record is looked at once;
++ * returns the same array when nothing changed.
++ */
++export function sharePictures(bodies: Body3D[]): Body3D[] {
++  let changed = false;
++  const out = bodies.map((b) => {
++    const img = b.surface?.image;
++    if (!img || shared.has(img)) return b;
++    const mid = img.data.length >> 1;
++    const key = `${img.data.length}:${img.data.slice(mid, mid + 64)}:${img.data.slice(-64)}`;
++    const kept = canonical.get(key);
++    if (kept !== undefined && kept === img.data) {
++      // The same picture as one already kept: point at that copy, and let this one go.
++      const one = { ...img, data: kept };
++      shared.add(one);
++      changed = true;
++      return { ...b, surface: { ...b.surface!, image: one } };
++    }
++    canonical.set(key, img.data);
++    if (canonical.size > 64) canonical.delete(canonical.keys().next().value as string);
++    shared.add(img);
++    return b;
++  });
++  return changed ? out : bodies;
++}
+diff --git a/autora-3d/src/utils/thumbnail.ts b/autora-3d/src/utils/thumbnail.ts
+index 8ab4610..e0060aa 100644
+--- a/autora-3d/src/utils/thumbnail.ts
++++ b/autora-3d/src/utils/thumbnail.ts
+@@ -3,6 +3,7 @@
+  * SPDX-License-Identifier: Apache-2.0
+  */
+ 
++import { resolveSurface } from './surface';
+ import { Body3D, Point2D } from '../types';
+ 
+ /**
+@@ -38,9 +39,31 @@ interface Face {
+   pts: P2[];
+   fill: string;
+   holes?: P2[][];
++  /** See-through (glass, a faded shape). */
++  opacity?: number;
++  /** Hair or fur: a soft edge in its colour. */
++  fuzz?: string;
+ }
+ 
+-function facesOf(b: Body3D): Face[] {
++const mixHex = (a: string, b: string, t: number) => {
++  const p = (h: string) => { const n = parseInt((/^#?([0-9a-f]{6})$/i.exec(h)?.[1] ?? '94a3b8'), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
++  const [x, y] = [p(a), p(b)];
++  return `#${x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, '0')).join('')}`;
++};
++
++/** What a shape looks like at thumbnail size: its colour as its pattern or hair shows it, and how see-through it is. */
++function looks(b: Body3D): { color: string; opacity: number; fuzz?: string } {
++  const s = resolveSurface(b);
++  let color = s.pattern ? mixHex(s.color, s.pattern.color2, 0.35) : s.color;
++  if (b.hair) color = mixHex(b.hair.rootColor, b.hair.tipColor, 0.5);
++  const opacity = Math.max(0.25, s.opacity * (1 - 0.6 * s.transmission));
++  return { color, opacity, ...(b.hair ? { fuzz: b.hair.tipColor } : {}) };
++}
++
++function facesOf(body: Body3D): Face[] {
++  const look = looks(body);
++  const b = { ...body, color: look.color };
++  const extra = { ...(look.opacity < 1 ? { opacity: look.opacity } : {}), ...(look.fuzz ? { fuzz: look.fuzz } : {}) };
+   const pts = b.points;
+   if (pts.length < 3) return [];
+   const z0 = b.elevation ?? 0;
+@@ -59,12 +82,12 @@ function facesOf(b: Body3D): Face[] {
+     const facing = (nx - ny) * R;
+     if (facing <= 0.01) continue;
+     walls.push({
+-      face: { pts: [project(a, z0), project(c, z0), project(c, z1), project(a, z1)], fill: shade(b.color, 0.55 + 0.3 * facing) },
++      face: { pts: [project(a, z0), project(c, z0), project(c, z1), project(a, z1)], fill: shade(b.color, 0.55 + 0.3 * facing), ...extra },
+       depth: near({ x: (a.x + c.x) / 2, y: (a.y + c.y) / 2 }),
+     });
+   }
+   walls.sort((x, y) => x.depth - y.depth);
+-  return [...walls.map((w) => w.face), { pts: pts.map((p) => project(p, z1)), fill: shade(b.color, 1.08), holes: b.holes?.map((h) => h.map((p) => project(p, z1))) }];
++  return [...walls.map((w) => w.face), { pts: pts.map((p) => project(p, z1)), fill: shade(b.color, 1.08), holes: b.holes?.map((h) => h.map((p) => project(p, z1))), ...extra }];
+ }
+ 
+ /** SVG text for a square picture of `bodies`, `size` px wide. Empty shapes give an empty picture. */
+@@ -88,7 +111,12 @@ export function thumbnailSvg(bodies: Body3D[], size = 96): string {
+   const oy = (size - (maxV - minV) * scale) / 2;
+   const sx = (p: P2) => `${(ox + (p.u - minU) * scale).toFixed(1)},${(oy + (maxV - p.v) * scale).toFixed(1)}`;
+   const d = (ps: P2[]) => `M${ps.map(sx).join('L')}Z`;
+-  const body = faces.map((f) => `<path d="${d(f.pts)}${(f.holes ?? []).map(d).join('')}" fill="${f.fill}" fill-rule="evenodd" stroke="rgba(0,0,0,0.25)" stroke-width="0.6" stroke-linejoin="round"/>`).join('');
++  const body = faces
++    .map((f) => {
++      const edge = f.fuzz ? `stroke="${f.fuzz}" stroke-width="1.6" stroke-dasharray="1 1.4"` : 'stroke="rgba(0,0,0,0.25)" stroke-width="0.6"';
++      return `<path d="${d(f.pts)}${(f.holes ?? []).map(d).join('')}" fill="${f.fill}"${f.opacity !== undefined ? ` fill-opacity="${f.opacity.toFixed(2)}"` : ''} fill-rule="evenodd" ${edge} stroke-linejoin="round"/>`;
++    })
++    .join('');
+   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">${body}</svg>`;
+ }
+ 
 diff --git a/autora-3d/src/utils/transform.ts b/autora-3d/src/utils/transform.ts
 index cd864be..bf5576e 100644
 --- a/autora-3d/src/utils/transform.ts

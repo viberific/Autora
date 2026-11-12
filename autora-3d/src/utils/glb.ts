@@ -8,7 +8,7 @@ import { Body3D, ShapeGroup } from '../types';
 import { buildBodyGeometry } from './bodyGeometry';
 import { frameMatrix } from './frame';
 import { encodePng, imageBytes, patternPixels, resolveSurface, textureRepeat } from './surface';
-import { hairGeometry, settleHair } from './hair';
+import { EXPORT_STRANDS, EXPORT_STRANDS_TOTAL, hairGeometry, settleHair } from './hair';
 
 export interface GlbOptions {
   /** Scene units per metre of output. Default 0.001: our mm become glTF metres, which is what game engines expect. */
@@ -21,6 +21,8 @@ export interface GlbOptions {
   pivot?: 'scene' | 'asset' | 'shape';
   /** The document's groups: each becomes a named parent node holding its shapes and inner groups (so "head" arrives as "head"). */
   groups?: ShapeGroup[];
+  /** Write the hair and fur (default true). Each shape's is capped (EXPORT_STRANDS, and EXPORT_STRANDS_TOTAL for the file). */
+  hair?: boolean;
 }
 
 const pad = (n: number) => (4 - (n % 4)) % 4;
@@ -32,6 +34,9 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
   /** One mesh to write: a shape's solid, or the hair grown on it (`hair`), which carries a colour per vertex. */
   type Part = { body: Body3D; pos: Float32Array; nrm: Float32Array; idx: Uint32Array; min: THREE.Vector3; max: THREE.Vector3; uv?: Float32Array; col?: Float32Array; hair?: boolean };
   const parts: Part[] = [];
+  const withHair = options.hair === false ? 0 : bodies.filter((b) => b.visible && b.hair).length;
+  // One file's hair stays a size an engine takes: each shape's share of the file's cap, and never more than a shape's own cap.
+  const most = Math.max(100, Math.min(EXPORT_STRANDS, Math.floor(EXPORT_STRANDS_TOTAL / Math.max(1, withHair))));
   for (const body of bodies) {
     if (!body.visible) continue;
     const g = buildBodyGeometry(body);
@@ -83,9 +88,9 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
       }
     }
     parts.push({ body, pos, nrm, idx, min, max, uv });
-    if (body.hair) {
+    if (body.hair && options.hair !== false) {
       // The hair is grown as it is drawn (fur too, as short strands): its own node beside the shape, coloured root to tip.
-      const strands = hairGeometry(g, settleHair(body.hair), body.elevation ?? 0);
+      const strands = hairGeometry(g, settleHair(body.hair), body.elevation ?? 0, most);
       if (strands) {
         const hp = strands.getAttribute('position');
         const hn = strands.getAttribute('normal');

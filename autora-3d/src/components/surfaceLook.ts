@@ -11,7 +11,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { Body3D, SceneLook } from '../types';
-import { furLayers, furPattern, furRepeat, furShell, hairGeometry, settleHair, type GroomAt } from '../utils/hair';
+import { furLayers, furPattern, furRepeat, furShell, hairGeometry, MAX_STRANDS, settleHair, type GroomAt } from '../utils/hair';
 import { patternPixels, resolveSurface, textureRepeat } from '../utils/surface';
 
 // Textures are shared between shapes and kept: a material's dispose never takes them with it.
@@ -170,7 +170,7 @@ const furPatternOf = (seed: number) =>
  * The hair grown on a shape, as an object to add beside its mesh: ribbons for strands, layers for fur. It is never picked
  * (a press goes through to the shape), and is grown in the shape's own space so it moves with it.
  */
-export function hairObject(geometry: THREE.BufferGeometry, body: Body3D): THREE.Object3D | null {
+export function hairObject(geometry: THREE.BufferGeometry, body: Body3D, most = MAX_STRANDS): THREE.Object3D | null {
   if (!body.hair) return null;
   const hair = settleHair(body.hair);
   const holder = new THREE.Group();
@@ -200,7 +200,7 @@ export function hairObject(geometry: THREE.BufferGeometry, body: Body3D): THREE.
     }
     return holder;
   }
-  const strands = hairGeometry(geometry, hair, body.elevation ?? 0);
+  const strands = hairGeometry(geometry, hair, body.elevation ?? 0, most);
   if (!strands) return null;
   const material = new THREE.MeshPhysicalMaterial({
     vertexColors: true,

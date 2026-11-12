@@ -2147,7 +2147,7 @@ export const cadSPECS: ToolSpec[] = [
   {
     "name": "cad_export",
     "group": "files",
-    "description": "Export the visible shapes. format \"stl\" (binary, Z-up), \"glb\" (binary glTF for game engines: metres, Y-up, keeps colours and materials), \"obj\" (text) or \"json\" (the document). glb options: scale (output metres per scene mm, default 0.001) and pivot (\"scene\" as placed, \"asset\" centred on the ground, \"shape\" one pivot per shape at the centre of its base). The file is saved as an artifact the person can download from the thread, and the reply names it; pass name to choose the file name.",
+    "description": "Export the visible shapes. format \"stl\" (binary, Z-up), \"glb\" (binary glTF for game engines: metres, Y-up, keeps colours, materials, textures and hair), \"obj\" (text) or \"json\" (the document). glb options: scale (output metres per scene mm, default 0.001), pivot (\"scene\" as placed, \"asset\" centred on the ground, \"shape\" one pivot per shape at the centre of its base) and hair (false leaves hair and fur out; with it each shape's hair is thinned to a size an engine takes). STL and OBJ never carry hair. The file is saved as an artifact the person can download from the thread, and the reply names it; pass name to choose the file name.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -2170,6 +2170,9 @@ export const cadSPECS: ToolSpec[] = [
             "asset",
             "shape"
           ]
+        },
+        "hair": {
+          "type": "boolean"
         },
         "name": {
           "type": "string",

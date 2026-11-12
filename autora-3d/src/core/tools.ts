@@ -409,8 +409,8 @@ export const TOOL_SPECS: ToolSpec[] = [
   { name: 'history_redo', description: 'Redo the last undone change.', inputSchema: obj({}) },
   {
     name: 'export',
-    description: 'Export the visible shapes. format "stl" (binary, Z-up, returned as base64), "glb" (binary glTF for game engines: metres, Y-up, keeps colours and materials, returned as base64), "obj" (text) or "json" (the document). glb options: scale (output metres per scene mm, default 0.001) and pivot ("scene" as placed, "asset" centred on the ground, "shape" one pivot per shape at the centre of its base).',
-    inputSchema: obj({ format: { type: 'string', enum: ['stl', 'glb', 'obj', 'json'] }, scale: { type: 'number' }, pivot: { type: 'string', enum: ['scene', 'asset', 'shape'] } }, ['format']),
+    description: 'Export the visible shapes. format "stl" (binary, Z-up, returned as base64), "glb" (binary glTF for game engines: metres, Y-up, keeps colours, materials, textures and hair, returned as base64), "obj" (text) or "json" (the document). glb options: scale (output metres per scene mm, default 0.001), pivot ("scene" as placed, "asset" centred on the ground, "shape" one pivot per shape at the centre of its base) and hair (false leaves hair and fur out; with it each shape\'s hair is thinned to a size an engine takes). STL and OBJ never carry hair.',
+    inputSchema: obj({ format: { type: 'string', enum: ['stl', 'glb', 'obj', 'json'] }, scale: { type: 'number' }, pivot: { type: 'string', enum: ['scene', 'asset', 'shape'] }, hair: { type: 'boolean' } }, ['format']),
     readOnly: true,
   },
   {

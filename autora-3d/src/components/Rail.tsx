@@ -233,6 +233,9 @@ export default function Rail(props: RailProps) {
     if (t.id === 'shapes' || t.id === 'draw') return true;
     if (t.id === 'library') return props.library.length > 0;
     if (t.id === 'file') return props.bodyCount > 0;
+    // Texture and Hair stand on the bar once the shape has a pattern, a picture or hair; until then Material leads to them.
+    if (t.id === 'texture') return !t.disabled && !!(props.selected[0]?.surface?.pattern || props.selected[0]?.surface?.image);
+    if (t.id === 'hair') return !t.disabled && !!props.selected[0]?.hair;
     return !t.disabled;
   };
   const wanted = ids.filter((id) => needed(byId.get(id)!));
@@ -267,6 +270,8 @@ export default function Rail(props: RailProps) {
 
   const press = (t: Tool) => { setGrid(false); t.run(); };
   const sidebar = props.sidebar;
+  // A shape's own cards go with the shape: picked away, they close.
+  const one = props.selected.length === 1 && !props.group;
   const panel = (() => {
     switch (auto) {
       case 'shapes':
@@ -315,9 +320,9 @@ export default function Rail(props: RailProps) {
         );
       case 'size': return <SizePositionPanel {...props} />;
       case 'props': return <Sidebar {...sidebar} section="properties" />;
-      case 'material': return <MaterialPanel selected={props.selected} onSurface={props.onSurface} />;
-      case 'texture': return <TexturePanel selected={props.selected} onSurface={props.onSurface} />;
-      case 'hair': return <HairPanel selected={props.selected} onHair={props.onHair} groomBrush={props.groomBrush} onGroomBrush={props.onGroomBrush} groomOn={props.groomOn} onGroomOn={props.onGroomOn} />;
+      case 'material': return one ? <MaterialPanel selected={props.selected} onSurface={props.onSurface} onOpen={setOpenId} /> : null;
+      case 'texture': return one ? <TexturePanel selected={props.selected} onSurface={props.onSurface} /> : null;
+      case 'hair': return !one || props.selected[0].frame ? null : <HairPanel selected={props.selected} onHair={props.onHair} groomBrush={props.groomBrush} onGroomBrush={props.onGroomBrush} groomOn={props.groomOn} onGroomOn={props.onGroomOn} />;
       case 'light': return <LightPanel look={props.look} onLook={props.onLook} />;
       case 'file': return <Sidebar {...sidebar} section="export" />;
       case 'edges': return <EdgePanel {...props} />;

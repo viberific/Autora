@@ -202,9 +202,9 @@ function sampleRoots(geometry: THREE.BufferGeometry, count: number, random: () =
 }
 
 /** The number of strands a coat has on this much surface, and how much thicker each is drawn past the cap. */
-export function strandBudget(areaMm2: number, hair: Hair): { count: number; widen: number } {
+export function strandBudget(areaMm2: number, hair: Hair, most = MAX_STRANDS): { count: number; widen: number } {
   const wanted = Math.max(1, Math.round((areaMm2 / 100) * hair.density));
-  const count = Math.min(MAX_STRANDS, wanted);
+  const count = Math.max(1, Math.min(MAX_STRANDS, most, wanted));
   return { count, widen: Math.sqrt(wanted / count) };
 }
 
@@ -238,10 +238,10 @@ export interface Strands {
  * Grows the strands: from each root out along the surface's normal, laid by the comb, falling with droop, curling round
  * its own line, wandering with frizz, and gathering into locks with its neighbours (clump).
  */
-export function growStrands(geometry: THREE.BufferGeometry, hairIn: Hair, lift = 0, segments?: number): Strands {
+export function growStrands(geometry: THREE.BufferGeometry, hairIn: Hair, lift = 0, segments?: number, most = MAX_STRANDS): Strands {
   const hair = settleHair(hairIn);
   const random = rng(hair.seed);
-  const { count, widen } = strandBudget(surfaceArea(geometry), hair);
+  const { count, widen } = strandBudget(surfaceArea(geometry), hair, most);
   const roots = sampleRoots(geometry, count, random);
   const groom = groomer(hair.strokes, lift);
   const steps = segments ?? (hair.style === 'fur' ? 4 : hair.curl > 0.2 ? 14 : 9);
@@ -348,9 +348,9 @@ const colorOf = (hex: string) => new THREE.Color(/^#[0-9a-f]{6}$/i.test(hex) ? h
  * from root to tip, a tangent along the hair (for the highlight that runs across a strand) and UVs (u across, v along).
  * Returns null when nothing grew.
  */
-export function hairGeometry(geometry: THREE.BufferGeometry, hairIn: Hair, lift = 0): THREE.BufferGeometry | null {
+export function hairGeometry(geometry: THREE.BufferGeometry, hairIn: Hair, lift = 0, most = MAX_STRANDS): THREE.BufferGeometry | null {
   const hair = settleHair(hairIn);
-  const { strands, normals, widen } = growStrands(geometry, hair, lift);
+  const { strands, normals, widen } = growStrands(geometry, hair, lift, undefined, most);
   if (!strands.length) return null;
   const per = strands[0].length;
   const verts = strands.length * per * 2;
@@ -410,7 +410,15 @@ export function hairGeometry(geometry: THREE.BufferGeometry, hairIn: Hair, lift 
 }
 
 /** How many layers a fur coat is drawn in. Fewer on a heavy surface, so it stays quick. */
-export const furLayers = (triangles: number) => (triangles > 30000 ? 8 : triangles > 12000 ? 12 : 18);
+export const furLayers = (triangles: number) => Math.max(4, Math.min(16, Math.floor(FUR_VERTICES / Math.max(1, triangles * 3))));
+
+/** The most vertices all the layers of one coat of fur add up to: a heavy surface gets fewer layers, so it stays quick to draw. */
+export const FUR_VERTICES = 360000;
+/** The most strands drawn in the whole scene at once, shared between the shapes with hair. Exports have their own cap. */
+export const SCENE_STRANDS = 16000;
+/** The most strands written for one shape in a file, and for the whole file. */
+export const EXPORT_STRANDS = 4000;
+export const EXPORT_STRANDS_TOTAL = 16000;
 
 /**
  * Fur as layers (shells): copies of the surface pushed out along its normals, each a little further, laid by the comb and

@@ -553,17 +553,25 @@ Spectra's fetched renderer is most of what is on disk.
   layout keeps `mesh.uvs` (welded per UV seam, dropped once the vertex count changes) and its base colour picture. `hair` is numbers plus the person's
   grooming `strokes`; strands are grown from them, seeded, whenever the shape is drawn or exported (`growStrands`: area-weighted roots, capped at
   `MAX_STRANDS` and widened past it, falling down and away and kept outside the shape's box ellipsoid, curl, frizz, locks), drawn as ribbons with a
-  tangent for an anisotropic highlight, fur as alpha-tested shells (`furShell`). The viewer rebuilds only a material when only the surface changed and
-  only the hair when only the hair did (`lookSignature`, `hairSignature`); hair is never picked (`raycast` off) and hides in See through. `doc.look`
+  tangent for an anisotropic highlight, fur as alpha-tested shells (`furShell`). The viewer rebuilds only a material when only the surface changed; hair is grown by `growHair` once the model has
+  been still for `HAIR_SETTLE_MS` (a slider moves freely, the old hair stays until then), only where its numbers or its surface changed,
+  sharing `SCENE_STRANDS` between the shapes with strands, and fur keeps its layers under `FUR_VERTICES`; hair is never picked (`raycast` off) and hides in See through. `doc.look`
   (`scene_look`) picks the environment (`lighting`: the RoomEnvironment studio, or a sky dome for daylight, sunset, night, which is also the backdrop),
   exposure and the key light. GLB export writes the surface as glTF PBR with KHR transmission, ior, volume, clearcoat, sheen, diffuse transmission and
   emissive strength, the pattern as an embedded PNG (`encodePng`, stored deflate, no zlib) or the picture, UVs with the repeat baked in, and hair as a
-  `<name>_hair` node under its shape with `COLOR_0`; STL and OBJ carry the shape only. The window's cards (Material, Texture, Hair with the Groom brush,
-  Light) show what the work needs and keep the rest behind More; the groom brush is a person-only command (`hair_groom`, authority `person`). Panacea's
+  `<name>_hair` node under its shape with `COLOR_0`, capped (`EXPORT_STRANDS` a shape, `EXPORT_STRANDS_TOTAL` a file; `hair: false` leaves it out); STL and OBJ carry the shape only. Pictures travel once (`src/lib/cadPictures.ts`): `CadWindow`'s save
+  sends a picture the server holds as its key (`byReference`), the PUT route puts it back from the chat's `entry.pictures`
+  (`restorePictures`; 409 with `missing` makes the window send those whole), and `settle` points every copy of a picture at one kept
+  string (`sharePictures`), so the command log's before/after models and the window's undo stack share it. The window's cards (Material,
+  Texture, Hair with the Groom brush, Light) show what the work needs and keep the rest behind More; Texture and Hair stand on the bar
+  only once the shape has a pattern, a picture or hair (Material's foot opens them before that), and a card closes when its shape is
+  no longer picked; the groom brush is a person-only command (`hair_groom`, authority `person`). Panacea's
   3D panels read and set the same numbers through `model.*` binds (`src/lib/panacea/apps/model.ts`: `FINISH_OF` mirrors the presets, held equal by
-  `tests/surface-3d.test.ts`). `node scripts/sync-autora-3d.mjs --specs` rewrites `server/specs/cad.ts` from the copy here while a patch is not
+  `tests/surface-3d.test.ts`); a 3D panel moved somewhere telling offers the next one beside it (`suggestForApp` in `rules.ts`: glass offers
+  Glass, a pattern Texture, hair Hair), through the same activity route as the canvas's own offers. Thumbnails show glass see-through, a
+  pattern's colours and hair as a soft edge (`thumbnail.ts` `looks`). `node scripts/sync-autora-3d.mjs --specs` rewrites `server/specs/cad.ts` from the copy here while a patch is not
   upstream yet. Traps: a pattern's colour, size and relief need a pattern first, and the hair's numbers need hair on; clear glass is kept slightly
-  tinted on screen (transmission at most 0.94, opacity 0.92) so it reads against the dark studio. Tests: `tests/surface-3d.test.ts`, the `surface` and
+  tinted on screen (transmission at most 0.94, opacity 0.92) so it reads against the dark studio. Tests: `tests/surface-3d.test.ts`, `tests/cad-pictures.test.ts`, the `surface` and
   `hair` cases of `tests/ui-cad-hand-tools.test.ts`.
 - `server/studio.ts`, `server/specs/studio.ts`, `src/lib/studio/`, `src/components/StudioWindow.tsx` + `src/components/studio/`:
   **Autora Music**, the music window, and the agent's `studio_*` tools. A song is tracks of clips of notes, in beats

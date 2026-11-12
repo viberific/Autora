@@ -13,7 +13,10 @@ import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { BevelStyle, Body3D, EdgeSel, FaceSel, DrawForm, DrawSession, Frame, GroomStroke, Point2D, RepeatSession, SceneLook, ShapeGroup } from '../types';
-import type { GroomBrush } from '../utils/hair';
+import { SCENE_STRANDS, type GroomBrush } from '../utils/hair';
+
+/** How long the model must be still before its hair is grown again. */
+const HAIR_SETTLE_MS = 160;
 import { withGroupMates } from '../utils/groups';
 import { Brush, SculptMesh } from '../utils/sculpt';
 import { buildBodyGeometry, buildBodyShape, featureEdges, getInteriorAnchor } from '../utils/bodyGeometry';
@@ -432,6 +435,36 @@ export default function ModelViewer3D({
   const popKeyRef = useRef('');
   const invalidateRef = useRef<(shadows?: boolean) => void>(() => {});
   const applyLookRef = useRef<(look: SceneLook | undefined) => void>(() => {});
+  const hairTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(hairTimer.current), []);
+
+  /**
+   * Grows the hair the model asks for, on the surfaces as they are now: only where it changed (its numbers, or the surface it
+   * grows from), sharing one strand budget between every shape with hair, so a scene of many furry things stays quick.
+   * Grown in one go after the model settles (HAIR_SETTLE_MS), keeping the old hair on screen until then.
+   */
+  const growHair = () => {
+    const entries = [...entriesRef.current.values()];
+    const strands = entries.filter((e) => e.body.hair && e.body.hair.style !== 'fur' && !e.signature.endsWith('|fast')).length;
+    const most = Math.max(200, Math.floor(SCENE_STRANDS / Math.max(1, strands)));
+    let grew = false;
+    for (const e of entries) {
+      const mesh = e.group.children[0] as THREE.Mesh;
+      const want = e.body.hair && !e.signature.endsWith('|fast') ? `${hairSignature(e.body)}|${most}` : '';
+      if (e.hair === want && e.group.userData.hairOn === mesh.geometry) continue;
+      e.group.children.filter((c) => c.userData.hair).forEach((c) => { e.group.remove(c); disposeObject(c); });
+      e.hair = want;
+      e.group.userData.hairOn = mesh.geometry;
+      grew = true;
+      if (!want) continue;
+      const grown = hairObject(mesh.geometry, e.body, most);
+      if (grown) {
+        grown.visible = !live.current.xray;
+        e.group.add(grown);
+      }
+    }
+    if (grew) invalidateRef.current(true);
+  };
   const refreshOutlinesRef = useRef<() => void>(() => {});
   const applyXrayRef = useRef<() => void>(() => {});
   const clearHoverRef = useRef<() => void>(() => {});
@@ -1454,6 +1487,8 @@ export default function ModelViewer3D({
       mesh.geometry.dispose();
       mesh.geometry = geometry;
       entry.outline.visible = false;
+      // The hair stood on the old surface: it goes while the surface moves, and grows back on the finished one.
+      entry.group.children.forEach((c) => { if (c.userData.hair) c.visible = false; });
       const normal = camera.getWorldDirection(new THREE.Vector3()).negate();
       stroke = { id: sc.bodyId, mesh, sm, attr, lift, pointerId: e.pointerId, last: hit.model, plane: new THREE.Plane().setFromNormalAndCoplanarPoint(normal, hit.world), start: hit.world, changed: false };
       controls.enabled = false;
@@ -2132,17 +2167,7 @@ export default function ModelViewer3D({
           if (!live.current.xray) mesh.material = solid;
           existing.look = look;
         }
-        const hair = hairSignature(body);
-        if (existing.hair !== hair && !fast) {
-          existing.group.children.filter((c) => c.userData.hair).forEach((c) => { existing.group.remove(c); disposeObject(c); });
-          const grown = hairObject(mesh.geometry, body);
-          if (grown) {
-            grown.visible = !live.current.xray;
-            existing.group.add(grown);
-          }
-          existing.hair = hair;
-          invalidateRef.current(true);
-        }
+        // A change to the hair alone: the old hair stays until it has settled (growHair).
         // Where a wall shape stands is not part of its geometry: a move arrives as a new frame, replacing the drag preview.
         if (JSON.stringify(existing.body.frame) !== JSON.stringify(body.frame)) {
           existing.group.position.set(0, 0, 0);
@@ -2176,19 +2201,16 @@ export default function ModelViewer3D({
       const bodyGroup = new THREE.Group();
       bodyGroup.userData.bodyId = id;
       bodyGroup.add(mesh, outline);
-      // Hair grows from the finished surface; while a shape is dragged (fast) it waits for the drop.
-      const grown = fast ? null : hairObject(geometry, body);
-      if (grown) {
-        grown.visible = !live.current.xray;
-        bodyGroup.add(grown);
-      }
       const root = new THREE.Group();
       root.add(bodyGroup);
       placeFrame(root, body);
       group.add(root);
-      entries.set(id, { body, root, group: bodyGroup, outline, signature, look: lookSignature(body), hair: fast ? '' : hairSignature(body) });
+      entries.set(id, { body, root, group: bodyGroup, outline, signature, look: lookSignature(body), hair: '' });
     });
     applyXrayRef.current();
+    // Hair is grown once the model has settled, not on every frame of a slider or a drag (see growHair).
+    window.clearTimeout(hairTimer.current);
+    hairTimer.current = window.setTimeout(growHair, HAIR_SETTLE_MS);
 
     // A newly added shape may land outside the view: bring everything back into frame, keeping the angle.
     const known = knownIdsRef.current;

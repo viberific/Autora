@@ -22,6 +22,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { keepCopy, saveArtifact } from "./artifacts";
 import { FileRefError, readFileRef } from "./fileref";
+import { picturesOf, restorePictures } from "../src/lib/cadPictures";
 import { chatTitle } from "./folders";
 import { stateDir } from "./state";
 import { readDoc, saveDoc } from "./store";
@@ -109,6 +110,22 @@ interface Entry {
   quiet?: number;
   /** The agent's hand is at work in the window: what the window sends up meanwhile is its hand's steps, not the person's. */
   handing?: number;
+  /** The surface pictures this chat's model has had, by key (src/lib/cadPictures.ts): the window sends one it has seen by its key. */
+  pictures?: Map<string, string>;
+}
+
+/** The most picture bytes (as characters) a chat keeps for the window to refer to; past it only the model's own are kept. */
+const PICTURE_CHARS = 96 * 1024 * 1024;
+
+/** Remembers the pictures of a model for this chat, so the window can refer to them by key. */
+function keepPictures(entry: Entry, doc: unknown): void {
+  const now = picturesOf(doc as Parameters<typeof picturesOf>[0]);
+  if (!now.size && !entry.pictures) return;
+  const store = entry.pictures ?? new Map<string, string>();
+  for (const [k, v] of now) store.set(k, v);
+  let size = 0;
+  for (const v of store.values()) size += v.length;
+  entry.pictures = size > PICTURE_CHARS ? now : store;
 }
 
 const entries = new Map<string, Entry>();
@@ -681,7 +698,9 @@ export function cadRoutes(app: Express, opts: {
       const engine = await engineOf(id);
       res.setHeader("Cache-Control", "no-store");
       const entry = entryFor(id);
-      res.json({ doc: engine.getDoc(), rev: entry.rev, ...(entry.by === "agent" && entry.cue ? { cue: entry.cue } : {}) });
+      const doc = engine.getDoc();
+      keepPictures(entry, doc);
+      res.json({ doc, rev: entry.rev, ...(entry.by === "agent" && entry.cue ? { cue: entry.cue } : {}) });
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
@@ -706,10 +725,15 @@ export function cadRoutes(app: Express, opts: {
     if (opts.off()) return res.status(403).json({ error: "Autora 3D is switched off on the Tools page." });
     try {
       const c = await loadCore();
-      const doc = c.parseDoc(req.body?.doc);
-      if (!doc) return res.status(400).json({ error: "That is not an Autora 3D model." });
       const engine = await engineOf(id);
       const entry = entryFor(id);
+      // Pictures the window knows the server holds come as their keys: put them back before the model is read.
+      keepPictures(entry, engine.getDoc());
+      const given = req.body?.doc && typeof req.body.doc === "object" ? restorePictures(req.body.doc, entry.pictures ?? new Map()) : null;
+      if (given?.missing.length) return res.status(409).json({ error: "Some pictures are not here any more; send them whole.", missing: given.missing });
+      const doc = c.parseDoc(given?.doc);
+      if (!doc) return res.status(400).json({ error: "That is not an Autora 3D model." });
+      keepPictures(entry, doc);
       // The agent's hand is at work: these are its steps, and the call puts in the finished model itself, as one change.
       if (entry.handing) return res.json({ rev: entry.rev });
       // Stays "person" until the agent's next tool call says otherwise: that is who made the latest change.

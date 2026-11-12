@@ -52,7 +52,7 @@ import { assembleRecipe, BUILTINS, DOMAINS, libraryIndex, searchLibrary, type Do
 import { cooling, normalizeProfile, noteDismiss, noteSide, noteUse, preferredSide, profileWords, quieted, sideOf, usageKey, type Profile } from "../src/lib/panacea/profile";
 import { rankRecipes } from "../src/lib/panacea/adaptive";
 import { checkTree, fingerprint, generalize, parseBind, readRecipePart, treeWords, type Node } from "../src/lib/panacea/recipe";
-import { addSurfaceTo, placeComposed, placeRecipe, recipeContext, suggestFor, type SurfaceInput } from "../src/lib/panacea/rules";
+import { addSurfaceTo, placeComposed, placeRecipe, recipeContext, suggestFor, suggestForApp, type SurfaceInput } from "../src/lib/panacea/rules";
 import { filteredRows, splitDelimited, tableCsv, tableFrom, type Table } from "../src/lib/panacea/surfaces";
 import { MAX_ARTIFACT_BYTES, keepCopy, saveArtifact } from "./artifacts";
 import { chatTitle } from "./folders";
@@ -1594,7 +1594,11 @@ export function panaceaRoutes(app: Express, opts: {
     if (text) act(id, e, text);
     // A local rule may have something to offer at once: the page asks, and places it itself.
     let offer: { recipe: string; why: string; near: string } | null = null;
-    if (typeof b.bind === "string" && b.value !== undefined) offer = suggestFor(e.canvas, b.bind, b.value as Value, (r) => cooling(p, r), p, allRecipes());
+    if (typeof b.bind === "string" && b.value !== undefined && b.bind.startsWith("model.")) {
+      // A 3D panel: the model is not a canvas surface, so the offer goes beside the panel that changed it.
+      const near = typeof b.panel === "string" && e.canvas.panels.some((x) => x.id === b.panel) ? b.panel : null;
+      offer = suggestForApp(e.canvas, b.bind, b.value as Value, near, (r) => cooling(p, r));
+    } else if (typeof b.bind === "string" && b.value !== undefined) offer = suggestFor(e.canvas, b.bind, b.value as Value, (r) => cooling(p, r), p, allRecipes());
     else if (b.kind === "focus" || b.kind === "selection") {
       const surface = typeof b.surface === "string" && e.canvas.surfaces.some((s) => s.id === b.surface) ? b.surface : undefined;
       const local = rankRecipes(e.canvas, allRecipes(), { profile: p, surface, limit: 1 })[0];

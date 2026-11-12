@@ -11,7 +11,7 @@ export const WORKSPACE_MODES: Record<WorkspaceMode, { name: string; context: str
   photo: { name: "Images", context: "Edit layers, masks, filters and brushes. Keep your look and mood; use the canvas for adaptive image controls." },
   video: { name: "Video", context: "Arrange footage, audio, titles and subtitles. Select a clip in the timeline to trim or adjust it." },
   studio: { name: "Music", context: "Compose with tracks, instruments, a piano roll and mixer. Your melody stays yours; the agent can handle timing and balance." },
-  cad: { name: "3D", context: "Shape, group and inspect a model. Select a part, face or edge to work with its modelling controls." },
+  cad: { name: "3D", context: "Shape, group and inspect a model, and give its parts materials, textures, hair and light. Select a part, face or edge to work with its controls." },
   game: { name: "Games", context: "Make scenes, objects and abilities, and play your game. The agent handles wiring; the world and story stay yours." },
   app: { name: "Apps & code", context: "Try the running app, select elements and leave review comments. The agent works on code and connections in the background." },
   browser: { name: "Web", context: "Use the live web page or let the agent drive. Take control for sign-ins and hand it back when you are done." },

@@ -65,13 +65,15 @@ function More({ open, onToggle }: { open: boolean; onToggle: () => void }) {
 export interface SurfacePanelProps {
   selected: Body3D[];
   onSurface: (args: SurfaceArgs) => void;
+  /** Opens another card of the bar (Texture, Hair): how they are reached before the shape has a pattern or hair. */
+  onOpen?: (id: 'texture' | 'hair') => void;
 }
 
 /** What one shape is made of: a finish to start from, its colour, and the numbers that matter for that finish. */
-export function MaterialPanel({ selected, onSurface }: SurfacePanelProps) {
+export function MaterialPanel({ selected, onSurface, onOpen }: SurfacePanelProps) {
   const [more, setMore] = useState(false);
   const body = selected.length === 1 ? selected[0] : null;
-  if (!body) return <p className={`p-4 text-xs text-slate-400 ${WIDTH}`}>Select a shape.</p>;
+  if (!body) return null;
   const s = resolveSurface(body);
   const set = (k: SurfaceNumber) => (n: number) => onSurface({ id: body.id, [k]: n });
   const range = (k: SurfaceNumber) => SURFACE_RANGES[k];
@@ -111,6 +113,13 @@ export function MaterialPanel({ selected, onSurface }: SurfacePanelProps) {
           )}
         </>
       )}
+      {onOpen && (!body.surface?.pattern && !body.surface?.image || (!body.hair && !body.frame)) && (
+        // Texture and Hair join the bar once the shape has a pattern or hair; until then they are reached from here.
+        <div className="flex gap-2 pt-2 border-t border-white/8">
+          {!body.surface?.pattern && !body.surface?.image && <button type="button" className={quiet} onClick={() => onOpen('texture')}>Texture…</button>}
+          {!body.hair && !body.frame && <button type="button" className={quiet} onClick={() => onOpen('hair')}>Hair…</button>}
+        </div>
+      )}
     </div>
   );
 }
@@ -120,7 +129,7 @@ export function TexturePanel({ selected, onSurface }: SurfacePanelProps) {
   const file = useRef<HTMLInputElement>(null);
   const [note, setNote] = useState<string | null>(null);
   const body = selected.length === 1 ? selected[0] : null;
-  if (!body) return <p className={`p-4 text-xs text-slate-400 ${WIDTH}`}>Select a shape.</p>;
+  if (!body) return null;
   const pattern = body.surface?.pattern;
   const image = body.surface?.image;
   const kind: PatternKind = pattern?.kind ?? 'none';
@@ -172,8 +181,8 @@ export interface HairPanelProps {
 export function HairPanel({ selected, onHair, groomBrush, onGroomBrush, groomOn, onGroomOn }: HairPanelProps) {
   const [more, setMore] = useState(false);
   const body = selected.length === 1 ? selected[0] : null;
-  if (!body) return <p className={`p-4 text-xs text-slate-400 ${WIDTH}`}>Select a shape.</p>;
-  if (body.frame) return <p className={`p-4 text-xs text-slate-400 ${WIDTH}`}>Hair grows on shapes that stand upright, not on a wall.</p>;
+  if (!body) return null;
+  if (body.frame) return null;
   if (!body.hair) {
     return (
       <div className={`p-4 flex gap-2 ${WIDTH}`}>

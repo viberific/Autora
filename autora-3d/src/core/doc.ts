@@ -7,6 +7,7 @@ import { Body3D, LibraryItem, Point2D, RepeatLink, SceneLook, ShapeGroup } from 
 import { syncInstances } from '../utils/library';
 import { normalizeGroups } from '../utils/groups';
 import { syncRepeats } from '../utils/repeat';
+import { sharePictures } from '../utils/surface';
 
 /** Everything that is saved: the shapes, how they are grouped, and the live repeats that make some of them. */
 export interface Doc {
@@ -26,7 +27,11 @@ export type IdGen = (kind: string) => string;
 export const emptyDoc = (): Doc => ({ bodies: [], groups: [], repeats: [], library: [] });
 
 /** Settles a document: live-repeat copies are always rebuilt to match their source and path. */
-export const settle = (d: Doc): Doc => {
+export const settle = (raw: Doc): Doc => {
+  // One copy of each surface picture, however many models (history, the command log) hold it.
+  const bodies = sharePictures(raw.bodies);
+  const library = raw.library.some((i) => i.bodies.some((b) => b.surface?.image)) ? raw.library.map((i) => { const b = sharePictures(i.bodies); return b === i.bodies ? i : { ...i, bodies: b }; }) : raw.library;
+  const d = bodies === raw.bodies && library.every((i, n) => i === raw.library[n]) ? raw : { ...raw, bodies, library };
   const placed = syncInstances(d.bodies, d.groups, d.library);
   const synced = syncRepeats(placed.bodies, d.repeats);
   const grouped = normalizeGroups(synced.bodies, placed.groups);

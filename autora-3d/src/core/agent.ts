@@ -140,7 +140,7 @@ function runOne(host: AgentHost, doc: Doc, ids: IdGen, name: string, args: unkno
         return { doc, result: { format: 'stl', filename: 'craft3d.stl', encoding: 'base64', bytes: bytes.length, data: toBase64(bytes) }, changed: false };
       }
       if (a.format === 'glb') {
-        const bytes = glbBytes(bodies, { scale: a.scale, pivot: a.pivot, groups: doc.groups });
+        const bytes = glbBytes(bodies, { scale: a.scale, pivot: a.pivot, groups: doc.groups, hair: a.hair !== false });
         if (!bytes) throw new AgentError('Nothing visible to export.');
         return { doc, result: { format: 'glb', filename: 'craft3d.glb', encoding: 'base64', bytes: bytes.length, data: toBase64(bytes) }, changed: false };
       }

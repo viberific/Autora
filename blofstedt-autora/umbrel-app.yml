@@ -217,5 +217,7 @@ releaseNotes: >-
   and colours, then comb, cut, lengthen or puff it yourself with the new
   grooming brush. The scene can be lit as a studio, daylight, a sunset or
   night. GLB exports carry the glass, cloth, glow, textures and hair to game
-  engines. The agent can set all of this for you, and Panacea's 3D panels
+  engines (hair is thinned to a size engines take, or left out if you ask).
+  Hair regrows once a slider stops, so dragging stays smooth, and a picture
+  is uploaded once rather than with every edit. The agent can set all of this for you, and Panacea's 3D panels
   have new Glass, Texture, Hair and Light controls.

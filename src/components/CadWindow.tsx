@@ -1,3 +1,4 @@
+import { byReference, picturesOf } from "../lib/cadPictures";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useWindowFull } from "../lib/fullscreen";
 import { SaveButton, keptAs, settle } from "./SaveButton";
@@ -68,6 +69,7 @@ export function CadWindow({ sessionId, phone }: { sessionId: string; phone: bool
       const body = (await res.json().catch(() => null)) as { doc?: unknown; rev?: number; cue?: { seq: number; tool: string }; error?: string } | null;
       if (!res.ok || !body?.doc) throw new Error(body?.error ?? `Autora answered ${res.status}`);
       known.current = Number(body.rev ?? 0);
+      for (const k of picturesOf(body.doc as Parameters<typeof picturesOf>[0]).keys()) serverHas.current.add(k);
       post({ autora3d: "load", doc: body.doc, ...(agent && cursorRef.current && body.cue ? { cue: body.cue } : {}) });
       setTrouble(null);
     } catch (err) {
@@ -78,6 +80,8 @@ export function CadWindow({ sessionId, phone }: { sessionId: string; phone: bool
   /* What the person changed, saved. One request at a time, always the newest: a quick run of edits is one save. */
   const saving = useRef(false);
   const waiting = useRef<unknown>(null);
+  /** The surface pictures the server holds: a save sends those by key, not again in full (lib/cadPictures.ts). */
+  const serverHas = useRef(new Set<string>());
   const save = useCallback(async (doc: unknown) => {
     waiting.current = doc;
     if (saving.current) return;
@@ -86,13 +90,21 @@ export function CadWindow({ sessionId, phone }: { sessionId: string; phone: bool
       while (waiting.current) {
         const next = waiting.current;
         waiting.current = null;
+        const slim = byReference(next as Parameters<typeof byReference>[0], serverHas.current);
         const res = await fetch(`/api/cad/${encodeURIComponent(sessionId)}/doc`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ doc: next }),
+          body: JSON.stringify({ doc: slim.doc }),
         });
-        const body = (await res.json().catch(() => null)) as { rev?: number; error?: string } | null;
+        const body = (await res.json().catch(() => null)) as { rev?: number; error?: string; missing?: string[] } | null;
+        if (res.status === 409 && Array.isArray(body?.missing)) {
+          // The server let go of some pictures: send this model again with those whole (unless a newer one is waiting).
+          for (const k of body.missing) serverHas.current.delete(k);
+          waiting.current ??= next;
+          continue;
+        }
         if (!res.ok) throw new Error(body?.error ?? `Autora answered ${res.status}`);
+        for (const k of slim.sent) serverHas.current.add(k);
         known.current = Math.max(known.current, Number(body?.rev ?? 0));
         setTrouble(null);
       }

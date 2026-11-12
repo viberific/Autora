@@ -400,3 +400,38 @@ export function imageDataUrl(bytes: Uint8Array): string | null {
   for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return `data:image/${png ? 'png' : 'jpeg'};base64,${btoa(bin)}`;
 }
+
+// ---- One copy of each picture -------------------------------------------------------------------
+
+/** The pictures in use, each kept once: the same picture arriving again (a save, an undo, the agent's call) is this one. */
+const canonical = new Map<string, string>();
+/** Image records already pointing at the kept copy (strings cannot be told apart by identity, their holders can). */
+const shared = new WeakSet<object>();
+
+/**
+ * Makes every picture in these shapes the one copy kept of it, so models that differ only elsewhere (a history of edits,
+ * an undo stack, the command log) share one picture instead of holding a copy each. Each image record is looked at once;
+ * returns the same array when nothing changed.
+ */
+export function sharePictures(bodies: Body3D[]): Body3D[] {
+  let changed = false;
+  const out = bodies.map((b) => {
+    const img = b.surface?.image;
+    if (!img || shared.has(img)) return b;
+    const mid = img.data.length >> 1;
+    const key = `${img.data.length}:${img.data.slice(mid, mid + 64)}:${img.data.slice(-64)}`;
+    const kept = canonical.get(key);
+    if (kept !== undefined && kept === img.data) {
+      // The same picture as one already kept: point at that copy, and let this one go.
+      const one = { ...img, data: kept };
+      shared.add(one);
+      changed = true;
+      return { ...b, surface: { ...b.surface!, image: one } };
+    }
+    canonical.set(key, img.data);
+    if (canonical.size > 64) canonical.delete(canonical.keys().next().value as string);
+    shared.add(img);
+    return b;
+  });
+  return changed ? out : bodies;
+}
