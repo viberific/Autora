@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.103"
+version: "0.3.104"
 port: 8096
 # umbrelOS only hands a container the GPU when the manifest says so: with this
 # permission it adds /dev/dri plus the render/video groups those nodes belong
@@ -60,23 +60,10 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  The next episode is fetched ahead of time down to 10% free instead of 25%, so
-  it is ready when you press play rather than waiting on a box with a quarter of
-  its disk spare. It is still refused if the file would not fit above the hard
-  floor that stops downloads outright.
-
-
-  The Torrents page no longer claims a show was watched by everyone when it was
-  not. A "Leaving soon" window that ran out now says exactly that, and who has
-  not watched it is listed separately. Shows whose seeding goal is met but which
-  someone else has not finished are listed too, with Remove anyway -- nothing
-  deletes them on its own, because that person may still watch it.
-
-
-  A show watched through and then deleted no longer comes back under
-  Recommended: the record of having watched it used to be deleted with the files.
-
-
-  Home has a Discover area: every show in the library, filtered by genre and
-  service and ordered by trending, newest or rating, with Show more. And Back on
-  a page you opened directly now goes to Home instead of closing Flix.
+  The Queue is now a grid, and shows in your Queue no longer appear again in the other areas of Home.
+  Every show tile shows its IMDb score, and Best rated now sorts on that score, so the highest-rated shows really come
+  first.
+  This release also ships what 0.3.103 was built for, which never reached Umbrel: prefetch down to 10% free instead of
+  25%, honest reasons on the Torrents page instead of claiming a show was watched by everyone, shows that meet their
+  seeding goal but are still held by someone else listed with Remove anyway, watched-then-deleted shows kept out of
+  Recommended, the Discover area on Home, and Back going to Home instead of closing Flix.
