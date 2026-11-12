@@ -29,6 +29,7 @@ import type { LedgerResult } from "./ledger";
 import type { RequirementResult } from "./requirements";
 import { SKILL_NOT_MEMORY, checkEntry } from "./mindrules";
 import { checkArgs } from "./argcheck";
+import { spectraAvailable } from "./spectra/engine";
 import { planTasks } from "./overlap";
 import { officeDir, runOfficeTool } from "./office";
 import type { Phase } from "./modes";
@@ -395,7 +396,8 @@ export function installedWindows(): Record<string, boolean> {
   const office = builtFor("office");
   // PDF and Video are fetched editors (docs/MAP.md): a server that never built them opens a white "Not Found" frame.
   const built = (editor: string) => fs.existsSync(path.join(process.cwd(), "dist", editor, "index.html"));
-  return { pdf: built("spectra-editor"), video: built("opencut-editor"), studio: true, pages: office, sheets: office, slides: office, cad: builtFor("cad"), game: builtFor("game"), photo: builtFor("photo") };
+  // The PDF window needs its page and its engine: the page alone opens on tools that cannot open a file.
+  return { pdf: built("spectra-editor") && spectraAvailable().ok, video: built("opencut-editor"), studio: true, pages: office, sheets: office, slides: office, cad: builtFor("cad"), game: builtFor("game"), photo: builtFor("photo") };
 }
 
 export function windowOff(name: string, settings: ToolSettings = toolSettings()): boolean {

@@ -1295,7 +1295,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
           aria-label={`Jump to ${surface.title}`} onClick={() => { handle.current?.jump(surface.id); onFocus(surface.id); onJumpWork?.("panacea"); }}>
           {surface.kind === "board" ? <IconOrg size={17} /> : workIcon(surface.kind === "image" ? "photo" : surface.kind === "data" ? "sheets" : surface.kind === "doc" ? "pages" : "widget")}
         </button>)}
-        {hosted.map((work) => <button type="button" key={work.id} data-jump={work.id} title={`Jump to ${work.title}`} aria-label={`Jump to ${work.title}`}
+        {hosted.map((work) => <button type="button" key={work.id} data-jump={work.id} title={`Jump to ${workName(root.current, work)}`} aria-label={`Jump to ${work.title}`}
           onClick={() => { handle.current?.jump(work.id); onJumpWork?.(work.mode); }}>{workIcon(work.mode)}</button>)}
         <button type="button" aria-label="Zoom out" title="Zoom out" onClick={() => { handle.current?.zoomOut(); onJumpWork?.(followTarget ?? "panacea"); }}>−</button>
         <button type="button" aria-label="Show all work" title="Show all work" onClick={() => { interacted.current = true; fit(); onJumpWork?.(followTarget ?? "panacea"); }}><IconMaximize size={16} /></button>
@@ -1330,6 +1330,14 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
       {children}
     </div>
   );
+}
+
+/** What a window's work is called, for the button that jumps to it: the file's or the song's own name off its strip
+    ("Budget.xlsx"), with the app's name when it has none yet. */
+function workName(board: HTMLElement | null, work: HostedWork): string {
+  const strip = board?.querySelector(`.pw-engine[data-work="${CSS.escape(work.id)}"] .pw-engine-body .pdf-bar`);
+  const name = (strip?.querySelector<HTMLInputElement>("input.st-song-name")?.value ?? strip?.querySelector(".pdf-bar-name")?.textContent ?? "").trim();
+  return name && name !== work.title ? `${name} (${work.title})` : work.title;
 }
 
 function workIcon(mode: WorkspaceMode): ReactNode {

@@ -577,7 +577,12 @@ const PANACEA = [
     "with its panels at a size that can be read, and Show all work is the person's to press. A jump to a piece shows it with the panels " +
     "that are out for it. When you place a chart on a table yourself, the starter chart and the standing offer beside that table give " +
     "way to it if the person has not touched or pinned them, so asking for one chart leaves one. A step the app held back is shown to " +
-    "the person in plain words and not as a failure: \"planning first\", \"yours to write\", \"waited for you\".",
+    "the person in plain words and not as a failure: \"planning first\", \"yours to write\", \"waited for you\". The header " +
+    "shows the canvas's own name only when it differs from the chat's (it appears with the pointer on the canvas's Load and Save). " +
+    "On a phone the windows' controls do not fade, and a touch on the board folds the conversation to its strip (a tap on the strip " +
+    "brings it back). If the PDF editor is not installed on this server its window says so in place of the editor; you can still " +
+    "read, compose and change PDFs with the pdf tools. A song is only offered to apps that open songs: a file that names its app " +
+    "(.song.json, .model.json, .panacea.json) is not offered to 3D or Games as a plain .json.",
   "  Saving. Native work is saved as you go; the workspace's top bar also has Save, which keeps native panels and surfaces " +
     "in Artifacts as <canvas name>.panacea.json. This is not a bundle of hosted engine files: Music, Office, PDF, video and other engines " +
     "save through their own work cards and retain their own undo/history. Beside it, Load opens supported work from Artifacts into the " +

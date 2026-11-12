@@ -25,7 +25,7 @@ import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocketServer, type WebSocket } from "ws";
 import { SpectraEngine, spectraAvailable } from "./spectra/engine";
-import { runCommand, type SpectraContext } from "./spectra/commands";
+import { NotHere, runCommand, type SpectraContext } from "./spectra/commands";
 import { closeDesk } from "./pdfdesk";
 import { editorMissing, staticDir } from "./staticfiles";
 
@@ -260,7 +260,7 @@ export function spectraRoutes(app: Express, opts: SpectraOptions): void {
         res.json({ result: result === undefined ? null : result });
       } catch (err) {
         const message = (err as Error)?.message ?? "That could not be done.";
-        res.status(400).json({ error: { command, message } });
+        res.status(err instanceof NotHere ? 200 : 400).json({ error: { command, message } });
       }
     })();
   });

@@ -176,7 +176,8 @@ async function main() {
       const told = app.seen.map((r) => JSON.stringify(r.messages)).join("\n");
       assert.match(told, /taken control of the document in the Office window/);
       assert.doesNotMatch(await bodyText(frame), /SHOULD NOT APPEAR/);
-      await page.getByRole("button", { name: "Hand back" }).click();
+      // The window's own pill; the strip above the message box offers the same ("Hand back to agent").
+      await page.getByRole("button", { name: "Hand back", exact: true }).click();
     });
 
     await test("File -> Export PDF in the window opens the PDF in the PDF editor", async () => {

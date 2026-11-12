@@ -1782,6 +1782,19 @@ export function App() {
   const retractChat = useCallback(() => {
     setChatCollapsed((collapsed) => !collapsed);
   }, []);
+  /* On a phone, reaching for the work gives it the screen: a touch on the board folds the conversation to its strip (a tap
+     on the strip brings it back). The sheet covered half of a small screen while the person was trying to use what was
+     under it, and only its handle put it away. */
+  useEffect(() => {
+    if (!phoneLayout || chatCollapsed) return;
+    const reach = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!event.isTrusted || !target?.closest?.(".pa-board") || target.closest(".conversation-flow, .pw-jump-dock")) return;
+      setChatCollapsed(true);
+    };
+    document.addEventListener("pointerdown", reach, true);
+    return () => document.removeEventListener("pointerdown", reach, true);
+  }, [phoneLayout, chatCollapsed]);
   const openPanaceaChooser = useCallback(async () => {
     if (workspaceOpening) return;
     if (toolsOpen) { setToolsOpen(false); return; }
@@ -2193,7 +2206,7 @@ export function App() {
 
           {/* The canvas's own controls (its name, whether it is saved, Load, Save), drawn here by PanaceaWindow: one
               bar at the top, not a second one under it. Empty until there is native work on the canvas. */}
-          {page === "chat" && <div id={CANVAS_BAR_SLOT} className="top-canvas-slot" />}
+          {page === "chat" && <div id={CANVAS_BAR_SLOT} className="top-canvas-slot" data-chat={currentName} />}
 
           {/* Following the agent's work, and watching it work (its mouse and keyboard), where they are always in reach
               rather than in a bar of the workspace's own. */}

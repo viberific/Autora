@@ -394,7 +394,7 @@ await test("the Panacea manual says that with Visible work on its changes are do
   assert.ok(!p.includes("not done by hand yet"), "the Panacea manual still says writing is not done by hand");
   // What a window looks like at rest, and what the person no longer sees printed on it (docs/TRY-IT-2026-11-11-PANACEA.md).
   for (const needle of ["the work and its name, nothing else", "fade when the work moves elsewhere", "column header sorts", "newest piece",
-    "asking for one chart leaves one", "planning first", "yours to write"]) {
+    "asking for one chart leaves one", "planning first", "yours to write", "folds the conversation to its strip", "says so in place of the editor"]) {
     assert.ok(p.includes(needle), `the Panacea manual lacks "${needle}"`);
   }
   assert.ok(!p.includes("Save native work"), "the canvas's Save is called Save");

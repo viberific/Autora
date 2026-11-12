@@ -220,4 +220,9 @@ releaseNotes: >-
   done ("Putting a table on the canvas") instead of raw settings, and a step
   the app held back, such as writing in a story that is yours, is shown as
   held back rather than as a red failure. If an editor is not installed on
-  your server, Autora now tells you so plainly.
+  your server, Autora now tells you so plainly, and the PDF window says so
+  itself. Sending a message always brings the chat to its end. On a phone,
+  touching the canvas folds the chat down to its strip, and windows keep
+  their buttons in view. A song is no longer offered to 3D or Games. Opening
+  a PDF, a spreadsheet or a new video no longer logs errors in the browser,
+  and spreadsheets load their fonts.

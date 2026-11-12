@@ -6577,11 +6577,13 @@ body:has(.panacea-workspace.is-phone .pw-engine) .install-offer { display: none;
    touched, or maximised -- and fades when the work moves elsewhere (CLAUDE.md: controls appear when the work needs them).
    They keep their places, so nothing in the window moves when they come and go. */
 .pw-engine-head > .spacer { flex: 1; }
-.pw-engine-head > button, .pw-engine-head > .pa-link-dot,
-.pw-engine-body .pdf-bar > :not(.pdf-bar-ico, .pdf-bar-name, .st-song-name, .pdf-bar-note, .pdf-bar-app, .spacer),
-.pw-engine-body .app-bar > :is(button, a, .btn) { opacity: 0; transition: opacity var(--dur-2) var(--ease); }
-.pw-engine:is(:hover, :focus-within, .is-active, .is-max) :is(.pw-engine-head > button, .pw-engine-head > .pa-link-dot),
-.pw-engine:is(:hover, :focus-within, .is-active, .is-max) .pw-engine-body :is(.pdf-bar, .app-bar) > * { opacity: 1; }
+/* On a phone a window is the screen and there is no pointer to bring its controls: they stay (the way out of full
+   screen above all). The fade is a desktop's. */
+.panacea-workspace:not(.is-phone) :is(.pw-engine-head > button, .pw-engine-head > .pa-link-dot,
+  .pw-engine-body .pdf-bar > :not(.pdf-bar-ico, .pdf-bar-name, .st-song-name, .pdf-bar-note, .pdf-bar-app, .spacer),
+  .pw-engine-body .app-bar > :is(button, a, .btn)) { opacity: 0; transition: opacity var(--dur-2) var(--ease); }
+.panacea-workspace:not(.is-phone) .pw-engine:is(:hover, :focus-within, .is-active, .is-max) :is(.pw-engine-head > button, .pw-engine-head > .pa-link-dot),
+.panacea-workspace:not(.is-phone) .pw-engine:is(:hover, :focus-within, .is-active, .is-max) .pw-engine-body :is(.pdf-bar, .app-bar) > * { opacity: 1; }
 /* One strip, not two: on a desktop the app's own bar (the file's name) is the window's title strip, and the window's
    buttons sit at its right end. A window whose app has no bar keeps the board's strip, with the app's name. */
 .panacea-workspace:not(.is-phone) .pw-engine:has(.pw-engine-body .pdf-bar) > .pw-engine-head {
@@ -6978,6 +6980,8 @@ button.app-url:hover { border-color: var(--border-strong); color: var(--text); }
    left edge. */
 .pdf-window.is-phone .pdf-bar > .pdf-full-btn,
 .app-window.is-phone .app-bar > .app-full-btn { order: -1; position: sticky; left: 0; z-index: 2; background: var(--s1); }
+.pdf-missing { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 24px; text-align: center; color: var(--text-2); font-size: var(--fs-sm); }
+.pdf-missing b { color: var(--text); font-size: var(--fs-base); }
 .pdf-problem {
   padding: 7px 12px; font-size: var(--fs-sm); color: var(--warn);
   background: rgba(var(--warn-rgb), 0.08); border-bottom: 1px solid rgba(var(--warn-rgb), 0.25);
@@ -8337,6 +8341,8 @@ body.is-resizing iframe { pointer-events: none; }
 .top-canvas-slot { display: contents; }
 .pa-canvas-bar { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; animation: fade var(--dur-2) var(--ease) both; }
 .pa-canvas-bar[data-idle] { display: none; }
+.pa-canvas-bar .st-song-name.is-same { display: none; }
+.pa-canvas-bar:is(:hover, :focus-within) .st-song-name.is-same { display: revert; }
 .pa-canvas-bar .st-song-name { max-width: 200px; }
 @media (max-width: 1240px) { .pa-canvas-bar .pdf-bar-note { display: none; } }
 .pa-history[data-idle] { opacity: 0; pointer-events: none; }

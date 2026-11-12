@@ -41,6 +41,13 @@ export function EditorProvider({ projectId, children }: EditorProviderProps) {
 				setIsLoading(true);
 				await initializeGpuRenderer();
 				editor.renderer.setDegraded(!isGpuAvailable());
+				/* "new" is not a project to look for: asking for it logged "Project with id new not found" as an error on
+				   every fresh video before the fallback below made one. Made straight away instead. */
+				if (projectId === "new") {
+					const newProjectId = await editor.project.createNewProject({ name: "Untitled Project" });
+					if (!cancelled) router.replace(`/editor/${newProjectId}`);
+					return;
+				}
 				await editor.project.loadProject({ id: projectId });
 
 				if (cancelled) return;

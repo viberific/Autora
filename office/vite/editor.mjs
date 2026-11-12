@@ -195,7 +195,11 @@ function singlePage() {
 
       // Inside a <script>, "</script" would end it and "<!--" would change how it is read. Both occur in the
       // editor's HTML handling, in strings and regular expressions; <\/script and <\x21-- mean the same there.
-      const inlineScript = (code) => code.replace(/__VITE_PRELOAD__/g, "void 0").replace(/<\/script/gi, "<\\/script").replace(/<!--/g, "<\\x21--");
+      /* The entry chunk is inlined into the page, so its `import.meta.url` is the page's and no longer a file's in
+         assets/: an asset it names beside itself (`new URL("Carlito-Regular-x.ttf", import.meta.url)`, the sheets' own
+         copy of the fonts for its canvas) was then asked for one folder up and answered 404. Named from the page instead. */
+      const besideThePage = (code) => code.replace(/new URL\("([^"/]+)",\s*import\.meta\.url\)/g, (all, name) => (bundle[`assets/${name}`] ? `new URL("assets/${name}",import.meta.url)` : all));
+      const inlineScript = (code) => besideThePage(code).replace(/__VITE_PRELOAD__/g, "void 0").replace(/<\/script/gi, "<\\/script").replace(/<!--/g, "<\\x21--");
       for (const file of Object.values(bundle)) {
         if (file.type === "chunk" && file.isEntry) {
           if (file.imports.length || file.dynamicImports.length) throw new Error(`autora: ${file.fileName} imports others at runtime`);

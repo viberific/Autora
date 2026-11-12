@@ -67,6 +67,9 @@ const show = (v: Value | undefined) => {
 /** The canvas value that says which track, part or clip a control acts on. */
 const pickOf = (bind: string) => (isModelBind(bind) ? MODEL_PART : isVideoBind(bind) ? VIDEO_CLIP : isGameBind(bind) ? GAME_OBJECT : MUSIC_TRACK);
 
+/** Whether a canvas's name says nothing the header does not already: the chat's own title, or the name a new chat starts with. */
+const sameName = (name: string, chat: string | undefined) => { const n = name.trim(); return !n || n === (chat ?? "").trim() || n === "New Session" || n === "Canvas"; };
+
 export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene, followTarget, onJump, onCloseWork, navigationHost, nativeActions }: {
   sessionId: string;
   hosted?: readonly HostedWork[];
@@ -812,7 +815,9 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
             not in a second bar under it: drawn here, shown there (the slot App.tsx keeps in the header). */}
         {!phone && barHost && createPortal(
           <div className="pa-canvas-bar" data-idle={idleBar ? "" : undefined} {...(idleBar ? ({ inert: "" } as object) : {})}>
-            {nativeOpen && <input className="st-song-name" value={canvas.name} size={Math.max(4, canvas.name.length + 1)} maxLength={80} aria-label="Canvas name"
+            {/* One name in the header, not two: a canvas still called what its chat is (or was, before the chat was named
+                from its first message) shows no name of its own until the pointer or the keys are on its bar. */}
+            {nativeOpen && <input className={`st-song-name${sameName(canvas.name, barHost.dataset.chat) ? " is-same" : ""}`} value={canvas.name} size={Math.max(4, canvas.name.length + 1)} maxLength={80} aria-label="Canvas name"
               title="The canvas's name" disabled={!doc.ready}
               onChange={(e) => { const name = e.target.value; edit((d) => { d.name = name; }, "Renamed the canvas", "name"); }} />}
             {nativeOpen && <span className={`pdf-bar-note st-save is-${doc.save}`}>{!doc.ready ? doc.notice ? "Not loaded" : "Loading native work…" : doc.save === "saving" ? "Saving…" : doc.save === "error" ? "Not saved" : ""}</span>}

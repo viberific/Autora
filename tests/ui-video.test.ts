@@ -256,6 +256,8 @@ async function main() {
       assert.match(said(), /image "violet.png"/, "the picture is still on the timeline");
 
       await again.click('.pw-engine-head button[aria-label="Close Video work"]');
+      // Closing a window asks first (it can lose the person's place); the answer is theirs.
+      await again.getByRole("alertdialog").getByRole("button", { name: "Close", exact: true }).click();
       await again.waitForSelector(".app-pane[data-pane=video]", { state: "detached", timeout: 5_000 });
       await again.close();
     });

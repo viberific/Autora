@@ -325,6 +325,19 @@ export function Thread({
     if (el) el.scrollTo({ top: el.scrollHeight, behavior });
   }, []);
 
+  /* A message the person has just sent takes the thread to its end, wherever they had scrolled to: they were reading up
+     the thread, said something, and the answer then arrived out of sight behind a "New messages" pill. */
+  const turnsSeen = useRef(count);
+  useEffect(() => {
+    const grew = count > turnsSeen.current;
+    turnsSeen.current = count;
+    if (!grew || !tail?.prompt) return;
+    setStuck(true);
+    setUnread(false);
+    const frame = requestAnimationFrame(() => toBottom("auto"));
+    return () => cancelAnimationFrame(frame);
+  }, [count, tail, toBottom]);
+
   /**
    * Where the thread sits, readable from a handler that is not re-rendered.
    */
@@ -1095,6 +1108,10 @@ const CellView = memo(function CellView({
   const held = !stage && docked !== "" && docked.split("|").includes(cellKey(cell));
   switch (cell.kind) {
     case "reply":
+      /* A reply with nothing in it yet (the model has begun and said no word, thought nothing shown, recalled nothing) is not
+         a bubble: an empty one with only the name on it stood in the thread while the steps ran. The line under the
+         thread already says what the agent is on. */
+      if (!cell.turn.text.trim() && !cell.turn.thinking?.trim() && cell.memories.length === 0 && !cell.turn.setup) return null;
       return (
         <Reply
           text={cell.turn.text}
