@@ -7987,6 +7987,33 @@ body.is-resizing iframe { pointer-events: none; }
 .pa-flow line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 5; opacity: 0.75; }
 .pa-flow-arrow { fill: var(--accent); stroke: var(--bg); stroke-width: 1.5; }
 .pa-flow-label { fill: var(--text-2); font-size: var(--fs-xs); font-family: var(--sans); paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+/* Joined windows (lib/panacea/joins.ts): the person's own link, thick and solid with a round end at each window and an
+   Unjoin button halfway -- never the thin dashed arrow of a flow above. Under the windows, so it takes none of their clicks. */
+.pa-joins { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; z-index: 0; }
+.pa-join line { stroke: var(--live); stroke-width: 5; stroke-linecap: round; opacity: 0.9; }
+.pa-join circle { fill: var(--live); stroke: var(--bg); stroke-width: 2px; vector-effect: non-scaling-stroke; }
+.pa-join-chip {
+  position: absolute; z-index: 0; display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px;
+  border: 1px solid var(--live); border-radius: var(--r-pill); background: var(--s2); color: var(--text-2);
+  font: 550 var(--fs-xs) var(--sans); white-space: nowrap; cursor: pointer; transform-origin: center;
+  transition: color var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
+}
+.pa-join-chip svg { color: var(--live); }
+.pa-join-chip:hover, .pa-join-chip:focus-visible { color: var(--text); background: var(--s1); }
+.pw-engine[data-join] { transition: opacity var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); }
+.pw-engine[data-join="takes"] { box-shadow: var(--shadow-lg), 0 0 0 2px rgba(var(--live-rgb), 0.25); }
+.pw-engine[data-join="near"] { border-color: var(--live); box-shadow: var(--shadow-lg), 0 0 0 3px rgba(var(--live-rgb), 0.4); }
+.pw-engine[data-join="armed"] { border-color: var(--live); box-shadow: var(--shadow-lg), 0 0 0 6px rgba(var(--live-rgb), 0.55); }
+.pw-engine[data-join="dragging"] { opacity: 0.5; }
+.pa-join-drop {
+  position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; pointer-events: none;
+  border-radius: inherit; background: rgba(var(--live-rgb), 0.08);
+}
+.pa-join-drop.is-armed { background: rgba(var(--live-rgb), 0.18); }
+.pa-join-drop span {
+  max-width: 80%; padding: 8px 14px; border: 1px solid var(--live); border-radius: var(--r); background: var(--s1);
+  color: var(--text); font: 600 var(--fs-sm) var(--sans); text-align: center; box-shadow: var(--shadow-lg);
+}
 @media (pointer: coarse) { .pa-resize { width: calc(32px / var(--pa-z, 1)); height: calc(32px / var(--pa-z, 1)); } .pa-surface-x { opacity: 1; } }
 .pa-surface-body { flex: 1; min-height: 0; display: flex; }
 .pa-image { position: relative; flex: 1; min-width: 0; display: grid; place-items: center; background: var(--sink); }

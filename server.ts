@@ -173,9 +173,10 @@ import { gameRoutes, gameState, onGamePlayRequest, serveGame } from "./server/ga
 import { onPhotoCommand, photoPickNote, photoRoutes, photoState, servePhoto } from "./server/photodesk";
 import { onStudioCommand, studioRoutes, studioState, studioTurnNote, studioVisible } from "./server/studio";
 import { appOfArtifact, appOfFile, appOfTool } from "./src/lib/panacea/flows";
-import { dropPanacea, noteFlow, onPanaceaChange, onPanaceaTouch, panaceaRoutes, panaceaState, panaceaSuggester, panaceaTurnNote, panaceaVisible } from "./server/panacea";
+import { dropPanacea, noteFlow, onPanaceaChange, panaceaJoins, onPanaceaTouch, panaceaRoutes, panaceaState, panaceaSuggester, panaceaTurnNote, panaceaVisible } from "./server/panacea";
 import { installedWindows, joinProjects, windowOff } from "./server/tools";
 import { capabilityOf } from "./server/capabilities";
+import { forgetJoins, joinsTouched, startOfficeJoins } from "./server/officejoin";
 import { dropOfficeDesk, onOfficeChange, onOfficePush, onOfficeTouch, officeBriefing, officeData, officeRoutes, onOfficeCommand, officeState, officeHooks, serveOfficeEditors } from "./server/officedesk";
 import { renderToPdf, webDir as officeWebDir } from "./server/officerender";
 import {
@@ -487,6 +488,7 @@ function forgetSession(id: string) {
   forgetPresence(id);
   for (const desk of DESKS) desk.drop(id);
   dropPanacea(id);
+  forgetJoins(id);
   presenceSent.delete(id);
   for (const timers of [presenceTimers]) {
     const timer = timers.get(id);
@@ -1327,6 +1329,9 @@ for (const desk of DESKS) desk.onChange((sessionId) => sendEphemeral(sessionId, 
 onPanaceaChange((sessionId) => {
   sendEphemeral(sessionId, { type: "panaceadesk", session: sessionId, state: panaceaState(sessionId) });
 });
+/* Windows the person joined (a sheet into a document): the joined work is kept up to date where it was put (server/officejoin.ts). */
+startOfficeJoins({ joinsOf: panaceaJoins, nameOf: (sessionId, kind) => officeHooks(sessionId).at(kind)?.name ?? "the sheet" });
+onPanaceaChange(joinsTouched);
 onPanaceaTouch((sessionId, text) => {
   // Heard by a running turn like any touch; but on the canvas the proactive voice is a ghost panel, not a remark in the chat.
   presenceFor(sessionId).touch("panacea", "*", "edit", text);

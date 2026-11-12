@@ -17,6 +17,7 @@ import { usePhone } from "../../lib/stage";
 import { sure } from "../../lib/sure";
 import { jumpTo, zoomAt } from "../../lib/panacea/workspace-camera";
 import { engineSends, surfaceSends, takersOf, type SentFile } from "../../lib/panacea/flows";
+import { addJoin, canJoin, joinOffer, removeJoin } from "../../lib/panacea/joins";
 import { workViewport } from "../../lib/frameCoordinates";
 import { EngineFrame, setFullscreen, useFullscreen } from "../../lib/fullscreen";
 
@@ -61,6 +62,8 @@ export interface BoardHandle {
 }
 
 const MIN_ZOOM = 0.3;
+/** How long a dragged window is held over another before letting go would join them (a pass over one does not). */
+const JOIN_DWELL_MS = 350;
 const MAX_ZOOM = 2;
 
 /**
@@ -68,7 +71,7 @@ const MAX_ZOOM = 2;
  * double-click or press / to summon a panel, Shift+drag to pick several, drop a file or paste a table to add a surface.
  * Panels move by their title bars and widen by their right edge, and land on the grid.
  */
-export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes, actions, selected, setSelected, onPick, onFocus, onFiles, onLink, onPaste, onRemoveSurface, onSurfaceSize, onMoved, handle, children,
+export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes, actions, selected, setSelected, onPick, onFocus, onFiles, onLink, onJoined, onPaste, onRemoveSurface, onSurfaceSize, onMoved, handle, children,
   hosted = [], ready = true, scene, followTarget, onJumpWork, onCloseWork, navigationHost }: {
   canvas: Canvas;
   fresh: ReadonlySet<string>;
@@ -87,6 +90,8 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
   onFiles: (files: File[], at: { x: number; y: number }) => void;
   /** The person connected a piece of work (a surface's id, or an app window's) to an app: send the first to the second. */
   onLink?: (from: string, to: WorkspaceMode) => void;
+  /** The person joined one window into another by dragging it there (joins.ts): told so it can be said. */
+  onJoined?: (from: string, to: string) => void;
   onPaste: (text: string, at: { x: number; y: number }) => void;
   onRemoveSurface: (s: Surface) => void;
   onSurfaceSize: (s: Surface, px: { w: number; h: number }) => void;
@@ -1130,22 +1135,29 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
       const had = pairs.get(key);
       pairs.set(key, { a, b, what: f.what, more: had ? had.more + 1 : 0, key });
     }
-    /** Where the line from a box's middle toward `p` leaves the box. */
-    const edge = (box: WorkBox, p: { x: number; y: number }) => {
-      const c = { x: box.x + box.w / 2, y: box.y + box.h / 2 };
-      const dx = p.x - c.x;
-      const dy = p.y - c.y;
-      const t = Math.min(dx ? (box.w / 2) / Math.abs(dx) : Infinity, dy ? (box.h / 2) / Math.abs(dy) : Infinity, 1);
-      return { x: c.x + dx * t, y: c.y + dy * t };
-    };
     return [...pairs.values()].map(({ a, b, what, more, key }) => {
       const ca = { x: a.x + a.w / 2, y: a.y + a.h / 2 };
       const cb = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
-      const p = edge(a, cb);
-      const q = edge(b, ca);
+      const p = boxEdge(a, cb);
+      const q = boxEdge(b, ca);
       return { key, p, q, mid: { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 }, angle: Math.atan2(q.y - p.y, q.x - p.x) * 180 / Math.PI, label: more ? `${what} +${more}` : what };
     });
   })();
+  // ------------------------------------------------------ windows joined --
+  /* A join (joins.ts) is the person's own: one window dragged onto another and let go. It is drawn as a thick solid
+     connector with a round end at each window, unlike a flow's thin dashed arrow, and has an Unjoin button halfway. Drawn
+     under the windows, so it never takes a click meant for one. */
+  const joinLines = (canvas.joins ?? []).flatMap((j) => {
+    const a = engineBoxes[j.from], b = engineBoxes[j.to];
+    if (!a || !b) return [];
+    const p = boxEdge(a, { x: b.x + b.w / 2, y: b.y + b.h / 2 });
+    const q = boxEdge(b, { x: a.x + a.w / 2, y: a.y + a.h / 2 });
+    return [{ key: `${j.from}>${j.to}`, from: j.from, to: j.to, p, q, mid: { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 } }];
+  });
+  const unjoin = (from: string, to: string) => edit((d) => { d.joins = removeJoin(d.joins ?? [], from, to); if (!d.joins.length) delete d.joins; },
+    `Unjoined ${windowName(from)} from ${windowName(to)}`);
+  /** A window being dragged that can be joined into another: which one it is over, and whether letting go joins them. */
+  const [joinDrag, setJoinDrag] = useState<{ from: string; over: string | null; armed: boolean } | null>(null);
   const dot = GRID * 1.5 * z;
   const bg = {
     backgroundSize: `${dot}px ${dot}px`,
@@ -1158,15 +1170,60 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     raiseIt(work.id);
     const target = e.currentTarget; target.setPointerCapture(e.pointerId);
     const start = { x: e.clientX, y: e.clientY, zoom: viewRef.current.zoom };
-    const move = (event: PointerEvent) => setEngineBoxes((before) => ({ ...before,
-      [work.id]: { ...box, x: box.x + (event.clientX - start.x) / start.zoom, y: box.y + (event.clientY - start.y) / start.zoom } }));
+    /* Hovering to join: held over a window it can be joined into for a moment, that window lights and says what letting
+       go does; let go there and the two are joined (the dragged window goes back where it was). Moving off, or Escape,
+       and nothing is joined. */
+    const targets = hostedRef.current.filter((w) => canJoin(work.id, w.id)).map((w) => w.id);
+    let over: string | null = null, armed = false, dwell = 0;
+    if (targets.length) {
+      setJoinDrag({ from: work.id, over: null, armed: false });
+      // Escape has to reach this page: an editor's frame that has the keys would keep it.
+      if (document.activeElement instanceof HTMLIFrameElement) document.activeElement.blur();
+    }
+    const overAt = (event: PointerEvent): string | null => {
+      const r = root.current?.getBoundingClientRect(), v = viewRef.current;
+      if (!r) return null;
+      const x = v.x + (event.clientX - r.left) / v.zoom, y = v.y + (event.clientY - r.top) / v.zoom;
+      return targets.find((id) => { const b = engineBoxesRef.current[id]; return b && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h; }) ?? null;
+    };
+    const move = (event: PointerEvent) => {
+      setEngineBoxes((before) => ({ ...before,
+        [work.id]: { ...box, x: box.x + (event.clientX - start.x) / start.zoom, y: box.y + (event.clientY - start.y) / start.zoom } }));
+      if (!targets.length) return;
+      const now = overAt(event);
+      if (now === over) return;
+      over = now; armed = false; window.clearTimeout(dwell);
+      setJoinDrag({ from: work.id, over, armed: false });
+      if (now) dwell = window.setTimeout(() => { armed = true; setJoinDrag({ from: work.id, over: now, armed: true }); }, JOIN_DWELL_MS);
+    };
+    const end = () => {
+      target.removeEventListener("pointermove", move); target.removeEventListener("pointerup", up); target.removeEventListener("pointercancel", up);
+      window.removeEventListener("keydown", key, true);
+      window.clearTimeout(dwell); holdBoard(false);
+      if (targets.length) setJoinDrag(null);
+    };
+    const key = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault(); event.stopPropagation();
+      end();
+      if (target.hasPointerCapture(e.pointerId)) target.releasePointerCapture(e.pointerId);
+      setEngineBoxes((before) => ({ ...before, [work.id]: box }));
+    };
     const up = (event: PointerEvent) => {
-      target.removeEventListener("pointermove", move); target.removeEventListener("pointerup", up); target.removeEventListener("pointercancel", up); holdBoard(false);
+      end();
       const dx = (event.clientX - start.x) / start.zoom, dy = (event.clientY - start.y) / start.zoom;
+      if (armed && over && event.type === "pointerup") {
+        const to = over;
+        setEngineBoxes((before) => ({ ...before, [work.id]: box }));
+        edit((d) => { d.joins = addJoin(d.joins ?? [], { from: work.id, to, at: Date.now() }); }, `Joined ${work.title} into ${windowName(to)}`);
+        onJoined?.(work.id, to);
+        return;
+      }
       if (Math.abs(dx) + Math.abs(dy) < 3) return;
       edit((d) => { placeWindow(d.windows ?? (d.windows = []), work.id, { x: box.x + dx, y: box.y + dy, w: box.w, h: box.h }, { front: true }); }, `Moved ${work.title}`);
     };
     target.addEventListener("pointermove", move); target.addEventListener("pointerup", up); target.addEventListener("pointercancel", up);
+    window.addEventListener("keydown", key, true);
   };
   return (
     <div
@@ -1197,12 +1254,37 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
             ))}
           </svg>
         )}
+        {joinLines.length > 0 && <>
+          <svg className="pa-joins" width="1" height="1" aria-hidden="true">
+            {joinLines.map((l) => (
+              <g key={l.key} className="pa-join" data-join={l.key}>
+                <line x1={l.p.x} y1={l.p.y} x2={l.q.x} y2={l.q.y} vectorEffect="non-scaling-stroke" />
+                <circle cx={l.p.x} cy={l.p.y} r={6 / z} />
+                <circle cx={l.q.x} cy={l.q.y} r={6 / z} />
+              </g>
+            ))}
+          </svg>
+          {joinLines.map((l) => (
+            <button type="button" key={l.key} className="pa-join-chip" data-join={l.key}
+              style={{ left: l.mid.x, top: l.mid.y, transform: `translate(-50%, -50%) scale(${1 / z})` }}
+              title={`${windowName(l.from)} is joined into ${windowName(l.to)}: its table there follows it. Click to unjoin.`}
+              aria-label={`Unjoin ${windowName(l.from)} from ${windowName(l.to)}`}
+              onPointerDown={(e) => e.stopPropagation()} onClick={() => unjoin(l.from, l.to)}>
+              <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true" focusable="false">
+                <circle cx="4" cy="8" r="2.25" fill="currentColor" /><circle cx="12" cy="8" r="2.25" fill="currentColor" /><path d="M6.25 8h3.5" />
+              </svg>
+              <span>Unjoin</span>
+            </button>
+          ))}
+        </>}
         <div className="pa-wins">{hosted.map((work) => {
           const box = engineBoxes[work.id];
           if (!box) return null;
           const z = canvas.windows?.find((w) => w.id === work.id)?.z ?? 0;
           return <section key={work.id} className={`pw-engine${enginePins.has(work.id) ? " is-pinned" : ""}${isMaxed(work.id) ? " is-max" : ""}${activeWin === work.id ? " is-active" : ""}`} data-engine={work.mode}
             data-link={!link || link.from === work.id ? undefined : link.over === work.id ? "over" : linkTakes?.has(work.mode) ? "takes" : "no"}
+            data-join={!joinDrag ? undefined : joinDrag.from === work.id ? (joinDrag.over ? "dragging" : undefined)
+              : !canJoin(joinDrag.from, work.id) ? undefined : joinDrag.over === work.id ? (joinDrag.armed ? "armed" : "near") : "takes"}
             data-work={work.id} style={{ left: box.x, top: box.y, width: box.w, height: box.h, zIndex: z + 1, ...(phone ? { maxWidth: "calc(100vw - 16px)" } : {}) }} aria-label={`${work.title} work surface`}
             /* Working in a window is not holding the view (only panning, zooming or dragging is): Follow still brings the
                agent's next window into view after the person has pressed a button in this one. */
@@ -1220,6 +1302,11 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
               {onCloseWork && <button type="button" aria-label={`Close ${work.title} work`}
                 onClick={() => { void sure(`Close ${work.title}?`, "Close").then((yes) => { if (yes) onCloseWork(work.mode); }); }}><IconX size={14} /></button>}
             </header>
+            {joinDrag && joinDrag.over === work.id && (
+              <div className={`pa-join-drop${joinDrag.armed ? " is-armed" : ""}`} role="status">
+                <span>{joinDrag.armed ? joinOffer(joinDrag.from, work.id) : "Hold here to join"}</span>
+              </div>
+            )}
             <div className="pw-engine-body"><EngineFrameScope id={work.id} full={isMaxed(work.id)} onFull={onWindowFull}>{work.content}</EngineFrameScope></div>
             <i className="pa-resize" role="presentation" title="Drag to resize" onPointerDown={engineResize(work.id)} />
           </section>;
@@ -1330,6 +1417,15 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
       {children}
     </div>
   );
+}
+
+/** Where the line from a box's middle toward `p` leaves the box. */
+function boxEdge(box: WorkBox, p: { x: number; y: number }) {
+  const c = { x: box.x + box.w / 2, y: box.y + box.h / 2 };
+  const dx = p.x - c.x;
+  const dy = p.y - c.y;
+  const t = Math.min(dx ? (box.w / 2) / Math.abs(dx) : Infinity, dy ? (box.h / 2) / Math.abs(dy) : Infinity, 1);
+  return { x: c.x + dx * t, y: c.y + dy * t };
 }
 
 /** What a window's work is called, for the button that jumps to it: the file's or the song's own name off its strip
