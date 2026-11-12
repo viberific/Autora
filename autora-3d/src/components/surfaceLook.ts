@@ -11,7 +11,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { Body3D, SceneLook } from '../types';
-import { furLayers, furPattern, furRepeat, furShell, hairGeometry, MAX_STRANDS, settleHair, type GroomAt } from '../utils/hair';
+import { furLayers, furPattern, furRepeat, furShell, hairGeometry, MAX_STRANDS, settleHair, type GroomAt, type Obstacle } from '../utils/hair';
 import { patternPixels, resolveSurface, textureRepeat } from '../utils/surface';
 
 // Textures are shared between shapes and kept: a material's dispose never takes them with it.
@@ -62,10 +62,11 @@ function patternTextures(kind: string, color: string, color2: string) {
   });
 }
 
-function imageTexture(data: string, loaded: () => void): THREE.Texture {
-  return keep(imageCache, data, () => {
+/** A picture as a texture. `colour`: it is a colour (sRGB); a relief or roughness picture is data (linear). */
+function imageTexture(data: string, loaded: () => void, colour = true): THREE.Texture {
+  return keep(imageCache, `${colour ? 'c' : 'd'}|${data}`, () => {
     const t = new THREE.TextureLoader().load(data, () => loaded());
-    t.colorSpace = THREE.SRGBColorSpace;
+    t.colorSpace = colour ? THREE.SRGBColorSpace : THREE.NoColorSpace;
     t.anisotropy = 4;
     return t;
   });
@@ -98,6 +99,16 @@ export function surfaceMaterial(body: Body3D, loaded: () => void): THREE.Materia
   }
   if (s.image) {
     params.map = tiled(imageTexture(s.image.data, loaded), textureRepeat(body, 'image'));
+  }
+  if (s.reliefImage) {
+    // A relief picture is the shape's own relief: it takes the place of a pattern's.
+    const relief = tiled(imageTexture(s.reliefImage.data, loaded, false), textureRepeat(body, 'reliefImage'));
+    params.bumpMap = relief;
+    params.bumpScale = (s.reliefImage.strength ?? 0.5) * 4;
+  }
+  if (s.roughnessImage) {
+    // three reads roughness from the green of the picture: a grey one has it everywhere.
+    params.roughnessMap = tiled(imageTexture(s.roughnessImage.data, loaded, false), textureRepeat(body, 'roughnessImage'));
   }
   if (s.opacity < 1) {
     params.transparent = true;
@@ -170,7 +181,7 @@ const furPatternOf = (seed: number) =>
  * The hair grown on a shape, as an object to add beside its mesh: ribbons for strands, layers for fur. It is never picked
  * (a press goes through to the shape), and is grown in the shape's own space so it moves with it.
  */
-export function hairObject(geometry: THREE.BufferGeometry, body: Body3D, most = MAX_STRANDS): THREE.Object3D | null {
+export function hairObject(geometry: THREE.BufferGeometry, body: Body3D, most = MAX_STRANDS, obstacles: Obstacle[] = []): THREE.Object3D | null {
   if (!body.hair) return null;
   const hair = settleHair(body.hair);
   const holder = new THREE.Group();
@@ -200,7 +211,7 @@ export function hairObject(geometry: THREE.BufferGeometry, body: Body3D, most = 
     }
     return holder;
   }
-  const strands = hairGeometry(geometry, hair, body.elevation ?? 0, most);
+  const strands = hairGeometry(geometry, hair, body.elevation ?? 0, most, obstacles);
   if (!strands) return null;
   const material = new THREE.MeshPhysicalMaterial({
     vertexColors: true,

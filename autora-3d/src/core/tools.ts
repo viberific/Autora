@@ -234,7 +234,7 @@ export const TOOL_SPECS: ToolSpec[] = [
   {
     name: 'surface_set',
     description:
-      'Change what shapes are made of, beyond the material presets: start from a preset (it clears earlier fine-tuning) and/or set any number of the finish, a pattern the modeller draws itself, or a picture laid on it. Glass: transmission 1, roughness 0 (clear) to 0.5 (frosted), ior 1.33 water / 1.5 glass / 2.4 diamond, thickness in mm. Cloth and fuzz: sheen. Skin, wax, leaves, marble: subsurface. Light: glow. A pattern is in the shape\'s colour and color2, repeating every scale mm, with bump for relief. A picture: image (an artifact id or path; the host reads it, PNG or JPEG), repeating every imageScale mm (a mesh whose file had a layout fits it once). Several shapes at once with ids.',
+      'Change what shapes are made of, beyond the material presets: start from a preset (it clears earlier fine-tuning) and/or set any number of the finish, a pattern the modeller draws itself, or a picture laid on it. Glass: transmission 1, roughness 0 (clear) to 0.5 (frosted), ior 1.33 water / 1.5 glass / 2.4 diamond, thickness in mm. Cloth and fuzz: sheen. Skin, wax, leaves, marble: subsurface. Light: glow. A pattern is in the shape\'s colour and color2, repeating every scale mm, with bump for relief. A picture: image (an artifact id or path; the host reads it, PNG or JPEG), repeating every imageScale mm (a mesh whose file had a layout fits it once); a grey reliefImage gives it relief and a grey roughnessImage rough and polished patches. A GLB carries the colour and (on a non-metal) the roughness picture; relief shows in Autora only, as glTF has no relief picture. Several shapes at once with ids.',
     inputSchema: obj({
       id: { type: 'string' },
       ids,
@@ -260,6 +260,11 @@ export const TOOL_SPECS: ToolSpec[] = [
       },
       image: { oneOf: [{ type: 'string' }, { type: 'null' }], description: 'A picture to lay on it: an artifact id (file_...) or a path; the host reads it. null takes it off.' },
       imageScale: { type: 'number', description: 'How big one repeat of the picture is, mm (default 100).' },
+      reliefImage: { oneOf: [{ type: 'string' }, { type: 'null' }], description: 'A grey relief picture (a bump map: light parts stand out, dark sink in), an artifact id or path the host reads; null takes it off. It lies like the colour picture unless reliefScale says otherwise.' },
+      reliefScale: { type: 'number', description: 'How big one repeat of the relief picture is, mm.' },
+      reliefStrength: unit('How far the relief picture stands out (default 0.5).'),
+      roughnessImage: { oneOf: [{ type: 'string' }, { type: 'null' }], description: 'A grey roughness picture (light is rough, dark is polished), times roughness; an artifact id or path; null takes it off.' },
+      roughnessScale: { type: 'number', description: 'How big one repeat of the roughness picture is, mm.' },
       reset: { type: 'boolean', description: 'Put every number back to the material preset\'s (keeps the pattern and picture).' },
     }),
   },
@@ -289,7 +294,7 @@ export const TOOL_SPECS: ToolSpec[] = [
   {
     name: 'hair_groom',
     description: 'The person\'s grooming stroke on a shape\'s hair (comb, cut, lengthen, puff). Not for the agent: styling hair by hand is the person\'s.',
-    inputSchema: obj({ id: { type: 'string' }, stroke: obj({ tool: { type: 'string', enum: ['comb', 'cut', 'lengthen', 'puff'] }, path: { type: 'array', items: { type: 'number' } }, radius: { type: 'number' }, strength: { type: 'number' } }, ['tool', 'path', 'radius', 'strength']) }, ['id', 'stroke']),
+    inputSchema: obj({ id: { type: 'string' }, stroke: obj({ tool: { type: 'string', enum: ['comb', 'cut', 'lengthen', 'puff'] }, path: { type: 'array', items: { type: 'number' } }, radius: { type: 'number' }, strength: { type: 'number' } }, ['tool', 'path', 'radius', 'strength']), mirror: { type: 'string', enum: ['x', 'y'] } }, ['id', 'stroke']),
     authority: 'person',
   },
   {

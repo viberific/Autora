@@ -1142,7 +1142,7 @@ export default function App() {
                   onSculpt={(id, positions) => void runOp((d) => ops.applySculpt(d, { id, positions }))}
                   look={doc.look}
                   groom={grooming}
-                  onGroom={(id, stroke) => void runOp((d) => ops.groomHair(d, { id, stroke }))}
+                  onGroom={(id, stroke, mirror) => void runOp((d) => ops.groomHair(d, { id, stroke, mirror }))}
                 />
 
                 {displayBodies.length === 0 && (

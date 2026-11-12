@@ -623,15 +623,20 @@ export function cadModel(session: string): ModelDoc | null {
   return (entries.get(session)?.engine?.getDoc() as unknown as ModelDoc | undefined) ?? null;
 }
 
-/** A surface_set's `image` names a file (an artifact or a path): it becomes the picture, as a data URL, before the model sees it. */
+/**
+ * A surface_set's pictures (`image`, `reliefImage`, `roughnessImage`) name files (an artifact or a path): each becomes the
+ * picture, as a data URL, before the model sees it.
+ */
 function readPicture(args: Record<string, unknown>, cwd: string): Record<string, unknown> {
-  const ref = args.image;
-  if (typeof ref !== "string" || ref.startsWith("data:")) return args;
-  const f = readFileRef(ref, cwd, "picture", "cad_surface_set");
-  const png = f.data[0] === 0x89 && f.data[1] === 0x50 && f.data[2] === 0x4e && f.data[3] === 0x47;
-  const jpg = f.data[0] === 0xff && f.data[1] === 0xd8;
-  if (!png && !jpg) throw new FileRefError(`${f.name} is not a PNG or a JPEG; a surface's picture must be one.`);
-  args.image = `data:image/${png ? "png" : "jpeg"};base64,${f.data.toString("base64")}`;
+  for (const slot of ["image", "reliefImage", "roughnessImage"]) {
+    const ref = args[slot];
+    if (typeof ref !== "string" || ref.startsWith("data:")) continue;
+    const f = readFileRef(ref, cwd, "picture", "cad_surface_set");
+    const png = f.data[0] === 0x89 && f.data[1] === 0x50 && f.data[2] === 0x4e && f.data[3] === 0x47;
+    const jpg = f.data[0] === 0xff && f.data[1] === 0xd8;
+    if (!png && !jpg) throw new FileRefError(`${f.name} is not a PNG or a JPEG; a surface's picture must be one.`);
+    args[slot] = `data:image/${png ? "png" : "jpeg"};base64,${f.data.toString("base64")}`;
+  }
   return args;
 }
 

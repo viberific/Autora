@@ -690,7 +690,8 @@ async function surfaceByHand(api: HandApi, args: Record<string, unknown>, goal: 
       }
     }
     if (args.sheenColor !== undefined) skip.push('the sheen colour: the window has no control for it');
-    const tex = args.pattern !== undefined || args.image !== undefined || args.imageScale !== undefined;
+    if (args.reliefScale !== undefined || args.roughnessScale !== undefined) skip.push('a relief or roughness picture\'s own size: the window lays them like the colour picture');
+    const tex = ['pattern', 'image', 'imageScale', 'reliefImage', 'reliefStrength', 'roughnessImage'].some((k) => args[k] !== undefined);
     if (tex) {
       const card3 = await card('Texture');
       const p = want?.surface?.pattern;
@@ -710,6 +711,11 @@ async function surfaceByHand(api: HandApi, args: Record<string, unknown>, goal: 
       }
       if (args.image === null) await pressIn(card3, 'Remove picture', 'Taking the picture off', did, 'pressed Remove picture in Texture');
       else if (args.image !== undefined) skip.push('the picture: Picture… asks for a file from this computer, which the hand does not choose');
+      if (args.reliefImage === null) await pressIn(card3, 'Remove relief', 'Taking the relief off', did, 'pressed Remove relief in Texture');
+      else if (args.reliefImage !== undefined) skip.push('the relief picture: Relief picture… asks for a file, which the hand does not choose');
+      if (args.roughnessImage === null) await pressIn(card3, 'Remove roughness', 'Taking the roughness picture off', did, 'pressed Remove roughness in Texture');
+      else if (args.roughnessImage !== undefined) skip.push('the roughness picture: Roughness picture… asks for a file, which the hand does not choose');
+      if (num(args.reliefStrength) !== null && !(await slide(card3, 'Relief strength', want?.surface?.reliefImage?.strength ?? num(args.reliefStrength)!, did, 'Texture'))) skip.push('the relief strength: there was no relief picture yet');
       if (num(args.imageScale) !== null && !(await slide(card3, 'Picture size', want?.surface?.image?.scale ?? num(args.imageScale)!, did, 'Texture'))) skip.push('the picture size: there was no picture yet');
     }
   }

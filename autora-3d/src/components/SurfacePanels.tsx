@@ -10,10 +10,11 @@
  * control that does nothing yet (the bend of light with nothing clear, a picture's size with no picture) is not there.
  */
 import React, { useRef, useState } from 'react';
-import { Body3D, Hair, MATERIAL_PRESETS, MaterialType, PatternKind, SceneLook, SWATCHES } from '../types';
+import { Body3D, Hair, MATERIAL_PRESETS, MaterialType, PatternKind, PictureSlot, SceneLook, SWATCHES } from '../types';
 import { DEFAULT_PATTERN, PATTERNS, SURFACE_RANGES, imageDataUrl, resolveSurface, type SurfaceNumber } from '../utils/surface';
 import { GROOM_TOOLS, HAIR_RANGES, settleHair, type GroomBrush, type HairNumber } from '../utils/hair';
 import type { SurfaceArgs, HairArgs } from '../core/ops';
+import { Segmented } from './controls';
 
 const chip = (on: boolean) =>
   `h-8 px-3 rounded-full text-xs font-medium transition-colors ${on ? 'bg-accent-500 text-white' : 'bg-white/6 text-slate-300 hover:bg-white/12'}`;
@@ -75,6 +76,7 @@ export function MaterialPanel({ selected, onSurface, onOpen }: SurfacePanelProps
   const body = selected.length === 1 ? selected[0] : null;
   if (!body) return null;
   const s = resolveSurface(body);
+  const textured = !!(s.pattern || s.image || s.reliefImage || s.roughnessImage);
   const set = (k: SurfaceNumber) => (n: number) => onSurface({ id: body.id, [k]: n });
   const range = (k: SurfaceNumber) => SURFACE_RANGES[k];
   const clear = s.transmission > 0;
@@ -113,10 +115,10 @@ export function MaterialPanel({ selected, onSurface, onOpen }: SurfacePanelProps
           )}
         </>
       )}
-      {onOpen && (!body.surface?.pattern && !body.surface?.image || (!body.hair && !body.frame)) && (
+      {onOpen && (!textured || (!body.hair && !body.frame)) && (
         // Texture and Hair join the bar once the shape has a pattern or hair; until then they are reached from here.
         <div className="flex gap-2 pt-2 border-t border-white/8">
-          {!body.surface?.pattern && !body.surface?.image && <button type="button" className={quiet} onClick={() => onOpen('texture')}>Texture…</button>}
+          {!textured && <button type="button" className={quiet} onClick={() => onOpen('texture')}>Texture…</button>}
           {!body.hair && !body.frame && <button type="button" className={quiet} onClick={() => onOpen('hair')}>Hair…</button>}
         </div>
       )}
@@ -127,18 +129,27 @@ export function MaterialPanel({ selected, onSurface, onOpen }: SurfacePanelProps
 /** A pattern drawn on the shape, or a picture laid on it. */
 export function TexturePanel({ selected, onSurface }: SurfacePanelProps) {
   const file = useRef<HTMLInputElement>(null);
+  /** Which picture the file chooser is for. */
+  const slot = useRef<PictureSlot>('image');
   const [note, setNote] = useState<string | null>(null);
+  const [more, setMore] = useState(false);
   const body = selected.length === 1 ? selected[0] : null;
   if (!body) return null;
   const pattern = body.surface?.pattern;
   const image = body.surface?.image;
+  const relief = body.surface?.reliefImage;
+  const rough = body.surface?.roughnessImage;
   const kind: PatternKind = pattern?.kind ?? 'none';
+  const choose = (which: PictureSlot) => {
+    slot.current = which;
+    file.current?.click();
+  };
   const pick = async (f: File | undefined) => {
     if (!f) return;
     const data = imageDataUrl(new Uint8Array(await f.arrayBuffer()));
     if (!data) return setNote('That is not a PNG or a JPEG.');
     setNote(null);
-    onSurface({ id: body.id, image: data });
+    onSurface({ id: body.id, [slot.current]: data });
   };
   return (
     <div className={`p-4 flex flex-col gap-3 ${WIDTH}`}>
@@ -158,11 +169,26 @@ export function TexturePanel({ selected, onSurface }: SurfacePanelProps) {
         </>
       )}
       <div className="flex items-center gap-2">
-        <button type="button" className={quiet} onClick={() => file.current?.click()}>{image ? 'Another picture' : 'Picture…'}</button>
+        <button type="button" className={quiet} onClick={() => choose('image')}>{image ? 'Another picture' : 'Picture…'}</button>
         {image && <button type="button" className={quiet} onClick={() => onSurface({ id: body.id, image: null })}>Remove picture</button>}
         <input ref={file} type="file" accept="image/png,image/jpeg" aria-label="Picture file" className="hidden" onChange={(e) => { void pick(e.target.files?.[0]); e.target.value = ''; }} />
       </div>
       {image && <Slider label="Picture size" value={image.scale ?? 100} min={5} max={1000} step={1} unit="mm" onChange={(n) => onSurface({ id: body.id, imageScale: n })} />}
+      {(relief || rough) ? null : <More open={more} onToggle={() => setMore((v) => !v)} />}
+      {(more || relief || rough) && (
+        // Grey pictures for relief and roughness: rarer, so they wait behind More until the shape has one.
+        <>
+          <div className="flex items-center gap-2">
+            <button type="button" className={quiet} onClick={() => choose('reliefImage')}>{relief ? 'Another relief picture' : 'Relief picture…'}</button>
+            {relief && <button type="button" className={quiet} onClick={() => onSurface({ id: body.id, reliefImage: null })}>Remove relief</button>}
+          </div>
+          {relief && <Slider label="Relief strength" value={relief.strength ?? 0.5} min={0} max={1} step={0.01} percent onChange={(n) => onSurface({ id: body.id, reliefStrength: n })} />}
+          <div className="flex items-center gap-2">
+            <button type="button" className={quiet} onClick={() => choose('roughnessImage')}>{rough ? 'Another roughness picture' : 'Roughness picture…'}</button>
+            {rough && <button type="button" className={quiet} onClick={() => onSurface({ id: body.id, roughnessImage: null })}>Remove roughness</button>}
+          </div>
+        </>
+      )}
       {note && <p className="text-xs text-amber-300">{note}</p>}
     </div>
   );
@@ -230,6 +256,10 @@ export function HairPanel({ selected, onHair, groomBrush, onGroomBrush, groomOn,
           <>
             <Slider label="Brush size" value={groomBrush.radius} min={1} max={150} step={1} unit="mm" onChange={(n) => onGroomBrush({ radius: n })} />
             <Slider label="Brush strength" value={groomBrush.strength} min={0.05} max={1} step={0.05} percent onChange={(n) => onGroomBrush({ strength: n })} />
+            <div className="flex items-center gap-3 text-xs text-slate-300">
+              <span className="w-20 shrink-0" title="L–R grooms the other side across the shape's middle left to right; F–B front to back">Mirror</span>
+              <Segmented id="groom-mirror" label="Mirror" value={groomBrush.mirror} options={[{ value: 'off', label: 'Off' }, { value: 'x', label: 'L–R' }, { value: 'y', label: 'F–B' }]} onChange={(v) => onGroomBrush({ mirror: v })} />
+            </div>
           </>
         )}
         <div className="flex gap-2">

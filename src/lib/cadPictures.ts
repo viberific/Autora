@@ -5,7 +5,9 @@
  */
 
 interface Picture { data: string }
-interface Bodyish { surface?: { image?: Picture } }
+interface Bodyish { surface?: { image?: Picture; reliefImage?: Picture; roughnessImage?: Picture } }
+/** A surface's picture slots (Autora 3D's PICTURE_SLOTS): its colour, relief and roughness. */
+const SLOTS = ["image", "reliefImage", "roughnessImage"] as const;
 interface Docish { bodies?: Bodyish[]; library?: Array<{ bodies?: Bodyish[] }> }
 
 const KEY = /^pic:\d+:[0-9a-z]+:[0-9a-z]+$/;
@@ -34,10 +36,14 @@ export const isPictureKey = (data: unknown): data is string => typeof data === "
 function mapPictures<T extends Docish>(doc: T, f: (data: string) => string): T {
   const bodies = (list: Bodyish[] | undefined) =>
     list?.map((b) => {
-      const img = b.surface?.image;
-      if (!img || typeof img.data !== "string") return b;
-      const data = f(img.data);
-      return data === img.data ? b : { ...b, surface: { ...b.surface, image: { ...img, data } } };
+      let surface = b.surface;
+      for (const slot of SLOTS) {
+        const img = surface?.[slot];
+        if (!img || typeof img.data !== "string") continue;
+        const data = f(img.data);
+        if (data !== img.data) surface = { ...surface, [slot]: { ...img, data } };
+      }
+      return surface === b.surface ? b : { ...b, surface };
     });
   return {
     ...doc,

@@ -212,10 +212,11 @@ releaseNotes: >-
   clear or frosted glass, water, velvet, skin, rubber and more, with sliders
   for roughness, metal, clarity, sheen, light shining through and glow. It can
   carry a pattern drawn for you (wood, marble, fabric, scales, brushed metal,
-  checks, dots) or a picture of your own, and a GLB you bring in keeps its
-  texture. Any shape can grow hair or fur: choose length, density, curl, locks
+  checks, dots) or a picture of your own, with grey pictures for relief and
+  for rough and polished patches, and a GLB you bring in keeps its texture. Any shape can grow hair or fur: choose length, density, curl, locks
   and colours, then comb, cut, lengthen or puff it yourself with the new
-  grooming brush. The scene can be lit as a studio, daylight, a sunset or
+  grooming brush, mirrored to the other side if you like. Hair rests on the
+  shapes it falls onto instead of passing through them. The scene can be lit as a studio, daylight, a sunset or
   night. GLB exports carry the glass, cloth, glow, textures and hair to game
   engines (hair is thinned to a size engines take, or left out if you ask).
   Hair regrows once a slider stops, so dragging stays smooth, and a picture

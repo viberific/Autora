@@ -52,7 +52,13 @@ export interface SurfaceImage {
   /** How big one repeat is, mm. Absent on a mesh that brought its own layout (UVs) from its file: it fits once. */
   scale?: number;
   name?: string;
+  /** A relief picture only: how far its light parts stand out, 0 to 1. */
+  strength?: number;
 }
+
+/** The pictures a surface can have: its colour, its relief (light stands out, dark sinks in) and its roughness (light is rough). */
+export type PictureSlot = 'image' | 'reliefImage' | 'roughnessImage';
+export const PICTURE_SLOTS: PictureSlot[] = ['image', 'reliefImage', 'roughnessImage'];
 
 /**
  * A shape's own surface: every number a finish has, each overriding its preset (`materialType`) when set. A preset chosen
@@ -76,6 +82,10 @@ export interface Surface {
   subsurface?: number;
   pattern?: SurfacePattern;
   image?: SurfaceImage;
+  /** A grey picture of the surface's relief: light parts stand out, dark parts sink in (a bump map). */
+  reliefImage?: SurfaceImage;
+  /** A grey picture of where it is rough (light) and smooth (dark), times its roughness. */
+  roughnessImage?: SurfaceImage;
 }
 
 /** One stroke of the person's grooming brush on a shape's hair, kept so the hair can be grown again with it. */

@@ -13,7 +13,7 @@ import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { BevelStyle, Body3D, EdgeSel, FaceSel, DrawForm, DrawSession, Frame, GroomStroke, Point2D, RepeatSession, SceneLook, ShapeGroup } from '../types';
-import { SCENE_STRANDS, type GroomBrush } from '../utils/hair';
+import { obstaclesNear, SCENE_STRANDS, settleHair, type GroomBrush } from '../utils/hair';
 
 /** How long the model must be still before its hair is grown again. */
 const HAIR_SETTLE_MS = 160;
@@ -171,7 +171,7 @@ export interface ModelViewer3DProps {
   /** Grooming: while set, a press on this shape's hair strokes it with the brush instead of picking or moving the shape. */
   groom?: { bodyId: string; brush: GroomBrush } | null;
   /** A finished grooming stroke (the person's own command, `hair_groom`). */
-  onGroom?: (id: string, stroke: GroomStroke) => void;
+  onGroom?: (id: string, stroke: GroomStroke, mirror?: 'x' | 'y') => void;
   /** A finished brush stroke: the shape's surface points after it (the person's own command, `sculpt_apply`). */
   onSculpt?: (id: string, positions: number[]) => void;
 }
@@ -447,17 +447,27 @@ export default function ModelViewer3D({
     const entries = [...entriesRef.current.values()];
     const strands = entries.filter((e) => e.body.hair && e.body.hair.style !== 'fur' && !e.signature.endsWith('|fast')).length;
     const most = Math.max(200, Math.floor(SCENE_STRANDS / Math.max(1, strands)));
+    // Every shape as something hair rests on rather than passing through: its box in the world (round for a mesh shape).
+    const solids = entries.map((e) => {
+      const g = (e.group.children[0] as THREE.Mesh).geometry;
+      g.computeBoundingBox();
+      // The root's matrix is set by hand (a wall shape's frame), never recomposed here.
+      return { id: e.body.id, obstacle: { box: g.boundingBox!.clone().applyMatrix4(e.root.matrix), round: !!e.body.mesh } };
+    });
     let grew = false;
     for (const e of entries) {
       const mesh = e.group.children[0] as THREE.Mesh;
-      const want = e.body.hair && !e.signature.endsWith('|fast') ? `${hairSignature(e.body)}|${most}` : '';
+      const obstacles = e.body.hair && e.body.hair.style !== 'fur' ? obstaclesNear(mesh.geometry, settleHair(e.body.hair), solids.filter((x) => x.id !== e.body.id).map((x) => x.obstacle)) : [];
+      // What the hair rests on is part of what it is grown from: a shape moved under it grows it again.
+      const resting = obstacles.map((o) => [o.box.min.toArray(), o.box.max.toArray()].flat().map(Math.round).join(',')).join(';');
+      const want = e.body.hair && !e.signature.endsWith('|fast') ? `${hairSignature(e.body)}|${most}|${resting}` : '';
       if (e.hair === want && e.group.userData.hairOn === mesh.geometry) continue;
       e.group.children.filter((c) => c.userData.hair).forEach((c) => { e.group.remove(c); disposeObject(c); });
       e.hair = want;
       e.group.userData.hairOn = mesh.geometry;
       grew = true;
       if (!want) continue;
-      const grown = hairObject(mesh.geometry, e.body, most);
+      const grown = hairObject(mesh.geometry, e.body, most, obstacles);
       if (grown) {
         grown.visible = !live.current.xray;
         e.group.add(grown);
@@ -1612,7 +1622,7 @@ export default function ModelViewer3D({
       controls.enabled = true;
       if (renderer.domElement.hasPointerCapture(e.pointerId)) renderer.domElement.releasePointerCapture(e.pointerId);
       const g = live.current.groom;
-      if (!cancelled && g) live.current.onGroom?.(st.id, { tool: g.brush.tool, path: st.path.map((v) => Math.round(v * 100) / 100), radius: g.brush.radius, strength: g.brush.strength });
+      if (!cancelled && g) live.current.onGroom?.(st.id, { tool: g.brush.tool, path: st.path.map((v) => Math.round(v * 100) / 100), radius: g.brush.radius, strength: g.brush.strength }, g.brush.mirror === 'off' ? undefined : g.brush.mirror);
       live.current.onDragStateChange?.(false);
       invalidate();
     };

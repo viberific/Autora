@@ -330,6 +330,62 @@ await test("a GLB with a picture comes back in with its picture and its layout",
   assert.equal(back.getDoc().bodies[0].mesh!.uvs, undefined);
 });
 
+// --------------------------------------------- relief, roughness, mirror, resting --
+
+await test("relief and roughness pictures: set, sized, given a strength, kept by a preset, taken off; a GLB carries roughness on a non-metal", async () => {
+  const { e, id } = await fresh();
+  const pic = imageDataUrl(png2())!;
+  await run(e, "surface_set", { id, image: pic, imageScale: 40, reliefImage: pic, reliefStrength: 0.8, roughnessImage: pic, roughnessScale: 20 });
+  let s = bodyOf(e, id).surface!;
+  assert.equal(s.reliefImage!.strength, 0.8);
+  assert.equal(s.roughnessImage!.scale, 20);
+  assert.equal((await e.execute("surface_set", { id, reliefStrength: 2 })).ok, false);
+  await run(e, "surface_set", { id, preset: "rubber" });
+  s = bodyOf(e, id).surface!;
+  assert.ok(s.reliefImage && s.roughnessImage && s.image, "a preset keeps the pictures");
+  const json = glbJson(glbBytes(e.getDoc().bodies)!);
+  const mat = json.materials[0];
+  assert.ok(mat.pbrMetallicRoughness.metallicRoughnessTexture, "roughness picture on a non-metal");
+  assert.deepEqual(mat.pbrMetallicRoughness.metallicRoughnessTexture.extensions.KHR_texture_transform.scale, [2, 2], "its own repeat on the colour picture's UVs");
+  assert.ok(json.extensionsUsed.includes("KHR_texture_transform"));
+  await run(e, "surface_set", { id, preset: "metal" });
+  assert.equal(glbJson(glbBytes(e.getDoc().bodies)!).materials[0].pbrMetallicRoughness.metallicRoughnessTexture, undefined, "not on a metal: glTF would read its metalness from it");
+  await run(e, "surface_set", { id, reliefImage: null, roughnessImage: null });
+  s = bodyOf(e, id).surface!;
+  assert.equal(s.reliefImage, undefined);
+  assert.equal(s.roughnessImage, undefined);
+  assert.ok(s.image);
+  assert.equal((await e.execute("surface_set", { id, reliefStrength: 0.5 })).ok, false, "no relief picture to strengthen");
+});
+
+await test("a mirrored grooming stroke is made on both sides, in one command", async () => {
+  const { e, id } = await fresh();
+  await run(e, "hair_set", { id });
+  const done = await e.execute("hair_groom", { id, mirror: "x", stroke: { tool: "comb", path: [10, 5, 30, 20, 5, 30], radius: 8, strength: 1 } }, { who: "person" });
+  assert.ok(done.ok, done.error);
+  const strokes = bodyOf(e, id).hair!.strokes!;
+  assert.equal(strokes.length, 2);
+  assert.deepEqual(strokes[1].path, [-10, 5, 30, -20, 5, 30], "reflected across the box's middle, left to right");
+  assert.equal(e.commandLog().filter((c) => c.name === "hair_groom").length, 1, "one command, one undo step");
+  assert.equal((await e.execute("hair_groom", { id, mirror: "z", stroke: strokes[0] }, { who: "person" })).ok, false);
+});
+
+await test("hair rests on the shapes it falls onto instead of passing through them", async () => {
+  const e = new Engine(emptyDoc());
+  const head = ((await e.execute("sculpt_blend", { parts: [{ kind: "sphere", at: { x: 0, y: 0, z: 110 }, radius: 30 }] })).result as { id: string }).id;
+  await e.execute("shape_add", { kind: "box", x: 0, y: 0, width: 200, depth: 200, height: 70, name: "Table" });
+  await run(e, "hair_set", { id: head, length: 120, droop: 1, clump: 0, frizz: 0 });
+  const g = buildBodyGeometry(bodyOf(e, head))!;
+  const table = e.getDoc().bodies.find((b) => b.name === "Table")!;
+  const tg = buildBodyGeometry(table)!;
+  tg.computeBoundingBox();
+  const free = growStrands(g, bodyOf(e, head).hair!);
+  const resting = growStrands(g, bodyOf(e, head).hair!, 0, undefined, undefined, [{ box: tg.boundingBox! as never, round: false }]);
+  const below = (st: typeof free) => st.strands.flat().filter((p) => p.y < 69.9 && Math.abs(p.x) < 99 && Math.abs(p.z) < 99).length;
+  assert.ok(below(free) > 0, "without it the hair falls into the table");
+  assert.equal(below(resting), 0, "with it the hair lies on top");
+});
+
 // ----------------------------------------------------------- Panacea --
 
 await test("Panacea's 3D panels read the modeller's own numbers for every finish, and set surfaces, hair and light with its tools", async () => {

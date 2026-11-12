@@ -53,9 +53,12 @@ import Sidebar from './Sidebar';
 import { HairPanel, LightPanel, MaterialPanel, TexturePanel } from './SurfacePanels';
 import type { HairArgs, SurfaceArgs } from '../core/ops';
 import type { GroomBrush } from '../utils/hair';
-import type { SceneLook } from '../types';
+import type { SceneLook, Surface } from '../types';
 import { useFading } from '../hooks/useFading';
 import { EdgePanel, FacePanel, SculptPanel, SizePositionPanel, sculptable, selectionMode, type TopBarProps } from './TopBar';
+
+/** The shape has something the Texture card works: a pattern or a picture. */
+const hasTexture = (b?: { surface?: Surface }) => !!(b?.surface?.pattern || b?.surface?.image || b?.surface?.reliefImage || b?.surface?.roughnessImage);
 
 const SHAPE_ICONS: Record<ShapeKind, LucideIcon> = {
   box: Square,
@@ -234,7 +237,7 @@ export default function Rail(props: RailProps) {
     if (t.id === 'library') return props.library.length > 0;
     if (t.id === 'file') return props.bodyCount > 0;
     // Texture and Hair stand on the bar once the shape has a pattern, a picture or hair; until then Material leads to them.
-    if (t.id === 'texture') return !t.disabled && !!(props.selected[0]?.surface?.pattern || props.selected[0]?.surface?.image);
+    if (t.id === 'texture') return !t.disabled && hasTexture(props.selected[0]);
     if (t.id === 'hair') return !t.disabled && !!props.selected[0]?.hair;
     return !t.disabled;
   };

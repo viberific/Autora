@@ -32,8 +32,9 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
   const unit = options.scale ?? 0.001;
   const pivot = options.pivot ?? 'scene';
   /** One mesh to write: a shape's solid, or the hair grown on it (`hair`), which carries a colour per vertex. */
-  type Part = { body: Body3D; pos: Float32Array; nrm: Float32Array; idx: Uint32Array; min: THREE.Vector3; max: THREE.Vector3; uv?: Float32Array; col?: Float32Array; hair?: boolean };
+  type Part = { body: Body3D; pos: Float32Array; nrm: Float32Array; idx: Uint32Array; min: THREE.Vector3; max: THREE.Vector3; uv?: Float32Array; col?: Float32Array; hair?: boolean; baseRepeat?: number };
   const parts: Part[] = [];
+  const growing: { body: Body3D; g: THREE.BufferGeometry; m: THREE.Matrix4; normalMatrix: THREE.Matrix3 }[] = [];
   const withHair = options.hair === false ? 0 : bodies.filter((b) => b.visible && b.hair).length;
   // One file's hair stays a size an engine takes: each shape's share of the file's cap, and never more than a shape's own cap.
   const most = Math.max(100, Math.min(EXPORT_STRANDS, Math.floor(EXPORT_STRANDS_TOTAL / Math.max(1, withHair))));
@@ -74,8 +75,12 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
     const s = resolveSurface(body);
     const uvAttr = g.getAttribute('uv');
     let uv: Float32Array | undefined;
-    if (uvAttr && (s.pattern || s.image)) {
-      const repeat = textureRepeat(body, s.image ? 'image' : 'pattern');
+    // The UVs carry the repeat of the colour picture or pattern (else the roughness picture's); another texture's own repeat
+    // is a KHR_texture_transform scale on top (texRepeat in surfaceMaterial).
+    const roughOut = !!s.roughnessImage && s.metalness <= 0.05;
+    const baseSlot = s.image ? 'image' : s.pattern ? 'pattern' : roughOut ? 'roughnessImage' : null;
+    if (uvAttr && baseSlot) {
+      const repeat = textureRepeat(body, baseSlot);
       const turn = s.image ? 0 : THREE.MathUtils.degToRad(s.pattern?.angle ?? 0);
       const [c, sn] = [Math.cos(turn), Math.sin(turn)];
       uv = new Float32Array(uvAttr.count * 2);
@@ -87,10 +92,18 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
         uv[i * 2 + 1] = 1 - (u * sn + w * c);
       }
     }
-    parts.push({ body, pos, nrm, idx, min, max, uv });
-    if (body.hair && options.hair !== false) {
+    parts.push({ body, pos, nrm, idx, min, max, uv, baseRepeat: baseSlot ? textureRepeat(body, baseSlot) : 1 });
+    if (body.hair && options.hair !== false) growing.push({ body, g, m, normalMatrix });
+  }
+  // Hair, once every shape is known: it rests on the others rather than passing through them (their boxes, in the world).
+  for (const { body, g, m, normalMatrix } of growing) {
+    const v = new THREE.Vector3();
+    const others = parts.filter((q) => q.body.id !== body.id && !q.hair).map((q) => ({ box: new THREE.Box3(q.min.clone(), q.max.clone()), round: !!q.body.mesh }));
+    // Hair is grown in the shape's own space; an upright shape's (the only kind with hair) is the world's.
+    const obstacles = body.frame ? [] : others;
+    {
       // The hair is grown as it is drawn (fur too, as short strands): its own node beside the shape, coloured root to tip.
-      const strands = hairGeometry(g, settleHair(body.hair), body.elevation ?? 0, most);
+      const strands = hairGeometry(g, settleHair(body.hair!), body.elevation ?? 0, most, obstacles);
       if (strands) {
         const hp = strands.getAttribute('position');
         const hn = strands.getAttribute('normal');
@@ -135,7 +148,7 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
   };
 
   /** A shape's surface as glTF PBR, with the extensions engines read for glass, cloth, lacquer and glow. */
-  const surfaceMaterial = (body: Body3D, laidOut: boolean): Record<string, any> => {
+  const surfaceMaterial = (body: Body3D, laidOut: boolean, baseRepeat = 1): Record<string, any> => {
     const s = resolveSurface(body);
     const c = new THREE.Color(s.color); // THREE.Color reads hex as sRGB and stores linear
     const m: Record<string, any> = {
@@ -150,6 +163,21 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
       const px = patternPixels(s.pattern.kind, s.color, s.pattern.color2);
       m.pbrMetallicRoughness.baseColorTexture = { index: addImage(`pattern|${s.pattern.kind}|${s.color}|${s.pattern.color2}`, encodePng(px.size, px.size, px.rgba), 'image/png') };
       m.pbrMetallicRoughness.baseColorFactor = [1, 1, 1, s.opacity];
+    }
+    // A roughness picture goes in glTF's metallic-roughness texture, which reads roughness from green and metal from blue: a grey
+    // picture would make a metal's metalness follow it, so it is written only for a non-metal (whose metal factor is 0).
+    if (laidOut && s.roughnessImage && s.metalness <= 0.05) {
+      const pic = imageBytes(s.roughnessImage.data);
+      if (pic) {
+        const ratio = textureRepeat(body, 'roughnessImage') / baseRepeat;
+        const ref: Record<string, any> = { index: addImage(`r|${s.roughnessImage.data.slice(0, 64)}${s.roughnessImage.data.length}`, pic.bytes, pic.mime) };
+        if (Math.abs(ratio - 1) > 1e-6) {
+          ref.extensions = { KHR_texture_transform: { scale: [ratio, ratio] } };
+          extensions.add('KHR_texture_transform');
+        }
+        m.pbrMetallicRoughness.metallicRoughnessTexture = ref;
+        m.pbrMetallicRoughness.metallicFactor = 0;
+      }
     }
     if (s.opacity < 1) m.alphaMode = 'BLEND';
     if (s.transmission > 0) {
@@ -229,7 +257,7 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
     accessors.push({ bufferView: addView(new Uint8Array(q.nrm.buffer), 34962), componentType: 5126, count: q.nrm.length / 3, type: 'VEC3' });
     accessors.push({ bufferView: addView(new Uint8Array(q.idx.buffer), 34963), componentType: 5125, count: q.idx.length, type: 'SCALAR' });
 
-    const material = q.hair ? hairMaterial(q.body) : surfaceMaterial(q.body, !!q.uv);
+    const material = q.hair ? hairMaterial(q.body) : surfaceMaterial(q.body, !!q.uv, q.baseRepeat);
     materials.push(material);
     const attributes: Record<string, number> = { POSITION: aPos, NORMAL: aPos + 1 };
     if (q.uv) {

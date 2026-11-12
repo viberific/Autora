@@ -9,7 +9,7 @@
  * export and the headless engine share one idea of every surface.
  */
 import * as THREE from 'three';
-import { Body3D, MATERIAL_PRESETS, PatternKind, Surface, SurfaceImage, SurfacePattern } from '../types';
+import { Body3D, MATERIAL_PRESETS, PICTURE_SLOTS, PatternKind, PictureSlot, Surface, SurfaceImage, SurfacePattern } from '../types';
 
 /** Every number a surface has, resolved: the preset's, with the shape's own on top. */
 export interface ResolvedSurface {
@@ -27,6 +27,8 @@ export interface ResolvedSurface {
   subsurface: number;
   pattern?: SurfacePattern;
   image?: SurfaceImage;
+  reliefImage?: SurfaceImage;
+  roughnessImage?: SurfaceImage;
 }
 
 /** The range each number of a surface may take. The engine holds values to these; the window's sliders run over them. */
@@ -83,6 +85,8 @@ export function resolveSurface(body: Pick<Body3D, 'materialType' | 'color' | 'su
     subsurface: pick('subsurface', p.subsurface ?? 0),
     ...(s.pattern && s.pattern.kind !== 'none' ? { pattern: s.pattern } : {}),
     ...(s.image ? { image: s.image } : {}),
+    ...(s.reliefImage ? { reliefImage: s.reliefImage } : {}),
+    ...(s.roughnessImage ? { roughnessImage: s.roughnessImage } : {}),
   };
 }
 
@@ -93,6 +97,8 @@ export function describeSurface(body: Pick<Body3D, 'materialType' | 'color' | 's
   if (body.surface && SURFACE_NUMBERS.some((k) => body.surface![k] !== undefined)) words.push('adjusted');
   if (r.pattern) words.push(`${PATTERNS.find((p) => p.kind === r.pattern!.kind)?.label.toLowerCase()} pattern`);
   if (r.image) words.push('image');
+  if (r.reliefImage) words.push('relief picture');
+  if (r.roughnessImage) words.push('roughness picture');
   return words.join(', ');
 }
 
@@ -139,11 +145,13 @@ export function addBoxUVs(geometry: THREE.BufferGeometry): void {
 export const hasOwnUVs = (body: Pick<Body3D, 'mesh'>) => !!body.mesh?.uvs && body.mesh.uvs.length / 2 === body.mesh.positions.length / 3;
 
 /** How many times a texture repeats per unit of UV on this shape. */
-export function textureRepeat(body: Pick<Body3D, 'mesh' | 'surface'>, which: 'pattern' | 'image'): number {
+export function textureRepeat(body: Pick<Body3D, 'mesh' | 'surface'>, which: 'pattern' | PictureSlot): number {
   const s = body.surface;
-  if (which === 'image') {
-    if (hasOwnUVs(body) && !s?.image?.scale) return 1;
-    return UV_MM / Math.max(1, s?.image?.scale ?? 100);
+  if (which !== 'pattern') {
+    // A relief or roughness picture without a size of its own lies like the colour picture.
+    const scale = s?.[which]?.scale ?? s?.image?.scale;
+    if (hasOwnUVs(body) && !scale) return 1;
+    return UV_MM / Math.max(1, scale ?? 100);
   }
   return UV_MM / Math.max(1, s?.pattern?.scale ?? DEFAULT_PATTERN.scale);
 }
@@ -416,22 +424,28 @@ const shared = new WeakSet<object>();
 export function sharePictures(bodies: Body3D[]): Body3D[] {
   let changed = false;
   const out = bodies.map((b) => {
-    const img = b.surface?.image;
-    if (!img || shared.has(img)) return b;
-    const mid = img.data.length >> 1;
-    const key = `${img.data.length}:${img.data.slice(mid, mid + 64)}:${img.data.slice(-64)}`;
-    const kept = canonical.get(key);
-    if (kept !== undefined && kept === img.data) {
-      // The same picture as one already kept: point at that copy, and let this one go.
-      const one = { ...img, data: kept };
-      shared.add(one);
-      changed = true;
-      return { ...b, surface: { ...b.surface!, image: one } };
+    if (!b.surface) return b;
+    let surface: Surface = b.surface;
+    for (const slot of PICTURE_SLOTS) {
+      const img = surface[slot];
+      if (!img || shared.has(img)) continue;
+      const mid = img.data.length >> 1;
+      const key = `${img.data.length}:${img.data.slice(mid, mid + 64)}:${img.data.slice(-64)}`;
+      const kept = canonical.get(key);
+      if (kept !== undefined && kept === img.data) {
+        // The same picture as one already kept: point at that copy, and let this one go.
+        const one = { ...img, data: kept };
+        shared.add(one);
+        surface = { ...surface, [slot]: one };
+        continue;
+      }
+      canonical.set(key, img.data);
+      if (canonical.size > 64) canonical.delete(canonical.keys().next().value as string);
+      shared.add(img);
     }
-    canonical.set(key, img.data);
-    if (canonical.size > 64) canonical.delete(canonical.keys().next().value as string);
-    shared.add(img);
-    return b;
+    if (surface === b.surface) return b;
+    changed = true;
+    return { ...b, surface };
   });
   return changed ? out : bodies;
 }

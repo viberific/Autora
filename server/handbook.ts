@@ -417,14 +417,16 @@ const CAD = [
     "colour and a second colour, every scale mm, with relief; a picture (a PNG or JPEG artifact or path; the host reads it) is laid on every " +
     "imageScale mm, or once by the layout a GLB brought. A GLB brought in with a picture inside keeps it. In the window: Material (the nine finishes, " +
     "the colours, Roughness, Metal and Clear, Bends light once it is clear, and More for Thickness, Opacity, Lacquer, Sheen, Light through, Glow and " +
-    "Back to the finish) and Texture (the patterns, Second colour, Size, Relief and Turn once one is on, Picture…, Picture size and Remove picture). " +
-    "A GLB export carries all of it (glTF's glass, cloth, lacquer and glow extensions, the pattern or picture as a texture); STL and OBJ carry the shape only.",
+    "Back to the finish) and Texture (the patterns, Second colour, Size, Relief and Turn once one is on, Picture…, Picture size and Remove picture, and behind More Relief picture… " +
+    "with Relief strength and Roughness picture…, each with its Remove). A grey reliefImage gives a surface relief (light stands out) and a grey " +
+    "roughnessImage rough and polished patches (light is rough), lying like the colour picture unless reliefScale or roughnessScale says otherwise. " +
+    "A GLB export carries all of it (glTF's glass, cloth, lacquer and glow extensions, the pattern or picture as a texture, a roughness picture on a non-metal) but not relief, which glTF has no picture for; STL and OBJ carry the shape only.",
   "  Hair and fur. cad_hair_set grows hair (strands: separate hairs that fall, curl and gather into locks, for a head of hair, a mane, grass) or fur " +
     "(a dense short coat, for an animal or a rug) on any upright shape, and changes only what you give: length, density, thickness, curl, frizz, " +
     "clump (locks), droop, shine, root and tip colours, seed (another number grows another head of hair); remove takes it off. The strands are grown " +
-    "from these numbers once the model is still for a moment (so a slider moves freely and the hair follows when it stops), sharing one strand budget across the scene, so it can still be moved, resized and sculpted. In the window the Hair card (one shape picked) " +
+    "from these numbers once the model is still for a moment (so a slider moves freely and the hair follows when it stops), sharing one strand budget across the scene, resting on the other shapes it falls onto rather than passing through them, so it can still be moved, resized and sculpted. In the window the Hair card (one shape picked) " +
     "has Grow hair and Grow fur, then Hair or Fur, Length, Density, Curl, Root colour and Tip colour, More for Thickness, Frizz, Locks, Droop, Shine " +
-    "and Grow it another way, and Groom: Off, Comb, Cut, Lengthen and Puff with Brush size and Brush strength. With a brush picked, pressing on the " +
+    "and Grow it another way, and Groom: Off, Comb, Cut, Lengthen and Puff with Brush size, Brush strength and Mirror (Off, L–R, F–B: each stroke is made on the other side too, as one undo step). With a brush picked, pressing on the " +
     "shape strokes its hair (one undo step) and dragging empty space turns the view. Grooming is the person's hand: you have no grooming tool (hair_groom " +
     "is refused to you), their strokes stay when you change the numbers, and clearGrooming forgets them only when they ask. How it looks is theirs: " +
     "suggest settings and what each does, set the numbers they ask for, and tell them where the brush is. A GLB export carries the hair as its own " +

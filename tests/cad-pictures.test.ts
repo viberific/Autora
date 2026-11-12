@@ -62,6 +62,19 @@ await test("a picture is sent by its key when the server holds it, and put back 
   assert.deepEqual(restorePictures(slim.doc, new Map()).missing, [key]);
 });
 
+await test("relief and roughness pictures travel by key too", async () => {
+  const pic = picture(17);
+  const { e, id } = await model();
+  assert.ok((await e.execute("surface_set", { id, reliefImage: pic, roughnessImage: pic })).ok);
+  const doc = e.toJSON();
+  const key = pictureKey(pic);
+  const slim = byReference(doc, new Set([key]));
+  assert.equal(slim.doc.bodies[0].surface!.reliefImage!.data, key);
+  assert.equal(slim.doc.bodies[0].surface!.roughnessImage!.data, key);
+  const back = restorePictures(slim.doc, picturesOf(doc));
+  assert.equal(back.doc.bodies[0].surface!.reliefImage!.data, pic);
+});
+
 await test("the engine keeps one copy of a picture, however many models hold it", async () => {
   const pic = picture(7);
   const a = parseDoc(JSON.parse(JSON.stringify((await model(pic)).e.toJSON())))!;

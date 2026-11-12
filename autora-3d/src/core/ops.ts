@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Body3D, DrawSession, EdgeSel, FaceSel, Frame, GroomStroke, Hair, LibraryItem, MATERIAL_PRESETS, MaterialType, PatternKind, Point2D, RepeatLink, RepeatSession, SceneLook, ShapeGroup, Surface, SWATCHES } from '../types';
+import { Body3D, DrawSession, EdgeSel, FaceSel, Frame, GroomStroke, Hair, LibraryItem, MATERIAL_PRESETS, MaterialType, PICTURE_SLOTS, PatternKind, PictureSlot, Point2D, RepeatLink, RepeatSession, SceneLook, ShapeGroup, Surface, SWATCHES } from '../types';
 import { DEFAULT_PATTERN, MAX_IMAGE_BYTES, PATTERN_KINDS, SURFACE_NUMBERS, SURFACE_RANGES, imageBytes, resolveSurface as finishOf, type ResolvedSurface } from '../utils/surface';
-import { DEFAULT_HAIR, FUR_START, HAIR_NUMBERS, HAIR_RANGES, MAX_STROKES, settleHair } from '../utils/hair';
+import { DEFAULT_HAIR, FUR_START, HAIR_NUMBERS, HAIR_RANGES, MAX_STROKES, mirrorStroke, settleHair } from '../utils/hair';
 import { BodyTransform, resizeBody, scaleMeshHeight, selectionBounds, transformBody } from '../utils/transform';
 import { MeshError, meshFormatOf, placeMesh, readMesh, type MeshFormat, type RawMesh } from '../utils/meshImport';
 import { boundsOf } from '../utils/sculpt';
@@ -1265,8 +1265,21 @@ export interface SurfaceArgs {
   /** A picture laid on it: a data URL (the host reads a file into one), or null to take it off. */
   image?: string | null;
   imageScale?: number;
+  /** A grey relief picture (light stands out), or null; its repeat in mm (default: the colour picture's) and how far it stands out. */
+  reliefImage?: string | null;
+  reliefScale?: number;
+  reliefStrength?: number;
+  /** A grey roughness picture (light is rough), or null; its repeat in mm (default: the colour picture's). */
+  roughnessImage?: string | null;
+  roughnessScale?: number;
   /** Put every number back to the preset's. */
   reset?: boolean;
+}
+
+/** What a surface has besides its finish's numbers (its pattern and pictures), copied onto a surface starting afresh. */
+function keepTexture(from: Surface | undefined, to: Surface): void {
+  if (from?.pattern) to.pattern = from.pattern;
+  for (const k of PICTURE_SLOTS) if (from?.[k]) to[k] = from[k];
 }
 
 const idsOf = (a: { ids?: unknown; id?: unknown }): string[] => {
@@ -1291,12 +1304,10 @@ export function setSurface(doc: Doc, a: SurfaceArgs): OpResult<{ ids: string[]; 
     let surface: Surface = a.preset !== undefined || a.reset ? {} : { ...(b.surface ?? {}) };
     if (a.preset !== undefined) {
       patch.materialType = materialOf(a.preset, b.materialType);
-      // A preset is a place to start: its pattern and picture are not numbers of the finish, so they stay.
-      if (b.surface?.pattern) surface.pattern = b.surface.pattern;
-      if (b.surface?.image) surface.image = b.surface.image;
+      // A preset is a place to start: its pattern and pictures are not numbers of the finish, so they stay.
+      keepTexture(b.surface, surface);
     } else if (a.reset) {
-      if (b.surface?.pattern) surface.pattern = b.surface.pattern;
-      if (b.surface?.image) surface.image = b.surface.image;
+      keepTexture(b.surface, surface);
     }
     if (a.color !== undefined) patch.color = colorOf(a.color, b.color);
     for (const k of SURFACE_NUMBERS) {
@@ -1317,22 +1328,36 @@ export function setSurface(doc: Doc, a: SurfaceArgs): OpResult<{ ids: string[]; 
         surface.pattern = { kind, color2: colorOf(given.color2, was.color2), scale, bump, angle };
       }
     }
-    if (a.image === null) delete surface.image;
-    else if (a.image !== undefined) {
-      if (typeof a.image !== 'string') return fail('image must be the picture (the host reads a file into it), or null to take it off.');
-      const pic = imageBytes(a.image);
-      if (!pic) return fail('The image must be a PNG or a JPEG.');
-      if (pic.bytes.length > MAX_IMAGE_BYTES) return fail(`The image is ${Math.round(pic.bytes.length / 1024)} KB; the most a surface keeps is ${MAX_IMAGE_BYTES / 1024 / 1024} MB.`, 'Make it smaller first (2048 pixels across is plenty).');
-      surface.image = { data: a.image, ...(a.imageScale !== undefined ? { scale: inRange(a.imageScale, 'imageScale', [2, 5000]) } : {}) };
-    } else if (a.imageScale !== undefined) {
-      if (!surface.image) return fail(`"${b.id}" has no image to scale.`, 'Give image first.');
-      surface.image = { ...surface.image, scale: inRange(a.imageScale, 'imageScale', [2, 5000]) };
+    const slots: Array<[PictureSlot, unknown, unknown, string]> = [
+      ['image', a.image, a.imageScale, 'imageScale'],
+      ['reliefImage', a.reliefImage, a.reliefScale, 'reliefScale'],
+      ['roughnessImage', a.roughnessImage, a.roughnessScale, 'roughnessScale'],
+    ];
+    for (const [slot, given, scale, scaleName] of slots) {
+      if (given === null) delete surface[slot];
+      else if (given !== undefined) {
+        if (typeof given !== 'string') return fail(`${slot} must be the picture (the host reads a file into it), or null to take it off.`);
+        const pic = imageBytes(given);
+        if (!pic) return fail(`The ${slot} must be a PNG or a JPEG.`);
+        if (pic.bytes.length > MAX_IMAGE_BYTES) return fail(`The ${slot} is ${Math.round(pic.bytes.length / 1024)} KB; the most a surface keeps is ${MAX_IMAGE_BYTES / 1024 / 1024} MB.`, 'Make it smaller first (2048 pixels across is plenty).');
+        surface[slot] = { data: given, ...(scale !== undefined ? { scale: inRange(scale, scaleName, [2, 5000]) } : {}), ...(slot === 'reliefImage' ? { strength: surface.reliefImage?.strength ?? 0.5 } : {}) };
+      } else if (scale !== undefined) {
+        const held = surface[slot];
+        if (!held) return fail(`"${b.id}" has no ${slot} to size.`, `Give ${slot} first.`);
+        surface[slot] = { ...held, scale: inRange(scale, scaleName, [2, 5000]) };
+      }
+    }
+    if (a.reliefStrength !== undefined) {
+      if (!surface.reliefImage) return fail(`"${b.id}" has no relief picture.`, 'Give reliefImage first.');
+      surface.reliefImage = { ...surface.reliefImage, strength: inRange(a.reliefStrength, 'reliefStrength', [0, 1]) };
     }
     patch.surface = Object.keys(surface).length ? surface : undefined;
     next = replace(next, b.id, patch);
   }
   const first = next.bodies.find((b) => b.id === bodies[0].id)!;
-  return { doc: next, result: { ids: list, surface: { ...finishOf(first), ...(first.surface?.image ? { image: { data: '(picture)', scale: first.surface.image.scale } } : {}) } } };
+  // The pictures are said, not sent back: a few MB each.
+  const said = Object.fromEntries(PICTURE_SLOTS.filter((k) => first.surface?.[k]).map((k) => [k, { data: '(picture)', scale: first.surface![k]!.scale, ...(first.surface![k]!.strength !== undefined ? { strength: first.surface![k]!.strength } : {}) }]));
+  return { doc: next, result: { ids: list, surface: { ...finishOf(first), ...said } } };
 }
 
 // ---- Hair ----------------------------------------------------------------------------------------
@@ -1372,6 +1397,8 @@ export function setHair(doc: Doc, a: HairArgs): OpResult<{ ids: string[]; hair?:
 export interface GroomArgs {
   id: string;
   stroke: GroomStroke;
+  /** Also make the stroke on the other side of the shape: across its middle left to right (x) or front to back (y). */
+  mirror?: 'x' | 'y';
 }
 
 /** The person's grooming stroke on a shape's hair: kept with the hair, so it is grown again the same way. */
@@ -1382,7 +1409,11 @@ export function groomHair(doc: Doc, a: GroomArgs): OpResult<{ id: string; stroke
   if (!s || !['comb', 'cut', 'lengthen', 'puff'].includes(s.tool)) return fail('stroke.tool must be comb, cut, lengthen or puff.');
   if (!Array.isArray(s.path) || s.path.length < 3 || s.path.length % 3 || s.path.some((n) => typeof n !== 'number' || !Number.isFinite(n))) return fail('stroke.path must be [x, y, height] triples of numbers.');
   const stroke: GroomStroke = { tool: s.tool, path: s.path.slice(0, 600).map((n) => Math.round(n * 100) / 100), radius: inRange(s.radius, 'stroke.radius', [0.5, 500]), strength: inRange(s.strength, 'stroke.strength', [0, 1]) };
-  const strokes = [...(b.hair.strokes ?? []), stroke].slice(-MAX_STROKES);
+  if (a.mirror !== undefined && a.mirror !== 'x' && a.mirror !== 'y') return fail('mirror must be "x" or "y".');
+  const xs = b.points.map((p) => p.x);
+  const ys = b.points.map((p) => p.y);
+  const made = a.mirror ? [stroke, mirrorStroke(stroke, a.mirror, { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) })] : [stroke];
+  const strokes = [...(b.hair.strokes ?? []), ...made].slice(-MAX_STROKES);
   return { doc: replace(doc, b.id, { hair: { ...b.hair, strokes } }), result: { id: b.id, strokes: strokes.length } };
 }
 

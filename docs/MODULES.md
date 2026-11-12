@@ -548,17 +548,21 @@ Spectra's fetched renderer is most of what is on disk.
   `docs/autora-3d-surfaces.patch`, applied after the sculpt patch): a shape's `surface` overrides its preset's numbers (`resolveSurface`: roughness,
   metalness, opacity, transmission/ior/thickness, clearcoat, sheen, subsurface, glow; nine presets in `MATERIAL_PRESETS`, a preset chosen again clears
   them), a `pattern` the modeller draws itself (`patternPixels`: seeded, seamless tiles of wood, marble, speckle, fabric, scales, brushed, checker,
-  dots, with relief) and an `image` (a PNG/JPEG data URL; `runCadTool` reads a named file into it with `readPicture`, so it never goes through the
-  conversation). Every geometry `buildBodyGeometry` makes is non-indexed with box-projected UVs (`addBoxUVs`, 100 mm a unit); a mesh whose GLB had a
+  dots, with relief) and pictures in three slots (`PICTURE_SLOTS`: `image` for colour, `reliefImage` as a bump map with a `strength`, `roughnessImage`
+  as a roughness map; each a PNG/JPEG data URL, read from a named file by `runCadTool`'s `readPicture` so it never goes through the
+  conversation; relief and roughness lie like the colour picture unless they have a `scale` of their own). Every geometry `buildBodyGeometry` makes is non-indexed with box-projected UVs (`addBoxUVs`, 100 mm a unit); a mesh whose GLB had a
   layout keeps `mesh.uvs` (welded per UV seam, dropped once the vertex count changes) and its base colour picture. `hair` is numbers plus the person's
-  grooming `strokes`; strands are grown from them, seeded, whenever the shape is drawn or exported (`growStrands`: area-weighted roots, capped at
-  `MAX_STRANDS` and widened past it, falling down and away and kept outside the shape's box ellipsoid, curl, frizz, locks), drawn as ribbons with a
+  grooming `strokes` (a stroke with `mirror` is kept with its reflection, `mirrorStroke`, as one command); strands are grown from them, seeded, whenever the shape is drawn or exported (`growStrands`: area-weighted roots, capped at
+  `MAX_STRANDS` and widened past it, falling down and away and kept outside the shape's box ellipsoid and the other shapes they reach (`Obstacle`s: an outline shape's
+  box, a mesh shape's ellipsoid; the viewer's `growHair` regrows hair when one under it moves, and GLB export does the same), curl, frizz, locks), drawn as ribbons with a
   tangent for an anisotropic highlight, fur as alpha-tested shells (`furShell`). The viewer rebuilds only a material when only the surface changed; hair is grown by `growHair` once the model has
   been still for `HAIR_SETTLE_MS` (a slider moves freely, the old hair stays until then), only where its numbers or its surface changed,
   sharing `SCENE_STRANDS` between the shapes with strands, and fur keeps its layers under `FUR_VERTICES`; hair is never picked (`raycast` off) and hides in See through. `doc.look`
   (`scene_look`) picks the environment (`lighting`: the RoomEnvironment studio, or a sky dome for daylight, sunset, night, which is also the backdrop),
   exposure and the key light. GLB export writes the surface as glTF PBR with KHR transmission, ior, volume, clearcoat, sheen, diffuse transmission and
-  emissive strength, the pattern as an embedded PNG (`encodePng`, stored deflate, no zlib) or the picture, UVs with the repeat baked in, and hair as a
+  emissive strength, the pattern as an embedded PNG (`encodePng`, stored deflate, no zlib) or the picture, a roughness picture as the
+  metallic-roughness texture on a non-metal only (glTF reads metal from its blue; its own repeat as `KHR_texture_transform`), no relief (glTF has
+  only normal maps), UVs with the repeat baked in, and hair as a
   `<name>_hair` node under its shape with `COLOR_0`, capped (`EXPORT_STRANDS` a shape, `EXPORT_STRANDS_TOTAL` a file; `hair: false` leaves it out); STL and OBJ carry the shape only. Pictures travel once (`src/lib/cadPictures.ts`): `CadWindow`'s save
   sends a picture the server holds as its key (`byReference`), the PUT route puts it back from the chat's `entry.pictures`
   (`restorePictures`; 409 with `missing` makes the window send those whole), and `settle` points every copy of a picture at one kept

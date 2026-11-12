@@ -238,7 +238,44 @@ export interface Strands {
  * Grows the strands: from each root out along the surface's normal, laid by the comb, falling with droop, curling round
  * its own line, wandering with frizz, and gathering into locks with its neighbours (clump).
  */
-export function growStrands(geometry: THREE.BufferGeometry, hairIn: Hair, lift = 0, segments?: number, most = MAX_STRANDS): Strands {
+/** Another shape hair must stay out of, in the same space as the geometry: a box, or (round) the ellipsoid inside it. */
+export interface Obstacle {
+  box: THREE.Box3;
+  round: boolean;
+}
+
+/** The obstacles hair from this surface could reach: those within its length of the shape. */
+export function obstaclesNear(geometry: THREE.BufferGeometry, hair: Pick<Hair, 'length'>, all: Obstacle[]): Obstacle[] {
+  geometry.computeBoundingBox();
+  const reach = geometry.boundingBox!.clone().expandByScalar(hair.length * 1.2);
+  return all.filter((o) => o.box.intersectsBox(reach) && !o.box.isEmpty());
+}
+
+/** Moves a point out of an obstacle it is inside: off a box by its nearest side, off a round one along its radius. */
+function pushOut(q: THREE.Vector3, o: Obstacle, margin: number): boolean {
+  const b = o.box;
+  if (!b.containsPoint(q)) return false;
+  if (o.round) {
+    const c = b.getCenter(new THREE.Vector3());
+    const h = b.getSize(new THREE.Vector3()).multiplyScalar(0.5).max(new THREE.Vector3(0.5, 0.5, 0.5));
+    const r = q.clone().sub(c);
+    const d = Math.hypot(r.x / h.x, r.y / h.y, r.z / h.z);
+    if (d >= 1 || d < 1e-6) return false;
+    q.copy(c).addScaledVector(r, (1 + margin / Math.min(h.x, h.y, h.z)) / d);
+    return true;
+  }
+  const out = [q.x - b.min.x, b.max.x - q.x, q.y - b.min.y, b.max.y - q.y, q.z - b.min.z, b.max.z - q.z];
+  const k = out.indexOf(Math.min(...out));
+  if (k === 0) q.x = b.min.x - margin;
+  else if (k === 1) q.x = b.max.x + margin;
+  else if (k === 2) q.y = b.min.y - margin;
+  else if (k === 3) q.y = b.max.y + margin;
+  else if (k === 4) q.z = b.min.z - margin;
+  else q.z = b.max.z + margin;
+  return true;
+}
+
+export function growStrands(geometry: THREE.BufferGeometry, hairIn: Hair, lift = 0, segments?: number, most = MAX_STRANDS, obstacles: Obstacle[] = []): Strands {
   const hair = settleHair(hairIn);
   const random = rng(hair.seed);
   const { count, widen } = strandBudget(surfaceArea(geometry), hair, most);
@@ -252,6 +289,7 @@ export function growStrands(geometry: THREE.BufferGeometry, hairIn: Hair, lift =
   const centre = box.getCenter(new THREE.Vector3());
   const half = box.getSize(new THREE.Vector3()).multiplyScalar(0.5).max(new THREE.Vector3(0.5, 0.5, 0.5));
   const rel = new THREE.Vector3();
+  const near = obstacles.length ? obstaclesNear(geometry, hair, obstacles) : [];
 
   const grow = (r: Root, rand: () => number): THREE.Vector3[] => {
     const g = groom(r.p, r.n);
@@ -285,6 +323,8 @@ export function growStrands(geometry: THREE.BufferGeometry, hairIn: Hair, lift =
       // Keep the hair outside the surface it grows from, and outside the body it falls over.
       const outward = q.clone().sub(r.p).dot(r.n);
       if (outward < 0) q.addScaledVector(r.n, -outward + 0.05);
+      // Other shapes it falls onto or into: it rests on them instead (a shoulder, a table, a collar).
+      for (const o of near) if (pushOut(q, o, 0.3)) spine.copy(q).sub(wander);
       rel.subVectors(q, centre);
       const inside = Math.hypot(rel.x / half.x, rel.y / half.y, rel.z / half.z);
       if (inside < 1.03 && inside > 1e-6) {
@@ -348,9 +388,9 @@ const colorOf = (hex: string) => new THREE.Color(/^#[0-9a-f]{6}$/i.test(hex) ? h
  * from root to tip, a tangent along the hair (for the highlight that runs across a strand) and UVs (u across, v along).
  * Returns null when nothing grew.
  */
-export function hairGeometry(geometry: THREE.BufferGeometry, hairIn: Hair, lift = 0, most = MAX_STRANDS): THREE.BufferGeometry | null {
+export function hairGeometry(geometry: THREE.BufferGeometry, hairIn: Hair, lift = 0, most = MAX_STRANDS, obstacles: Obstacle[] = []): THREE.BufferGeometry | null {
   const hair = settleHair(hairIn);
-  const { strands, normals, widen } = growStrands(geometry, hair, lift, undefined, most);
+  const { strands, normals, widen } = growStrands(geometry, hair, lift, undefined, most, obstacles);
   if (!strands.length) return null;
   const per = strands[0].length;
   const verts = strands.length * per * 2;
@@ -482,5 +522,14 @@ export interface GroomBrush {
   tool: GroomStroke['tool'];
   radius: number;
   strength: number;
+  /** Each stroke is also made on the other side: across the shape's middle left to right (x) or front to back (y). */
+  mirror: 'off' | 'x' | 'y';
 }
-export const DEFAULT_GROOM: GroomBrush = { tool: 'comb', radius: 15, strength: 0.7 };
+export const DEFAULT_GROOM: GroomBrush = { tool: 'comb', radius: 15, strength: 0.7, mirror: 'off' };
+
+/** A stroke reflected across the middle of a shape (its footprint's box): x mirrors left to right, y front to back. */
+export function mirrorStroke(stroke: GroomStroke, axis: 'x' | 'y', box: { minX: number; maxX: number; minY: number; maxY: number }): GroomStroke {
+  const c = axis === 'x' ? box.minX + box.maxX : box.minY + box.maxY;
+  const k = axis === 'x' ? 0 : 1;
+  return { ...stroke, path: stroke.path.map((v, i) => (i % 3 === k ? Math.round((c - v) * 100) / 100 : v)) };
+}
