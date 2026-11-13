@@ -6,6 +6,7 @@ import { LoadButton } from "./LoadButton";
 import { cadStateNow, onCadHand, onCadState, useCadState } from "../lib/caddesk";
 import { framePoint, isWorkVisible } from "../lib/frameCoordinates";
 import { pointerFollow } from "../lib/pointer";
+import { holdFocus } from "../lib/keepFocus";
 import { useAgentCursor } from "../lib/agentCursor";
 import { useCursorWho, whoColors, getCursorWho } from "../lib/cursorWho";
 import { IconCube, IconMaximize, IconMinimize } from "./Icons";
@@ -180,6 +181,8 @@ export function CadWindow({ sessionId, phone }: { sessionId: string; phone: bool
         .catch(() => ({ won: false, goal: undefined, need: undefined }));
       if (!claim.won) return;
       for (let waited = 0; !ready.current && waited < 45_000; waited += 250) await new Promise((r) => setTimeout(r, 250));
+      // The modeller may take the keyboard while it works; the person's place is theirs again after (lib/keepFocus.ts).
+      const held = holdFocus(frame.current);
       const answer = ready.current
         ? await new Promise<Record<string, unknown>>((resolve) => {
           const timer = setTimeout(() => resolve({ did: [], skipped: "the modeller did not answer" }), 140_000);
@@ -188,6 +191,7 @@ export function CadWindow({ sessionId, phone }: { sessionId: string; phone: bool
         })
         : { did: [], skipped: "the modeller did not start" };
       handing.current.delete(hand.id);
+      held.release();
       await fetch(`${q}/reply?id=${encodeURIComponent(hand.id)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

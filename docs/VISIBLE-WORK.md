@@ -19,7 +19,10 @@ The **Visible** switch (`VisibleWork.tsx`, Settings → Working together; one se
 **One cursor for the whole board.** The agent's cursor is the board's own (`lib/pointer.ts`), not one per window: each
 editor's frame (Office, PDF, Photo, 3D) and the Video window report where their hand is, and `pointerFollow` moves the
 board's pointer there, gliding from wherever it was, so it travels between the windows and the canvas as one hand. The
-frames draw no cursor of their own while the board does (`who.board`), and only their press rings.
+frames draw no cursor of their own while the board does (`who.board`), and only their press rings. The frames report
+their hand every 30 ms while it moves, so the board's pointer chases the newest report a frame at a time (`followStep` in
+`lib/humanPath.ts`); it must never glide to one report and ignore the rest, which sent it to a point the hand had already
+left and then made it jump onto the target after the click.
 
 **Switching off or stopping, mid-work** (`lib/handHalt.ts`). Turning Visible off halts every hand at once: the cursor goes,
 pauses already under way end, and the rest of the call's work is done straight away with no cursor, as it would have been

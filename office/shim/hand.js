@@ -491,6 +491,24 @@
     quieted.clear();
   }
 
+  /* The person's own keys while the hand works are not the editor's: the editor took the keyboard to type, the person
+     did not give it (R17). They are kept out of the cell the hand is filling and sent back to where the person was
+     typing (src/lib/keepFocus.ts). Only real keys: the hand's own are made events (isTrusted false). */
+  const STRAY = ["keydown", "keypress", "keyup", "paste", "cut"];
+  const stray = (e) => {
+    if (!e.isTrusted) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (e.type !== "keydown" || e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (Array.from(e.key).length === 1 || e.key === "Backspace") void A.host("stray-key", { key: e.key }).catch(() => undefined);
+  };
+  function strayKeys(on) {
+    for (const t of STRAY) {
+      if (on) window.addEventListener(t, stray, true);
+      else window.removeEventListener(t, stray, true);
+    }
+  }
+
   let busy = false;
   async function run(id, steps, who) {
     if (busy) { void A.host("handed", { id, results: [], error: "the editor is already doing an edit" }).catch(() => undefined); return; }
@@ -498,6 +516,7 @@
     halted = false;
     stopped = false;
     keysQuiet(true);
+    strayKeys(true);
     const results = [];
     const current = new Map();
     sheetNow = "";
@@ -521,6 +540,7 @@
     } finally {
       busy = false;
       keysQuiet(false);
+      strayKeys(false);
       hideCursor();
     }
   }

@@ -2434,7 +2434,7 @@ label + .jf-hint { margin-top: -5px; }
    taller than a laptop window and the words have to fit beside that bar too. */
 .rail-gauge {
   position: absolute; left: 0; top: 0; width: max-content; z-index: -1;
-  visibility: hidden; pointer-events: none; padding: 0 8px;
+  visibility: hidden; pointer-events: none; padding: 0 6px;
 }
 .rail-gauge .rail-nav-item { width: max-content; }
 /* A column like the list it copies, but not the list itself: a second .rail-nav in
@@ -2443,7 +2443,9 @@ label + .jf-hint { margin-top: -5px; }
 .rail-gauge-list { display: flex; flex-direction: column; gap: 1px; }
 /* Always with its words, in every state: this copy is what the words are
    measured from, so it must never be the one folded to icons. */
-.rail .rail-gauge .rail-nav-item > span { display: inline; position: static; opacity: 1; visibility: visible; transform: none; }
+/* `inherit`, not `visible`: a child made visible shows through its hidden parent, and the copy's words were drawn over the
+   real menu's. */
+.rail .rail-gauge .rail-nav-item > span { display: inline; position: static; opacity: 1; visibility: inherit; transform: none; }
 
 .rail-top {
   display: flex; align-items: center; gap: 9px; height: 58px; padding: 0 14px;
@@ -7492,12 +7494,17 @@ body.is-resizing iframe { pointer-events: none; }
 
 /* Desktop menu, slimmest: the widgets stack, and say their words at the size the menu's own options do. */
 .rail:not(.is-drawer) { --rail-fs: var(--fs-base); }
-.rail:not(.is-drawer) .rail-nav-item { padding: 8px 10px; gap: 10px; font-size: var(--rail-fs); }
+/* Rows close together, so the whole list and its widgets fit a laptop's height with no scrolling; narrow side padding, so the
+   menu is as wide as its words and their notes, not wider. */
+.rail:not(.is-drawer) .rail-nav-item { padding: 5px 8px; gap: 8px; font-size: var(--rail-fs); }
+.rail:not(.is-drawer) .rail-nav { gap: 0; }
+.rail:not(.is-drawer) .rail-divider { margin: 4px 8px; }
+.rail:not(.is-drawer) .rail-scroll { padding: 4px 6px 8px; }
 .rail:not(.is-drawer) .rail-act-row { padding: 6px 10px; font-size: var(--rail-fs); }
-.rail:not(.is-drawer) .rail-foot { gap: 6px; padding-top: 10px; }
+.rail:not(.is-drawer) .rail-foot { gap: 4px; padding-top: 6px; }
 .rail:not(.is-drawer) .rail-ctx,
 .rail:not(.is-drawer) .rail-mem,
-.rail:not(.is-drawer) .rail-vitals { padding: 8px 10px; }
+.rail:not(.is-drawer) .rail-vitals { padding: 6px 10px; }
 .rail:not(.is-drawer) .rail-ctx { gap: 10px; }
 .rail:not(.is-drawer) .rail-ctx-ring { width: 38px; height: 38px; }
 .rail:not(.is-drawer) .rail-ctx-head,
@@ -7515,7 +7522,7 @@ body.is-resizing iframe { pointer-events: none; }
 .rail:not(.is-drawer) .rail-ctx-pct { font-size: var(--fs-2xs); }
 .rail:not(.is-drawer) .rail-mem-ask .btn { height: 26px; }
 /* The machine's three bars, one under the other: label and figure on a line, the bar under it. */
-.rail:not(.is-drawer) .rail-vitals { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.rail:not(.is-drawer) .rail-vitals { grid-template-columns: minmax(0, 1fr); gap: 4px; }
 .rail:not(.is-drawer) .rail-vital { gap: 3px; }
 .rail:not(.is-drawer) .rail-vital-bar { height: 4px; }
 .rail:not(.is-drawer) .rail-vital-detail { display: none; }
@@ -7524,8 +7531,8 @@ body.is-resizing iframe { pointer-events: none; }
 .rail:not(.is-drawer) .rail-brand { margin: -4px -4px -4px -1px; }
 
 /* ---- Desktop: the context ring is the widget; its words are in its tooltip. */
-.rail:not(.is-drawer):not(.is-mini) .rail-ctx { flex-direction: column; align-items: center; justify-content: center; padding: 8px; }
-.rail:not(.is-drawer):not(.is-mini) .rail-ctx-ring { width: 100%; max-width: 84px; height: auto; aspect-ratio: 1; }
+.rail:not(.is-drawer):not(.is-mini) .rail-ctx { flex-direction: column; align-items: center; justify-content: center; padding: 6px; }
+.rail:not(.is-drawer):not(.is-mini) .rail-ctx-ring { width: 100%; max-width: 60px; height: auto; aspect-ratio: 1; }
 .rail:not(.is-drawer):not(.is-mini) .rail-ctx-text { display: none; }
 .rail:not(.is-drawer) .rail-ctx-pct { font-size: var(--fs-xs); }
 .rail:not(.is-drawer) .rail-ctx-track, .rail:not(.is-drawer) .rail-ctx-fill, .rail:not(.is-drawer) .rail-ctx-tick { stroke-width: 4.5; }
@@ -7561,10 +7568,10 @@ body.is-resizing iframe { pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
   .rail-slot, .rail:not(.is-drawer) .rail-nav-item, .rail.is-mini .rail-nav-item, .rail.is-mini .rail-nav-item > span { transition: none; }
 }
-.rail.is-mini .rail-scroll { padding: 6px 6px 12px; }
+.rail.is-mini .rail-scroll { padding: 4px 6px 8px; }
 /* Folded, each row is a square about its icon (so the one you are on is a square, not a wide slab), and the strip is
    only as wide as that square and its margins. */
-.rail.is-mini .rail-nav-item { justify-content: center; width: 36px; height: 36px; margin-inline: auto; padding: 0; gap: 0; }
+.rail.is-mini .rail-nav-item { justify-content: center; width: 32px; height: 32px; margin-inline: auto; padding: 0; gap: 0; }
 .rail.is-mini .rail-nav-item > span {
   /* Off the flow rather than display: none, so the icon can slide to the middle
      of the strip while the word fades out instead of vanishing between frames.

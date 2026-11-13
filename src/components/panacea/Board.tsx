@@ -4,7 +4,7 @@ import { GRID, PANEL_MAX_W, PANEL_MIN_W, snap, type Canvas, type Panel, type Sur
 import { maximise as maximiseWindow, placeWindow, raise as raiseWindow, tidy as tidyBoxes } from "../../lib/panacea/windows";
 import { KINDS } from "../../lib/panacea/kinds";
 import type { Recipe } from "../../lib/panacea/library";
-import { IconCode, IconCube, IconFile, IconGame, IconGlobe, IconImage, IconMusic, IconNotebook, IconOrg, IconSlides, IconSparkle, IconTable, IconVideo, IconX, IconMaximize, IconMoreH, IconTidy } from "../Icons";
+import { IconCode, IconCube, IconFile, IconGame, IconGlobe, IconImage, IconMusic, IconNotebook, IconOrg, IconSlides, IconSparkle, IconTable, IconVideo, IconX, IconMaximize, IconMinimize, IconMoreH, IconTidy } from "../Icons";
 import { PanelCard, type PanelActions } from "./PanelCard";
 import { SHEET_MOVED } from "./chatLayout";
 import { SurfaceView } from "./Surfaces";
@@ -1295,10 +1295,12 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
               <span className="pw-engine-ico">{workIcon(work.mode)}</span><b>{work.title}</b><span className="spacer" />
               {linkDot(work.id, work.title)}
               <button type="button" aria-label={isMaxed(work.id) ? `Restore ${work.title}` : `Maximise ${work.title}`} aria-pressed={isMaxed(work.id)}
-                onClick={() => { onWindowFull(work.id, !isMaxed(work.id)); onJumpWork?.(work.mode); }}><IconMaximize size={14} /></button>
-              <button type="button" aria-pressed={enginePins.has(work.id)} aria-label={`Pin ${work.title} work`} onClick={() => setEnginePins((before) => {
+                title={isMaxed(work.id) ? "Restore" : "Maximise"}
+                onClick={() => { onWindowFull(work.id, !isMaxed(work.id)); onJumpWork?.(work.mode); }}>{isMaxed(work.id) ? <IconMinimize size={14} /> : <IconMaximize size={14} />}</button>
+              <button type="button" aria-pressed={enginePins.has(work.id)} aria-label={`${enginePins.has(work.id) ? "Unpin" : "Pin"} ${work.title} work`}
+                title={enginePins.has(work.id) ? "Unpin" : "Pin"} onClick={() => setEnginePins((before) => {
                 const next = new Set(before); if (next.has(work.id)) next.delete(work.id); else next.add(work.id); return next;
-              })}>Pin</button>
+              })}>{enginePins.has(work.id) ? "Unpin" : "Pin"}</button>
               {onCloseWork && <button type="button" aria-label={`Close ${work.title} work`}
                 onClick={() => { void sure(`Close ${work.title}?`, "Close").then((yes) => { if (yes) onCloseWork(work.mode); }); }}><IconX size={14} /></button>}
             </header>
@@ -1332,7 +1334,8 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
               <span className="pa-surface-meta">{KINDS[s.kind].meta(s)}</span>
               {linkDot(s.id, s.title)}
               <button type="button" className="pa-surface-max" aria-label={isMaxed(s.id) ? `Restore ${s.title}` : `Maximise ${s.title}`} aria-pressed={isMaxed(s.id)}
-                onClick={() => { maximize(s.id, "surface"); rerender((n) => n + 1); }}><IconMaximize size={11} /></button>
+                title={isMaxed(s.id) ? "Restore" : "Maximise"}
+                onClick={() => { maximize(s.id, "surface"); rerender((n) => n + 1); }}>{isMaxed(s.id) ? <IconMinimize size={11} /> : <IconMaximize size={11} />}</button>
               <button type="button" className="pa-surface-x" aria-label={`Remove ${s.title}`} onClick={() => onRemoveSurface(s)}><IconX size={11} /></button>
             </header>
             <div className="pa-surface-body">

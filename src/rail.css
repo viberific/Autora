@@ -79,7 +79,7 @@
 .rail-ask:hover { border-color: var(--accent-line); }
 .rail-scrim {
   position: fixed; inset: 0; z-index: var(--z-modal, 60); display: grid; place-items: center; padding: 16px;
-  background: rgba(var(--bg-rgb, 8, 9, 13), 0.66); backdrop-filter: blur(3px); animation: rail-fade var(--dur-1, 0.15s) var(--ease, cubic-bezier(0.32, 0.72, 0, 1)) both;
+  background: var(--scrim); backdrop-filter: var(--scrim-blur); -webkit-backdrop-filter: var(--scrim-blur); animation: rail-fade var(--dur-1, 0.15s) var(--ease, cubic-bezier(0.32, 0.72, 0, 1)) both;
 }
 @keyframes rail-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes rail-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }

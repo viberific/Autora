@@ -7,6 +7,7 @@ import { TakeControl } from "./TakeControl";
 import { onOfficeHand, onOfficePush, useOfficeWindow, type OfficeHand, type OfficeKind } from "../lib/officedesk";
 import { clearCursor } from "../lib/cursorPos";
 import { pointerFollow } from "../lib/pointer";
+import { holdFocus, type HeldFocus } from "../lib/keepFocus";
 import { framePoint, isWorkVisible } from "../lib/frameCoordinates";
 import { getCursorWho, whoColors } from "../lib/cursorWho";
 import { OfficePages } from "./OfficePages";
@@ -67,6 +68,7 @@ export function OfficeWindow({ sessionId, kind, phone }: { sessionId: string; ki
   openedRef.current = openedRev;
   /** The agent's edits being typed in the editor by hand, by id: answered when the editor says it is done. */
   const handing = useRef(new Map<string, (said: { results?: unknown; error?: unknown }) => void>());
+  const holding = useRef<HeldFocus | null>(null);
   /** Every call says which window it is about, since each app's document is open beside the chat at the same time. */
   const api = useCallback((path: string) => {
     const at = `/api/officedesk/${encodeURIComponent(sessionId)}${path}`;
@@ -148,6 +150,12 @@ export function OfficeWindow({ sessionId, kind, phone }: { sessionId: string; ki
             case "handed": {
               // The agent's hand is done in the editor (office/shim/hand.js): what each step did.
               handing.current.get(String(payload.id))?.(payload);
+              reply(true, {});
+              break;
+            }
+            case "stray-key": {
+              // A key the person pressed while the editor had the keyboard for the hand: it belongs where they were typing.
+              holding.current?.type(String(payload.key ?? ""));
               reply(true, {});
               break;
             }
@@ -255,12 +263,17 @@ export function OfficeWindow({ sessionId, kind, phone }: { sessionId: string; ki
     if (!ready()) { await reply({ results: [], error: "the editor did not start" }); return; }
     // A document just opened is laid out a moment after it is opened.
     await new Promise((r) => setTimeout(r, 1200));
+    // The editor takes the keyboard to type; the person's place (the chat) is theirs again when it is done (lib/keepFocus.ts).
+    const held = holdFocus(frame.current);
+    holding.current = held;
     const said = await new Promise<{ results?: unknown; error?: unknown }>((resolve) => {
       handing.current.set(hand.id, resolve);
       // The board draws the cursor (one for the whole board): the frame only says where its hand is.
       post({ type: "autora:office-hand", id: hand.id, steps: hand.steps, who: { name: getCursorWho().name, color: cursorColor(), board: true } });
     });
     handing.current.delete(hand.id);
+    if (holding.current === held) holding.current = null;
+    held.release();
     clearCursor();
     await reply({ results: said.results ?? [], ...(typeof said.error === "string" ? { error: said.error } : {}) });
   }, [post, sessionId]);

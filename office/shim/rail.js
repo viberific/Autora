@@ -99,7 +99,7 @@
     html.autora-desktop #autora-rail .div { width: 20px; height: 1px; margin: 2px 0; }
     html.autora-phone #autora-rail .div { width: 1px; height: 24px; margin: 0 2px; }
 
-    #autora-grid { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 16px; background: rgba(8,9,13,.68); backdrop-filter: blur(3px); font-family: inherit; }
+    #autora-grid { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 16px; background: var(--autora-scrim, rgba(8,9,13,.5)); backdrop-filter: var(--autora-scrim-blur, blur(10px) saturate(140%)); -webkit-backdrop-filter: var(--autora-scrim-blur, blur(10px) saturate(140%)); font-family: inherit; }
     #autora-grid .box { width: min(560px, 100%); max-height: min(88vh, 720px); overflow-y: auto; box-sizing: border-box; padding: 16px; border-radius: 20px; background: #0e1016; border: 1px solid rgba(255,255,255,.13); color: #edeff5; box-shadow: 0 30px 80px -20px #000; }
     html.autora-phone #autora-grid .box { width: min(340px, 100%); padding: 12px; }
     #autora-grid .head { display: flex; align-items: center; gap: 8px; }
@@ -128,6 +128,19 @@
     html.autora-card #autora-ask-btn { height: 26px; font-size: 11px; }
     #autora-ask-btn svg { width: 14px; height: 14px; fill: none; stroke: none; }
     #autora-ask-btn:hover { opacity: .9; }
+    /* The context menu (M1): a short vertical list of groups at the pointer, a group's entries beside it. */
+    #autora-menu { position: fixed; z-index: 95; left: 0; top: 0; font-family: inherit; }
+    #autora-menu .am-list { display: flex; flex-direction: column; min-width: 168px; padding: 4px; box-sizing: border-box; border-radius: 10px;
+      background: rgba(21,24,36,.96); border: 1px solid rgba(255,255,255,.13); box-shadow: 0 18px 48px -12px rgba(0,0,0,.7); color: #edeff5; }
+    #autora-menu .am-sub { position: absolute; min-width: 200px; }
+    #autora-menu button { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+    #autora-menu button span { flex: 1; white-space: nowrap; }
+    #autora-menu button i { font-style: normal; opacity: .6; }
+    #autora-menu button kbd { font: inherit; font-size: 11px; opacity: .55; }
+    #autora-menu button svg { width: 16px; height: 16px; flex: 0 0 16px; color: var(--tc, currentColor); stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    #autora-menu button:is(:hover, :focus-visible, [aria-expanded="true"]):not(:disabled) { background: rgba(255,255,255,.08); outline: none; }
+    #autora-menu button.on { box-shadow: inset 2px 0 0 var(--tc, #8b7bff); }
+    #autora-menu button:disabled { opacity: .4; cursor: default; }
     #autora-ask-pop { position: fixed; z-index: 100; background: #0e1016; border: 1px solid rgba(255,255,255,.18); border-radius: 14px; padding: 10px 12px; box-shadow: 0 20px 50px -10px #000; width: min(300px,calc(100vw - 24px)); display: flex; flex-direction: column; gap: 8px; font-family: inherit; }
     #autora-ask-pop-title { font-size: 12px; font-weight: 600; color: #edeff5; }
     #autora-ask-pop-sub { font-size: 11px; color: #7a8297; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -233,7 +246,7 @@
 
   /* ------------------------------------------------------------ the editor's own buttons */
   const named = (el) => ["data-tip", "aria-label", "title"].map((a) => (el.getAttribute(a) || "").trim().toLowerCase()).filter(Boolean);
-  const mine = (el) => el.closest("#autora-rail, #autora-grid, #autora-ask-pop") || el.classList.contains("ai-entry");
+  const mine = (el) => el.closest("#autora-rail, #autora-grid, #autora-ask-pop, #autora-menu") || el.classList.contains("ai-entry");
   /** The editor's button whose name starts with one of `starts`, never one of ours and never an AI one. */
   function find(starts) {
     for (const el of document.querySelectorAll("button, [role=button]")) {
@@ -403,7 +416,8 @@
   }
 
   function openCard(spot) {
-    if (!card || !bar) return;
+    // The right-click menu is the one thing at the pointer while it is open.
+    if (!card || !bar || document.getElementById("autora-menu")) return;
     if (spot) placeCard(spot);
     bar.setAttribute("data-open", "1");
   }
@@ -418,7 +432,7 @@
   if (card) {
     // Open the card when the person interacts with the grid (sheets) or the document (docs).
     document.addEventListener("pointerup", (e) => {
-      if (!bar || !e.target || mine(e.target)) return;
+      if (!bar || !e.target || mine(e.target) || e.button !== 0) return;
       const inWork = !!(
         (app === "sheets" && e.target.closest?.("#univer-container, .spreadsheet, [data-u-comp]")) ||
         (app === "docs" && e.target.closest?.(".ProseMirror, [contenteditable='true']"))
@@ -465,6 +479,28 @@
 
     // Escape closes the card.
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && bar && bar.getAttribute("data-open") === "1" && !grid) closeCard(); }, true);
+
+    /* The card belongs to the cell (or words) it came to (R17b). It sits at a point on the screen, so when the work moves under
+       it -- a scroll, a pan, a zoom, the window resized, the pick moved with the keys -- it would stay where it was and drift
+       off its cell, across the work. So it goes as soon as the view moves, and comes back at the pick on the next click. A
+       formula being typed in its bar is the exception: that bar is where the person is typing, and it stays with them. */
+    const typingFx = () => !!document.activeElement?.closest?.("[data-u-comp='formula-bar']");
+    const viewMoved = (e) => {
+      // Only what the person does: this shim tells the editor of its own changes with made-up resizes (refit, below).
+      if (!e.isTrusted || !bar || bar.getAttribute("data-open") !== "1" || typingFx()) return;
+      if (e.target instanceof Element && mine(e.target)) return;
+      closeCard();
+    };
+    const WORK = app === "sheets" ? "#univer-container, .spreadsheet, [data-u-comp]" : ".ProseMirror, [contenteditable='true']";
+    // A scroll of the work itself (the page, or the grid's own panes), not of a list or field that scrolls inside a dialog.
+    const ofWork = (e) => e.target === document || e.target === document.documentElement || e.target === document.body
+      || (e.target instanceof Element && (e.target.matches(WORK) || !!e.target.querySelector?.(WORK)));
+    document.addEventListener("wheel", (e) => { if (e.target instanceof Element && e.target.closest(WORK)) viewMoved(e); }, { capture: true, passive: true });
+    document.addEventListener("scroll", (e) => { if (bar?.getAttribute("data-open") === "1" && ofWork(e)) viewMoved(e); }, { capture: true, passive: true });
+    window.addEventListener("resize", viewMoved);
+    // In Sheets the keys move the pick to another cell (Pages' card follows its selection as it changes, above).
+    const MOVES = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "PageUp", "PageDown", "Home", "End", "Tab", "Enter"]);
+    if (app === "sheets") document.addEventListener("keydown", (e) => { if (MOVES.has(e.key) && !e.altKey) viewMoved(e); }, true);
   }
 
   /* ------------------------------------------------------- the bar follows the work */
@@ -776,7 +812,7 @@
 
   /* ---------------------------------------------------------------- Ask Autora popover */
   let askPop = null;
-  function openAsk() {
+  function openAsk(near) {
     closeAsk();
     const c = readContext();
     const range = String(c.pick || "");
@@ -816,9 +852,9 @@
     send.addEventListener("click", () => { if (!send.disabled) doAsk(input.value.trim(), range); });
     foot.appendChild(cancel); foot.appendChild(send);
     askPop.appendChild(foot);
-    // Position below/above the bar.
-    if (bar) {
-      const br = bar.getBoundingClientRect();
+    // Position below/above the bar (or what it was asked from: the menu's row).
+    if (near || bar) {
+      const br = near && typeof near.left === "number" ? near : bar.getBoundingClientRect();
       const popW = Math.min(300, window.innerWidth - 24);
       let popLeft = Math.max(8, Math.min(br.left, window.innerWidth - popW - 8));
       const popBelow = br.bottom + 8;
@@ -839,6 +875,143 @@
     } catch { /* no host */ }
   }
 
+
+  /* ---------------------------------------------------------------- the context menu (M1, M2) */
+  /*
+   * Right-click in the work gives one short vertical list of groups, the same shape in every Panacea app (M1): Formatting,
+   * Data, Formula, Autora. A group opens beside it to its entries, and only the entries that apply to what is picked are
+   * there (the card's own rules); a group with none is not shown. Each entry presses the editor's own command, as the card
+   * does, so it is the editor that does the work. It sits at the pointer and goes when anything else happens. The
+   * editor's own menu is off (office/patches/0004), so this is the one menu.
+   */
+  const MENU = {
+    sheets: [
+      ["Formatting", ["bold", "italic", "underline", "color", "fill"]],
+      ["Data", ["sort", "cond", "astable", "insrow", "inscol", "delrow", "delcol"]],
+      ["Formula", ["autosum", "fn"]],
+      ["Autora", ["ask", "all"]],
+    ],
+  }[app] || null;
+  const MENU_LABEL = { fill: "Cell colour", sort: "Sort & filter" };
+  const MENU_WORK = app === "sheets" ? "#univer-container, .spreadsheet, [data-u-comp]" : ".ProseMirror, [contenteditable='true']";
+  /** What an entry is: a tool of the card, the Formulas tab's Insert function (once All tools has read the ribbon), or ours. */
+  function menuEntry(id, c) {
+    if (id === "ask") return c.doc ? { id, label: "Ask Autora…", icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z" fill="currentColor"/><path d="M19 15l.85 2.3L22 18.15l-2.15.85L19 21.3l-.85-2.3-2.15-.85 2.15-.85L19 15z" fill="currentColor"/></svg>', color: "#8b7bff", act: (at) => openAsk(at) } : null;
+    if (id === "all") return { id, label: "All tools", icon: svg("layout-grid"), color: "#98a1b6", act: () => openGrid() };
+    const tool = id === "fn" ? TOOLS.find((x) => x.tab === "formulas" && /function/i.test(x.label)) : byId.get(id);
+    if (!tool || !needed(tool, c)) return null;
+    const st = state(tool);
+    if (!st.found) return null;
+    return { id, label: MENU_LABEL[id] || tool.label, icon: iconOf(tool), color: tool.color, on: !!st.on, off: !!st.off, key: st.key || "", act: (at) => void run(tool, at) };
+  }
+  let menu = null;
+  function closeMenu() { menu?.remove(); menu = null; }
+  function openMenu(x, y) {
+    closeMenu();
+    if (!MENU) return;
+    closeCard();
+    const c = steady(readContext());
+    const groups = MENU.map(([name, ids]) => [name, ids.map((id) => menuEntry(id, c)).filter(Boolean)]).filter(([, items]) => items.length);
+    if (!groups.length) return;
+    menu = document.createElement("div");
+    menu.id = "autora-menu";
+    const list = document.createElement("div");
+    list.className = "am-list";
+    list.setAttribute("role", "menu");
+    list.setAttribute("aria-label", c.pick ? `Menu for ${c.pick}` : "Menu");
+    menu.appendChild(list);
+    let sub = null, open = null;
+    const shut = () => { sub?.remove(); sub = null; if (open) open.setAttribute("aria-expanded", "false"); open = null; };
+    const rowsOf = (panel) => [...panel.querySelectorAll("button:not(:disabled)")];
+    const step = (panel, d) => {
+      const rows = rowsOf(panel);
+      if (!rows.length) return;
+      const i = rows.indexOf(document.activeElement);
+      rows[(i + d + rows.length) % rows.length].focus();
+    };
+    const showGroup = (row, items, focus) => {
+      if (open === row) { if (focus) rowsOf(sub)[0]?.focus(); return; }
+      shut();
+      open = row;
+      row.setAttribute("aria-expanded", "true");
+      sub = document.createElement("div");
+      sub.className = "am-list am-sub";
+      sub.setAttribute("role", "menu");
+      sub.setAttribute("aria-label", row.dataset.group);
+      for (const it of items) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.setAttribute("role", "menuitem");
+        b.className = it.on ? "on" : "";
+        b.disabled = it.off;
+        b.style.setProperty("--tc", it.color);
+        b.innerHTML = `${it.icon}<span></span>${it.key ? "<kbd></kbd>" : ""}`;
+        b.querySelector("span").textContent = it.label;
+        if (it.key) b.querySelector("kbd").textContent = it.key;
+        swallow(b);
+        b.addEventListener("click", () => {
+          const at = b.getBoundingClientRect();
+          closeMenu();
+          it.act({ left: at.left, top: at.top, right: at.right, bottom: at.bottom, width: at.width, height: at.height });
+        });
+        b.addEventListener("keydown", (e) => {
+          if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); step(sub, e.key === "ArrowDown" ? 1 : -1); }
+          else if (e.key === "ArrowLeft") { e.preventDefault(); const r = open; shut(); r?.focus(); }
+        });
+        sub.appendChild(b);
+      }
+      menu.appendChild(sub);
+      // Beside its row, on the side there is room; pulled up if it would run off the bottom.
+      const r = row.getBoundingClientRect(), m = menu.getBoundingClientRect(), w = sub.offsetWidth, h = sub.offsetHeight;
+      const right = r.right + 2 + w <= window.innerWidth - 8;
+      sub.style.left = `${Math.round(right ? r.right - m.left + 2 : r.left - m.left - w - 2)}px`;
+      sub.style.top = `${Math.round(Math.min(r.top, window.innerHeight - 8 - h) - m.top - 4)}px`;
+      if (focus) rowsOf(sub)[0]?.focus();
+    };
+    for (const [name, items] of groups) {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.dataset.group = name;
+      row.setAttribute("role", "menuitem");
+      row.setAttribute("aria-haspopup", "menu");
+      row.setAttribute("aria-expanded", "false");
+      row.innerHTML = `<span></span><i aria-hidden="true">›</i>`;
+      row.querySelector("span").textContent = name;
+      swallow(row);
+      row.addEventListener("pointerenter", () => showGroup(row, items, false));
+      row.addEventListener("click", () => showGroup(row, items, true));
+      row.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); shut(); step(list, e.key === "ArrowDown" ? 1 : -1); }
+        else if (e.key === "ArrowRight" || e.key === "Enter" || e.key === " ") { e.preventDefault(); showGroup(row, items, true); }
+      });
+      list.appendChild(row);
+    }
+    document.body.appendChild(menu);
+    // At the pointer, kept on screen: below and right of it where there is room, never under it.
+    const w = list.offsetWidth, h = list.offsetHeight;
+    const left = x + 4 + w <= window.innerWidth - 8 ? x + 4 : Math.max(8, x - 4 - w);
+    const top = y + 4 + h <= window.innerHeight - 8 ? y + 4 : Math.max(8, y - 4 - h);
+    menu.style.left = `${Math.round(left)}px`;
+    menu.style.top = `${Math.round(top)}px`;
+    list.querySelector("button")?.focus({ preventScroll: true });
+  }
+  if (MENU && !phone) {
+    window.addEventListener("contextmenu", (e) => {
+      if (!(e.target instanceof Element) || mine(e.target) || !e.target.closest(MENU_WORK)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      closeCard();
+      const { clientX: x, clientY: y } = e;
+      // The right press has just moved the pick under the pointer: what applies is read once the name box says so.
+      setTimeout(() => openMenu(x, y), 60);
+    }, true);
+    document.addEventListener("pointerdown", (e) => { if (menu && !(e.target instanceof Element && e.target.closest("#autora-menu"))) closeMenu(); }, true);
+    document.addEventListener("keydown", (e) => { if (menu && e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeMenu(); } }, true);
+    document.addEventListener("wheel", () => closeMenu(), { capture: true, passive: true });
+    window.addEventListener("resize", (e) => { if (e.isTrusted) closeMenu(); });
+    window.addEventListener("blur", () => closeMenu());
+  }
+
   function build() {
     if (document.getElementById("autora-rail") || !document.body) return;
     bar = document.createElement("nav");
@@ -853,19 +1026,31 @@
 
     // Sheets card: position the formula bar inside the card when a cell enters edit mode.
     if (card && app === "sheets") {
+      /* The bar is laid over its slot in the card, measured every frame while it shows: the card's own rows change as tools
+         come and go, and a bar measured once was left behind when they did (R17b). */
+      let fxFrame = 0;
+      const fxFit = () => {
+        fxFrame = 0;
+        if (!root.classList.contains("fx-on") || !bar || bar.getAttribute("data-open") !== "1") return;
+        const slot = bar.querySelector(".fx-slot");
+        if (slot) {
+          const sr = slot.getBoundingClientRect(), fbEl = document.querySelector("[data-u-comp='formula-bar']");
+          const px = (n) => `${Math.round(n)}px`;
+          if (root.style.getPropertyValue("--fx-x") !== px(sr.left)) root.style.setProperty("--fx-x", px(sr.left));
+          if (root.style.getPropertyValue("--fx-y") !== px(sr.top)) root.style.setProperty("--fx-y", px(sr.top));
+          if (root.style.getPropertyValue("--fx-w") !== px(sr.width)) root.style.setProperty("--fx-w", px(sr.width));
+          const h = px(fbEl ? fbEl.offsetHeight : 32);
+          if (root.style.getPropertyValue("--fx-h") !== h) root.style.setProperty("--fx-h", h);
+        }
+        fxFrame = requestAnimationFrame(fxFit);
+      };
       document.addEventListener("focusin", (e) => {
         if (!bar || bar.getAttribute("data-open") !== "1") return;
         const fb = e.target && e.target.closest && e.target.closest("[data-u-comp='formula-bar']");
         if (!fb) return;
-        const slot = bar.querySelector(".fx-slot");
-        if (slot) {
-          const sr = slot.getBoundingClientRect(), fbEl = document.querySelector("[data-u-comp='formula-bar']");
-          root.style.setProperty("--fx-x", `${Math.round(sr.left)}px`);
-          root.style.setProperty("--fx-y", `${Math.round(sr.top)}px`);
-          root.style.setProperty("--fx-w", `${Math.round(sr.width)}px`);
-          root.style.setProperty("--fx-h", `${Math.round(fbEl ? fbEl.offsetHeight : 32)}px`);
-        }
         root.classList.add("fx-on");
+        if (fxFrame) cancelAnimationFrame(fxFrame);
+        fxFit();
       }, true);
       document.addEventListener("focusout", (e) => {
         const fb = e.target && e.target.closest && e.target.closest("[data-u-comp='formula-bar']");

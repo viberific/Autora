@@ -208,13 +208,17 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Windows on the Panacea canvas can now be joined together by dragging one
-  onto another and holding it there for a moment. The window lights up and
-  says what letting go will do; Escape or dragging away cancels. When you
-  join Autora Sheets into Autora Pages, the spreadsheet's table appears in
-  the document and updates there every time the sheet changes — no reopen
-  needed. A thick connector is drawn between the two windows on the canvas
-  so you can see at a glance what is linked, and an Unjoin button in the
-  middle removes the join when you no longer want it. The join and its live
-  table survive saving and reopening the session. An exported .docx holds
-  the table as a copy at that moment, not a live link.
+  The menu on the left no longer shows two sets of words on top of each
+  other when it is open. It is narrower, with no empty space after the
+  words, and its rows sit closer so it fits a laptop screen without
+  scrolling. The unfinished Store page is gone.
+  Right-click a cell in Sheets for a short menu: Formatting, Data, Formula
+  and Autora, each opening beside it with only what applies to the cells
+  you picked. Formatting holds bold, italic, underline, text colour and
+  cell colour. Sheets' tool card no longer drifts off its cell when you
+  scroll, zoom or resize; it comes back at the next click. When the agent
+  edits a document, sheet, PDF, photo or model, your cursor stays in the
+  chat and what you type there is kept. With Visible work on, the agent's
+  cursor goes straight to what it is editing. A maximised window shows
+  Restore with inward arrows, a pinned one reads Unpin, and All tools now
+  dims the screen behind it the same way as every other dialog.

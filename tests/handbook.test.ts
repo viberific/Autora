@@ -188,6 +188,14 @@ await test("the Office manual teaches the workbook's and deck's command log: who
   }
 });
 
+await test("the Office manual says Pages and Sheets have a card beside the pick that goes when the view moves", () => {
+  const text = manualText("office");
+  for (const needle of ["small card that comes beside what the person picks", "formula bar is its first row", "as soon as the view moves under", "never drifts off its cell",
+    "right-click in a Sheets cell gives one short vertical menu", "Formatting, Data, Formula and Autora", "Bold, Italic, Underline, Text colour and Cell colour", "Only the entries that apply"]) {
+    assert.ok(text.includes(needle), needle);
+  }
+});
+
 await test("the Office manual says what the person has picked reaches the briefing, so \"this\" means it", () => {
   const text = manualText("office");
   for (const needle of ["is in your briefing for about two minutes", "they mean that, so act on it without asking which"]) {
@@ -405,7 +413,7 @@ await test("the Panacea manual says that with Visible work on its changes are do
     "listed there as yours", "dragging a slider", "More opened", "dragged by its title bar", "a table pasted, a file dropped",
     "a document's words typed in", "linked by dragging a dot", "finished canvas goes in", "With Visible work off", "a Board, Flowchart or Document",
     "panacea_project", "project strip", "only then can you move past the first phase", "picker (Project)",
-    "moves by its title bar", "Maximise", "arrow halfway"]) {
+    "moves by its title bar", "Maximise", "arrow halfway", "arrows pointing in and reads Restore", "reads Unpin while that window is pinned"]) {
     assert.ok(p.includes(needle), `the Panacea manual lacks "${needle}"`);
   }
   assert.ok(!p.includes("not done by hand yet"), "the Panacea manual still says writing is not done by hand");

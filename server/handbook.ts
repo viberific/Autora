@@ -317,6 +317,15 @@ const OFFICE = [
     "editor has, one group per old ribbon tab (Insert, Design, Layout, Review, View...), where a desktop can pin any of them to the bar. " +
     "Commands with a drop-down open it beside the bar. The keyboard shortcuts work on a desktop as ever. Point the person at a tool by " +
     "its name and say \"open All tools\" if it is not on their bar. You have every tool whatever is shown. " +
+    "On a desktop, Pages and Sheets hold those tools in a small card that comes beside what the person picks (in Sheets the formula bar is " +
+    "its first row) rather than a bar down the side; it goes when they click elsewhere or press Escape, and as soon as the view moves under " +
+    "it (a scroll, a zoom, the window resized, or in Sheets the keys moving to another cell), so it never drifts off its cell; the next click " +
+    "brings it back at the pick. A formula being typed in its bar stays put. " +
+    "A right-click in a Sheets cell gives one short vertical menu at the pointer (the grid's own long menu is gone): Formatting, " +
+    "Data, Formula and Autora, each opening beside it. Formatting has Bold, Italic, Underline, Text colour and Cell colour; Data has Sort " +
+    "& filter, Conditional formatting and Format as table (with a block of cells picked) and Insert or Delete row and column; Formula has " +
+    "AutoSum and Insert function; Autora has Ask Autora (about the pick) and All tools. Only the entries that apply to what is picked " +
+    "are there, and each does what the editor's own command does. Tell the person \"right-click the cell, Formatting, Cell colour\". " +
     "What the person has picked in a window (their words in Pages, the cell range in Sheets, a box on a slide) is in your briefing for about two " +
     "minutes after: when they say \"this\" or \"these\", they mean that, so act on it without asking which.",
   "  With Visible work on and the document open in its window, office_edit's words are typed there by your hand, live, before the " +
@@ -539,8 +548,9 @@ const PANACEA = [
     "lands there; it also has blank pieces: a slider, switch, choice, notes, checklist or colour, and a Board, Flowchart or Document, " +
     "which adds that surface); scroll or drag the grid to pan, Ctrl+scroll to zoom; drop a photo or a table on the grid, or paste a table, to add a " +
     "surface; click a surface to work on it. Every window on the board (an app's, a photo, a table, a document, a board) moves by its " +
-    "title bar and is sized by its bottom-right corner, with a mouse or a finger, and its Maximise button fills the screen there is " +
-    "for work with it, centred (again, and it is as it was). Where work went between the apps (a model into the game, a picture " +
+    "title bar and is sized by its bottom-right corner, with a mouse or a finger, and its Maximise button (arrows pointing out) fills the screen there is " +
+    "for work with it, centred; maximised, the same button shows arrows pointing in and reads Restore, and puts it back as it was. " +
+    "An app window's Pin button reads Unpin while that window is pinned. Where work went between the apps (a model into the game, a picture " +
     "into a document, a file loaded from another app) is drawn as a dashed line between their windows with an arrow halfway " +
     "pointing the way it went, and the file's name beside it: you make these by using one app's file in another's tools. A photo's Before / after is a line to drag across it. The centered main Ask Autora bar " +
     "sends to this chat; there is no second canvas Ask box. Native history has Undo, Redo and a track of native changes, yours and theirs, to drag back " +

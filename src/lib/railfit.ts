@@ -21,7 +21,7 @@ import { useCallback, useLayoutEffect, useState } from "react";
     purpose: the whole menu is 164px and the words need about 144, so the band has to
     fit inside that -- but a band there still is, which is what stops a drag chattering
     on one number. */
-export const RAIL_SLACK = 16;
+export const RAIL_SLACK = 8;
 
 /** An element's own width, kept current. 0 until it has been measured. */
 export function useWidthOf(ref: React.RefObject<HTMLElement | null>): number {

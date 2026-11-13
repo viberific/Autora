@@ -8,6 +8,7 @@ import { onDeskHand, useDeskState, type DeskHand } from "../lib/pdfdesk";
 import { useBootWatch } from "../lib/bootWatch";
 import { clearCursor } from "../lib/cursorPos";
 import { pointerFollow } from "../lib/pointer";
+import { holdFocus } from "../lib/keepFocus";
 import { framePoint, isWorkVisible } from "../lib/frameCoordinates";
 import { getCursorWho, whoColors } from "../lib/cursorWho";
 import { onSpectraEvent } from "../lib/spectra";
@@ -94,12 +95,15 @@ export function SpectraWindow({ sessionId, phone }: { sessionId: string; phone: 
     }).catch(() => undefined);
     for (let waited = 0; !booted.current && waited < EDITOR_START_MS; waited += 250) await new Promise((r) => setTimeout(r, 250));
     if (!booted.current) { await reply({ results: [], saved: false, error: "the editor did not start" }); return; }
+    // The editor may take the keyboard while it works; the person's place is theirs again after (lib/keepFocus.ts).
+    const held = holdFocus(frame.current);
     const answer = await new Promise<{ results?: unknown; saved?: unknown; error?: unknown }>((resolve) => {
       handing.current.set(hand.id, resolve);
       // The board draws the cursor (one for the whole board): the frame only says where its hand is.
       post({ type: "autora:spectra:hand", id: hand.id, job: hand.job, who: { name: getCursorWho().name, color: cursorColor(), board: true } });
     });
     handing.current.delete(hand.id);
+    held.release();
     clearCursor();
     await reply({ results: answer.results ?? [], saved: answer.saved === true, ...(typeof answer.error === "string" ? { error: answer.error } : {}) });
   }, [post, sessionId]);

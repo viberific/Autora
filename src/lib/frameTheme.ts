@@ -27,6 +27,8 @@ const TOKENS: Array<[string, string]> = [
   ["--autora-live", "--live"], ["--autora-live-rgb", "--live-rgb"],
   ["--autora-warn", "--warn"], ["--autora-warn-rgb", "--warn-rgb"],
   ["--autora-danger", "--danger"], ["--autora-danger-rgb", "--danger-rgb"],
+  // The one scrim behind what opens over the work (R18): a frame's All tools dims and frosts the way the page's dialogs do.
+  ["--autora-scrim", "--scrim"], ["--autora-scrim-blur", "--scrim-blur"],
 ];
 
 function frameThemeVars(): Record<string, string> {

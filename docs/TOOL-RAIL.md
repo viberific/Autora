@@ -52,6 +52,19 @@ Live copy of the first version: https://claude.ai/artifact/A5vaGaNwJ8EFLA35jv3gD
 13. Keep the editor's own commands underneath (as `spectra-editor/src/autora/rail.tsx` does with
    `invokeCommand`): restyle and re-arrange, do not re-implement.
 
+## The right-click menu (M1: the same shape in every app)
+
+A right-click in the work gives one short vertical list of groups at the pointer: **Formatting, Data, Formula, Autora**. A
+group opens beside it to its entries; only the entries that apply to what is picked are there (the bar's own rules), and a
+group with none is left out. Each entry presses the editor's own command, as the bar does. It goes on Escape, a click
+elsewhere, a wheel or a resize, and the keys work it (up and down, right into a group, left out of it).
+
+- **Sheets** (done): `office/shim/rail.js` (`MENU`, `openMenu`), with the grid's own menu off (`office/patches/0004`).
+  Formatting: Bold, Italic, Underline, Text colour, Cell colour. Data: Sort & filter, Conditional formatting, Format as
+  table (a block picked), Insert / Delete row and column. Formula: AutoSum, Insert function. Autora: Ask Autora, All tools.
+  Test: `tests/ui-office-menu.test.ts`.
+- Pages, Slides, PDF, Photo, Video, Music, 3D and Games: still their own menus, one at a time (M3 to M10).
+
 ## Sizes (every app's bar, the same numbers)
 
 The desktop bar is the size of the rest of Autora's chrome, not bigger: **34px round buttons with 18px icons, 3px apart, 5px of

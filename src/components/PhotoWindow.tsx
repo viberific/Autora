@@ -3,6 +3,7 @@ import { useFullscreen } from "../lib/fullscreen";
 import { onPhotoHand, onPhotoState, photoStateNow, usePhotoState, type PhotoHand } from "../lib/photodesk";
 import { clearCursor } from "../lib/cursorPos";
 import { pointerFollow } from "../lib/pointer";
+import { holdFocus } from "../lib/keepFocus";
 import { framePoint, isWorkVisible } from "../lib/frameCoordinates";
 import { getCursorWho, whoColors } from "../lib/cursorWho";
 import { IconImage, IconMaximize, IconMinimize } from "./Icons";
@@ -117,12 +118,15 @@ export function PhotoWindow({ sessionId, phone }: { sessionId: string; phone: bo
       }).catch(() => undefined);
       return;
     }
+    // The editor may take the keyboard while it works; the person's place is theirs again after (lib/keepFocus.ts).
+    const held = holdFocus(frame.current);
     const answer = await new Promise<{ json: string; bytes: ArrayBuffer | null }>((resolve) => {
       handing.current.set(hand.id, (json, bytes) => resolve({ json, bytes }));
       // The board draws the cursor (one for the whole board): the editor only says where its hand is.
       post({ autoraPhoto: "hand", json: JSON.stringify({ id: hand.id, commands: hand.commands, who: { name: getCursorWho().name, color: cursorColor(), board: true } }) });
     });
     handing.current.delete(hand.id);
+    held.release();
     let said: { results?: unknown; error?: unknown } = {};
     try { said = JSON.parse(answer.json) as typeof said; } catch { /* nothing said */ }
     await fetch(`${q}/reply?id=${encodeURIComponent(hand.id)}`, {
