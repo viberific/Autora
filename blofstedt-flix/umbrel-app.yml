@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.105"
+version: "0.3.106"
 port: 8096
 # umbrelOS only hands a container the GPU when the manifest says so: with this
 # permission it adds /dev/dri plus the render/video groups those nodes belong
@@ -60,8 +60,7 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  The Queue reads properly as a grid: the cards fill their columns instead of shrinking to fit their own text, and the
-  Continue card spans two columns without squeezing its neighbours.
-  The storage warning is quieter and shorter. It now appears only when the disk is genuinely almost full (below 5% free)
-  and links straight to the Torrents page, instead of nagging at 20%; the separate notice about pre-downloading being
-  paused still tells you when the next episode is not fetched ahead.
+  Playback stops interrupting itself. Subtitles no longer cost a full read of the episode: they are taken from the file
+  on disk and kept, so a second play starts nothing at all. A play now takes the machine back from anything copying in
+  the background, instead of only asking new work not to start. And the pieces already cut for the episode you are
+  watching are no longer thrown away, so it stops rebuilding from the first second while you watch it.
