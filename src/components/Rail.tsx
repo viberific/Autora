@@ -198,12 +198,12 @@ export function Rail({
       {/* The pages at the top; at the foot, how full this session's context
           is and what is running without you. */}
       <div className="rail-scroll">
+        {!mini && !drawer && sessions && <Recent sessions={sessions} current={sessionId ?? null} onOpen={onOpenSession} />}
         <nav className="rail-nav">
           {PAGES.filter((p) => p.group === "work").map(item)}
           <div className="rail-divider" role="separator" />
           {PAGES.filter((p) => p.group === "setup").map(item)}
         </nav>
-        {!mini && !drawer && sessions && <Recent sessions={sessions} current={sessionId ?? null} onOpen={onOpenSession} />}
         {mini && !drawer ? (
           <ContextBar gauge={context} />
         ) : (
@@ -224,8 +224,9 @@ export function Rail({
 const RECENT_MAX = 40;
 
 /**
- * The latest chats, in the room a tall screen leaves between the pages and the cards at the foot. Only whole rows are
- * shown: as many as fit, none when not even one does, so a short window is as it was and the menu never scrolls for it.
+ * The latest chats, at the top of the menu, in the room a tall screen leaves above the pages and the cards at the foot. Only
+ * whole rows are shown, newest first: as many as fit, none when not even one does, so a short window is as it was and the
+ * menu never scrolls for it.
  */
 function Recent({ sessions, current, onOpen }: { sessions: readonly SessionRow[]; current: string | null; onOpen: (id: string) => void }) {
   const box = useRef<HTMLElement | null>(null);

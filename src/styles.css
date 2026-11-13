@@ -4412,7 +4412,11 @@ html[data-font="mono"] body { font-size: var(--fs-base); }
 /* A chat's title never widens the menu: the menu is as wide as its page names, and the titles are cut to it. */
 .rail-recent { flex: 1 1 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 0; contain: inline-size; }
 .rail-recent.is-unfit > * { visibility: hidden; }
-.rail-recent-head { margin: 0; padding: 12px 8px 4px; font-size: var(--fs-xs); font-weight: 600; color: var(--text-3); }
+/* It comes in from the top as the screen gives it room. */
+.rail-recent:not(.is-unfit) { animation: railRecentIn var(--dur-3) var(--ease) both; }
+@keyframes railRecentIn { from { opacity: 0; transform: translateY(-6px); } }
+.rail-recent + .rail-nav { margin-top: 6px; }
+.rail-recent-head { margin: 0; padding: 6px 8px 4px; font-size: var(--fs-xs); font-weight: 600; color: var(--text-3); }
 .rail-recent-row {
   flex: 0 0 auto; display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0;
   padding: 5px 8px; border: 0; border-radius: var(--r-sm); cursor: pointer;
