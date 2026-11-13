@@ -4407,6 +4407,22 @@ html[data-font="mono"] body { font-size: var(--fs-base); }
 .rail-scroll > .rail-nav { flex: 0 0 auto; }
 .rail-foot { margin-top: auto; padding-top: 14px; display: flex; flex-direction: column; gap: 6px; }
 .rail-activity { display: flex; flex-direction: column; gap: 1px; }
+/* The latest chats fill the room between the pages and the cards (Rail.tsx, Recent): whole rows only, counted from the
+   room there is, and nothing at all where not one row fits. The first row is always laid out, unseen, to be measured. */
+.rail-recent { flex: 1 1 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 0; }
+.rail-recent.is-unfit > * { visibility: hidden; }
+.rail-recent-head { margin: 0; padding: 12px 8px 4px; font-size: var(--fs-xs); font-weight: 600; color: var(--text-3); }
+.rail-recent-row {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0;
+  padding: 5px 8px; border: 0; border-radius: var(--r-sm); cursor: pointer;
+  background: none; color: var(--text-2); font: inherit; font-size: var(--fs-sm); text-align: left;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.rail-recent-row[hidden] { display: none; }
+.rail-recent-row span { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail-recent-row:hover { background: var(--s2); color: var(--text); }
+.rail-recent-row.on { color: var(--text); background: var(--s2); }
+.rail-recent-row .watch-dot { flex: 0 0 auto; }
 /* The open session's context, as a ring with the condensing mark on it. */
 .rail-ctx {
   display: flex; align-items: center; gap: 12px; padding: 10px 12px;

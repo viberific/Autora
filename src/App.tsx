@@ -2075,6 +2075,8 @@ export function App() {
             mini={railIcons}
             onMini={foldRail}
             onNeed={setRailNeed}
+            sessions={sessions}
+            sessionId={sessionId}
           />
         </div>
       ))}
