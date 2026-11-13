@@ -7,7 +7,7 @@
  * it the rectangle of a real element, or a point a frame confirmed. (The editors with an agent's hand -- Photo, PDF,
  * Pages, Sheets, Slides -- draw their own cursor inside their frame, where the hand works.)
  */
-import { along, humanRoute, restMs, routeMs, type Point } from "./humanPath";
+import { along, followStep, humanRoute, restMs, routeMs, type Point } from "./humanPath";
 import { clearCursor, reportCursor } from "./cursorPos";
 import { getCursorWho, glyphPoints, onCursorWho } from "./cursorWho";
 import { handsHalted, onHandsHalted } from "./handHalt";
@@ -157,27 +157,44 @@ export function pointerRest(after = 2200) {
 /**
  * The cursor of an editor's frame (Office, PDF, Photo, Video, 3D), as the board's own pointer: there is one cursor for
  * the whole board, and it travels between the windows rather than living inside one. Each frame reports where its hand
- * is (mapped to the page), and stops drawing a cursor of its own; a report far from where the pointer is glides there
- * the way a hand moves, nearer ones are followed as they come. With no report for a while it rests.
+ * is (mapped to the page), and stops drawing a cursor of its own. The pointer chases the newest report a frame at a
+ * time (`followStep`): always toward where the hand is now, at a hand's speed, so it is on the target when the hand
+ * presses. It never glides to an old report and then jumps (the frames report every 30 ms while their own hand moves,
+ * so a report is out of date as soon as the next one comes). With no report for a while it rests.
  */
-let gliding = false;
-let latest: Point | null = null;
+let goal: Point | null = null;
+let chasing = 0;
+let chaseToken = 0;
+let lastTick = 0;
+
+function chase(now: number) {
+  chasing = 0;
+  // Halted, or a hand on this page (Music, Panacea) has taken the pointer: stop following.
+  if (!goal || !at || handsHalted() || chaseToken !== token) { goal = null; return; }
+  const next = followStep(at, goal, now - lastTick);
+  lastTick = now;
+  place(next);
+  if (next.x === goal.x && next.y === goal.y) { goal = null; return; }
+  chasing = requestAnimationFrame(chase);
+}
+
 export function pointerFollow(p: Point) {
   if (handsHalted()) return;
   const host = ensure();
   window.clearTimeout(hideTimer);
-  const shown = host.classList.contains("is-on");
-  if (gliding) { latest = p; }
-  else if (shown && at && Math.hypot(p.x - at.x, p.y - at.y) <= 48) {
-    place(p);
-  } else {
-    gliding = true;
-    latest = null;
-    void pointerGo(p, false).finally(() => {
-      gliding = false;
-      if (latest && !handsHalted()) place(latest);
-      latest = null;
-    });
+  if (!host.classList.contains("is-on")) {
+    host.classList.remove("is-off");
+    host.classList.add("is-on");
+    // Where it last was on the board; the first time, a short way off the hand, as pointerGo starts.
+    place(at ?? { x: Math.min(innerWidth - 12, Math.max(12, p.x + 90)), y: Math.max(12, p.y - 60) });
+  }
+  goal = p;
+  // A frame's hand takes over from any glide in flight, as it did when this called pointerGo.
+  if (chaseToken !== token || !chasing) {
+    chaseToken = ++token;
+    if (chasing) cancelAnimationFrame(chasing);
+    lastTick = performance.now();
+    chasing = requestAnimationFrame(chase);
   }
   pointerRest(2600);
 }

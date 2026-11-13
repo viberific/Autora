@@ -73,6 +73,25 @@ export function along(route: readonly Point[], t: number): Point {
   return route[i];
 }
 
+/** The fastest the board's pointer moves while it follows a frame's hand, in pixels a millisecond: a quick hand, not a jump. */
+export const FOLLOW_MAX_SPEED = 3.2;
+
+/**
+ * One frame of the board's pointer following where an editor's hand says it is (`pointerFollow`): it closes most of the
+ * gap each frame (a hand catching up, about 40 ms behind), never faster than `FOLLOW_MAX_SPEED` and never past the target,
+ * so it is always heading for the hand's newest place and is on it by the time the hand presses.
+ */
+export function followStep(at: Point, target: Point, dtMs: number): Point {
+  const dx = target.x - at.x;
+  const dy = target.y - at.y;
+  const dist = Math.hypot(dx, dy);
+  if (dist < 0.5) return { x: target.x, y: target.y };
+  const dt = Math.max(0, Math.min(50, dtMs));
+  const step = Math.min(dist, Math.max(dist * (1 - Math.exp(-dt / 40)), 0.06 * dt), FOLLOW_MAX_SPEED * dt);
+  if (step >= dist) return { x: target.x, y: target.y };
+  return { x: at.x + (dx / dist) * step, y: at.y + (dy / dist) * step };
+}
+
 /** A pause before pressing, the way a person rests on the target. */
 export const restMs = () => Math.round(rand(80, 230));
 
