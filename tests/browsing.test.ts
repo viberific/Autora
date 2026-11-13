@@ -15,13 +15,29 @@ const home = fs.mkdtempSync(path.join(os.tmpdir(), "autora-browsing-"));
 process.env.AUTORA_HOME = home;
 
 let passed = 0;
+/** What is said when a test against a real page does not come back: where the browser is, so a hang on a machine we cannot see is a report. */
+let aboutBrowser: (() => Promise<string>) | null = null;
+const PAGE_LIMIT_MS = 90_000;
+
 async function test(name: string, fn: () => Promise<void> | void) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    await fn();
+    /* A test against a real page that never returns (a browser that stopped answering) stops the file with a report:
+       the operations after it wait behind it in the browser's queue, so going on would only repeat the wait. */
+    await Promise.race([
+      Promise.resolve().then(fn),
+      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`did not finish in ${PAGE_LIMIT_MS / 1000} seconds`)), PAGE_LIMIT_MS); }),
+    ]);
+    clearTimeout(timer);
     passed += 1;
     console.log(`  ok  ${name}`);
   } catch (err) {
+    clearTimeout(timer);
     console.error(`  FAIL ${name}`);
+    if (err instanceof Error && /did not finish in/.test(err.message)) {
+      console.error(`${err.message}\n${aboutBrowser ? await Promise.race([aboutBrowser(), new Promise<string>((r) => setTimeout(() => r("(the browser did not answer a question either)"), 5000))]).catch((e) => String(e)) : ""}`);
+      process.exit(1);
+    }
     throw err;
   }
 }
@@ -116,6 +132,11 @@ async function main() {
     onFrame: () => {}, onKeyframe: () => {}, onNav: () => {}, onAction: () => {},
     onFields: () => {}, watchers: () => 0,
   });
+  aboutBrowser = async () => {
+    const live_ = live as unknown as { page?: { url(): string; frames(): Array<{ url(): string }>; context(): { browser(): { version(): string } | null } } };
+    const page = live_.page;
+    return page ? `browser ${page.context().browser()?.version() ?? "?"}, page ${page.url()}, frames ${JSON.stringify(page.frames().map((f) => f.url()))}, binary ${executable ?? "(playwright's own)"}` : "(no page)";
+  };
   const url = `file://${path.resolve("tests/fixtures/form.html")}`;
   try {
     const page = await live.goto(url);
