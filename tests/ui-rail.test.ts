@@ -64,6 +64,8 @@ async function main() {
 
     await test("on a tall screen the latest chats fill the room between the pages and the cards, whole rows only", async () => {
       for (let i = 0; i < 30; i += 1) await app.newSession(`Chat number ${i}`, "build");
+      // A long title is cut to the menu, never widens it (a wider menu moves the board beside it).
+      await app.newSession("A rather long chat title that keeps on going well past the width of the menu", "build");
       const tall = await (await browser.newContext({ viewport: { width: 1280, height: 1900 } })).newPage();
       await tall.goto(`${app.base}/?page=sessions`);
       await tall.waitForSelector(".rail-recent-row");
@@ -79,6 +81,8 @@ async function main() {
       const order = ((await app.api("GET", "/api/sessions")).body as { title: string }[]).map((r) => r.title);
       assert.deepEqual(recent.names, order.slice(0, recent.names.length), "in the Sessions list's order: pinned, then latest");
       assert.ok((await scrolls(tall)) <= 0, "the tall menu does not scroll");
+      const width = await tall.evaluate(() => document.querySelector(".rail")!.getBoundingClientRect().width);
+      assert.ok(width <= 150, `a long chat title leaves the menu as wide as its words: ${width}px`);
       await tall.close();
       // The short window still fits with no scrolling, and shows no half rows.
       await page.reload();

@@ -19,7 +19,7 @@ import { CAPABILITIES, capabilityOf } from "./capabilities";
 const OVERVIEW = [
   "How Autora's windows work (all of these tools are yours from the first message; none needs loading):",
   "- The layout. Panacea is the main area and fills the whole region; on desktop the conversation is a frosted glass window floating " +
-    "over it, opening at the bottom left with a gap from every edge. Until the person pulls its top or bottom edge it is only as tall as what has been said; once they do, it stays at the height they chose. They move it with the Move button in its top-left corner " +
+    "over it, opening at the bottom left with a gap from every edge. Until the person pulls its top or bottom edge it is only as tall as what has been said; once they do, it stays at the height they chose (an empty chat is still only its message box). They move it with the Move button in its top-left corner " +
     "(Move conversation; a double click puts it back at the bottom left), size it with the pull in its top-right corner (Resize conversation), and a window brought near the " +
     "left or right side is pulled onto that side and held there. It is never retracted on desktop, so there is always somewhere to type: " +
     "the Ask Autora bar is at its foot (work mode, voice, attachments, notebooks, artifacts, Capabilities, Send, Stop) with the TODO " +
