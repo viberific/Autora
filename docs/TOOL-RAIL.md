@@ -59,6 +59,9 @@ group opens beside it to its entries; only the entries that apply to what is pic
 group with none is left out. Each entry presses the editor's own command, as the bar does. It goes on Escape, a click
 elsewhere, a wheel or a resize, and the keys work it (up and down, right into a group, left out of it).
 
+- **Pins** (Sheets, done): above the groups, a row of round icons the person has pinned, those that apply to the pick (Bold,
+  Italic, Cell colour, AutoSum to start). Each entry in a group has a pin at the end of its row (P on the keys); kept in the
+  page's storage (`autora-menu-pins-<app>`). On a desktop Sheets has no card on a click: this menu is its tools.
 - **Sheets** (done): `office/shim/rail.js` (`MENU`, `openMenu`), with the grid's own menu off (`office/patches/0004`).
   Formatting: Bold, Italic, Underline, Text colour, Cell colour. Data: Sort & filter, Conditional formatting, Format as
   table (a block picked), Insert / Delete row and column. Formula: AutoSum, Insert function. Autora: Ask Autora, All tools.

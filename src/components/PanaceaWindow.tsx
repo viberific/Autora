@@ -15,7 +15,11 @@ import { addSurfaceTo, placeRecipe, type SurfaceInput } from "../lib/panacea/rul
 import { filteredRows, looksTabular, splitDelimited, tableCsv, tableFrom } from "../lib/panacea/surfaces";
 import { onPanaceaCommand } from "../lib/panacea";
 import type { HandStep } from "../lib/panacea/handsteps";
-import { Board, type BoardHandle } from "./panacea/Board";
+import { Board, type BoardHandle, type NewFileKind } from "./panacea/Board";
+import { LibraryPicker } from "./LibraryPicker";
+
+/** The window each blank file from the board's menu opens in. */
+const NEW_MODE: Record<NewFileKind, WorkspaceMode> = { docx: "pages", xlsx: "sheets", pptx: "slides", pdf: "pdf" };
 import { BOARD_PIECE, DOC_PIECE, FLOWCHART_PIECE, PROJECT_PIECE } from "./panacea/Summon";
 import { ProjectStrip } from "./panacea/ProjectStrip";
 import { createProject, type Project } from "../lib/panacea/project";
@@ -34,7 +38,7 @@ import { VIDEO_CLIP, isVideoBind } from "../lib/panacea/apps/video";
 import { MUSIC_TRACK } from "../lib/panacea/apps/music";
 import { SaveButton, keptAs } from "./SaveButton";
 import { LoadButton, loadInto, type LoadResult } from "./LoadButton";
-import type { LoadApp } from "../lib/loadable";
+import { loadable, type LoadApp } from "../lib/loadable";
 import type { ArtifactInfo } from "../lib/notebooks";
 import { keepRoute } from "../lib/panacea/flows";
 import { windowTitle } from "../lib/panacea/windows";
@@ -629,6 +633,38 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
     }
   }, [refresh, onJump]);
 
+  /* The board's right-click menu. New: a blank file of that kind, made and opened in its window as the toolbox beside the
+     message box does (server/newfile.ts), and the view goes to it. Open file: a saved file from Artifacts, opened where it
+     belongs, as Load does. Neither starts a turn. */
+  const newFile = useCallback((kind: NewFileKind) => {
+    if (!sessionId) return;
+    void (async () => {
+      const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/new`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind }),
+      });
+      const body = await res.json().catch(() => ({})) as { error?: string };
+      if (!res.ok) throw new Error(body.error ?? `Autora answered ${res.status}`);
+      const mode = NEW_MODE[kind];
+      onJump?.(mode);
+      // The window arrives with the next state from the server: go to it once it is on the board.
+      for (let i = 0; i < 20; i += 1) {
+        await new Promise((r) => setTimeout(r, 150));
+        if (document.querySelector(`.pw-engine[data-work="engine:${mode}"]`)) { board.current?.jump(`engine:${mode}`); break; }
+      }
+    })().catch((err: unknown) => setProblem(err instanceof Error ? err.message : String(err)));
+  }, [sessionId, onJump]);
+  const [opening, setOpening] = useState(false);
+  const openFile = useCallback(() => setOpening(true), []);
+  const closeOpening = useCallback(() => setOpening(false), []);
+  const openFilter = useCallback((f: ArtifactInfo) => loadable("panacea", f), []);
+  const openPicked = useCallback((file: ArtifactInfo) => {
+    setOpening(false);
+    void (async () => {
+      const result = await loadInto("panacea", sessionId, file);
+      if (result) await loaded(result);
+    })().catch((err: unknown) => setProblem(err instanceof Error ? err.message : String(err)));
+  }, [sessionId, loaded]);
+
   const onPaste = useCallback((text: string, at: { x: number; y: number }) => {
     if (putPendingSurface()) return;
     // Rows (most lines split the same way by tabs, commas or semicolons) are a table; anything else is words, and
@@ -865,6 +901,8 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
           onJumpWork={onJump}
           onCloseWork={onCloseWork}
           navigationHost={navigationHost}
+          onNewFile={sessionId ? newFile : undefined}
+          onOpenFile={sessionId ? openFile : undefined}
         >
           {canvas.project && <ProjectStrip project={canvas.project} onChange={changeProject} onPhase={goPhase} />}
           {selected.size > 1 && (
@@ -893,6 +931,10 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
           </div>
           {toast && <div className="pa-toast pa-chrome" role="status">{toast}</div>}
         </Board>
+        {opening && (
+          <LibraryPicker tabs={["files"]} title="Open a file" action="Open" filter={openFilter} single onClose={closeOpening}
+            onPick={(picked) => { if (picked.files[0]) openPicked(picked.files[0]); }} />
+        )}
       </div>
     </PanaceaCtx.Provider>
   );

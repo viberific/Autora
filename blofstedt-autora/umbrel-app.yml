@@ -210,5 +210,11 @@ gallery: []
 releaseNotes: >-
   The chat window can be made as tall as your screen: pull its top edge up
   and it stays at that height when you let go, instead of shrinking back to
-  the messages. The height you choose is kept the next time you open
-  Autora.
+  the messages, and the height is remembered. On a tall screen the left
+  menu fills its empty middle with your recent chats. In Sheets, clicking a
+  cell no longer pops up a strip of tools; right-click for the menu, which
+  now has a row of pinned icons at the top (Bold, Italic, Cell colour and
+  AutoSum to start). Pin any entry with the pin at the end of its row.
+  Right-click the empty board for a menu of its own: New document,
+  spreadsheet, slides, PDF, board, flowchart or project, Open file, Add
+  piece, and View.

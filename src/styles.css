@@ -8006,6 +8006,25 @@ body.is-resizing iframe { pointer-events: none; }
 }
 .pa-link-menu button:hover, .pa-link-menu button:focus-visible { background: var(--accent-soft); color: var(--accent-light); }
 .pa-link-menu button > svg { flex: 0 0 auto; color: var(--text-3); }
+/* The board's right-click menu (BoardMenu.tsx): the same glass as Send to, a short list with groups that open beside it. */
+.pa-board-menu { position: absolute; z-index: var(--z-menu); }
+.pa-board-menu-list {
+  min-width: 176px; padding: 4px; display: flex; flex-direction: column;
+  border: 1px solid var(--glass-line-strong); border-radius: var(--r); background: var(--glass-sheen), var(--glass-veil), var(--glass);
+  box-shadow: var(--glass-shadow), var(--glass-shine); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+  animation: paArrive var(--dur-2) var(--ease) both;
+}
+.pa-board-menu-sub { position: absolute; }
+.pa-board-menu-sub.is-right { left: calc(100% + 4px); }
+.pa-board-menu-sub.is-left { right: calc(100% + 4px); }
+.pa-board-menu button {
+  display: flex; align-items: center; gap: 8px; padding: 7px 8px; border: 0; border-radius: var(--r-xs); background: transparent;
+  color: var(--text); font: inherit; font-size: var(--fs-sm); text-align: left; cursor: pointer; white-space: nowrap;
+}
+.pa-board-menu button > span { flex: 1; }
+.pa-board-menu button > i { font-style: normal; color: var(--text-3); }
+.pa-board-menu button:is(:hover, :focus-visible, .is-open) { background: var(--accent-soft); color: var(--accent-light); outline: none; }
+.pa-board-menu button > svg { flex: 0 0 auto; color: var(--text-3); }
 .pa-flows { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; z-index: 0; }
 .pa-flow line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 5; opacity: 0.75; }
 .pa-flow-arrow { fill: var(--accent); stroke: var(--bg); stroke-width: 1.5; }
