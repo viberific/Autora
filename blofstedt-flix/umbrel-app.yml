@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.110"
+version: "0.3.111"
 port: 8096
 # umbrelOS only hands a container the GPU when the manifest says so: with this
 # permission it adds /dev/dri plus the render/video groups those nodes belong
@@ -60,11 +60,9 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Search as you type, from any page: typing in the search bar on a show or in Settings opens the results and narrows
-  them letter by letter, and Back returns to the page the search started from.
-  Results are ranked — the title itself first, then titles starting with what was typed, then a word that does — and
-  punctuation is ignored, so "greys" finds Grey's Anatomy and "csi miami" finds CSI: Miami.
-  The player's error message and the empty pages (no results, an empty library, an empty downloads page) now sit in the
-  middle of the screen instead of in the slot under where the logo was.
-  Plus a polish pass over home, show, player and settings: several UI rough edges found in a walkthrough are fixed, and
-  the Finished seeding remove UI is tidier.
+  Finished seeding now goes three levels deep: a show, its seasons, and the episodes under each, one compact line
+  apiece, so a season is no longer squeezed into a narrow column on a phone.
+  Remove beside a show or a season takes only the episodes everyone in the house has finished and leaves the rest,
+  saying what it removed, what it queued and what it kept.
+  Delete show is new: it asks in a confirmation dialog, then takes every episode, watched or not — except one still
+  short of BTN's seeding goal, which is marked to go the moment it reaches it, so that rule still holds.
