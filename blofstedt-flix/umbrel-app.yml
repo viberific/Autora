@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.109"
+version: "0.3.110"
 port: 8096
 # umbrelOS only hands a container the GPU when the manifest says so: with this
 # permission it adds /dev/dri plus the render/video groups those nodes belong
@@ -60,13 +60,11 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  The controls over a video now always disappear again after five seconds of no input, and Back always has a screen
-  behind it instead of closing the app.
-  Ratings fill themselves in: a capped background sweep works through the backlog a few at a time, and shows with no
-  IMDb id are looked up by name instead of being marked Unrated and forgotten.
-  Netflix, Disney+ and Prime Video shows are off the recommendations, Discover drops the service filter for the app's
-  own filter rails, and shows with nothing playable no longer appear.
-  Downloads that have finished seeding are grouped by show and season, removable at each level, and Using the most space
-  says whether each entry has finished seeding, offering deletion only when it has.
-  Plus the playback work from the last update: subtitles are read from the file on disk and kept, a play takes the
-  machine back from anything copying in the background, and the pieces already cut for what you are watching survive.
+  Search as you type, from any page: typing in the search bar on a show or in Settings opens the results and narrows
+  them letter by letter, and Back returns to the page the search started from.
+  Results are ranked — the title itself first, then titles starting with what was typed, then a word that does — and
+  punctuation is ignored, so "greys" finds Grey's Anatomy and "csi miami" finds CSI: Miami.
+  The player's error message and the empty pages (no results, an empty library, an empty downloads page) now sit in the
+  middle of the screen instead of in the slot under where the logo was.
+  Plus a polish pass over home, show, player and settings: several UI rough edges found in a walkthrough are fixed, and
+  the Finished seeding remove UI is tidier.
