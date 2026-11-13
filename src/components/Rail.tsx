@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AutoraMark, type MarkState } from "./AutoraMark";
 import {
   IconBrain, IconSkill, IconChart, IconClock, IconFolder, IconList, IconMask, IconMessage,
-  IconMonitor, IconNotebook, IconOrg, IconPlug, IconThreads, IconPlus, IconServer, IconSliders, IconStore, IconWrench, IconZap,
+  IconMonitor, IconNotebook, IconOrg, IconPlug, IconThreads, IconPlus, IconServer, IconSliders, IconWrench, IconZap,
   IconX, IconCheck, IconChevron,
 } from "./Icons";
 import {
@@ -24,7 +24,7 @@ import { useRailNeed } from "../lib/railfit";
 
 export type PageId =
   | "chat" | "config" | "sessions" | "artifacts" | "notebooks" | "analytics"
-  | "cron" | "triggers" | "mind" | "skills" | "organization" | "threads" | "store" | "tools" | "mcp" | "system";
+  | "cron" | "triggers" | "mind" | "skills" | "organization" | "threads" | "tools" | "mcp" | "system";
 
 /** The sidebar. Ids stay as they were, so old links (?page=cron) still land;
     the labels are what people call these things rather than how they are
@@ -40,7 +40,6 @@ export const PAGES: { id: PageId; label: string; icon: ReactNode; group: "work" 
   { id: "skills", label: "Skills", icon: <IconSkill size={16} />, group: "work" },
   { id: "organization", label: "Organization", icon: <IconOrg size={16} />, group: "work" },
   { id: "threads", label: "Threads", icon: <IconThreads size={16} />, group: "work" },
-  { id: "store", label: "Store", icon: <IconStore size={16} />, group: "work" },
   { id: "tools", label: "Tools", icon: <IconWrench size={16} />, group: "setup" },
   { id: "config", label: "Settings", icon: <IconSliders size={16} />, group: "setup" },
   { id: "mcp", label: "Integrations", icon: <IconPlug size={16} />, group: "setup" },
@@ -129,14 +128,15 @@ export function Rail({
       {p.icon}
       <span>{p.label}</span>
       {/* Said in words as well as the dot: a phone has no tooltips. */}
-      {p.id === "chat" && alert && <em className="rail-tag is-alert">waiting on you</em>}
+      {/* The desktop menu is only as wide as its words: its notes are short, and say the rest in their tooltip. */}
+      {p.id === "chat" && alert && <em className="rail-tag is-alert" title="Something in the chat is waiting on you">{drawer ? "waiting on you" : "waiting"}</em>}
       {p.id === "mind" && learned > 0 && page !== "mind" && <em className="rail-tag is-grew">+{learned}</em>}
       {p.id === "threads" && threadsUnread > 0 && page !== "threads" && (
-        <em className="rail-tag is-grew" title="New posts and comments from the agents">{threadsUnread > 99 ? "99+" : threadsUnread} new</em>
+        <em className="rail-tag is-grew" title="New posts and comments from the agents">{threadsUnread > 99 ? "99+" : threadsUnread}{drawer ? " new" : ""}</em>
       )}
       {p.id === "system" && relayOn && (
         <em className="rail-tag" title="A desktop relay is connected">
-          <IconMonitor size={11} /> desktop
+          <IconMonitor size={11} />{drawer ? " desktop" : ""}
         </em>
       )}
     </button>

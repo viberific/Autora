@@ -416,7 +416,8 @@
   }
 
   function openCard(spot) {
-    if (!card || !bar) return;
+    // The right-click menu is the one thing at the pointer while it is open.
+    if (!card || !bar || document.getElementById("autora-menu")) return;
     if (spot) placeCard(spot);
     bar.setAttribute("data-open", "1");
   }
@@ -908,6 +909,7 @@
   function openMenu(x, y) {
     closeMenu();
     if (!MENU) return;
+    closeCard();
     const c = steady(readContext());
     const groups = MENU.map(([name, ids]) => [name, ids.map((id) => menuEntry(id, c)).filter(Boolean)]).filter(([, items]) => items.length);
     if (!groups.length) return;

@@ -68,11 +68,12 @@ async function main() {
       });
       assert.ok(shape.stacked, "the groups are one under the other");
       assert.equal(shape.univer, 0, "the grid's own menu is not shown");
+      assert.equal(await frame.evaluate(() => document.getElementById("autora-rail")?.getAttribute("data-open")), "0", "the tool card is not shown with it");
       await page.screenshot({ path: "test-results/office-menu.png" }).catch(() => undefined);
     });
 
     await test("Formatting opens beside it to Bold, Italic, Underline, Text colour and Cell colour", async () => {
-      await frame.locator('#autora-menu button[data-group="Formatting"]').hover();
+      await page.keyboard.press("ArrowRight");
       await until("the Formatting entries", async () => (await frame.locator("#autora-menu .am-sub button").count()) > 0, 3_000);
       const items = (await frame.locator("#autora-menu .am-sub button span").allTextContents()).map((x) => x.trim());
       assert.deepEqual(items, ["Bold", "Italic", "Underline", "Text colour", "Cell colour"]);
@@ -86,19 +87,21 @@ async function main() {
     });
 
     await test("an entry does what the editor's own command does, and the menu goes", async () => {
-      await frame.locator("#autora-menu .am-sub button", { hasText: "Bold" }).click();
+      await page.keyboard.press("Enter");
       assert.equal(await menuOpen(), false);
       await until("Bold to be on for the cell", async () => (await frame.locator('#autora-rail [aria-label="Bold"].on, #autora-rail [aria-label^="Bold"].on').count()) === 1, 5_000);
       await rightClick();
-      await frame.locator('#autora-menu button[data-group="Formatting"]').hover();
+      await page.keyboard.press("ArrowRight");
       await until("Bold shown as on in the menu", async () => (await frame.locator("#autora-menu .am-sub button.on", { hasText: "Bold" }).count()) === 1, 3_000);
-      await frame.locator("#autora-menu .am-sub button", { hasText: "Bold" }).click();
+      await page.keyboard.press("Enter");
       await until("Bold off again", async () => (await frame.locator('#autora-rail [aria-label^="Bold"].on').count()) === 0, 5_000);
     });
 
     await test("only what applies: on one cell, Data has no Sort & filter; on a block of cells, it does", async () => {
       await rightClick();
-      await frame.locator('#autora-menu button[data-group="Data"]').hover();
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("ArrowRight");
+      await until("the Data entries", async () => (await frame.locator("#autora-menu .am-sub button").count()) > 0, 3_000);
       const one = await frame.locator("#autora-menu .am-sub button span").allTextContents();
       assert.ok(!one.includes("Sort & filter"), `one cell: ${one.join(", ")}`);
       await page.keyboard.press("Escape");
@@ -108,7 +111,8 @@ async function main() {
       await sleep(400);
       await page.mouse.click(cell.x + 10, cell.y + 4, { button: "right" });
       await until("the menu", menuOpen, 5_000);
-      await frame.locator('#autora-menu button[data-group="Data"]').hover();
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("ArrowRight");
       await until("Sort & filter for a block", async () => (await frame.locator("#autora-menu .am-sub button span").allTextContents()).includes("Sort & filter"), 3_000);
     });
 

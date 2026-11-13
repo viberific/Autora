@@ -63,7 +63,9 @@ async function main() {
       // words, measured from the labels themselves -- so the old 150-180 expectation asserted a number the app stopped
       // using when it began measuring what the words need (R13). What matters is that it comes back as words and not as
       // the strip of icons, and that it is a width a whole menu can be.
-      assert.ok(back >= 150 && back <= 280, `put back to ${back}px, which is not a whole menu`);
+      // 0.9.371: narrower again -- rows with less side padding and no slack beyond the words (the person asked for no dead
+      // space after them), so a whole menu is now about 140px.
+      assert.ok(back >= 120 && back <= 280, `put back to ${back}px, which is not a whole menu`);
       assert.equal(await page.locator(".app").evaluate((el) => el.classList.contains("rail-icons")), false, "the reset puts the words back, not the icons");
     });
 

@@ -72,7 +72,6 @@ const McpPage = lazyPage(() => import("./components/pages/McpPage"), "McpPage");
 const ArtifactsPage = lazyPage(() => import("./components/pages/ArtifactsPage"), "ArtifactsPage");
 const OrganizationPage = lazyPage(() => import("./components/pages/OrganizationPage"), "OrganizationPage");
 const ThreadsPage = lazyPage(() => import("./components/pages/ThreadsPage"), "ThreadsPage");
-const StorePage = lazyPage(() => import("./components/pages/StorePage"), "StorePage");
 const NotebooksPage = lazyPage(() => import("./components/pages/NotebooksPage"), "NotebooksPage");
 const ToolsPage = lazyPage(() => import("./components/pages/ToolsPage"), "ToolsPage");
 const MindPage = lazyPage(() => import("./components/pages/MindPage"), "MindPage");
@@ -1628,7 +1627,7 @@ export function App() {
   const railIcons = panes.mini || railNarrow;
   /* Where the words fit again: what they measured, plus the same margin the fold
      waits for, so "Show the whole menu" never leaves a strip of icons. */
-  const railWhole = Math.max(RAIL.whole, railNeed ? railNeed + RAIL_SLACK + 4 : 0);
+  const railWhole = Math.max(RAIL.whole, railNeed ? railNeed + RAIL_SLACK + 2 : 0);
   /* Two rows that give way rather than clip. The header's Ask/Yolo pill and the
      composer's mode pill are both "what this chat may do", both at a fixed size,
      and both were being pushed out of the window or cut in half when the column
@@ -2273,7 +2272,6 @@ export function App() {
             )}
             {page === "organization" && <OrganizationPage topSlot={topSlot} />}
             {page === "threads" && <ThreadsPage topSlot={topSlot} />}
-            {page === "store" && <StorePage />}
             {page === "tools" && <ToolsPage />}
             {page === "mcp" && <McpPage topSlot={topSlot} />}
             {page === "cron" && <Schedule embedded topSlot={topSlot} onOpenSession={openSession} />}
