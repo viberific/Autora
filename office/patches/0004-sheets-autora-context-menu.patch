@@ -1,0 +1,14 @@
+diff --git a/apps/sheets/src/renderer/App.tsx b/apps/sheets/src/renderer/App.tsx
+index babb51d..c077b0e 100644
+--- a/apps/sheets/src/renderer/App.tsx
++++ b/apps/sheets/src/renderer/App.tsx
+@@ -1630,7 +1630,8 @@ export function App({
+           // bar (the Univer ribbon needs both flags).
+           header: true,
+           toolbar: false,
+-          contextMenu: true,
++          // Autora: the grid's right-click menu is Autora's own (office/shim/rail.js, the same shape in every app).
++          contextMenu: false,
+           formulaBar: true,
+           footer: {
+             sheetBar: true,

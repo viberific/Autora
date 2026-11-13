@@ -321,6 +321,11 @@ const OFFICE = [
     "its first row) rather than a bar down the side; it goes when they click elsewhere or press Escape, and as soon as the view moves under " +
     "it (a scroll, a zoom, the window resized, or in Sheets the keys moving to another cell), so it never drifts off its cell; the next click " +
     "brings it back at the pick. A formula being typed in its bar stays put. " +
+    "A right-click in a Sheets cell gives one short vertical menu at the pointer (the grid's own long menu is gone): Formatting, " +
+    "Data, Formula and Autora, each opening beside it. Formatting has Bold, Italic, Underline, Text colour and Cell colour; Data has Sort " +
+    "& filter, Conditional formatting and Format as table (with a block of cells picked) and Insert or Delete row and column; Formula has " +
+    "AutoSum and Insert function; Autora has Ask Autora (about the pick) and All tools. Only the entries that apply to what is picked " +
+    "are there, and each does what the editor's own command does. Tell the person \"right-click the cell, Formatting, Cell colour\". " +
     "What the person has picked in a window (their words in Pages, the cell range in Sheets, a box on a slide) is in your briefing for about two " +
     "minutes after: when they say \"this\" or \"these\", they mean that, so act on it without asking which.",
   "  With Visible work on and the document open in its window, office_edit's words are typed there by your hand, live, before the " +

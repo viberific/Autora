@@ -208,6 +208,13 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Window controls now say what they will do. A maximised window's button
-  shows arrows pointing in and reads Restore; a pinned window's Pin button
-  reads Unpin.
+  Right-click a cell in Sheets for a short menu: Formatting, Data, Formula
+  and Autora, each opening beside it with only what applies to the cells
+  you picked. Formatting holds bold, italic, underline, text colour and
+  cell colour. Sheets' tool card no longer drifts off its cell when you
+  scroll, zoom or resize; it comes back at the next click. When the agent
+  edits a document, sheet, PDF, photo or model, your cursor stays in the
+  chat and what you type there is kept. With Visible work on, the agent's
+  cursor goes straight to what it is editing. A maximised window shows
+  Restore with inward arrows, a pinned one reads Unpin, and All tools now
+  dims the screen behind it the same way as every other dialog.
