@@ -27,6 +27,11 @@ function blankPieces(name: string): Recipe[] {
   ];
 }
 
+/** One of the blank pieces (BOARD_PIECE, DOC_PIECE...), as the picker would hand it over: the board's menu makes them too. */
+export function blankPiece(id: string): Recipe | undefined {
+  return blankPieces("value").find((r) => r.id === id);
+}
+
 /**
  * The summon picker: what the person gets by double-clicking the grid (or pressing /). Type to search the library, pick
  * with a click or Enter, and the panel lands where they asked for it. No AI involved.

@@ -19,7 +19,7 @@ import { CAPABILITIES, capabilityOf } from "./capabilities";
 const OVERVIEW = [
   "How Autora's windows work (all of these tools are yours from the first message; none needs loading):",
   "- The layout. Panacea is the main area and fills the whole region; on desktop the conversation is a frosted glass window floating " +
-    "over it, opening at the bottom left with a gap from every edge. It is only as tall as what has been said, up to the height the person gave it. They move it with the Move button in its top-left corner " +
+    "over it, opening at the bottom left with a gap from every edge. Until the person pulls its top or bottom edge it is only as tall as what has been said; once they do, it stays at the height they chose (an empty chat is still only its message box). They move it with the Move button in its top-left corner " +
     "(Move conversation; a double click puts it back at the bottom left), size it with the pull in its top-right corner (Resize conversation), and a window brought near the " +
     "left or right side is pulled onto that side and held there. It is never retracted on desktop, so there is always somewhere to type: " +
     "the Ask Autora bar is at its foot (work mode, voice, attachments, notebooks, artifacts, Capabilities, Send, Stop) with the TODO " +
@@ -317,12 +317,14 @@ const OFFICE = [
     "editor has, one group per old ribbon tab (Insert, Design, Layout, Review, View...), where a desktop can pin any of them to the bar. " +
     "Commands with a drop-down open it beside the bar. The keyboard shortcuts work on a desktop as ever. Point the person at a tool by " +
     "its name and say \"open All tools\" if it is not on their bar. You have every tool whatever is shown. " +
-    "On a desktop, Pages and Sheets hold those tools in a small card that comes beside what the person picks (in Sheets the formula bar is " +
-    "its first row) rather than a bar down the side; it goes when they click elsewhere or press Escape, and as soon as the view moves under " +
-    "it (a scroll, a zoom, the window resized, or in Sheets the keys moving to another cell), so it never drifts off its cell; the next click " +
-    "brings it back at the pick. A formula being typed in its bar stays put. " +
-    "A right-click in a Sheets cell gives one short vertical menu at the pointer (the grid's own long menu is gone): Formatting, " +
-    "Data, Formula and Autora, each opening beside it. Formatting has Bold, Italic, Underline, Text colour and Cell colour; Data has Sort " +
+    "On a desktop, Pages holds those tools in a small card that comes beside what the person picks rather than a bar down the side; it goes " +
+    "when they click elsewhere or press Escape, and as soon as the view moves under it (a scroll, a zoom, the window resized), so it never " +
+    "drifts off its words; the next pick brings it back. Sheets on a desktop shows nothing over the grid when a cell is clicked: no card, no bar. " +
+    "Its tools are the right-click menu. " +
+    "A right-click in a Sheets cell gives one short vertical menu at the pointer (the grid's own long menu is gone): at its top a row of " +
+    "round icons the person has pinned (Bold, Italic, Cell colour and AutoSum to start with; only those that apply to the pick show), then Formatting, " +
+    "Data, Formula and Autora, each opening beside it. Every entry in a group has a pin at the end of its row (or P on the keys) that puts it in " +
+    "that top row or takes it out. Formatting has Bold, Italic, Underline, Text colour and Cell colour; Data has Sort " +
     "& filter, Conditional formatting and Format as table (with a block of cells picked) and Insert or Delete row and column; Formula has " +
     "AutoSum and Insert function; Autora has Ask Autora (about the pick) and All tools. Only the entries that apply to what is picked " +
     "are there, and each does what the editor's own command does. Tell the person \"right-click the cell, Formatting, Cell colour\". " +
@@ -546,7 +548,9 @@ const PANACEA = [
   "  What the person sees and does: panels with a title bar (drag it to move, the right edge to widen, the pin to keep it, × to put it " +
     "away, Shift+click to pick several, then Group); double-click the grid or press / for the picker (search the library, pick, and it " +
     "lands there; it also has blank pieces: a slider, switch, choice, notes, checklist or colour, and a Board, Flowchart or Document, " +
-    "which adds that surface); scroll or drag the grid to pan, Ctrl+scroll to zoom; drop a photo or a table on the grid, or paste a table, to add a " +
+    "which adds that surface); right-click the empty grid for its menu: New (Document, Spreadsheet, Slides or PDF, a blank file opened in its " +
+    "window with no turn; or a Board, Flowchart or Project where the click was), Open file… (a saved file from Artifacts), Add piece… (the " +
+    "picker there) and, once there is work, View (Show all work, Tidy, Zoom out); scroll or drag the grid to pan, Ctrl+scroll to zoom; drop a photo or a table on the grid, or paste a table, to add a " +
     "surface; click a surface to work on it. Every window on the board (an app's, a photo, a table, a document, a board) moves by its " +
     "title bar and is sized by its bottom-right corner, with a mouse or a finger, and its Maximise button (arrows pointing out) fills the screen there is " +
     "for work with it, centred; maximised, the same button shows arrows pointing in and reads Restore, and puts it back as it was. " +

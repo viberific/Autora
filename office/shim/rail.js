@@ -141,6 +141,20 @@
     #autora-menu button:is(:hover, :focus-visible, [aria-expanded="true"]):not(:disabled) { background: rgba(255,255,255,.08); outline: none; }
     #autora-menu button.on { box-shadow: inset 2px 0 0 var(--tc, #8b7bff); }
     #autora-menu button:disabled { opacity: .4; cursor: default; }
+    /* The pinned row: round icons in the bar's colours, above the groups. */
+    #autora-menu .am-pins { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 2px 6px; margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,.1); }
+    #autora-menu .am-pins[hidden] { display: none; }
+    #autora-menu .am-pins button { width: 30px; height: 30px; padding: 0; justify-content: center; border-radius: 50%; background: color-mix(in srgb, var(--tc) 20%, transparent); }
+    #autora-menu .am-pins button svg { color: var(--tc); }
+    #autora-menu .am-pins button:is(:hover, :focus-visible):not(:disabled) { background: color-mix(in srgb, var(--tc) 34%, transparent); }
+    #autora-menu .am-pins button.on { box-shadow: inset 0 0 0 1px var(--tc); }
+    /* An entry and its pin. The pin shows on the row the pointer or the keys are on, and stays lit once pinned. */
+    #autora-menu .am-row { display: flex; align-items: center; }
+    #autora-menu .am-row > button:first-child { flex: 1; min-width: 0; }
+    #autora-menu button.am-pin { flex: 0 0 26px; width: 26px; height: 26px; padding: 0; justify-content: center; opacity: 0; }
+    #autora-menu button.am-pin svg { width: 13px; height: 13px; color: currentColor; }
+    #autora-menu .am-row:is(:hover, :focus-within) button.am-pin, #autora-menu button.am-pin.is-pinned { opacity: .85; }
+    #autora-menu button.am-pin.is-pinned { color: #8b7bff; }
     #autora-ask-pop { position: fixed; z-index: 100; background: #0e1016; border: 1px solid rgba(255,255,255,.18); border-radius: 14px; padding: 10px 12px; box-shadow: 0 20px 50px -10px #000; width: min(300px,calc(100vw - 24px)); display: flex; flex-direction: column; gap: 8px; font-family: inherit; }
     #autora-ask-pop-title { font-size: 12px; font-weight: 600; color: #edeff5; }
     #autora-ask-pop-sub { font-size: 11px; color: #7a8297; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -416,8 +430,9 @@
   }
 
   function openCard(spot) {
-    // The right-click menu is the one thing at the pointer while it is open.
-    if (!card || !bar || document.getElementById("autora-menu")) return;
+    // The right-click menu is the one thing at the pointer while it is open. In Sheets it is the only one: a click in the grid
+    // brings nothing up (the person asked for no pop-up on a pick); the tools are a right-click away, pinned ones first.
+    if (!card || !bar || app === "sheets" || document.getElementById("autora-menu")) return;
     if (spot) placeCard(spot);
     bar.setAttribute("data-open", "1");
   }
@@ -904,6 +919,15 @@
     if (!st.found) return null;
     return { id, label: MENU_LABEL[id] || tool.label, icon: iconOf(tool), color: tool.color, on: !!st.on, off: !!st.off, key: st.key || "", act: (at) => void run(tool, at) };
   }
+  /* The person's own row at the top of the menu: the entries they use most, as round icons, one press each. Pinned from the
+     pin on any entry in a group; kept in the page's storage, like the bar's pins. */
+  const MENU_PINS = `autora-menu-pins-${app}`;
+  const MENU_PIN_DEFAULT = ["bold", "italic", "fill", "autosum"];
+  let menuPins = (() => {
+    try { const saved = JSON.parse(localStorage.getItem(MENU_PINS) || "null"); if (Array.isArray(saved)) return saved.filter((x) => typeof x === "string"); } catch { /* the defaults */ }
+    return MENU_PIN_DEFAULT.slice();
+  })();
+  const saveMenuPins = () => { try { localStorage.setItem(MENU_PINS, JSON.stringify(menuPins)); } catch { /* this session only */ } };
   let menu = null;
   function closeMenu() { menu?.remove(); menu = null; }
   function openMenu(x, y) {
@@ -920,9 +944,46 @@
     list.setAttribute("role", "menu");
     list.setAttribute("aria-label", c.pick ? `Menu for ${c.pick}` : "Menu");
     menu.appendChild(list);
+    // The pinned row: the pins that apply to the pick, in the order they were pinned. Redrawn when a pin is set or taken off.
+    const pinRow = document.createElement("div");
+    pinRow.className = "am-pins";
+    pinRow.setAttribute("role", "group");
+    pinRow.setAttribute("aria-label", "Pinned");
+    list.appendChild(pinRow);
+    const drawPins = () => {
+      pinRow.textContent = "";
+      for (const id of menuPins) {
+        const it = menuEntry(id, c);
+        if (!it) continue;
+        const b = document.createElement("button");
+        b.type = "button";
+        b.setAttribute("role", "menuitem");
+        b.dataset.pin = id;
+        b.className = it.on ? "on" : "";
+        b.disabled = it.off;
+        b.title = it.label;
+        b.setAttribute("aria-label", it.label);
+        b.style.setProperty("--tc", it.color);
+        b.innerHTML = it.icon;
+        swallow(b);
+        b.addEventListener("click", () => {
+          const at = b.getBoundingClientRect();
+          closeMenu();
+          it.act({ left: at.left, top: at.top, right: at.right, bottom: at.bottom, width: at.width, height: at.height });
+        });
+        b.addEventListener("keydown", (e) => {
+          if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); const all = [...pinRow.querySelectorAll("button:not(:disabled)")]; const i = all.indexOf(b); all[(i + (e.key === "ArrowRight" ? 1 : -1) + all.length) % all.length]?.focus(); }
+          else if (e.key === "ArrowDown") { e.preventDefault(); list.querySelector("button[data-group]")?.focus(); }
+        });
+        pinRow.appendChild(b);
+      }
+      pinRow.hidden = !pinRow.childElementCount;
+    };
+    drawPins();
     let sub = null, open = null;
     const shut = () => { sub?.remove(); sub = null; if (open) open.setAttribute("aria-expanded", "false"); open = null; };
-    const rowsOf = (panel) => [...panel.querySelectorAll("button:not(:disabled)")];
+    // The rows the up and down keys walk: the groups, or a group's entries; never the pins (left and right walk those).
+    const rowsOf = (panel) => [...panel.querySelectorAll("button:not(:disabled):not(.am-pin):not([data-pin])")];
     const step = (panel, d) => {
       const rows = rowsOf(panel);
       if (!rows.length) return;
@@ -957,8 +1018,33 @@
         b.addEventListener("keydown", (e) => {
           if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); step(sub, e.key === "ArrowDown" ? 1 : -1); }
           else if (e.key === "ArrowLeft") { e.preventDefault(); const r = open; shut(); r?.focus(); }
+          // Kept from the grid: a letter that reached it would start typing into the cell.
+          else if (e.key === "p" || e.key === "P") { e.preventDefault(); e.stopPropagation(); pin.click(); }
         });
-        sub.appendChild(b);
+        // Its pin, at the end of the row: puts it in the pinned row at the top of the menu, or takes it out.
+        const row = document.createElement("div");
+        row.className = "am-row";
+        const pin = document.createElement("button");
+        pin.type = "button";
+        pin.tabIndex = -1;
+        const pinned = () => menuPins.includes(it.id);
+        const paintPin = () => {
+          pin.className = `am-pin${pinned() ? " is-pinned" : ""}`;
+          pin.setAttribute("aria-pressed", String(pinned()));
+          pin.setAttribute("aria-label", pinned() ? `Unpin ${it.label}` : `Pin ${it.label} to the top of the menu`);
+          pin.title = pinned() ? "Unpin" : "Pin to the top of the menu (P)";
+        };
+        pin.innerHTML = svg("pin");
+        paintPin();
+        swallow(pin);
+        pin.addEventListener("click", () => {
+          menuPins = pinned() ? menuPins.filter((x) => x !== it.id) : [...menuPins, it.id];
+          saveMenuPins();
+          paintPin();
+          drawPins();
+        });
+        row.append(b, pin);
+        sub.appendChild(row);
       }
       menu.appendChild(sub);
       // Beside its row, on the side there is room; pulled up if it would run off the bottom.
@@ -981,7 +1067,10 @@
       row.addEventListener("pointerenter", () => showGroup(row, items, false));
       row.addEventListener("click", () => showGroup(row, items, true));
       row.addEventListener("keydown", (e) => {
-        if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); shut(); step(list, e.key === "ArrowDown" ? 1 : -1); }
+        // Up from the first group goes into the pinned row, when there is one.
+        const firstPin = e.key === "ArrowUp" && rowsOf(list)[0] === row ? pinRow.querySelector("button:not(:disabled)") : null;
+        if (firstPin) { e.preventDefault(); shut(); firstPin.focus(); }
+        else if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); shut(); step(list, e.key === "ArrowDown" ? 1 : -1); }
         else if (e.key === "ArrowRight" || e.key === "Enter" || e.key === " ") { e.preventDefault(); showGroup(row, items, true); }
       });
       list.appendChild(row);
@@ -993,7 +1082,7 @@
     const top = y + 4 + h <= window.innerHeight - 8 ? y + 4 : Math.max(8, y - 4 - h);
     menu.style.left = `${Math.round(left)}px`;
     menu.style.top = `${Math.round(top)}px`;
-    list.querySelector("button")?.focus({ preventScroll: true });
+    list.querySelector("button[data-group]")?.focus({ preventScroll: true });
   }
   if (MENU && !phone) {
     window.addEventListener("contextmenu", (e) => {

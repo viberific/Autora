@@ -62,6 +62,37 @@ async function main() {
       assert.ok((await scrolls(page)) <= 0, `it scrolls ${await scrolls(page)}px`);
     });
 
+    await test("on a tall screen the latest chats fill the top of the menu, above the pages, whole rows only", async () => {
+      for (let i = 0; i < 30; i += 1) await app.newSession(`Chat number ${i}`, "build");
+      // A long title is cut to the menu, never widens it (a wider menu moves the board beside it).
+      await app.newSession("A rather long chat title that keeps on going well past the width of the menu", "build");
+      const tall = await (await browser.newContext({ viewport: { width: 1280, height: 1900 } })).newPage();
+      await tall.goto(`${app.base}/?page=sessions`);
+      await tall.waitForSelector(".rail-recent-row");
+      if (await tall.locator(".rail.is-mini").count()) await tall.locator('.top-rail-acts [aria-label="Show the whole menu"]').click();
+      await tall.waitForTimeout(600);
+      const recent = await tall.evaluate(() => {
+        const box = document.querySelector(".rail-recent")!.getBoundingClientRect();
+        const rows = [...document.querySelectorAll<HTMLElement>(".rail-recent-row:not([hidden])")].map((r) => r.getBoundingClientRect());
+        const nav = document.querySelector(".rail-nav")!.getBoundingClientRect();
+        return { above: box.bottom <= nav.top + 1, rows: rows.length, inside: rows.every((r) => r.bottom <= box.bottom + 0.5), names: [...document.querySelectorAll(".rail-recent-row span")].map((n) => n.textContent), height: box.height };
+      });
+      assert.ok(recent.rows >= 10, `${recent.rows} chats shown in ${Math.round(recent.height)}px`);
+      assert.equal(recent.inside, true, "no row is cut at the foot");
+      assert.equal(recent.above, true, "at the top of the menu, above the pages");
+      const order = ((await app.api("GET", "/api/sessions")).body as { title: string }[]).map((r) => r.title);
+      assert.deepEqual(recent.names, order.slice(0, recent.names.length), "in the Sessions list's order: pinned, then latest");
+      assert.ok((await scrolls(tall)) <= 0, "the tall menu does not scroll");
+      const width = await tall.evaluate(() => document.querySelector(".rail")!.getBoundingClientRect().width);
+      assert.ok(width <= 150, `a long chat title leaves the menu as wide as its words: ${width}px`);
+      await tall.close();
+      // The short window still fits with no scrolling, and shows no half rows.
+      await page.reload();
+      await page.waitForSelector(".rail .rail-nav");
+      await page.waitForTimeout(500);
+      assert.ok((await scrolls(page)) <= 0, `it scrolls ${await scrolls(page)}px`);
+    });
+
     await test("folded to icons, too", async () => {
       await page.locator('.rail [aria-label="Fold the menu to icons"]').click();
       await page.waitForSelector(".rail.is-mini");

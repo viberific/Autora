@@ -228,10 +228,14 @@ body:has(.conversation-flow[data-moving]) iframe {
   border-radius: var(--r-lg);
 }
 
-/* While the window is being sized it is shown at the whole height being chosen, not only what the chat fills. */
+/* While the window is being sized it is shown at the whole height being chosen, not only what the chat fills, and once
+   the person has chosen a height (data-sized) the messages fill it rather than the window shrinking back to them. */
 .conversation-flow.is-float[data-moving="size"] .conversation-flow__conversation,
 .conversation-flow.is-float[data-moving="size"] .thread-wrap,
-.conversation-flow.is-float[data-moving="size"] .thread {
+.conversation-flow.is-float[data-moving="size"] .thread,
+.conversation-flow.is-float[data-sized] .conversation-flow__conversation,
+.conversation-flow.is-float[data-sized] .thread-wrap,
+.conversation-flow.is-float[data-sized] .thread {
   flex: 1 1 auto;
 }
 

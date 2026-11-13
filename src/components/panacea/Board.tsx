@@ -4,11 +4,12 @@ import { GRID, PANEL_MAX_W, PANEL_MIN_W, snap, type Canvas, type Panel, type Sur
 import { maximise as maximiseWindow, placeWindow, raise as raiseWindow, tidy as tidyBoxes } from "../../lib/panacea/windows";
 import { KINDS } from "../../lib/panacea/kinds";
 import type { Recipe } from "../../lib/panacea/library";
-import { IconCode, IconCube, IconFile, IconGame, IconGlobe, IconImage, IconMusic, IconNotebook, IconOrg, IconSlides, IconSparkle, IconTable, IconVideo, IconX, IconMaximize, IconMinimize, IconMoreH, IconTidy } from "../Icons";
+import { IconCode, IconCube, IconFile, IconFolder, IconGame, IconGlobe, IconImage, IconList, IconMusic, IconNotebook, IconOrg, IconPlus, IconSlides, IconSparkle, IconTable, IconVideo, IconX, IconMaximize, IconMinimize, IconMoreH, IconTidy, IconGrid } from "../Icons";
 import { PanelCard, type PanelActions } from "./PanelCard";
 import { SHEET_MOVED } from "./chatLayout";
 import { SurfaceView } from "./Surfaces";
-import { Summon } from "./Summon";
+import { BOARD_PIECE, FLOWCHART_PIECE, PROJECT_PIECE, Summon, blankPiece } from "./Summon";
+import { BoardMenu, type BoardMenuItem } from "./BoardMenu";
 import type { Edit, Editor } from "./useCanvas";
 import { fitWorkView, revealWorkView, type WorkBox } from "../../lib/workspaceViewport";
 import type { HostedWork } from "../../lib/workspaceScene";
@@ -61,6 +62,9 @@ export interface BoardHandle {
   zoomOut: () => void;
 }
 
+/** The blank files the board's menu can open a window on (server/newfile.ts). */
+export type NewFileKind = "docx" | "xlsx" | "pptx" | "pdf";
+
 const MIN_ZOOM = 0.3;
 /** How long a dragged window is held over another before letting go would join them (a pass over one does not). */
 const JOIN_DWELL_MS = 350;
@@ -72,7 +76,7 @@ const MAX_ZOOM = 2;
  * Panels move by their title bars and widen by their right edge, and land on the grid.
  */
 export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes, actions, selected, setSelected, onPick, onFocus, onFiles, onLink, onJoined, onPaste, onRemoveSurface, onSurfaceSize, onMoved, handle, children,
-  hosted = [], ready = true, scene, followTarget, onJumpWork, onCloseWork, navigationHost }: {
+  hosted = [], ready = true, scene, followTarget, onJumpWork, onCloseWork, navigationHost, onNewFile, onOpenFile }: {
   canvas: Canvas;
   fresh: ReadonlySet<string>;
   edit: Editor;
@@ -105,6 +109,10 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
   onJumpWork?: (mode: WorkspaceMode) => void;
   onCloseWork?: (mode: WorkspaceMode) => void;
   navigationHost?: HTMLElement | null;
+  /** The board's right-click menu: a blank file of this kind, opened in its window. */
+  onNewFile?: (kind: NewFileKind) => void;
+  /** And a saved file, picked from Artifacts, opened in its window. */
+  onOpenFile?: () => void;
 }) {
   const phone = usePhone();
   /** On a phone the work area is measured above the conversation already, and every pixel of it counts: fit tight. */
@@ -158,6 +166,9 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
   const [widen, setWiden] = useState<{ id: string; w: number } | null>(null);
   const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const [summon, setSummon] = useState<{ sx: number; sy: number; at: { x: number; y: number } } | null>(null);
+  /** The right-click menu on the empty board, where it was asked for (on the screen and in the world). */
+  const [boardMenu, setBoardMenu] = useState<{ sx: number; sy: number; at: { x: number; y: number } } | null>(null);
+  const closeBoardMenu = useCallback(() => setBoardMenu(null), []);
   const fitted = useRef(false);
   const interacted = useRef(false);
   const canvasRef = useRef(canvas);
@@ -690,6 +701,16 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     el.addEventListener("wheel", wheel, { passive: false });
     return () => el.removeEventListener("wheel", wheel);
   }, [setView, onJumpWork, followTarget]);
+
+  /* A right-click on the empty board: its own menu (New, Open file, Add piece, View). On a piece of work, a window or the
+     board's own controls the browser's menu (or theirs) is left alone. */
+  const onBoardMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest(".pa-panel, .pa-surface, .pa-summon, .pa-chrome, .pw-engine, input, textarea, [contenteditable]")) return;
+    e.preventDefault();
+    const r = root.current!.getBoundingClientRect();
+    setSummon(null);
+    setBoardMenu({ sx: e.clientX - r.left, sy: e.clientY - r.top, at: toWorld(e.clientX, e.clientY) });
+  };
 
   const onDouble = (e: React.MouseEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest(".pa-panel, .pa-surface, .pa-summon, .pa-chrome, .pw-engine")) return;
@@ -1233,6 +1254,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
       tabIndex={-1}
       onPointerDown={onGridDown}
       onDoubleClick={onDouble}
+      onContextMenu={onBoardMenu}
       // The canvas pans by its view, never by scrolling: a focus or scrollIntoView inside it must not shift it.
       onScroll={(e) => { e.currentTarget.scrollTop = 0; e.currentTarget.scrollLeft = 0; }}
       onDragOver={(e) => { if ([...e.dataTransfer.types].includes("Files")) e.preventDefault(); }}
@@ -1360,6 +1382,33 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
           <div className="pa-marquee" style={{ left: Math.min(marquee.x0, marquee.x1), top: Math.min(marquee.y0, marquee.y1), width: Math.abs(marquee.x1 - marquee.x0), height: Math.abs(marquee.y1 - marquee.y0) }} />
         )}
       </div>
+      {boardMenu && (() => {
+        const at = boardMenu.at;
+        const piece = (id: string) => () => { const r = blankPiece(id); if (r) onPick(r, at); };
+        const pieces = canvas.surfaces.length + hosted.length;
+        const items: BoardMenuItem[] = [
+          { label: "New", icon: <IconPlus size={15} />, items: [
+            ...(onNewFile ? [
+              { label: "Document", icon: workIcon("pages"), act: () => onNewFile("docx") },
+              { label: "Spreadsheet", icon: workIcon("sheets"), act: () => onNewFile("xlsx") },
+              { label: "Slides", icon: workIcon("slides"), act: () => onNewFile("pptx") },
+              { label: "PDF", icon: workIcon("pdf"), act: () => onNewFile("pdf") },
+            ] : []),
+            { label: "Board", icon: <IconGrid size={15} />, act: piece(BOARD_PIECE) },
+            { label: "Flowchart", icon: <IconOrg size={15} />, act: piece(FLOWCHART_PIECE) },
+            { label: "Project", icon: <IconList size={15} />, act: piece(PROJECT_PIECE) },
+          ] },
+          ...(onOpenFile ? [{ label: "Open file…", icon: <IconFolder size={15} />, act: onOpenFile }] : []),
+          { label: "Add piece…", icon: <IconSparkle size={15} />, act: () => setSummon({ sx: boardMenu.sx, sy: boardMenu.sy, at }) },
+          // Moving around the work only once there is work to move around (CLAUDE.md: controls appear when the work needs them).
+          ...(pieces > 0 ? [{ label: "View", icon: <IconMaximize size={15} />, items: [
+            { label: "Show all work", act: () => handle.current?.fit() },
+            ...(pieces > 1 ? [{ label: "Tidy", icon: <IconTidy size={15} />, act: () => { tidyUp(); onJumpWork?.(followTarget ?? "panacea"); } }] : []),
+            { label: "Zoom out", act: () => handle.current?.zoomOut() },
+          ] }] : []),
+        ];
+        return <BoardMenu x={boardMenu.sx} y={boardMenu.sy} items={items} onClose={closeBoardMenu} />;
+      })()}
       {summon && (
         <Summon
           x={summon.sx}

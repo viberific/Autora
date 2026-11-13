@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { AutoraMark, type MarkState } from "./AutoraMark";
 import {
   IconBrain, IconSkill, IconChart, IconClock, IconFolder, IconList, IconMask, IconMessage,
@@ -21,6 +21,7 @@ import {
 import { MemoryPeek } from "./MemoryCell";
 import { every, usePoll } from "../lib/poll";
 import { useRailNeed } from "../lib/railfit";
+import type { SessionRow } from "./Sessions";
 
 export type PageId =
   | "chat" | "config" | "sessions" | "artifacts" | "notebooks" | "analytics"
@@ -60,7 +61,7 @@ export function Rail({
   page, onNavigate, onOpenSession, onOpenMemory, context, relayOn, alert, onNew, onIncognito,
   onStartTask, drawer = false, onClose, mini = false, onMini,
   mood = "rest", attention = 0, pulse = 0, learned = 0, bloom = 0, mindGlow = false, threadsUnread = 0,
-  onNeed,
+  onNeed, sessions, sessionId,
 }: {
   page: PageId;
   onNavigate: (page: PageId) => void;
@@ -102,6 +103,10 @@ export function Rail({
       words themselves (lib/railfit.ts) and reported up so the app knows where
       the menu folds to icons. */
   onNeed?: (px: number) => void;
+  /** Every saved chat, and the one open now: the latest of them fill the room between the pages and the cards on a tall
+      desktop screen. */
+  sessions?: readonly SessionRow[];
+  sessionId?: string | null;
 }) {
   /* The words, measured rather than guessed: a hidden copy of the menu's rows,
      laid out at their natural width. A copy, because the rows on screen are as
@@ -193,6 +198,7 @@ export function Rail({
       {/* The pages at the top; at the foot, how full this session's context
           is and what is running without you. */}
       <div className="rail-scroll">
+        {!mini && !drawer && sessions && <Recent sessions={sessions} current={sessionId ?? null} onOpen={onOpenSession} />}
         <nav className="rail-nav">
           {PAGES.filter((p) => p.group === "work").map(item)}
           <div className="rail-divider" role="separator" />
@@ -211,6 +217,56 @@ export function Rail({
         )}
       </div>
     </aside>
+  );
+}
+
+/** The most chats the Recent list will hold, however tall the screen. */
+const RECENT_MAX = 40;
+
+/**
+ * The latest chats, at the top of the menu, in the room a tall screen leaves above the pages and the cards at the foot. Only
+ * whole rows are shown, newest first: as many as fit, none when not even one does, so a short window is as it was and the
+ * menu never scrolls for it.
+ */
+function Recent({ sessions, current, onOpen }: { sessions: readonly SessionRow[]; current: string | null; onOpen: (id: string) => void }) {
+  const box = useRef<HTMLElement | null>(null);
+  const [fit, setFit] = useState(0);
+  // In the server's order: pinned first, then by last activity (GET /api/sessions).
+  const rows = sessions.slice(0, RECENT_MAX);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const measure = () => {
+      const head = el.querySelector<HTMLElement>(".rail-recent-head")?.offsetHeight ?? 0;
+      const row = el.querySelector<HTMLElement>(".rail-recent-row")?.offsetHeight ?? 0;
+      const next = row > 0 ? Math.max(0, Math.floor((el.clientHeight - head) / row)) : 0;
+      setFit((was) => (was === next ? was : next));
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const watch = new ResizeObserver(measure);
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, [rows.length]);
+  if (!rows.length) return null;
+  return (
+    <section className={`rail-recent${fit > 0 ? "" : " is-unfit"}`} ref={box} aria-label="Recent chats">
+      <h2 className="rail-recent-head">Recent</h2>
+      {rows.map((s, i) => (
+        <button
+          key={s.id}
+          type="button"
+          className={`rail-recent-row${s.id === current ? " on" : ""}`}
+          hidden={i >= fit && i > 0}
+          aria-current={s.id === current ? "true" : undefined}
+          onClick={() => onOpen(s.id)}
+          title={s.title || "Untitled"}
+        >
+          {s.busy && <span className="watch-dot" aria-hidden="true" />}
+          <span>{s.title || "Untitled"}</span>
+        </button>
+      ))}
+    </section>
   );
 }
 

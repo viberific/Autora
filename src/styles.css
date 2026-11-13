@@ -4407,6 +4407,27 @@ html[data-font="mono"] body { font-size: var(--fs-base); }
 .rail-scroll > .rail-nav { flex: 0 0 auto; }
 .rail-foot { margin-top: auto; padding-top: 14px; display: flex; flex-direction: column; gap: 6px; }
 .rail-activity { display: flex; flex-direction: column; gap: 1px; }
+/* The latest chats fill the room between the pages and the cards (Rail.tsx, Recent): whole rows only, counted from the
+   room there is, and nothing at all where not one row fits. The first row is always laid out, unseen, to be measured. */
+/* A chat's title never widens the menu: the menu is as wide as its page names, and the titles are cut to it. */
+.rail-recent { flex: 1 1 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 0; contain: inline-size; }
+.rail-recent.is-unfit > * { visibility: hidden; }
+/* It comes in from the top as the screen gives it room. */
+.rail-recent:not(.is-unfit) { animation: railRecentIn var(--dur-3) var(--ease) both; }
+@keyframes railRecentIn { from { opacity: 0; transform: translateY(-6px); } }
+.rail-recent + .rail-nav { margin-top: 6px; }
+.rail-recent-head { margin: 0; padding: 6px 8px 4px; font-size: var(--fs-xs); font-weight: 600; color: var(--text-3); }
+.rail-recent-row {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0;
+  padding: 5px 8px; border: 0; border-radius: var(--r-sm); cursor: pointer;
+  background: none; color: var(--text-2); font: inherit; font-size: var(--fs-sm); text-align: left;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.rail-recent-row[hidden] { display: none; }
+.rail-recent-row span { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail-recent-row:hover { background: var(--s2); color: var(--text); }
+.rail-recent-row.on { color: var(--text); background: var(--s2); }
+.rail-recent-row .watch-dot { flex: 0 0 auto; }
 /* The open session's context, as a ring with the condensing mark on it. */
 .rail-ctx {
   display: flex; align-items: center; gap: 12px; padding: 10px 12px;
@@ -7990,6 +8011,25 @@ body.is-resizing iframe { pointer-events: none; }
 }
 .pa-link-menu button:hover, .pa-link-menu button:focus-visible { background: var(--accent-soft); color: var(--accent-light); }
 .pa-link-menu button > svg { flex: 0 0 auto; color: var(--text-3); }
+/* The board's right-click menu (BoardMenu.tsx): the same glass as Send to, a short list with groups that open beside it. */
+.pa-board-menu { position: absolute; z-index: var(--z-menu); }
+.pa-board-menu-list {
+  min-width: 176px; padding: 4px; display: flex; flex-direction: column;
+  border: 1px solid var(--glass-line-strong); border-radius: var(--r); background: var(--glass-sheen), var(--glass-veil), var(--glass);
+  box-shadow: var(--glass-shadow), var(--glass-shine); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+  animation: paArrive var(--dur-2) var(--ease) both;
+}
+.pa-board-menu-sub { position: absolute; }
+.pa-board-menu-sub.is-right { left: calc(100% + 4px); }
+.pa-board-menu-sub.is-left { right: calc(100% + 4px); }
+.pa-board-menu button {
+  display: flex; align-items: center; gap: 8px; padding: 7px 8px; border: 0; border-radius: var(--r-xs); background: transparent;
+  color: var(--text); font: inherit; font-size: var(--fs-sm); text-align: left; cursor: pointer; white-space: nowrap;
+}
+.pa-board-menu button > span { flex: 1; }
+.pa-board-menu button > i { font-style: normal; color: var(--text-3); }
+.pa-board-menu button:is(:hover, :focus-visible, .is-open) { background: var(--accent-soft); color: var(--accent-light); outline: none; }
+.pa-board-menu button > svg { flex: 0 0 auto; color: var(--text-3); }
 .pa-flows { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; z-index: 0; }
 .pa-flow line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 5; opacity: 0.75; }
 .pa-flow-arrow { fill: var(--accent); stroke: var(--bg); stroke-width: 1.5; }

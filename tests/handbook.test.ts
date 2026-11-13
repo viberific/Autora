@@ -188,10 +188,12 @@ await test("the Office manual teaches the workbook's and deck's command log: who
   }
 });
 
-await test("the Office manual says Pages and Sheets have a card beside the pick that goes when the view moves", () => {
+await test("the Office manual says Pages has a card beside the pick, Sheets nothing on a click, and Sheets' right-click menu has pins", () => {
   const text = manualText("office");
-  for (const needle of ["small card that comes beside what the person picks", "formula bar is its first row", "as soon as the view moves under", "never drifts off its cell",
-    "right-click in a Sheets cell gives one short vertical menu", "Formatting, Data, Formula and Autora", "Bold, Italic, Underline, Text colour and Cell colour", "Only the entries that apply"]) {
+  for (const needle of ["Pages holds those tools in a small card that comes beside what the person picks", "as soon as the view moves under", "never drifts off its words",
+    "Sheets on a desktop shows nothing over the grid when a cell is clicked", "Its tools are the right-click menu",
+    "right-click in a Sheets cell gives one short vertical menu", "round icons the person has pinned", "Bold, Italic, Cell colour and AutoSum to start with",
+    "Formatting, Data, Formula and Autora", "Bold, Italic, Underline, Text colour and Cell colour", "Only the entries that apply", "pin at the end of its row"]) {
     assert.ok(text.includes(needle), needle);
   }
 });
@@ -391,6 +393,13 @@ await test("the Panacea manual says whose words a panel's fields are, how to swi
   const p = manualText("panacea");
   for (const needle of ["text or list fields", "\"You write\"", "\"Autora writes\"", "presses it to switch", "values refuse those fields", "panacea_arrange writes", "say you did", "no other window was made for"]) {
     assert.ok(p.includes(needle), `the Panacea manual lacks "${needle}"`);
+  }
+});
+
+await test("the Panacea manual says what a right-click on the empty grid offers", () => {
+  const text = manualText("panacea");
+  for (const needle of ["right-click the empty grid for its menu", "Document, Spreadsheet, Slides or PDF", "Open file…", "Add piece…", "Show all work, Tidy, Zoom out"]) {
+    assert.ok(text.includes(needle), needle);
   }
 });
 

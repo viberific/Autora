@@ -1,8 +1,6 @@
 /**
- * Sheets' card on a desktop (office/shim/rail.js) belongs to the cell it came to (R17b): it sits at a point on the screen,
- * so it goes as soon as the view moves under it (a wheel over the grid, the keys moving the pick, the window resized)
- * instead of staying put while the cell slides away -- but not for the shim's own made-up resizes, and not while a
- * formula is being typed in its bar. Its formula bar stays laid over its slot in the card as the card's rows change.
+ * Sheets on a desktop (office/shim/rail.js) has no tool card: a click, the keys, a wheel or a resize bring nothing up over
+ * the grid, which the person asked for. Its tools are the right-click menu (tests/ui-office-menu.test.ts).
  * The real shim is run in Chromium in a stand-in for the editor's frame (a name box, a grid, a formula bar).
  *
  *   npx tsx tests/rail-card.test.ts
@@ -43,54 +41,33 @@ try {
     await page.goto("http://autora.test/top.html");
     frame = page.frames().find((f) => f.url().includes("/sheets/"))!;
     await frame.waitForSelector("#autora-rail", { state: "attached" });
-    // A click on the grid brings the card to the cell.
-    await page.mouse.click(300, 200);
-    await frame.waitForFunction(() => document.getElementById("autora-rail")?.getAttribute("data-open") === "1");
   };
 
-  await test("a click on a cell brings the card, and the shim's own made-up resizes leave it there", async () => {
+  await test("a click on a cell brings up nothing: Sheets has no tool card on a desktop", async () => {
     await fresh();
-    await frame.evaluate(() => { window.dispatchEvent(new Event("resize")); document.documentElement.classList.add("rail-ribbon"); document.documentElement.classList.remove("rail-ribbon"); });
-    await page.waitForTimeout(150);
-    assert.equal(await open(), true);
+    await page.mouse.click(300, 200);
+    await page.waitForTimeout(250);
+    assert.equal(await open(), false);
+    assert.equal(await frame.evaluate(() => getComputedStyle(document.getElementById("autora-rail")!).visibility), "hidden");
   });
 
-  await test("a wheel over the grid takes the card away rather than leaving it off its cell", async () => {
+  await test("nor do the keys moving the pick, a wheel or a resize", async () => {
     await fresh();
+    await page.mouse.click(300, 200);
+    await page.keyboard.press("ArrowDown");
     await page.mouse.move(400, 400);
     await page.mouse.wheel(0, 200);
-    await frame.waitForFunction(() => document.getElementById("autora-rail")?.getAttribute("data-open") === "0");
-  });
-
-  await test("the keys moving the pick to another cell take it away", async () => {
-    await fresh();
-    await page.keyboard.press("ArrowDown");
+    await page.evaluate(() => { document.querySelector("iframe")!.style.width = "800px"; });
+    await page.waitForTimeout(250);
     assert.equal(await open(), false);
   });
 
-  await test("the window resized takes it away", async () => {
+  await test("the formula bar is kept out of the way, not left in its strip over the grid", async () => {
     await fresh();
-    await page.evaluate(() => { document.querySelector("iframe")!.style.width = "800px"; });
-    await frame.waitForFunction(() => document.getElementById("autora-rail")?.getAttribute("data-open") === "0");
-  });
-
-  await test("a formula being typed in its bar stays with the person through a wheel, laid over its slot as the card changes", async () => {
-    await fresh();
-    await frame.focus("#fx");
-    await frame.waitForFunction(() => document.documentElement.classList.contains("fx-on"));
-    await page.mouse.move(400, 400);
-    await page.mouse.wheel(0, 200);
-    await page.waitForTimeout(100);
-    assert.equal(await open(), true);
-    // The card moves (as it does when its rows change); the bar is measured again and follows its slot.
-    await frame.evaluate(() => { const bar = document.getElementById("autora-rail")!; bar.style.left = "40px"; bar.style.top = "300px"; });
-    await page.waitForTimeout(100);
-    const fit = await frame.evaluate(() => {
-      const slot = document.querySelector(".fx-slot")!.getBoundingClientRect();
-      const fb = document.querySelector("[data-u-comp='formula-bar']")!.getBoundingClientRect();
-      return { dx: Math.abs(slot.left - fb.left), dy: Math.abs(slot.top - fb.top) };
-    });
-    assert.ok(fit.dx <= 1 && fit.dy <= 1, `the formula bar is ${fit.dx},${fit.dy}px off its slot`);
+    await page.mouse.click(300, 200);
+    await page.waitForTimeout(150);
+    const left = await frame.evaluate(() => document.querySelector("[data-u-comp='formula-bar']")!.getBoundingClientRect().left);
+    assert.ok(left < -1000, `the formula bar is at ${left}`);
   });
 
   await test("All tools dims and frosts behind it with the page's own scrim, sent to the frame with the theme (R18)", async () => {

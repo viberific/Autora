@@ -139,16 +139,30 @@ test("the window opens at the bottom left, is held inside the world, and the mag
 test("resizing moves only the dragged edges and keeps the window's minimum and the world's gap", () => {
   const room = { w: 1400, h: 900 };
   const box = { x: 300, y: 200, w: 400, h: 500, snap: null };
-  assert.deepEqual(resizeFloat(box, "se", 60, 40, room), { x: 300, y: 200, w: 460, h: 540, snap: null });
-  assert.deepEqual(resizeFloat(box, "nw", -50, -30, room), { x: 250, y: 170, w: 450, h: 530, snap: null });
+  assert.deepEqual(resizeFloat(box, "se", 60, 40, room), { x: 300, y: 200, w: 460, h: 540, snap: null, sized: true });
+  assert.deepEqual(resizeFloat(box, "nw", -50, -30, room), { x: 250, y: 170, w: 450, h: 530, snap: null, sized: true });
   assert.deepEqual(resizeFloat(box, "w", 400, 0, room), { x: 700 - FLOAT_MIN_W, y: 200, w: FLOAT_MIN_W, h: 500, snap: null });
-  assert.deepEqual(resizeFloat(box, "n", 0, -900, room), { x: 300, y: FLOAT_GAP, w: 400, h: 700 - FLOAT_GAP, snap: null });
+  assert.deepEqual(resizeFloat(box, "n", 0, -900, room), { x: 300, y: FLOAT_GAP, w: 400, h: 700 - FLOAT_GAP, snap: null, sized: true });
   assert.equal(resizeFloat(box, "s", 0, 2000, room).h, 900 - FLOAT_GAP - 200);
   // Held to the left: its right edge resizes it and it stays held; pulling its left edge away lets it go.
   const held = { x: FLOAT_GAP, y: 200, w: 400, h: 500, snap: "left" as const };
   assert.equal(resizeFloat(held, "e", 80, 0, room).snap, "left");
   assert.equal(resizeFloat(held, "w", 30, 0, room).snap, null);
   assert.equal(resizeFloat(held, "w", 30, 0, room).x, FLOAT_GAP + 30);
+});
+
+test("a height the person pulls the window to is kept, not shrunk back to what has been said", () => {
+  const room = { w: 1400, h: 1800 };
+  const box = { x: FLOAT_GAP, y: 1184, w: 360, h: 600, snap: "left" as const };
+  // Only pulling the top or the bottom chooses the height; a width change leaves the window as tall as its messages.
+  assert.equal(resizeFloat(box, "e", 80, 0, room).sized, undefined);
+  const taller = resizeFloat(box, "n", 0, -900, room);
+  assert.equal(taller.sized, true);
+  assert.equal(taller.h, 1500);
+  // Kept through a move, a clamp and a width change.
+  assert.equal(magnet({ ...taller, x: 500 }, room).sized, true);
+  assert.equal(clampFloat(taller, { w: 1400, h: 1000 }).sized, true);
+  assert.equal(resizeFloat(taller, "e", 40, 0, room).sized, true);
 });
 
 test("a retracted phone sheet previews the last two things said and opens on a tap; a desktop strip does not", () => {
