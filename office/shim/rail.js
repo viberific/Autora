@@ -99,7 +99,7 @@
     html.autora-desktop #autora-rail .div { width: 20px; height: 1px; margin: 2px 0; }
     html.autora-phone #autora-rail .div { width: 1px; height: 24px; margin: 0 2px; }
 
-    #autora-grid { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 16px; background: rgba(8,9,13,.68); backdrop-filter: blur(3px); font-family: inherit; }
+    #autora-grid { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 16px; background: var(--autora-scrim, rgba(8,9,13,.5)); backdrop-filter: var(--autora-scrim-blur, blur(10px) saturate(140%)); -webkit-backdrop-filter: var(--autora-scrim-blur, blur(10px) saturate(140%)); font-family: inherit; }
     #autora-grid .box { width: min(560px, 100%); max-height: min(88vh, 720px); overflow-y: auto; box-sizing: border-box; padding: 16px; border-radius: 20px; background: #0e1016; border: 1px solid rgba(255,255,255,.13); color: #edeff5; box-shadow: 0 30px 80px -20px #000; }
     html.autora-phone #autora-grid .box { width: min(340px, 100%); padding: 12px; }
     #autora-grid .head { display: flex; align-items: center; gap: 8px; }

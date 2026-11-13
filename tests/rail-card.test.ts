@@ -92,6 +92,18 @@ try {
     });
     assert.ok(fit.dx <= 1 && fit.dy <= 1, `the formula bar is ${fit.dx},${fit.dy}px off its slot`);
   });
+
+  await test("All tools dims and frosts behind it with the page's own scrim, sent to the frame with the theme (R18)", async () => {
+    await fresh();
+    const look = await frame.evaluate(() => {
+      document.documentElement.style.setProperty("--autora-scrim", "rgba(1, 2, 3, 0.5)");
+      document.documentElement.style.setProperty("--autora-scrim-blur", "blur(10px) saturate(1.4)");
+      (document.querySelector('#autora-rail button[aria-label="All tools"]') as HTMLButtonElement).click();
+      const css = getComputedStyle(document.getElementById("autora-grid")!);
+      return { bg: css.backgroundColor, blur: css.backdropFilter };
+    });
+    assert.deepEqual(look, { bg: "rgba(1, 2, 3, 0.5)", blur: "blur(10px) saturate(1.4)" });
+  });
 } finally {
   await browser.close();
 }
