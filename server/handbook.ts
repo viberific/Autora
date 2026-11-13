@@ -539,8 +539,9 @@ const PANACEA = [
     "lands there; it also has blank pieces: a slider, switch, choice, notes, checklist or colour, and a Board, Flowchart or Document, " +
     "which adds that surface); scroll or drag the grid to pan, Ctrl+scroll to zoom; drop a photo or a table on the grid, or paste a table, to add a " +
     "surface; click a surface to work on it. Every window on the board (an app's, a photo, a table, a document, a board) moves by its " +
-    "title bar and is sized by its bottom-right corner, with a mouse or a finger, and its Maximise button fills the screen there is " +
-    "for work with it, centred (again, and it is as it was). Where work went between the apps (a model into the game, a picture " +
+    "title bar and is sized by its bottom-right corner, with a mouse or a finger, and its Maximise button (arrows pointing out) fills the screen there is " +
+    "for work with it, centred; maximised, the same button shows arrows pointing in and reads Restore, and puts it back as it was. " +
+    "An app window's Pin button reads Unpin while that window is pinned. Where work went between the apps (a model into the game, a picture " +
     "into a document, a file loaded from another app) is drawn as a dashed line between their windows with an arrow halfway " +
     "pointing the way it went, and the file's name beside it: you make these by using one app's file in another's tools. A photo's Before / after is a line to drag across it. The centered main Ask Autora bar " +
     "sends to this chat; there is no second canvas Ask box. Native history has Undo, Redo and a track of native changes, yours and theirs, to drag back " +

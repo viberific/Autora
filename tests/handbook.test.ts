@@ -405,7 +405,7 @@ await test("the Panacea manual says that with Visible work on its changes are do
     "listed there as yours", "dragging a slider", "More opened", "dragged by its title bar", "a table pasted, a file dropped",
     "a document's words typed in", "linked by dragging a dot", "finished canvas goes in", "With Visible work off", "a Board, Flowchart or Document",
     "panacea_project", "project strip", "only then can you move past the first phase", "picker (Project)",
-    "moves by its title bar", "Maximise", "arrow halfway"]) {
+    "moves by its title bar", "Maximise", "arrow halfway", "arrows pointing in and reads Restore", "reads Unpin while that window is pinned"]) {
     assert.ok(p.includes(needle), `the Panacea manual lacks "${needle}"`);
   }
   assert.ok(!p.includes("not done by hand yet"), "the Panacea manual still says writing is not done by hand");

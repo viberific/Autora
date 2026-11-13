@@ -208,13 +208,6 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Windows on the Panacea canvas can now be joined together by dragging one
-  onto another and holding it there for a moment. The window lights up and
-  says what letting go will do; Escape or dragging away cancels. When you
-  join Autora Sheets into Autora Pages, the spreadsheet's table appears in
-  the document and updates there every time the sheet changes — no reopen
-  needed. A thick connector is drawn between the two windows on the canvas
-  so you can see at a glance what is linked, and an Unjoin button in the
-  middle removes the join when you no longer want it. The join and its live
-  table survive saving and reopening the session. An exported .docx holds
-  the table as a copy at that moment, not a live link.
+  Window controls now say what they will do. A maximised window's button
+  shows arrows pointing in and reads Restore; a pinned window's Pin button
+  reads Unpin.
