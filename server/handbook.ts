@@ -317,6 +317,10 @@ const OFFICE = [
     "editor has, one group per old ribbon tab (Insert, Design, Layout, Review, View...), where a desktop can pin any of them to the bar. " +
     "Commands with a drop-down open it beside the bar. The keyboard shortcuts work on a desktop as ever. Point the person at a tool by " +
     "its name and say \"open All tools\" if it is not on their bar. You have every tool whatever is shown. " +
+    "On a desktop, Pages and Sheets hold those tools in a small card that comes beside what the person picks (in Sheets the formula bar is " +
+    "its first row) rather than a bar down the side; it goes when they click elsewhere or press Escape, and as soon as the view moves under " +
+    "it (a scroll, a zoom, the window resized, or in Sheets the keys moving to another cell), so it never drifts off its cell; the next click " +
+    "brings it back at the pick. A formula being typed in its bar stays put. " +
     "What the person has picked in a window (their words in Pages, the cell range in Sheets, a box on a slide) is in your briefing for about two " +
     "minutes after: when they say \"this\" or \"these\", they mean that, so act on it without asking which.",
   "  With Visible work on and the document open in its window, office_edit's words are typed there by your hand, live, before the " +

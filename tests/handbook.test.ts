@@ -188,6 +188,13 @@ await test("the Office manual teaches the workbook's and deck's command log: who
   }
 });
 
+await test("the Office manual says Pages and Sheets have a card beside the pick that goes when the view moves", () => {
+  const text = manualText("office");
+  for (const needle of ["small card that comes beside what the person picks", "formula bar is its first row", "as soon as the view moves under", "never drifts off its cell"]) {
+    assert.ok(text.includes(needle), needle);
+  }
+});
+
 await test("the Office manual says what the person has picked reaches the briefing, so \"this\" means it", () => {
   const text = manualText("office");
   for (const needle of ["is in your briefing for about two minutes", "they mean that, so act on it without asking which"]) {

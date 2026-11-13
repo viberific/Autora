@@ -465,6 +465,28 @@
 
     // Escape closes the card.
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && bar && bar.getAttribute("data-open") === "1" && !grid) closeCard(); }, true);
+
+    /* The card belongs to the cell (or words) it came to (R17b). It sits at a point on the screen, so when the work moves under
+       it -- a scroll, a pan, a zoom, the window resized, the pick moved with the keys -- it would stay where it was and drift
+       off its cell, across the work. So it goes as soon as the view moves, and comes back at the pick on the next click. A
+       formula being typed in its bar is the exception: that bar is where the person is typing, and it stays with them. */
+    const typingFx = () => !!document.activeElement?.closest?.("[data-u-comp='formula-bar']");
+    const viewMoved = (e) => {
+      // Only what the person does: this shim tells the editor of its own changes with made-up resizes (refit, below).
+      if (!e.isTrusted || !bar || bar.getAttribute("data-open") !== "1" || typingFx()) return;
+      if (e.target instanceof Element && mine(e.target)) return;
+      closeCard();
+    };
+    const WORK = app === "sheets" ? "#univer-container, .spreadsheet, [data-u-comp]" : ".ProseMirror, [contenteditable='true']";
+    // A scroll of the work itself (the page, or the grid's own panes), not of a list or field that scrolls inside a dialog.
+    const ofWork = (e) => e.target === document || e.target === document.documentElement || e.target === document.body
+      || (e.target instanceof Element && (e.target.matches(WORK) || !!e.target.querySelector?.(WORK)));
+    document.addEventListener("wheel", (e) => { if (e.target instanceof Element && e.target.closest(WORK)) viewMoved(e); }, { capture: true, passive: true });
+    document.addEventListener("scroll", (e) => { if (bar?.getAttribute("data-open") === "1" && ofWork(e)) viewMoved(e); }, { capture: true, passive: true });
+    window.addEventListener("resize", viewMoved);
+    // In Sheets the keys move the pick to another cell (Pages' card follows its selection as it changes, above).
+    const MOVES = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "PageUp", "PageDown", "Home", "End", "Tab", "Enter"]);
+    if (app === "sheets") document.addEventListener("keydown", (e) => { if (MOVES.has(e.key) && !e.altKey) viewMoved(e); }, true);
   }
 
   /* ------------------------------------------------------- the bar follows the work */
@@ -853,19 +875,31 @@
 
     // Sheets card: position the formula bar inside the card when a cell enters edit mode.
     if (card && app === "sheets") {
+      /* The bar is laid over its slot in the card, measured every frame while it shows: the card's own rows change as tools
+         come and go, and a bar measured once was left behind when they did (R17b). */
+      let fxFrame = 0;
+      const fxFit = () => {
+        fxFrame = 0;
+        if (!root.classList.contains("fx-on") || !bar || bar.getAttribute("data-open") !== "1") return;
+        const slot = bar.querySelector(".fx-slot");
+        if (slot) {
+          const sr = slot.getBoundingClientRect(), fbEl = document.querySelector("[data-u-comp='formula-bar']");
+          const px = (n) => `${Math.round(n)}px`;
+          if (root.style.getPropertyValue("--fx-x") !== px(sr.left)) root.style.setProperty("--fx-x", px(sr.left));
+          if (root.style.getPropertyValue("--fx-y") !== px(sr.top)) root.style.setProperty("--fx-y", px(sr.top));
+          if (root.style.getPropertyValue("--fx-w") !== px(sr.width)) root.style.setProperty("--fx-w", px(sr.width));
+          const h = px(fbEl ? fbEl.offsetHeight : 32);
+          if (root.style.getPropertyValue("--fx-h") !== h) root.style.setProperty("--fx-h", h);
+        }
+        fxFrame = requestAnimationFrame(fxFit);
+      };
       document.addEventListener("focusin", (e) => {
         if (!bar || bar.getAttribute("data-open") !== "1") return;
         const fb = e.target && e.target.closest && e.target.closest("[data-u-comp='formula-bar']");
         if (!fb) return;
-        const slot = bar.querySelector(".fx-slot");
-        if (slot) {
-          const sr = slot.getBoundingClientRect(), fbEl = document.querySelector("[data-u-comp='formula-bar']");
-          root.style.setProperty("--fx-x", `${Math.round(sr.left)}px`);
-          root.style.setProperty("--fx-y", `${Math.round(sr.top)}px`);
-          root.style.setProperty("--fx-w", `${Math.round(sr.width)}px`);
-          root.style.setProperty("--fx-h", `${Math.round(fbEl ? fbEl.offsetHeight : 32)}px`);
-        }
         root.classList.add("fx-on");
+        if (fxFrame) cancelAnimationFrame(fxFrame);
+        fxFit();
       }, true);
       document.addEventListener("focusout", (e) => {
         const fb = e.target && e.target.closest && e.target.closest("[data-u-comp='formula-bar']");
