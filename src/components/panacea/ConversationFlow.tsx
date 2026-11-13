@@ -137,7 +137,8 @@ export function ConversationFlow({
   };
   /* The box is the room the window may take; the window itself stands on the box's foot and is only as tall as what
      has been said (its max-height is the box's), so a short chat leaves no empty glass above it. While it is being
-     sized it is drawn at the box's whole height, so the person sees the height they are choosing. */
+     sized it is drawn at the box's whole height, so the person sees the height they are choosing, and once they have
+     chosen one (`sized`) it keeps it: letting go must not shrink it back to the messages. */
   const place = (root: HTMLElement, next: FloatBox) => {
     const at = roomRef.current;
     if (!at) return;
@@ -145,8 +146,9 @@ export function ConversationFlow({
     root.style.width = `${next.w}px`;
     root.style.bottom = `${at.h - next.y - next.h}px`;
     root.style.maxHeight = `${next.h}px`;
-    root.style.height = gesture.current && gesture.current.kind !== "move" ? `${next.h}px` : "auto";
+    root.style.height = next.sized || (gesture.current && gesture.current.kind !== "move") ? `${next.h}px` : "auto";
     if (next.snap) root.dataset.snap = next.snap; else delete root.dataset.snap;
+    if (next.sized) root.dataset.sized = ""; else delete root.dataset.sized;
     clear(root, next);
   };
   useLayoutEffect(() => {
@@ -201,7 +203,7 @@ export function ConversationFlow({
     const state = gesture.current;
     gesture.current = null;
     const root = rootRef.current;
-    if (root) { delete root.dataset.moving; root.style.height = "auto"; }
+    if (root) { delete root.dataset.moving; root.style.height = state?.live.sized ? `${state.live.h}px` : "auto"; }
     if (!state) return;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     const moved = state.live.x !== state.start.x || state.live.y !== state.start.y || state.live.w !== state.start.w || state.live.h !== state.start.h;
@@ -592,7 +594,7 @@ export function ConversationFlow({
     </div>
   );
   const floatStyle: CSSProperties | undefined = phone || !box || !room ? undefined
-    : { left: box.x, bottom: room.h - box.y - box.h, width: box.w, maxHeight: box.h, top: "auto", height: "auto" };
+    : { left: box.x, bottom: room.h - box.y - box.h, width: box.w, maxHeight: box.h, top: "auto", height: box.sized ? box.h : "auto" };
 
   return (
     <>
@@ -601,6 +603,7 @@ export function ConversationFlow({
       className={`conversation-flow${shut ? " is-collapsed" : ""}${empty ? " is-empty" : ""}${phone ? " is-sheet" : " is-float"}${phone && !shut ? ` is-${sheet}` : ""}`}
       style={floatStyle}
       data-snap={!phone && box?.snap ? box.snap : undefined}
+      data-sized={!phone && box?.sized ? "" : undefined}
     >
       {phone ? (
         <div

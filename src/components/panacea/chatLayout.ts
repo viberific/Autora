@@ -12,8 +12,9 @@ const FLOAT_DEFAULT_H = 600;
 export const FLOAT_STEP = 16;
 
 /** Where the floating conversation stands in the world area, in pixels from its top-left corner. `snap` is the side it
-    is held to: it stays on that side as the window is resized, and leaves it only when dragged away. */
-export interface FloatBox { x: number; y: number; w: number; h: number; snap: "left" | "right" | null }
+    is held to: it stays on that side as the window is resized, and leaves it only when dragged away. `sized` is set once the
+    person has chosen the height: the window then stands at that height, rather than shrinking to what has been said. */
+export interface FloatBox { x: number; y: number; w: number; h: number; snap: "left" | "right" | null; sized?: true }
 export interface Room { w: number; h: number }
 /** Which edges of the window a resize handle moves: n, s, e, w or a corner. */
 export type Edge = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
@@ -63,7 +64,7 @@ export function clampFloat(box: FloatBox, room: Room): FloatBox {
   const maxX = room.w - w - FLOAT_GAP;
   const x = box.snap === "left" ? FLOAT_GAP : box.snap === "right" ? Math.max(FLOAT_GAP, maxX) : between(box.x, FLOAT_GAP, maxX);
   const y = between(box.y, FLOAT_GAP, room.h - h - FLOAT_GAP);
-  return { x: Math.round(x), y: Math.round(y), w, h, snap: box.snap };
+  return { x: Math.round(x), y: Math.round(y), w, h, snap: box.snap, ...(box.sized ? { sized: true as const } : {}) };
 }
 
 /** The magnet: a window brought within FLOAT_SNAP of a side is pulled onto it and held there; anywhere else it floats. */
@@ -101,7 +102,9 @@ export function resizeFloat(start: FloatBox, edge: Edge, dx: number, dy: number,
   const snap = start.snap === "left" && edge.includes("w") && x > FLOAT_GAP + 1 ? null
     : start.snap === "right" && edge.includes("e") && x + w < room.w - FLOAT_GAP - 1 ? null
     : start.snap;
-  return clampFloat({ x, y, w, h, snap }, room);
+  // Pulling the top or the bottom chooses the height, and the window keeps it.
+  const sized = start.sized || ((edge.includes("n") || edge.includes("s")) && h !== start.h);
+  return clampFloat({ x, y, w, h, snap, ...(sized ? { sized: true as const } : {}) }, room);
 }
 
 function readFloat(): FloatBox | null {
@@ -109,7 +112,7 @@ function readFloat(): FloatBox | null {
     const stored = JSON.parse(localStorage.getItem(FLOAT_KEY) ?? "null") as Partial<FloatBox> | null;
     if (!stored || ![stored.x, stored.y, stored.w, stored.h].every((n) => typeof n === "number" && Number.isFinite(n))) return null;
     const snap = stored.snap === "left" || stored.snap === "right" ? stored.snap : null;
-    return { x: stored.x!, y: stored.y!, w: stored.w!, h: stored.h!, snap };
+    return { x: stored.x!, y: stored.y!, w: stored.w!, h: stored.h!, snap, ...(stored.sized === true ? { sized: true as const } : {}) };
   } catch { return null; }
 }
 
