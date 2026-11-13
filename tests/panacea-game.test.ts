@@ -78,7 +78,7 @@ await test("what the behaviour cannot do is refused with a reason, and the game 
 
 await test("every Game recipe is wired, and nothing the game cannot do is offered", () => {
   const recipes = BUILTINS.filter((r) => r.domain === "game");
-  assert.equal(recipes.length, 9);
+  assert.equal(recipes.length, 10);
   for (const r of recipes) {
     assert.equal(treeLive(r.tree), true, `${r.id}: ${unwiredBinds(r.tree).join(", ")}`);
     const walk = (n: { bind?: string; children?: unknown[] }) => { if (n.bind?.startsWith("game.")) assert.ok(game.GAME_WIRED.includes(n.bind), `${r.id}: ${n.bind}`); (n.children as typeof n[] | undefined)?.forEach(walk); };

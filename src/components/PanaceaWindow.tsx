@@ -37,6 +37,7 @@ import { LoadButton, loadInto, type LoadResult } from "./LoadButton";
 import type { LoadApp } from "../lib/loadable";
 import type { ArtifactInfo } from "../lib/notebooks";
 import { keepRoute } from "../lib/panacea/flows";
+import { windowTitle } from "../lib/panacea/windows";
 import { PANACEA_LOADED, offerKeep } from "../lib/panaceaBridge";
 import { IconX } from "./Icons";
 import { usePhone } from "../lib/stage";
@@ -293,6 +294,13 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
       }
     })();
   }, [base, flash, hosted, keepSurface, live, sessionId, tell]);
+
+  /** The person joined one window into another on the board (Board's hover to join): said, and the agent is told. */
+  const joined = useCallback((from: string, to: string) => {
+    const a = windowTitle(from), b = windowTitle(to);
+    flash(`Joined: the ${a} table is in ${b} now, and follows ${a}.`);
+    void tell(`joined ${a} into ${b} on the board: the spreadsheet's table is shown in the document and kept up to date as the spreadsheet changes`);
+  }, [flash, tell]);
 
   const ask = useCallback((text: string, panel: Panel) => {
     const vals = [...new Set(bindsOf(panel.tree))].map((b) => `${b}=${show(valueAt(live.current, b))}`).join(", ");
@@ -844,7 +852,7 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
           setSelected={select}
           onPick={onPick}
           onFocus={onFocus}
-          onFiles={onFiles} onLink={link}
+          onFiles={onFiles} onLink={link} onJoined={joined}
           onPaste={onPaste}
           onRemoveSurface={onRemoveSurface}
           onSurfaceSize={onSurfaceSize}

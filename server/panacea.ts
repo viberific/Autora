@@ -29,6 +29,7 @@ import {
 } from "../src/lib/panacea/canvas";
 import { panaceaSteps, stepWords } from "../src/lib/panacea/handsteps";
 import { addFlow, type Flow } from "../src/lib/panacea/flows";
+import type { Join } from "../src/lib/panacea/joins";
 import { WORKSPACE_MODES, type WorkspaceMode } from "../src/lib/workspace";
 import { treeLive } from "../src/lib/panacea/wiring";
 import { MUSIC_TRACK, isMusicBind, readMusic } from "../src/lib/panacea/apps/music";
@@ -366,6 +367,11 @@ async function command(session: string, name: string, args: Record<string, unkno
   });
   if (!out.taken) throw new Error("unclaimed");
   return out.value;
+}
+
+/** The windows the person joined on a chat's canvas (src/lib/panacea/joins.ts; server/officejoin.ts keeps them live). */
+export function panaceaJoins(session: string): readonly Join[] {
+  return validSession(session) ? entryFor(session).canvas.joins ?? [] : [];
 }
 
 /** Work went from one app to another (src/lib/panacea/flows.ts): noted on the chat's canvas, for the line between them. */

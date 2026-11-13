@@ -216,7 +216,15 @@ export function onOfficeChange(fn: (session: string) => void) {
    is taken apart here, so no other line has to remember that a key is not a session. */
 const touched = (key: DeskKey, subject: string, kind: string, detail: string, opts?: { tell?: boolean }) =>
   tellTouched(sessionOf(key), subject, kind, detail, opts);
-const changed = (key: DeskKey) => tellChanged(sessionOf(key));
+/** Told of every change to any window, with which app it was (server/officejoin.ts keeps joined documents up to date). */
+const changeWatchers: Array<(session: string, kind: OfficeKind) => void> = [];
+export function watchOfficeChange(fn: (session: string, kind: OfficeKind) => void) {
+  changeWatchers.push(fn);
+}
+const changed = (key: DeskKey) => {
+  tellChanged(sessionOf(key));
+  for (const fn of changeWatchers) fn(sessionOf(key), kindOfKey(key));
+};
 
 // ------------------------------------------- reading a Word file --
 
@@ -401,8 +409,9 @@ export function pptxParagraphs(data: Buffer): string[] | null {
   }
 }
 
-/** Each filled cell as "Sheet1!B2" -> its value (and formula), or null when the file cannot be read this way. */
-export function xlsxCells(data: Buffer): Map<string, string> | null {
+/** Each filled cell as "Sheet1!B2" -> its value (and formula), or null when the file cannot be read this way. With
+    `values`, a formula's cell is its last computed value alone, as the sheet shows it. */
+export function xlsxCells(data: Buffer, opts: { values?: boolean } = {}): Map<string, string> | null {
   try {
     const book = zipEntry(data, "xl/workbook.xml")?.toString("utf8");
     if (!book) return null;
@@ -429,7 +438,7 @@ export function xlsxCells(data: Buffer): Map<string, string> | null {
         if (type === "s" && v !== undefined) value = shared[Number(v)] ?? "";
         else if (type === "inlineStr" && inline) value = unescapeXml([...inline[1].matchAll(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g)].map((t) => t[1]).join(""));
         else if (v !== undefined) value = unescapeXml(v);
-        const formula = f ? `=${unescapeXml(f)}` : "";
+        const formula = f && !opts.values ? `=${unescapeXml(f)}` : "";
         if (value === "" && !formula) continue;
         cells.set(`${sheet}!${ref}`, formula ? `${formula}${value !== "" ? ` (${value})` : ""}` : value);
         if (cells.size > 200000) return;
@@ -583,6 +592,7 @@ export function dropOfficeDesk(session: string) {
     stopEngine(key);
     dropPages(key);
     desks.delete(key);
+    personSaveAt.delete(key);
     writing.delete(key);
     rewriting.delete(key);
   }
@@ -1123,7 +1133,43 @@ export function officeBriefing(session: string): string | null {
 // ------------------------------------------------ the person's side --
 
 /** The editor saved: the document is what it sent. */
+/** When the person's editor last sent a save of each window's document (not kept: only the last few seconds matter). */
+const personSaveAt = new Map<DeskKey, number>();
+
+/** Milliseconds since the person's editor last saved this window's document; Infinity when it has not. */
+export function sincePersonSave(session: string, kind: OfficeKind): number {
+  const at = personSaveAt.get(keyOf(session, kind));
+  return at === undefined ? Infinity : Date.now() - at;
+}
+
+/**
+ * A joined window's work changed, and this document shows it (server/officejoin.ts): the document becomes `data`. Not
+ * the agent's change and not one the person typed here, so it goes in as itself: a version to go back to, a line in the
+ * command log, a line the agent is told, and the open editor is handed the new document (a Pages window loads it where
+ * it is, without being reopened). False when there is no such document, or the agent's hand is typing in it.
+ */
+export function joinedChange(session: string, kind: OfficeKind, data: Buffer, label: string): boolean {
+  const key = keyOf(session, kind);
+  const desk = load(key);
+  if (!desk || handingKeys.has(key) || Date.now() < (desk.quietUntil ?? 0) || data.equals(desk.data)) return false;
+  if (desk.dirty) snapshot(key, desk, "Your changes", "person");
+  const beforeV = desk.vseq > 0 ? desk.vseq : null;
+  desk.data = data;
+  desk.rev++;
+  desk.loadRev++;
+  if (desk.kind !== "docx") engineFileChanged(key, desk);
+  desk.news.push(label);
+  desk.news = desk.news.slice(-40);
+  snapshot(key, desk, label, "person");
+  record(key, desk, { who: "person", name: "person_edit", at: Date.now(), before: beforeV, summary: label });
+  persist(key);
+  changed(key);
+  rewrite(key);
+  return true;
+}
+
 function personSaved(session: DeskKey, data: Buffer): string | null {
+  personSaveAt.set(session, Date.now());
   const desk = load(session);
   if (!desk) return "There is no document open in the window.";
   if (!isOffice(data, desk.kind)) return `That is not a file ${THING[desk.kind]} opens.`;

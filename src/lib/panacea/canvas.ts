@@ -17,6 +17,7 @@ import type { DocState } from "./document";
 import type { Table } from "./surfaces";
 import { describeProject, readProject, regionX, REGION_W, type Project } from "./project";
 import { readFlows, type Flow } from "./flows";
+import { readJoins, type Join } from "./joins";
 import { describeWindows, readWindows, type WinBox } from "./windows";
 import { treeLive } from "./wiring";
 import { WORKSPACE_MODES } from "../workspace";
@@ -93,6 +94,8 @@ export interface Canvas {
   project?: Project;
   /** Where work went between the apps (flows.ts): drawn as arrowed lines between their windows. */
   flows?: Flow[];
+  /** Windows the person joined, one's work shown live in the other (joins.ts): drawn as thick solid connectors. */
+  joins?: Join[];
   /** Where the apps' windows are, how big and in front of which (windows.ts): kept with the canvas, so a reload keeps the layout. */
   windows?: WinBox[];
   /** The room there is for work on the page that has the canvas open (what maximising fills), as the page last measured it. */
@@ -514,10 +517,11 @@ export function normalizeCanvas(raw: unknown): Canvas | null {
   // A surface's phase is one the project has, or none.
   for (const s of surfaces) if (s.phase && !project?.phases.some((ph) => ph.id === s.phase)) delete s.phase;
   const flows = readFlows(r.flows, Object.keys(WORKSPACE_MODES));
+  const joins = readJoins(r.joins);
   const windows = readWindows(r.windows);
   const roomRaw = r.room as { w?: unknown; h?: unknown } | undefined;
   const room = roomRaw && typeof roomRaw.w === "number" && typeof roomRaw.h === "number" && roomRaw.w >= 200 && roomRaw.h >= 200 && roomRaw.w <= 8000 && roomRaw.h <= 8000 ? { w: Math.round(roomRaw.w), h: Math.round(roomRaw.h) } : null;
-  return { version: 1, name: str(r.name, "Canvas", 80) || "Canvas", panels, surfaces, values, focus, gone, ...(project ? { project } : {}), ...(flows.length ? { flows } : {}), ...(windows.length ? { windows } : {}), ...(room ? { room } : {}) };
+  return { version: 1, name: str(r.name, "Canvas", 80) || "Canvas", panels, surfaces, values, focus, gone, ...(project ? { project } : {}), ...(flows.length ? { flows } : {}), ...(joins.length ? { joins } : {}), ...(windows.length ? { windows } : {}), ...(room ? { room } : {}) };
 }
 
 // --------------------------------------------------------------- describing --
