@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.111"
+version: "0.3.115"
 port: 8096
 # umbrelOS only hands a container the GPU when the manifest says so: with this
 # permission it adds /dev/dri plus the render/video groups those nodes belong
@@ -60,9 +60,6 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Finished seeding now goes three levels deep: a show, its seasons, and the episodes under each, one compact line
-  apiece, so a season is no longer squeezed into a narrow column on a phone.
-  Remove beside a show or a season takes only the episodes everyone in the house has finished and leaves the rest,
-  saying what it removed, what it queued and what it kept.
-  Delete show is new: it asks in a confirmation dialog, then takes every episode, watched or not — except one still
-  short of BTN's seeding goal, which is marked to go the moment it reaches it, so that rule still holds.
+  An audio track picker sits in the bottom-right controls while you watch: pick the language you want and it stays
+  chosen for that show. English audio is the default when a file carries several tracks.
+  Delete show in Settings opens its confirmation and deletes again.
