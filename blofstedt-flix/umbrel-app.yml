@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.115"
+version: "0.3.117"
 port: 8096
 # umbrelOS only hands a container the GPU when the manifest says so: with this
 # permission it adds /dev/dri plus the render/video groups those nodes belong
@@ -60,6 +60,8 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  An audio track picker sits in the bottom-right controls while you watch: pick the language you want and it stays
-  chosen for that show. English audio is the default when a file carries several tracks.
-  Delete show in Settings opens its confirmation and deletes again.
+  Delete show now actually clears the show out of Flix: it is hidden from the home rows, search, Discover, My List,
+  Continue watching and the Queue, not just had its files removed. It comes back by itself when a new episode or
+  season reaches the source after the delete, and it lands in its own place rather than in the Queue. Watched
+  episodes stay ticked and Continue watching resumes where you left off even if the show was deleted and its files
+  downloaded again. Settings -> Torrents lists the hidden shows, with Restore.
