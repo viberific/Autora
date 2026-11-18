@@ -23,7 +23,11 @@ async function main() {
   const browser = await chromium.launch({ executablePath: CHROME });
   const scrolls = (page: Page) => page.evaluate(() => { const el = document.querySelector(".rail-scroll") as HTMLElement; return el.scrollHeight - el.clientHeight; });
   try {
-    const page = await (await browser.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
+    // The menu starts as icons below 1366 px until chosen; these tests are about the whole menu, so the person has chosen it.
+    const wholeMenu = "try { localStorage.setItem('autora.panes', JSON.stringify({ mini: false })); } catch {}";
+    const ctx1 = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+    await ctx1.addInitScript(wholeMenu);
+    const page = await ctx1.newPage();
     await page.goto(`${app.base}/?page=sessions`);
     await page.waitForSelector(".rail .rail-nav");
     if (await page.locator(".rail.is-mini").count()) await page.locator('.top-rail-acts [aria-label="Show the whole menu"]').click();
@@ -66,7 +70,9 @@ async function main() {
       for (let i = 0; i < 30; i += 1) await app.newSession(`Chat number ${i}`, "build");
       // A long title is cut to the menu, never widens it (a wider menu moves the board beside it).
       await app.newSession("A rather long chat title that keeps on going well past the width of the menu", "build");
-      const tall = await (await browser.newContext({ viewport: { width: 1280, height: 1900 } })).newPage();
+      const ctx2 = await browser.newContext({ viewport: { width: 1280, height: 1900 } });
+      await ctx2.addInitScript(wholeMenu);
+      const tall = await ctx2.newPage();
       await tall.goto(`${app.base}/?page=sessions`);
       await tall.waitForSelector(".rail-recent-row");
       if (await tall.locator(".rail.is-mini").count()) await tall.locator('.top-rail-acts [aria-label="Show the whole menu"]').click();

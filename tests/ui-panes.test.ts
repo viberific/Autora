@@ -143,6 +143,12 @@ async function main() {
         });
         assert.ok(reached, `${sel} is under the window beside the chat`);
       }
+      // A fresh browser on a narrow window has not chosen yet: the menu starts as icons, and a wide one starts whole.
+      assert.equal(await p3.locator(".app.rail-mini").count(), 1, "icons below 1366 px until chosen");
+      const wide = await (await browser.newContext({ viewport: { width: 1500, height: 900 } })).newPage();
+      await wide.goto(`${app.base}/?session=${t}`);
+      await wide.waitForSelector(".pw-full-workspace > .pw-scene-stack", { timeout: 30_000 });
+      assert.equal(await wide.locator(".app.rail-mini").count(), 0, "whole at 1500 px");
       await ctx.close();
     });
 
