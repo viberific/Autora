@@ -66,6 +66,7 @@ async function main() {
     });
 
     await test("Load in PDF opens the PDF picked, and a file that is not one is refused by the server", async () => {
+      if (!(((await app.api("GET", "/api/settings")).body.tools.installed ?? {}) as Record<string, boolean>).pdf) { console.log("  skip  the PDF editor is not built here"); return; }
       assert.equal((await app.api("POST", `/api/sessions/${s}/new`, { kind: "pdf" })).status, 200);
       await page.waitForSelector('[data-pane="pdf"] .pdf-window');
       await page.locator('[data-pane="pdf"] .win-load').click();

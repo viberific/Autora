@@ -12,7 +12,7 @@ export default tseslint.config(
   // And gdevelop-editor/ (the game window's editor: GDevelop's, fetched and overlaid; plain JavaScript with Flow types).
   // .cache/ holds the pinned GenOffice checkout the Office tools are built from (scripts/build-office.mjs).
   // office/host/entry.ts is bundled with GenOffice's own tsconfig (esbuild, office/host/build.mjs), not this one.
-  { ignores: ["dist/", "node_modules/", "ui/", ".autora/", "recordings/", "spectra-editor/", "opencut-editor/", "gdevelop-editor/", "autora-3d/", ".cache/", "office/host/entry.ts"] },
+  { ignores: [".scratch/", "dist/", "node_modules/", "ui/", ".autora/", "recordings/", "spectra-editor/", "opencut-editor/", "gdevelop-editor/", "autora-3d/", ".cache/", "office/host/entry.ts"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

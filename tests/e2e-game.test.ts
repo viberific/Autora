@@ -18,6 +18,11 @@ async function main() {
   try {
     console.log("Autora Games");
     const s = await app.newSession("a game", "build");
+    // A server built without this editor answers 503: nothing here can run, which is not a failure of the code (like e2e-photo).
+    if ((await app.api("GET", `/api/game/${s}`)).status === 503) {
+      console.log("  skip  Autora Games is not built (npm --prefix gdevelop-editor run build)");
+      return;
+    }
     const told: any[] = [];
     const ws = new WebSocket(`${app.base.replace(/^http/, "ws")}/ws/${s}`);
     ws.on("message", (raw) => { const m = JSON.parse(String(raw)); if (m.type === "gamedesk") told.push(m.state); });

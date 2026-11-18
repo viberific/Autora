@@ -738,7 +738,7 @@ export interface ToolContext {
     reload: () => Promise<{ ok: boolean; summary: string }>;
     look: () => Promise<{ ok: boolean; summary: string; png?: Buffer }>;
     /** Use the page as a person would: click, hover, type, press a key, scroll. */
-    act: (args: { action: string; target?: string; text?: string; key?: string; dy?: number; submit?: boolean }) => Promise<{ ok: boolean; summary: string; png?: Buffer }>;
+    act: (args: { action: string; target?: string; text?: string; key?: string; dy?: number; submit?: boolean; hold_ms?: number }) => Promise<{ ok: boolean; summary: string; png?: Buffer }>;
   };
   /** Agent mode's switch between planning and building. Absent where there is
       no session to switch. */
@@ -2736,7 +2736,7 @@ async function runToolUnredacted(
         if (["click", "hover", "type", "press", "scroll"].includes(action)) {
           const r = await ctx.preview.act({
             action, target: args.target === undefined ? undefined : String(args.target), text: args.text === undefined ? undefined : String(args.text),
-            key: args.key === undefined ? undefined : String(args.key), dy: args.dy === undefined ? undefined : Number(args.dy), submit: args.submit === true,
+            key: args.key === undefined ? undefined : String(args.key), hold_ms: args.hold_ms === undefined ? undefined : Number(args.hold_ms), dy: args.dy === undefined ? undefined : Number(args.dy), submit: args.submit === true,
           });
           const picture = r.png ? pictureFor(r.png, "image/png") : null;
           return { ok: r.ok, summary: r.summary, preview: r.ok ? `${action} in the app` : undefined, ...(picture ? { images: [picture] } : {}) };

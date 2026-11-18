@@ -2175,7 +2175,7 @@ label + .jf-hint { margin-top: -5px; }
 .cell-chip.is-running { background: var(--accent-soft); color: var(--accent); }
 .cell-chip.is-bad { background: rgba(var(--danger-rgb), 0.13); color: var(--danger); }
 .cell-chip.is-warn { background: rgba(var(--warn-rgb), 0.13); color: var(--warn); }
-.cell-at { font-style: normal; font-family: var(--mono); font-size: var(--fs-2xs); color: var(--text-3); }
+.cell-at { font-style: normal; font-family: var(--mono); font-size: var(--fs-xs); color: var(--text-3); }
 
 .cell-act {
   flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px;
@@ -6477,7 +6477,7 @@ body:has(.panacea-workspace.is-phone .pw-engine) .install-offer { display: none;
    being cut in half at the edge of the tile (which is what it used to do, in a
    box with overflow: hidden). */
 .mode-sel-pill.is-icon .mode-sel-ico { flex: 0 0 auto; }
-.mode-sel-caret { font-size: var(--fs-2xs); opacity: 0.7; }
+.mode-sel-caret { font-size: var(--fs-xs); opacity: 0.7; }
 /* The sheet is centred in the window with the page dimmed behind it, on every screen: the one the phone had, which
    is the one people like. Fixed, so what it opens from no longer matters. */
 .mode-sel-sheet {
@@ -8220,7 +8220,7 @@ body.is-resizing iframe { pointer-events: none; }
 .pa-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .pa-cap { font-size: var(--fs-xs); color: var(--text-2); }
 .pa-val { font-size: var(--fs-xs); color: var(--text); font-variant-numeric: tabular-nums; }
-.pa-val small, .pa-unit { color: var(--text-3); font-size: var(--fs-2xs); }
+.pa-val small, .pa-unit { color: var(--text-3); font-size: var(--fs-xs); }
 .pa-row-between { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .pa-more { align-self: flex-start; border: 0; background: transparent; color: var(--text-3); font: 600 var(--fs-xs) var(--sans); cursor: pointer; padding: 2px 0; }
 .pa-more span { display: inline-grid; place-items: center; min-width: 16px; height: 16px; margin-left: 4px; border-radius: var(--r-pill); background: var(--s3); font-size: var(--fs-2xs); }
@@ -8268,7 +8268,7 @@ body.is-resizing iframe { pointer-events: none; }
 .pa-select { position: relative; }
 .pa-select-btn { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 30px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--s2); color: var(--text); font: var(--fs-sm) var(--sans); cursor: pointer; text-align: left; }
 .pa-select-btn:hover { border-color: var(--border-strong); }
-.pa-caret { color: var(--text-3); font-size: var(--fs-2xs); }
+.pa-caret { color: var(--text-3); font-size: var(--fs-xs); }
 .pa-menu { position: absolute; z-index: 5; left: 0; right: 0; top: 100%; margin-top: 4px; max-height: 220px; overflow: auto; padding: 4px; background: var(--s2); border: 1px solid var(--border-strong); border-radius: var(--r-sm); box-shadow: var(--shadow-lg); display: flex; flex-direction: column; animation: paArrive var(--dur-2) var(--ease) both; }
 .pa-menu button { border: 0; background: transparent; color: var(--text); text-align: left; font: var(--fs-sm) var(--sans); padding: 6px 8px; border-radius: var(--r-xs); cursor: pointer; }
 .pa-menu button:hover, .pa-menu button.is-on { background: var(--s4); }

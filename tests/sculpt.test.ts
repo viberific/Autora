@@ -81,6 +81,10 @@ await test("smoothing evens out a lumpy surface without shrinking it much; subdi
 
 // ------------------------------------------------------------------ the engine --
 
+if (!fs.existsSync(new URL("../dist/autora-3d-engine/engine.mjs", import.meta.url))) {
+  console.log("  skip  the 3D engine is not built (npm --prefix autora-3d run build:engine)");
+  process.exit(0);
+}
 const core = await import(new URL("../dist/autora-3d-engine/engine.mjs", import.meta.url).href);
 await core.initManifold();
 

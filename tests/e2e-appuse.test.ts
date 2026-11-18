@@ -23,7 +23,9 @@ body{margin:0;font:16px system-ui} .row{padding:20px} #tall{height:2400px;backgr
 <div class="row"><a id="more" href="#">Read more</a></div>
 <div id="tall"></div>
 <script>window.addEventListener("scroll",()=>{ if (scrollY>300) console.error("scrolled to " + Math.round(scrollY)) });
-document.addEventListener("keydown",(e)=>{ if (e.key==="Escape") console.error("escape pressed") });</script>
+document.addEventListener("keydown",(e)=>{ if (e.key==="Escape") console.error("escape pressed") });
+let down=0; addEventListener("keydown",(e)=>{ if (e.key==="ArrowRight" && !down) down=Date.now() });
+addEventListener("keyup",(e)=>{ if (e.key==="ArrowRight" && down) { console.error("arrow held " + (Date.now()-down>=500 ? "long" : "short")); down=0 } });</script>
 </body></html>`;
 
 async function main() {
@@ -75,6 +77,14 @@ async function main() {
       assert.match(said, /escape pressed/);
       assert.match(said, /Scrolled down 900 pixels/);
       assert.match(said, /scrolled to \d{3}/);
+    });
+
+    await test("hold_ms holds a key down, for a game that reads the keys down each frame; a plain press is a tap", async () => {
+      await steps([{ action: "press", key: "ArrowRight", hold_ms: 700 }, { action: "press", key: "ArrowRight" }]);
+      const said = told();
+      assert.match(said, /Held ArrowRight for 700 ms/);
+      assert.match(said, /arrow held long/);
+      assert.match(said, /arrow held short/);
     });
 
     await test("a target that is not there says what is, so the agent can choose", async () => {

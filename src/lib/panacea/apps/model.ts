@@ -39,7 +39,7 @@ const HAIR = {
 type HairBind = keyof typeof HAIR;
 
 /** The values the adapter acts on. */
-const MODEL_BINDS = [
+export const MODEL_BINDS = [
   MODEL_PART, "model.x", "model.y", "model.z", "model.width", "model.depth", "model.height", "model.color", "model.material",
   "model.visible", "model.bevel", "model.bevelstyle", "model.count", "model.gap", "model.dir",
   ...(Object.keys(FINISH) as FinishBind[]), "model.pattern", "model.patterncolor", "model.patternsize", "model.relief",

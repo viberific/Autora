@@ -18,7 +18,7 @@ import {
 export const MUSIC_TRACK = "music.track";
 
 /** Every value the adapter acts on. */
-const MUSIC_BINDS = [
+export const MUSIC_BINDS = [
   MUSIC_TRACK, "music.bpm", "music.sig", "music.loop", "music.root", "music.scale", "music.master",
   "music.vol", "music.pan", "music.mute", "music.solo", "music.reverb", "music.low", "music.mid", "music.high",
   "music.inst", "music.steps",

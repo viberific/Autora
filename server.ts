@@ -1104,7 +1104,7 @@ async function previewLook(run: PreviewRun, done: string): Promise<{ ok: boolean
  */
 async function previewAct(
   session: Session,
-  args: { action: string; target?: string; text?: string; key?: string; dy?: number; submit?: boolean },
+  args: { action: string; target?: string; text?: string; key?: string; dy?: number; submit?: boolean; hold_ms?: number },
 ): Promise<{ ok: boolean; summary: string; png?: Buffer }> {
   const run = previews.get(session.id);
   if (!run?.opened) return { ok: false, summary: "There is no preview open. Start one with app_preview start." };
@@ -1162,9 +1162,12 @@ async function previewAct(
       case "press": {
         const key = String(args.key ?? "").trim();
         if (!key) return { ok: false, summary: "press needs a key, e.g. Enter, Tab, Escape, ArrowDown." };
-        await live.keyboardPress(key);
+        // hold_ms: a key held down that long, for a game that reads the keys down each frame (a tap is under a frame's reading).
+        const held = Number.isFinite(args.hold_ms) ? Math.max(0, Math.min(5000, Math.round(Number(args.hold_ms)))) : 0;
+        if (held > 0 && !key.includes("+")) await live.keyboardHold(key, held);
+        else await live.keyboardPress(key);
         await settle();
-        done = `Pressed ${key}.`;
+        done = held > 0 && !key.includes("+") ? `Held ${key} for ${held} ms.` : `Pressed ${key}.`;
         break;
       }
       case "scroll": {

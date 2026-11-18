@@ -13,7 +13,7 @@ import type { Value } from "../atoms";
 
 export const VIDEO_CLIP = "video.clip";
 
-const VIDEO_BINDS = [
+export const VIDEO_BINDS = [
   VIDEO_CLIP, "video.speed", "video.vol", "video.mute", "video.zoom", "video.opacity", "video.title", "video.titlecolor",
   "video.aspect", "video.fps",
 ] as const;

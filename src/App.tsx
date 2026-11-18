@@ -2482,6 +2482,8 @@ export function App() {
                     value={draft}
                     rows={1}
                     aria-label="Ask Autora"
+                    aria-keyshortcuts="/"
+                    title="Press / anywhere to come back here"
                     placeholder={modelReady === false
                       ? "Connect a model to start…"
                       : "What should I do?"}

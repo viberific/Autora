@@ -25,6 +25,7 @@
 import express, { type Express, type Request, type Response } from "express";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
+import zlib from "node:zlib";
 import path from "node:path";
 import catalogJson from "./game-catalog.json";
 import starterJson from "./game-starter.json";
@@ -149,6 +150,37 @@ const validSession = (id: string) => /^[A-Za-z0-9_-]{1,80}$/.test(id);
 const savedName = (session: string) => `game-${session}`;
 
 /** The editor, built into this server (npm run build): without it the tools are not offered. */
+/** A solid picture for an object that has no art yet: a rectangle or a circle in one colour, as a PNG. Null for a bad description. */
+function placeholderPng(spec: Json): Buffer | null {
+  const width = Math.trunc(Number(spec.width ?? 32)), height = Math.trunc(Number(spec.height ?? 32));
+  const color = /^#?([0-9a-f]{6})$/i.exec(String(spec.color ?? "#4f8cff"));
+  const shape = String(spec.shape ?? "rect");
+  if (!(width >= 1 && width <= 1024 && height >= 1 && height <= 1024) || !color || (shape !== "rect" && shape !== "circle")) return null;
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(color[1]!.slice(i, i + 2), 16));
+  const rows: Buffer[] = [];
+  for (let y = 0; y < height; y += 1) {
+    const row = Buffer.alloc(1 + width * 4); // filter byte 0, then RGBA
+    for (let x = 0; x < width; x += 1) {
+      const inside = shape === "rect" || ((x + 0.5 - width / 2) / (width / 2)) ** 2 + ((y + 0.5 - height / 2) / (height / 2)) ** 2 <= 1;
+      row.set([r!, g!, b!, inside ? 255 : 0], 1 + x * 4);
+    }
+    rows.push(row);
+  }
+  const chunk = (type: string, data: Buffer): Buffer => {
+    const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
+    const out = Buffer.alloc(8 + data.length + 4);
+    out.writeUInt32BE(data.length, 0);
+    body.copy(out, 4);
+    out.writeUInt32BE(zlib.crc32(body), 8 + data.length);
+    return out;
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header.set([8, 6, 0, 0, 0], 8); // 8 bits, RGBA
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", header), chunk("IDAT", zlib.deflateSync(Buffer.concat(rows))), chunk("IEND", Buffer.alloc(0))]);
+}
+
 const editorDir = (): string => path.join(process.cwd(), "dist", "gdevelop-editor");
 
 /** One file of the engine's runtime (GDJS), for the game played by game_play: only under /gdevelop-editor/GDJS/, and never outside it. */
@@ -575,6 +607,10 @@ const objectTypeKnown = (type: string, project: Json): boolean =>
 const behaviorTypeKnown = (type: string, project: Json): boolean =>
   catalog.extensions.some((e) => e.behaviors.some((b) => b.type === type)) || asArray(project.eventsFunctionsExtensions).some((e: Json) => asArray(e?.eventsBasedBehaviors).some((b: Json) => `${e.name}::${b?.name}` === type));
 
+/** Parameter types the engine reads as a string expression, which needs its quotes ("Player", not Player); a key or mouse button is a plain choice and is written bare. Found by playing:
+    an unquoted scene name logged "no scene called" every frame and passed game_check. */
+const QUOTED_PARAMS = new Set(["string", "layer", "sceneName", "stringWithSelector"]);
+
 type InstructionVisitor = (kind: "action" | "condition", instruction: Json, where: string) => void;
 
 /** Every instruction in an events list, nested events and sub-instructions included, with the path that finds it again. */
@@ -619,8 +655,17 @@ function checkInstruction(
     return;
   }
   const params = asArray(inst.parameters);
-  if (params.length !== known.n) warn(`${where}: ${type} takes ${known.n} parameters, this has ${params.length} (parameter 0 comes first; internal ones are "").`);
+  if (params.length !== known.n) {
+    // The shape asked for, slot by slot: the visible ones named, the internal and trailing optional ones as "" (what a model gets wrong).
+    const shape = Array.from({ length: known.n }, (_, i) => { const p = known.params.find((q) => q.i === i); return p ? `<${p.description}${p.optional ? ", optional: \"\" to leave out" : ""}>` : '""'; });
+    warn(`${where}: ${type} takes ${known.n} parameters, this has ${params.length}. Every slot is written, the internal ones and the optional ones left out as "": [${shape.join(", ")}].`);
+  }
   for (const p of known.params) {
+    const given = params[p.i];
+    if (typeof given === "string" && given) {
+      // A string the engine reads as an expression needs its quotes; a resource is named bare. Either wrong draws nothing or logs every frame.
+      if (QUOTED_PARAMS.has(p.type) && /^[A-Za-z_][\w ]*$/.test(given)) warn(`${where}: ${p.description || p.type} is a ${p.type}, an expression: write it quoted, "${given}" with the quotes inside the string, not ${given}.`);
+    }
     if (p.type === "objectList" || p.type === "object" || p.type === "objectListOrEmptyIfJustDeclared" || p.type === "objectListOrEmptyWithoutPicking" || p.type === "objectPtr") {
       const given = params[p.i];
       if (typeof given === "string" && given && !objects.has(given) && !globals.has(given) && !groups.has(given)) warn(`${where}: "${given}" is not an object or group of this scene.`);
@@ -755,6 +800,19 @@ function outline(events: unknown, prefix: string, depth: number, out: string[], 
 
 // ---------------------------------------------------------------- the catalog --
 
+/** How a person says it, and the word the engine's own entry uses ("restart the scene" is the action "Change the scene"). */
+const CATALOG_SYNONYMS: Record<string, string[]> = {
+  restart: ["scene"], reload: ["scene"], respawn: ["create"], spawn: ["create"], destroy: ["delete"], kill: ["delete"], remove: ["delete"],
+  score: ["variable"], counter: ["variable"], lives: ["variable"], health: ["variable"], hit: ["collision"], touch: ["collision"],
+  overlap: ["collision"], audio: ["sound"], music: ["sound"], key: ["key pressed"], keyboard: ["key pressed"], delay: ["wait"],
+};
+
+/** What nearly every game uses, by instruction type. */
+const CORE_INSTRUCTIONS = new Set([
+  "SetNumberVariable", "NumberVariable", "SetStringVariable", "StringVariable", "Scene", "Create", "Delete", "CollisionNP", "KeyFromTextPressed", "SetX", "SetY",
+  "Wait", "PlaySound", "TextContainerCapability::TextContainerBehavior::SetValue", "ResetTimer", "CompareTimer", "SceneJustBegins", "Show", "Hide",
+]);
+
 const WORDS = (text: string) => text.toLowerCase().split(/[^a-z0-9_]+/).filter(Boolean);
 
 function scopeText(scope?: string): string {
@@ -803,6 +861,7 @@ function searchCatalog(args: Record<string, any>): string {
         if (type === w) score += 20;
         else if (type.includes(w)) score += 6;
         else if (hay.includes(w)) score += 3;
+        else if ((CATALOG_SYNONYMS[w] ?? []).some((s) => hay.includes(s))) score += 2;
         else {
           score = -1;
           break;
@@ -812,10 +871,37 @@ function searchCatalog(args: Record<string, any>): string {
     }
     scored.push({ i, score });
   }
+  /* Every word must be somewhere in an entry, which fails for how a person says it ("scene variable": the entry is "Change
+     variable value"). With nothing matched, the entries holding the most of the words are shown, and it says so. */
+  let partial = false;
+  if (!scored.length && words.length > 1) {
+    for (const i of catalog.instructions) {
+      if (kind && i.kind !== kind) continue;
+      if (extension && i.extension.toLowerCase() !== extension.toLowerCase()) continue;
+      const hay = `${i.type} ${i.name} ${i.sentence} ${i.group} ${i.extension}`.toLowerCase();
+      const hits = words.filter((w) => hay.includes(w) || (CATALOG_SYNONYMS[w] ?? []).some((s) => hay.includes(s))).length;
+      if (hits > 0) scored.push({ i, score: hits * 3 + (i.type.toLowerCase() === words.find((w) => i.type.toLowerCase() === w) ? 20 : 0) });
+    }
+    partial = scored.length > 0;
+  }
+  /* The handful of instructions nearly every game uses are always candidates when a word of the query is in them, and rank above
+     the long tail: "scene variable" is "Change variable value", and the long entries that say "scene variable" outscored it. */
+  if (words.length && !forType) {
+    const have = new Set(scored.map((x) => x.i));
+    for (const i of catalog.instructions) {
+      if (!CORE_INSTRUCTIONS.has(i.type) || (kind && i.kind !== kind) || (extension && i.extension.toLowerCase() !== extension.toLowerCase())) continue;
+      const hay = `${i.type} ${i.name} ${i.sentence} ${i.group}`.toLowerCase();
+      const hits = words.filter((w) => hay.includes(w) || (CATALOG_SYNONYMS[w] ?? []).some((s) => hay.includes(s))).length;
+      if (!hits) continue;
+      const found = scored.find((x) => x.i === i);
+      if (found) found.score += 12;
+      else if (!have.has(i)) scored.push({ i, score: 18 + hits * 3 });
+    }
+  }
   scored.sort((a, b) => b.score - a.score || a.i.type.length - b.i.type.length);
   if (!scored.length) return `Nothing matches. Try fewer or different words, or list extensions (list: "extensions"). In GDevelop an action reads like "Change the X position" and a condition like "Key pressed".`;
   const shown = scored.slice(0, limit);
-  return cut(`${scored.length} match${scored.length === 1 ? "" : "es"}${scored.length > shown.length ? `, the first ${shown.length}` : ""}. Use "type" as instruction.type.value; parameters go in the order given (index:type), internal ones as "".\n` + shown.map((s) => instructionLine(s.i)).join("\n"), "Narrow it with kind, extension or for.");
+  return cut(`${partial ? "No entry has all of those words; these hold the most of them. " : ""}${scored.length} match${scored.length === 1 ? "" : "es"}${scored.length > shown.length ? `, the first ${shown.length}` : ""}. Use "type" as instruction.type.value; parameters go in the order given (index:type), internal ones as "".\n` + shown.map((s) => instructionLine(s.i)).join("\n"), "Narrow it with kind, extension or for.");
 }
 
 /** The shapes of things the editor saves, for the agent to copy: engine-made where the engine can make them. */
@@ -841,6 +927,16 @@ function templateFor(args: Record<string, any>): { ok: boolean; text: string } {
   switch (kind) {
     case "scene":
       return { ok: true, text: `A new scene. Give it a name (and mangledName: the name with letters, digits and _ only), then insert it into layouts.\n${json(t.scene)}` };
+    case "animation": {
+      // One animation of a Sprite, for its `animations` list: the frames are image resources (game_import makes them), one direction.
+      const frames = (Array.isArray(args.images) ? args.images : []).map(String).filter(Boolean);
+      const images = frames.length ? frames : ["image.png"];
+      const animation = {
+        name: "", useMultipleDirections: false,
+        directions: [{ looping: false, timeBetweenFrames: 0.08, sprites: images.map((image) => ({ image, points: [], originPoint: { name: "origine", x: 0, y: 0 }, centerPoint: { automatic: true, name: "centre", x: 0, y: 0 }, hasCustomCollisionMask: false, customCollisionMask: [] })) }],
+      };
+      return { ok: true, text: `One animation, for a Sprite's animations list (name it, e.g. "Walk"; looping: true to repeat; timeBetweenFrames in seconds). Each frame's image is a resource name from game_import; ${frames.length ? "yours are filled in" : "pass images: [names] for yours"}.\n${json(animation)}` };
+    }
     case "layer":
       return { ok: true, text: `A layer, for a scene's layers list (the base layer is named "").\n${json({ ...t.layer, name: "Layer 2" })}` };
     case "instance":
@@ -864,7 +960,7 @@ function templateFor(args: Record<string, any>): { ok: boolean; text: string } {
     }
     default: {
       const found = EVENT_TEMPLATES[kind];
-      if (!found) return { ok: false, text: `kind is one of: scene, layer, instance, object, behavior, resource, ${Object.keys(EVENT_TEMPLATES).join(", ")}.` };
+      if (!found) return { ok: false, text: `kind is one of: scene, layer, instance, object, animation, behavior, resource, ${Object.keys(EVENT_TEMPLATES).join(", ")}.` };
       const extra = kind === "event" ? " Conditions all hold for the actions to run; with none the actions run every frame. Nested events run when their parent's conditions hold." : kind === "condition" || kind === "action" ? " Take type and the parameter list from game_catalog; parameters are strings, in order from 0." : "";
       return { ok: true, text: `${kind}:${extra}\n${json(found)}` };
     }
@@ -1312,17 +1408,21 @@ export async function runGameTool(session: string, name: string, args: Record<st
       }
 
       case "game_import": {
-        const given = need(args, "file");
-        const art = /^file_[0-9a-f]{16}$/.test(given) ? getArtifact(given) : null;
-        let file = art ? artifactPath(art.id) : path.resolve(hooks.cwd ?? process.cwd(), given);
-        if (!art && !fs.existsSync(file)) {
+        // A placeholder picture made here (a Sprite with no image is invisible, and the agent has no paint tool): no file is read.
+        const made = isObject(args.placeholder) ? placeholderPng(args.placeholder) : null;
+        if (isObject(args.placeholder) && !made) return { ok: false, summary: "placeholder is { width, height (1 to 1024 pixels), color: \"#rrggbb\", shape: \"rect\" or \"circle\" }." };
+        const given = made ? "" : need(args, "file");
+        const art = !made && /^file_[0-9a-f]{16}$/.test(given) ? getArtifact(given) : null;
+        let file = made || art ? "" : path.resolve(hooks.cwd ?? process.cwd(), given);
+        if (art) file = artifactPath(art.id);
+        if (!made && !art && !fs.existsSync(file)) {
           const named = hooks.cwd && fs.existsSync(path.resolve(hooks.cwd, path.basename(given))) ? path.resolve(hooks.cwd, path.basename(given)) : null;
           if (!named) return { ok: false, summary: `There is no file "${given}": give an artifact id (file_...) or a path on this host.` };
           file = named;
         }
-        if (!fs.statSync(file).isFile()) return { ok: false, summary: `${file} is not a file.` };
-        const wanted = String(args.name ?? art?.name ?? path.basename(file));
-        const kept = keepAsset(session, wanted, fs.readFileSync(file));
+        if (!made && !fs.statSync(file).isFile()) return { ok: false, summary: `${file} is not a file.` };
+        const wanted = made ? String(args.name ?? args.resource ?? "placeholder.png") : String(args.name ?? art?.name ?? path.basename(file));
+        const kept = keepAsset(session, made ? (/\.png$/i.test(wanted) ? wanted : `${wanted}.png`) : wanted, made ?? fs.readFileSync(file));
         const project = JSON.parse(JSON.stringify(projectOf(session)));
         normalize(project);
         const resourceName = typeof args.resource === "string" && args.resource.trim() ? args.resource.trim() : kept.file;
@@ -1349,13 +1449,16 @@ export async function runGameTool(session: string, name: string, args: Record<st
           if (fresh) {
             preview = fresh;
           } else {
+            // Waited the whole time for the editor to answer: say for what, and what usually stops it, most likely first.
+            const secs = Math.round(previewWait.fresh / 1000);
+            const causes = `Usually the game would not compile (run game_check and fix what it says), the window is not open beside the chat (game_open opens it) or the editor is still loading (try again in a few seconds).`;
             how = preview
-              ? " The window did not make a new preview in time (is it open beside the chat, with the editor started?), so this is the last one it made."
+              ? ` The window made no new preview in ${secs} s, so this is the last one it made, an earlier version of the game. ${causes}`
               : "";
           }
         }
         if (!preview) {
-          return { ok: false, summary: "There is no preview of the game to play. The editor makes one when the game is started in the window (the Play button), and that needs the game window open beside the chat with its editor running: ask the person to open it and press Play once, or open it with game_open and try again." };
+          return { ok: false, summary: `There is no preview of the game to play: the editor makes one when the game is started in its window, and none came in ${Math.round(previewWait.fresh / 1000)} s. Usually the game would not compile (run game_check and fix what it says), the window is not open beside the chat (game_open opens it), or the editor is still loading (try again in a few seconds). If it keeps failing, ask the person to press Play once in the window.` };
         }
         const stale = preview.at < entry.changedAt ? ` The game was changed after this preview was made (${Math.round((entry.changedAt - preview.at) / 1000)} s later), so it is an earlier version: use fresh (the default) to play the current one.` : "";
         let played: Played;

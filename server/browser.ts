@@ -3794,6 +3794,17 @@ export class LiveBrowser {
     });
   }
 
+  /** A key held down for `ms` and then let go (a game reads the keys that are down each frame, which a tap is too short for). */
+  keyboardHold(key: string, ms: number): Promise<void> {
+    return this.run(async () => {
+      const page = await this.ensure();
+      await this.personHand();
+      await page.keyboard.down(key);
+      try { await new Promise<void>((r) => setTimeout(r, ms)); } finally { await page.keyboard.up(key); }
+      this.noteTyping(0, key);
+    });
+  }
+
   /** What a run of typing adds up to, logged once it pauses. */
   private typed = { chars: 0, keys: [] as string[], timer: null as NodeJS.Timeout | null };
 
