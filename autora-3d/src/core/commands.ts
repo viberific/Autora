@@ -76,6 +76,6 @@ export function describeEdit(before: Doc, after: Doc): string {
   if (sculpted.length) out.push(`sculpted ${names(sculpted)}`);
   if (groomed.length) out.push(`groomed the hair of ${names(groomed)}`);
   if (rest.length) out.push(`changed ${names(rest)}`);
-  if (!out.length) out.push(before.groups !== after.groups || before.library !== after.library ? 'changed groups or the library' : before.look !== after.look ? 'changed the light' : 'changed the model');
+  if (!out.length) out.push(before.groups !== after.groups || before.library !== after.library ? 'changed groups or the library' : before.look !== after.look ? 'changed the light' : before.rig !== after.rig ? 'changed the rig' : 'changed the model');
   return clip(out.join('; '));
 }

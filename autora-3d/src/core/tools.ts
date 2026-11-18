@@ -11,6 +11,7 @@ import { AgentError } from './errors';
 import { thumbnailSvg } from '../utils/thumbnail';
 import { describeEdgesOf, describeFaces, libraryItems, meshReport, sceneSummary, summarize } from './inspect';
 import * as ops from './ops';
+import * as rigOps from './rigOps';
 
 /** A JSON-Schema-described command an agent can call. These specs are what MCP and LLM tool-use want. */
 export interface ToolSpec {
@@ -401,6 +402,27 @@ export const TOOL_SPECS: ToolSpec[] = [
     ),
   },
   { name: 'repeat_remove', description: 'Let go of a live repeat: its copies stay as ordinary shapes you can edit one by one.', inputSchema: obj({ id: { type: 'string' } }, ['id']) },
+  { name: 'rig_get', description: 'The skeleton, or null when there is none: each bone with its id, name, parent, head and tail (mm; x right, y away, z up), which shapes are bound to it (and whether an edit made that stale), and the preview pose.', inputSchema: obj({}), readOnly: true },
+  {
+    name: 'rig_add',
+    description: 'Give the model a skeleton. "bip29" is the 29-bone biped (bip Pelvis, Spine, Neck, Head, both arms with fingers, both legs), standing on the ground as tall as the model, arms out in a T, character facing the front. Its names match Little-Farm\'s characters. "custom" starts with one root bone to build on with rig_bone_set. Then rig_bind ties the shapes to it.',
+    inputSchema: obj({ template: { type: 'string', enum: ['bip29', 'custom'] }, replace: { type: 'boolean', description: 'Start over when a skeleton already exists (its weights are lost).' } }),
+  },
+  {
+    name: 'rig_bone_set',
+    description: 'Move or rename a bone: head and tail are points in mm (x right, y away, z up). Moving a head carries the end of the bone before it along, and with move_children:true the whole branch beyond. Without id it adds a new bone (head, tail, optional parent and name). Weights are not recomputed: call rig_bind again.',
+    inputSchema: obj({ id: { type: 'string' }, name: { type: 'string' }, head: point3, tail: point3, parent: { type: 'string', description: 'A new bone only: the bone it hangs from.' }, move_children: { type: 'boolean' } }),
+  },
+  {
+    name: 'rig_bind',
+    description: 'Tie every visible shape to the skeleton automatically: each point of the shape\'s surface follows its nearest bones (up to four, nearer pulls harder), the head and hair follow the head alone, and below the pelvis each side follows its own leg. Changing a bound shape afterwards marks its weights stale: bind again. Returns how many shapes and points were bound.',
+    inputSchema: obj({}),
+  },
+  {
+    name: 'rig_pose',
+    description: 'Preview a pose: turn one bone by x, y, z degrees about its own axes (its branch follows), or reset one bone or all. It is a preview in the window only: cad_export always leaves in the rest pose.',
+    inputSchema: obj({ bone: { type: 'string' }, x: { type: 'number' }, y: { type: 'number' }, z: { type: 'number' }, reset: { type: 'boolean', description: 'Clear the pose of this bone, or of all when no bone is given.' } }),
+  },
   { name: 'doc_get', description: 'The whole document as JSON (shapes, groups, repeats): save it, or hand it back to doc_set later.', inputSchema: obj({}), readOnly: true },
   { name: 'doc_set', description: 'Replace the whole model with a document from doc_get.', inputSchema: obj({ doc: { type: 'object' } }, ['doc']) },
   { name: 'doc_clear', description: 'Remove every shape.', inputSchema: obj({}) },
@@ -414,8 +436,8 @@ export const TOOL_SPECS: ToolSpec[] = [
   { name: 'history_redo', description: 'Redo the last undone change.', inputSchema: obj({}) },
   {
     name: 'export',
-    description: 'Export the visible shapes. format "stl" (binary, Z-up, returned as base64), "glb" (binary glTF for game engines: metres, Y-up, keeps colours, materials, textures and hair, returned as base64), "obj" (text) or "json" (the document). glb options: scale (output metres per scene mm, default 0.001), pivot ("scene" as placed, "asset" centred on the ground, "shape" one pivot per shape at the centre of its base) and hair (false leaves hair and fur out; with it each shape\'s hair is thinned to a size an engine takes). STL and OBJ never carry hair.',
-    inputSchema: obj({ format: { type: 'string', enum: ['stl', 'glb', 'obj', 'json'] }, scale: { type: 'number' }, pivot: { type: 'string', enum: ['scene', 'asset', 'shape'] }, hair: { type: 'boolean' } }, ['format']),
+    description: 'Export the visible shapes. format "stl" (binary, Z-up, returned as base64), "glb" (binary glTF for game engines: metres, Y-up, keeps colours, materials, textures and hair, returned as base64), "obj" (text) or "json" (the document). glb options: scale (output metres per scene mm, default 0.001), pivot ("scene" as placed, "asset" centred on the ground, "shape" one pivot per shape at the centre of its base), rig (true writes the skeleton: one skin, bone nodes and weights for the shapes rig_bind tied to it, in the rest pose; shapes with stale weights are refused until bound again) and hair (false leaves hair and fur out; with it each shape\'s hair is thinned to a size an engine takes). STL and OBJ never carry hair.',
+    inputSchema: obj({ format: { type: 'string', enum: ['stl', 'glb', 'obj', 'json'] }, scale: { type: 'number' }, pivot: { type: 'string', enum: ['scene', 'asset', 'shape'] }, hair: { type: 'boolean' }, rig: { type: 'boolean' } }, ['format']),
     readOnly: true,
   },
   {
@@ -558,6 +580,16 @@ export function runDocTool(ctx: ToolContext, name: string, rawArgs: unknown): To
       return done(ops.setRepeat(doc, ids, a as ops.RepeatArgs));
     case 'repeat_remove':
       return done(ops.removeRepeat(doc, a as { id: string }));
+    case 'rig_get':
+      return { doc, result: rigOps.rigGet(doc) };
+    case 'rig_add':
+      return rigOps.rigAdd(doc, a);
+    case 'rig_bone_set':
+      return rigOps.rigBoneSet(doc, a);
+    case 'rig_bind':
+      return rigOps.rigBind(doc);
+    case 'rig_pose':
+      return rigOps.rigPose(doc, a);
     default:
       return fail(`Unknown tool "${name}".`, `Tools: ${TOOL_SPECS.map((t) => t.name).join(', ')}`);
   }

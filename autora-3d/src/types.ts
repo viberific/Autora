@@ -410,3 +410,38 @@ export const SWATCHES: ColorSwatch[] = [
   { name: 'Snow Pearl', value: '#f1f5f9' },
 ];
 
+
+/** One bone of a skeleton. Positions are scene space (Y up), millimetres: x right, y up, z toward the viewer. */
+export interface Bone {
+  /** Stable, e.g. "bone-1". */
+  id: string;
+  /** A bip29 name when the template made it. */
+  name: string;
+  parentId: string | null;
+  head: [number, number, number];
+  /** Points down the bone. */
+  tail: [number, number, number];
+}
+
+/** Where a shape's generated triangles are tied to the bones: four bone numbers and four weights for each vertex, flattened. */
+export interface RigBind {
+  /** Indices into `rig.bones`, four per vertex. */
+  joints: number[];
+  /** Four per vertex; each vertex's four add up to 1. */
+  weights: number[];
+  vertexCount: number;
+  /** The shape's outline, height, bevels or place changed since this was made: bind again. */
+  stale?: boolean;
+  /** A fingerprint of the geometry that was bound, so an edit is noticed. */
+  sig?: string;
+}
+
+/** A skeleton for the model. Absent on a model that has none (and then nothing about it changes). */
+export interface Rig {
+  template: 'bip29' | 'custom';
+  bones: Bone[];
+  /** Per visible body (by id): the weights of its generated mesh. */
+  bind?: Record<string, RigBind>;
+  /** A preview pose: degrees about each bone's local x, y, z, by bone id. Exports always leave in the rest pose. */
+  pose?: Record<string, [number, number, number]>;
+}
