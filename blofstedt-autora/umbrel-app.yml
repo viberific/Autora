@@ -208,11 +208,12 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  The 3D window can put a skeleton inside a model and move it. Add one to
-  what you have built — the 29-bone skeleton is fitted to your model's own
-  height, and its bones are named the same as the characters in Little-Farm —
-  then bind it with one click, pose the bones, and export a GLB that carries
-  the skeleton and the skin, so a game can play an animation on it. Editing
-  the model after binding marks the bind stale instead of quietly using the
-  old weights. Exporting a model with no skeleton writes exactly the file it
-  wrote before.
+  Lebrel is a provider now, with one key for everything it serves. Add it in
+  Settings, paste a leb_live_ key, and its models are in the picker: Lebrel's
+  own uncensored edition first, then the routed models it prices — DeepSeek,
+  Kimi, Qwen and GLM. The prices are Lebrel's published rates and are what
+  Usage counts with, including its peak hours on DeepSeek V4 Pro, where a
+  weekday turn bills at double as Lebrel bills it. Lebrel publishes no
+  per-token price for its own edition, so those turns are counted and marked
+  unpriced instead of billed at a guess, and routed models show no context
+  figure because Lebrel publishes none.
