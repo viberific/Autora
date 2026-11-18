@@ -4,7 +4,7 @@
  */
 
 import { Bone, Rig } from '../types';
-import { autoBind, makeRig, modelBox, moveBoneHead, nextBoneId } from '../utils/rig';
+import { autoBind, makeRig, modelBox, moveBoneHead, nextBoneId, shoulderReach } from '../utils/rig';
 import { Doc } from './doc';
 import { fail } from './errors';
 
@@ -48,8 +48,27 @@ export function rigAdd(doc: Doc, a: { template?: string; replace?: boolean }): R
   const template = a.template === undefined ? 'bip29' : a.template;
   if (template !== 'bip29' && template !== 'custom') return fail('template must be "bip29" or "custom".');
   if (doc.rig && !a.replace) return fail('This model already has a skeleton.', 'Pass replace: true to start over (its weights are lost).');
-  const rig = makeRig(template, modelBox(doc.bodies));
-  return { doc: { ...doc, rig }, result: { template, bones: rig.bones.length, note: 'Fitted to the model\'s height and centre. rig_bind ties the shapes to it.' } };
+  const box = modelBox(doc.bodies);
+  const { rig, fit } = makeRig(template, box, template === 'bip29' ? shoulderReach(doc.bodies, box, (box.min.x + box.max.x) / 2) : null);
+  const mm = (n: number) => Math.round(n);
+  const centre = toModel(fit.centre);
+  const result: Record<string, any> = {
+    template,
+    bones: rig.bones.length,
+    centre: { x: mm(centre.x), y: mm(centre.y), z: mm(centre.z) },
+    height_mm: mm(fit.height),
+  };
+  if (template === 'bip29') {
+    result.arm_span_mm = mm(fit.armSpan);
+    result.width_at_shoulders_mm = mm(fit.shoulderWidth);
+    result.note = `Legs, spine and head fitted to the model's height (${mm(fit.height)} mm) and centred on x ${mm(centre.x)}, y ${mm(centre.y)}; the arms follow the model's real width at shoulder height, giving an arm span of ${mm(fit.armSpan)} mm. rig_bind ties the shapes to it.`;
+    if (fit.narrow) {
+      result.warning = `The model is only ${mm(fit.shoulderWidth)} mm wide at shoulder height, against ${mm(fit.height)} mm tall: it is not in a T-pose (arms down or held in). The arm bones were squeezed to that width and will sit inside the body, so binding will not bend the arms cleanly. Pose the model with its arms straight out, or move the arm bones by hand with rig_bone_set, before rig_bind.`;
+    }
+  } else {
+    result.note = 'One root bone, at the model\'s centre. rig_bind ties the shapes to it.';
+  }
+  return { doc: { ...doc, rig }, result };
 }
 
 export function rigBoneSet(doc: Doc, a: { id?: string; name?: string; head?: unknown; tail?: unknown; parent?: string; move_children?: boolean }): RigOutcome {

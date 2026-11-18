@@ -156,5 +156,45 @@ const oldGlb = await glbOf(om, { rig: false });
 check(!oldGlb.json.skins, 'and exports with no skin');
 check(!(await om.execute('export', { format: 'glb', rig: true })).ok, 'rig:true without a skeleton is refused plainly');
 
+// ---- 7. the fit reads the mesh, it does not assume a T-pose ----------------------------------------------------
+const spanOf = (rig) => {
+  const tips = rig.bones.filter((b) => /Finger\d1$/.test(b.name)).map((b) => b.tail.x);
+  return Math.max(...tips) - Math.min(...tips);
+};
+{
+  // Arms hanging down, and the whole figure off to one side: 760 mm wide, 1800 tall.
+  const narrow = new Engine();
+  const ox = 125;
+  await run(narrow, 'shape_add', { kind: 'box', name: 'Legs', x: ox, y: 0, width: 240, depth: 160, height: 880 });
+  await run(narrow, 'shape_add', { kind: 'box', name: 'Torso', x: ox, y: 0, width: 380, depth: 220, height: 640, elevation: 880 });
+  await run(narrow, 'shape_add', { kind: 'box', name: 'Arm L', x: ox + 285, y: 0, width: 95, depth: 110, height: 620, elevation: 880 });
+  await run(narrow, 'shape_add', { kind: 'box', name: 'Arm R', x: ox - 285, y: 0, width: 95, depth: 110, height: 620, elevation: 880 });
+  await run(narrow, 'shape_add', { kind: 'box', name: 'Head', x: ox, y: 0, width: 200, depth: 200, height: 280, elevation: 1520 });
+  const r = (await run(narrow, 'rig_add', { template: 'bip29' })).result;
+  const rg = (await run(narrow, 'rig_get', {})).result.rig;
+  const meshWidth = 665;
+  const span = spanOf(rg);
+  const pelvis = rg.bones.find((b) => b.name === 'bip Pelvis');
+  check(span <= meshWidth + 20, `arms-down mesh: arm span ${span} mm does not exceed the mesh width ${meshWidth} mm by more than 20 (not ${(0.5 * 1800 * 2)} from the height)`);
+  check(Math.abs(pelvis.head.x - ox) < 1, `arms-down mesh: pelvis sits on the mesh's centre (x ${pelvis.head.x}, wanted ${ox})`);
+  check(typeof r.warning === 'string' && /not in a T-pose/.test(r.warning), 'arms-down mesh: the reply warns it is not a T-pose');
+  check(r.centre && Math.abs(r.centre.x - ox) < 1 && Math.abs(r.arm_span_mm - span) < 1, `the reply states the centre (${JSON.stringify(r.centre)}) and arm span (${r.arm_span_mm})`);
+}
+{
+  // A true T-pose: arms out as wide as the figure is tall.
+  const tp = new Engine();
+  await run(tp, 'shape_add', { kind: 'box', name: 'Legs', x: 0, y: 0, width: 240, depth: 160, height: 880 });
+  await run(tp, 'shape_add', { kind: 'box', name: 'Torso', x: 0, y: 0, width: 380, depth: 220, height: 640, elevation: 880 });
+  await run(tp, 'shape_add', { kind: 'box', name: 'Arms', x: 0, y: 0, width: 1800, depth: 110, height: 110, elevation: 1330 });
+  await run(tp, 'shape_add', { kind: 'box', name: 'Head', x: 0, y: 0, width: 200, depth: 200, height: 280, elevation: 1520 });
+  const r = (await run(tp, 'rig_add', { template: 'bip29' })).result;
+  const rg = (await run(tp, 'rig_get', {})).result.rig;
+  const span = spanOf(rg);
+  const pelvis = rg.bones.find((b) => b.name === 'bip Pelvis');
+  check(Math.abs(span - 1800) < 20, `T-pose mesh: arm span ${span} mm matches the mesh's 1800`);
+  check(Math.abs(pelvis.head.x) < 1 && Math.abs(pelvis.head.y) < 1, 'T-pose mesh: pelvis at x 0, y 0');
+  check(r.warning === undefined, 'T-pose mesh: no warning');
+}
+
 console.log(failed ? `\n${failed} check(s) FAILED` : '\nall checks passed');
 process.exit(failed ? 1 : 0);

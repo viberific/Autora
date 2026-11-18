@@ -74,21 +74,95 @@ export function modelBox(bodies: Body3D[]): THREE.Box3 {
 
 const roundMm = (n: number) => Math.round(n * 100) / 100;
 
-/** A skeleton of the given template, fitted to the box: as tall as the model, standing on its lowest point, centred on it. */
-export function makeRig(template: 'bip29' | 'custom', box: THREE.Box3): Rig {
+/** The shoulder line of the template, as a fraction of height. */
+const SHOULDER = 0.79;
+
+/**
+ * How far the model actually reaches left and right of `cx` (mm) around shoulder height, or null when nothing is there. Triangle
+ * edges are clipped to a band around the shoulders, so a coarse mesh with no vertex at that height still counts.
+ */
+export function shoulderReach(bodies: Body3D[], box: THREE.Box3, cx: number): { left: number; right: number } | null {
+  const h = Math.max(1, box.max.y - box.min.y);
+  const lo = box.min.y + (SHOULDER - 0.05) * h;
+  const hi = box.min.y + (SHOULDER + 0.05) * h;
+  let minX = Infinity;
+  let maxX = -Infinity;
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const edge = (p: THREE.Vector3, q: THREE.Vector3) => {
+    const y0 = Math.min(p.y, q.y);
+    const y1 = Math.max(p.y, q.y);
+    if (y1 < lo || y0 > hi) return;
+    const at = (y: number) => (q.y === p.y ? p.x : p.x + ((q.x - p.x) * (y - p.y)) / (q.y - p.y));
+    for (const y of [Math.max(lo, y0), Math.min(hi, y1)]) {
+      const x = q.y === p.y ? p.x : at(y);
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+    }
+    if (q.y === p.y) { minX = Math.min(minX, q.x); maxX = Math.max(maxX, q.x); }
+  };
+  for (const body of bodies) {
+    if (!body.visible) continue;
+    const g = buildBodyGeometry(body);
+    if (!g) continue;
+    if (body.frame) g.applyMatrix4(frameMatrix(body.frame));
+    const pos = g.getAttribute('position');
+    const idx = g.getIndex();
+    const n = idx ? idx.count : pos.count;
+    const vertex = (i: number, out: THREE.Vector3) => out.fromBufferAttribute(pos, idx ? idx.getX(i) : i);
+    const c = new THREE.Vector3();
+    for (let i = 0; i + 2 < n; i += 3) {
+      vertex(i, a); vertex(i + 1, b); vertex(i + 2, c);
+      edge(a, b); edge(b, c); edge(c, a);
+    }
+  }
+  return Number.isFinite(minX) ? { left: maxX - cx, right: cx - minX } : null;
+}
+
+/** What makeRig did with the arms: the centre it used and the span it gave them, for the caller to show. */
+export interface RigFit {
+  /** The scene-space centre the skeleton stands on: x and z of the model's box, y its lowest point. */
+  centre: V3;
+  height: number;
+  /** Fingertip to fingertip, mm. */
+  armSpan: number;
+  /** The model's own width at shoulder height, mm. */
+  shoulderWidth: number;
+  /** True when that width is far short of a T-pose's (arms down or held in). */
+  narrow: boolean;
+}
+
+/** Below this share of the height, the width at the shoulders is not a T-pose (which is about as wide as it is tall). */
+export const T_POSE_SPAN = 0.75;
+
+/**
+ * A skeleton of the given template, fitted to the box: as tall as the model, standing on its lowest point, centred on it. The
+ * arms follow how far the model really reaches at shoulder height (`reach`), not a span worked out from the height.
+ */
+export function makeRig(template: 'bip29' | 'custom', box: THREE.Box3, reach?: { left: number; right: number } | null): { rig: Rig; fit: RigFit } {
   const h = Math.max(1, box.max.y - box.min.y);
   const cx = (box.min.x + box.max.x) / 2;
   const cz = (box.min.z + box.max.z) / 2;
-  const at = (f: V3): V3 => [roundMm(cx + f[0] * h), roundMm(box.min.y + f[1] * h), roundMm(cz + f[2] * h)];
+  // The template's arm chain ends 0.5 h out; scale it so the fingertips land on the model's real edge on each side.
+  const minReach = 0.05 * h;
+  const kL = reach ? Math.max(minReach, reach.left) / (0.5 * h) : 1;
+  const kR = reach ? Math.max(minReach, reach.right) / (0.5 * h) : 1;
+  const ARM = /^bip [LR] (Clavicle|UpperArm|Forearm|Hand|Finger)/;
+  const at = (f: V3, k = 1): V3 => [roundMm(cx + f[0] * h * k), roundMm(box.min.y + f[1] * h), roundMm(cz + f[2] * h)];
+  const centre: V3 = [roundMm(cx), roundMm(box.min.y), roundMm(cz)];
   if (template === 'custom') {
-    return { template, bones: [{ id: 'bone-1', name: 'Root', parentId: null, head: at([0, 0.5, 0]), tail: at([0, 0.6, 0]) }] };
+    return { rig: { template, bones: [{ id: 'bone-1', name: 'Root', parentId: null, head: at([0, 0.5, 0]), tail: at([0, 0.6, 0]) }] }, fit: { centre, height: h, armSpan: 0, shoulderWidth: reach ? reach.left + reach.right : 0, narrow: false } };
   }
   const rows = bip29Table();
   const idOf = new Map(rows.map((r, i) => [r[0], `bone-${i + 1}`]));
-  return {
-    template,
-    bones: rows.map(([name, parent, head, tail], i) => ({ id: `bone-${i + 1}`, name, parentId: parent ? idOf.get(parent)! : null, head: at(head), tail: at(tail) })),
-  };
+  const bones: Bone[] = rows.map(([name, parent, head, tail], i) => {
+    const k = ARM.test(name) ? (name.startsWith('bip L') ? kL : kR) : 1;
+    return { id: `bone-${i + 1}`, name, parentId: parent ? idOf.get(parent)! : null, head: at(head, k), tail: at(tail, k) };
+  });
+  const tips = bones.filter((b) => /Finger\d1$/.test(b.name)).map((b) => b.tail[0]);
+  const armSpan = roundMm(Math.max(...tips) - Math.min(...tips));
+  const shoulderWidth = reach ? roundMm(reach.left + reach.right) : roundMm(h);
+  return { rig: { template, bones }, fit: { centre, height: h, armSpan, shoulderWidth, narrow: shoulderWidth < T_POSE_SPAN * h } };
 }
 
 export const nextBoneId = (rig: Rig): string => {
