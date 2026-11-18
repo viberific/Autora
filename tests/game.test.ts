@@ -16,7 +16,7 @@ process.env.AUTORA_STATE_DIR = dir;
 const express = (await import("express")).default;
 const game = await import("../server/gamedesk");
 const { gameSPECS } = await import("../server/specs/game");
-const { windowOff, toolSettings, installedWindows } = await import("../server/tools");
+const { windowOff, toolSettings } = await import("../server/tools");
 const { loadedFamilies, withoutUnloaded } = await import("../server/toolload");
 const { saveArtifact } = await import("../server/artifacts");
 const catalog = (await import("../server/game-catalog.json")).default as any;
@@ -52,8 +52,7 @@ await test("the tools are in a family of their own, brought in by the person's w
 await test("the Tools page switch turns them off", () => {
   assert.equal(windowOff("game_look"), false);
   assert.equal(windowOff("game_look", { ...toolSettings(), game: { enabled: false } }), true);
-  // PDF tools follow whether the PDF editor is built here, never the game switch.
-  assert.equal(windowOff("pdf_read", { ...toolSettings(), game: { enabled: false } }), !installedWindows().pdf);
+  assert.equal(windowOff("pdf_read", { ...toolSettings(), game: { enabled: false } }), false);
 });
 
 // ---------------------------------------------------------------- catalog --

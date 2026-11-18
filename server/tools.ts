@@ -381,28 +381,23 @@ export async function groupStates(): Promise<GroupState[]> {
 }
 
 /** A tool that lives in a built-in window the Tools page has switched off. */
-/** Whether this server has the editor for a hosted capability built in: Music always does. */
+/** Whether this server has the editor for a hosted capability built in: PDF, Video and Music always do. */
 function builtFor(id: Capability["id"]): boolean {
   if (id === "cad") return cadAvailable();
   if (id === "game") return gameAvailable();
   if (id === "photo") return photoAvailable();
   if (id === "office") return Boolean(officeDir());
-  // PDF and Video are fetched editors: without their built page the tools would open a white frame (video_open stalled
-  // for 90 s, then said "did not start"), so a server that never built them does not offer them.
-  if (id === "pdf") return editorBuilt("spectra-editor") && spectraAvailable().ok;
-  if (id === "video") return editorBuilt("opencut-editor");
   return true;
 }
-
-const editorBuilt = (editor: string) => fs.existsSync(path.join(process.cwd(), "dist", editor, "index.html"));
 
 /** Which Tools page windows this server has an editor for. A window that is not installed cannot be turned on, so the pages say
     "not installed" rather than "switched off" (the chooser, the new-file and load routes). */
 export function installedWindows(): Record<string, boolean> {
   const office = builtFor("office");
   // PDF and Video are fetched editors (docs/MAP.md): a server that never built them opens a white "Not Found" frame.
+  const built = (editor: string) => fs.existsSync(path.join(process.cwd(), "dist", editor, "index.html"));
   // The PDF window needs its page and its engine: the page alone opens on tools that cannot open a file.
-  return { pdf: builtFor("pdf"), video: builtFor("video"), studio: true, pages: office, sheets: office, slides: office, cad: builtFor("cad"), game: builtFor("game"), photo: builtFor("photo") };
+  return { pdf: built("spectra-editor") && spectraAvailable().ok, video: built("opencut-editor"), studio: true, pages: office, sheets: office, slides: office, cad: builtFor("cad"), game: builtFor("game"), photo: builtFor("photo") };
 }
 
 export function windowOff(name: string, settings: ToolSettings = toolSettings()): boolean {

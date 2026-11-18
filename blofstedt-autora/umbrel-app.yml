@@ -215,8 +215,8 @@ releaseNotes: >-
   the canvas, rather than waiting off-screen. The left menu starts as a
   strip of icons on narrower screens, and the CPU, memory and disk bars show
   only when one is running hot. The Tools page says when an editor is not
-  installed on this server, and Video and PDF tools are no longer offered
-  then. Slack is no longer suggested or listed, and integration suggestions
+  installed on this server, and opening Video without its editor says so at
+  once instead of stalling for a minute and a half. Slack is no longer suggested or listed, and integration suggestions
   match whole words only. A refusal because something is the person's to
   write is no longer reported to the agent as a failure. The agent's game
   play-test now actually shows the game instead of a black screen.

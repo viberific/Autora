@@ -704,7 +704,7 @@ await test("in guide the agent formats and structures but may not write; refusal
     const refused = await run("panacea_doc", { ops: [{ op: "format", id: title!.id, set: { align: "left" } }, op] });
     assert.equal(refused.ok, false);
     assert.match(refused.summary, /theirs to write/);
-    assert.equal(refused.held, true, "the person's words are theirs: held, so the loop does not call it a failure");
+    assert.equal((refused as { held?: boolean }).held, true, "the person's words are theirs: held, so the loop does not call it a failure");
   }
   assert.equal(JSON.stringify((await docOf()).doc), before, "a refused call is all-or-nothing: even its allowed first op was undone");
 });

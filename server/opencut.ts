@@ -238,6 +238,10 @@ export async function command(session: string, name: string, args: Record<string
   if (opts.open === false && !(win(session).open && isReady(win(session)))) throw new Error("The video window is not open.");
   setOpen(session, true);
   const w = win(session);
+  // A server that never built the editor cannot start it: say so at once, not after a minute and a half of waiting.
+  if (!isReady(w) && !fs.existsSync(path.join(process.cwd(), "dist", "opencut-editor", "index.html"))) {
+    throw new Error("Autora Video is not installed on this server (its editor was not built), so there is nothing to open. Say so to the person.");
+  }
   // The frame loads after the window opens: give it time to say it is up, unless it has said why it cannot.
   for (let waited = 0; !isReady(w) && !w.problem && waited < START_MS; waited += 150) await sleep(150);
   if (w.problem && !isReady(w)) {
