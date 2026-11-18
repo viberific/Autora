@@ -10,6 +10,12 @@ import { fail } from './errors';
 
 type V3 = [number, number, number];
 
+/** What a rig tool hands back: the changed document and what to tell the caller. */
+export interface RigOutcome {
+  doc: Doc;
+  result: Record<string, any>;
+}
+
 // The tools speak the model's axes (x right, y away, z up); the rig is kept in scene space (x right, y up, z toward you).
 const toScene = (p: { x: number; y: number; z?: number }): V3 => [p.x, p.z ?? 0, -p.y];
 const toModel = (p: V3) => ({ x: p[0], y: -p[2] === 0 ? 0 : -p[2], z: p[1] });
@@ -38,7 +44,7 @@ export function rigGet(doc: Doc) {
   };
 }
 
-export function rigAdd(doc: Doc, a: { template?: string; replace?: boolean }) {
+export function rigAdd(doc: Doc, a: { template?: string; replace?: boolean }): RigOutcome {
   const template = a.template === undefined ? 'bip29' : a.template;
   if (template !== 'bip29' && template !== 'custom') return fail('template must be "bip29" or "custom".');
   if (doc.rig && !a.replace) return fail('This model already has a skeleton.', 'Pass replace: true to start over (its weights are lost).');
@@ -46,7 +52,7 @@ export function rigAdd(doc: Doc, a: { template?: string; replace?: boolean }) {
   return { doc: { ...doc, rig }, result: { template, bones: rig.bones.length, note: 'Fitted to the model\'s height and centre. rig_bind ties the shapes to it.' } };
 }
 
-export function rigBoneSet(doc: Doc, a: { id?: string; name?: string; head?: unknown; tail?: unknown; parent?: string; move_children?: boolean }) {
+export function rigBoneSet(doc: Doc, a: { id?: string; name?: string; head?: unknown; tail?: unknown; parent?: string; move_children?: boolean }): RigOutcome {
   let rig = needRig(doc);
   if (a.id === undefined) {
     // A new bone, hung off `parent` (or a root bone).
@@ -73,7 +79,7 @@ export function rigBoneSet(doc: Doc, a: { id?: string; name?: string; head?: unk
   return { doc: { ...doc, rig }, result: { bone: rig.bones.find((b) => b.id === bone.id)!.id, note: 'Weights are unchanged: rig_bind again to recompute them for the new positions.' } };
 }
 
-export function rigBind(doc: Doc) {
+export function rigBind(doc: Doc): RigOutcome {
   const rig = needRig(doc);
   if (!rig.bones.length) return fail('The skeleton has no bones.');
   const out = autoBind(doc.bodies, rig);
@@ -81,7 +87,7 @@ export function rigBind(doc: Doc) {
   return { doc: { ...doc, rig: out.rig }, result: { bodies: out.bodies, vertices: out.vertices, bones: rig.bones.length } };
 }
 
-export function rigPose(doc: Doc, a: { bone?: string; x?: number; y?: number; z?: number; reset?: boolean }) {
+export function rigPose(doc: Doc, a: { bone?: string; x?: number; y?: number; z?: number; reset?: boolean }): RigOutcome {
   const rig = needRig(doc);
   if (a.reset) {
     if (a.bone === undefined) return { doc: { ...doc, rig: { ...rig, pose: undefined } }, result: { reset: 'all' } };

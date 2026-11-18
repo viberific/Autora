@@ -20,7 +20,7 @@ import {
   Trash2,
   Ungroup,
 } from 'lucide-react';
-import { Body3D, EdgeSel, MATERIAL_PRESETS, ShapeGroup, SWATCHES } from '../types';
+import { Body3D, EdgeSel, MATERIAL_PRESETS, Rig, ShapeGroup, SWATCHES } from '../types';
 import { listFeatures } from '../utils/edges';
 import { getPolygonSignedArea } from '../utils/geometry';
 import { exportGLB, exportJSON, exportOBJ, exportSTL } from '../utils/exporters';
@@ -49,6 +49,8 @@ interface SidebarProps {
   section?: Tab;
   /** Inside Autora: bring the picked shapes (or everything) into the chat's game, with physics or without. */
   onSendToGame?: (physics: 'none' | 'falls' | 'fixed') => void;
+  /** The model's skeleton: with one, the GLB carries it (the shapes bound to it are skinned). */
+  rig?: Rig;
 }
 
 export type Tab = 'properties' | 'material' | 'export';
@@ -171,6 +173,7 @@ export default function Sidebar({
   onShowAll,
   section,
   onSendToGame,
+  rig,
 }: SidebarProps) {
   const [gamePhysics, setGamePhysics] = useState<'none' | 'falls' | 'fixed'>('falls');
   const [tabState, setTab] = useState<Tab>('properties');
@@ -182,7 +185,8 @@ export default function Sidebar({
 
   const runExport = (fn: (b: Body3D[]) => boolean | void) => {
     const ok = fn(bodies);
-    setExportNote(ok === false ? 'Nothing visible to export.' : null);
+    const stale = rig?.bind ? Object.values(rig.bind).filter((x) => x.stale).length : 0;
+    setExportNote(ok === false ? 'Nothing visible to export.' : stale ? `${stale === 1 ? '1 shape changed' : `${stale} shapes changed`} after it was bound, so it went out without weights. Bind again in the Rig card.` : null);
   };
 
   return (
@@ -425,7 +429,7 @@ export default function Sidebar({
               >
                 <Download size={15} /> Export STL
               </button>
-              <button type="button" onClick={() => runExport((b) => exportGLB(b, { groups }))} disabled={bodies.length === 0} className={secondaryButton}>
+              <button type="button" onClick={() => runExport((b) => exportGLB(b, { groups, rig }))} disabled={bodies.length === 0} className={secondaryButton}>
                 <Download size={15} /> Export GLB (games)
               </button>
               <button type="button" onClick={() => runExport(exportOBJ)} disabled={bodies.length === 0} className={secondaryButton}>

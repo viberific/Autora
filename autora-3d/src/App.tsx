@@ -32,6 +32,8 @@ import { DEFAULT_BRUSH, type Brush } from './utils/sculpt';
 import { DEFAULT_GROOM, type GroomBrush } from './utils/hair';
 import ConfirmDeleteModal from './components/ConfirmDeleteModal';
 import { useHistory } from './hooks/useHistory';
+import * as rigOps from './core/rigOps';
+import { moveBoneHead } from './utils/rig';
 import { defaultSession } from './utils/repeat';
 import { thumbnailUrl } from './utils/thumbnail';
 import { loadShared, mergeShared, saveShared, SHARED_KEY } from './utils/sharedLibrary';
@@ -195,6 +197,8 @@ export default function App() {
   const [hint, setHint] = useState('');
   /** Which bar menu is open (one at a time). */
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  /** The bone picked in the Rig card or the view. */
+  const [boneId, setBoneId] = useState<string | null>(null);
   const [brush, setBrush] = useState<Brush>(DEFAULT_BRUSH);
   const [groomBrush, setGroomBrush] = useState<GroomBrush>(DEFAULT_GROOM);
   const [groomOn, setGroomOn] = useState(false);
@@ -300,7 +304,7 @@ export default function App() {
     setDoc: (d) => {
       const next = settle(d);
       // The same model again (the agent's hand made it here already): not a step of its own.
-      const same = (x: Doc) => JSON.stringify([x.bodies, x.groups, x.repeats, x.library]);
+      const same = (x: Doc) => JSON.stringify([x.bodies, x.groups, x.repeats, x.library, x.rig]);
       if (same(next) === same(docRef.current)) return;
       history.commit();
       setDocRaw(next);
@@ -798,7 +802,8 @@ export default function App() {
 
   const handleClearWorkspace = () => {
     if (window.confirm('Remove every shape and start from an empty workspace?')) {
-      setDoc({ bodies: [], groups: [], repeats: [] });
+      setDoc({ bodies: [], groups: [], repeats: [], rig: undefined });
+      setBoneId(null);
       selectOnly(null);
       setIsolatedIds(null);
       notify('Workspace cleared. Press ⌘Z to bring it back.');
@@ -954,6 +959,7 @@ export default function App() {
   }, [notify]);
 
   const sidebarProps = {
+    rig: doc.rig,
     onSendToGame: embedded()
       ? (physics: 'none' | 'falls' | 'fixed') => {
           const picked = selectedBodyIds.length ? selectedBodyIds : selectedBodyId ? [selectedBodyId] : [];
@@ -1007,7 +1013,30 @@ export default function App() {
   const groomable = selectedBodies.length === 1 && !!selectedBodies[0].hair && !selectedBodies[0].frame;
   const grooming = openMenu === 'hair' && groomOn && groomable ? { bodyId: selectedBodies[0].id, brush: groomBrush } : null;
 
+  /** The Rig card's own commands: the same operations the agent calls, so a rig made here and one made by the agent are one thing. */
+  const rigPose = (id: string, axis: 0 | 1 | 2, degrees: number) => {
+    const now = docRef.current.rig?.pose?.[id] ?? [0, 0, 0];
+    const next = [...now] as [number, number, number];
+    next[axis] = degrees;
+    void runOp((d) => rigOps.rigPose(d, { bone: id, x: next[0], y: next[1], z: next[2] }));
+  };
+  /** A joint dragged in the view: its head moves and its branch follows. Positions are scene mm. */
+  const moveBone = useCallback((id: string, head: [number, number, number]) => {
+    const d = docRef.current;
+    if (d.rig) setDocRaw(settle({ ...d, rig: moveBoneHead(d.rig, id, head, true) }));
+  }, [setDocRaw]);
+
   const railProps: RailProps = {
+    rig: doc.rig,
+    boneId,
+    onBone: setBoneId,
+    onRigAdd: () => { if (runOp((d) => rigOps.rigAdd(d, {}))) setOpenMenu('rig'); },
+    onRigBind: () => {
+      const r = runOp((d) => rigOps.rigBind(d));
+      if (r) notify(`${r.vertices.toLocaleString()} vertices, ${r.bodies} ${r.bodies === 1 ? 'body' : 'bodies'} bound.`);
+    },
+    onRigPose: rigPose,
+    onRigReset: () => void runOp((d) => rigOps.rigPose(d, { reset: true })),
     openId: openMenu,
     setOpenId: setOpenMenu,
     brush,
@@ -1159,6 +1188,11 @@ export default function App() {
                   sculpt={sculpting}
                   onSculpt={(id, positions) => void runOp((d) => ops.applySculpt(d, { id, positions }))}
                   look={doc.look}
+                  rig={doc.rig}
+                  rigShown={openMenu === 'rig'}
+                  boneId={boneId}
+                  onBone={setBoneId}
+                  onMoveBone={moveBone}
                   groom={grooming}
                   onGroom={(id, stroke, mirror) => void runOp((d) => ops.groomHair(d, { id, stroke, mirror }))}
                 />
