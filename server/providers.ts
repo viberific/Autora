@@ -47,6 +47,10 @@ export interface ModelSpec {
       used; its turns are counted and marked unpriced rather than billed at a
       figure nobody checked. */
   priced?: boolean;
+  /** The multiple this model bills at inside its vendor's published peak
+      hours. Only Lebrel prices on a schedule today (see lebrelPeak); absent
+      means the price holds all day. */
+  peak?: number;
 }
 
 interface ProviderSpec {
@@ -269,6 +273,42 @@ export const PROVIDERS: ProviderSpec[] = [
     ],
   },
   {
+    id: "lebrel",
+    label: "Lebrel",
+    kind: "openai",
+    note: "Attested routing to open-weight models: every request ends inside Intel TDX hardware and every answer carries a signed receipt registered on Solana. One key serves every model, Lebrel's own uncensored edition included.",
+    envKeys: ["LEBREL_API_KEY"],
+    keyHint: "leb_live_...",
+    keysUrl: "https://lebrel.ai/dashboard#keys",
+    baseUrl: "https://attested.lebrel.ai/v1",
+    defaultModel: "lebrel/deepseek-v4.1-flash-uncensored",
+    listable: true,
+    openEnded: true,
+    // Lebrel publishes no balance endpoint, so none is claimed for it.
+    models: [
+      /* Lebrel's own edition is unpriced on purpose: it publishes no
+         per-token rate for it (a free window each day, and a drop price it
+         publishes separately outside that), so it is counted and marked
+         unpriced rather than billed at a figure nobody quoted. Its window
+         is the one its docs give. Routed models below publish no window at
+         all, so theirs is left unset rather than borrowed. */
+      { window: 1_048_544, id: "lebrel/deepseek-v4.1-flash-uncensored", label: "DeepSeek V4.1 Flash - Lebrel Uncensored", input: 0, output: 0, priced: false, note: "Lebrel's own uncensored edition on its own attested GPUs; unpriced, not free" },
+      // Prices read off GET /v1/models (lebrel.pricing, microUSD per million
+      // tokens) on 2026-11-18; a fifth of each is Lebrel's route fee, already
+      // in the figure. v4-pro is listed at its off-peak rate: it carries a
+      // peak schedule, which `peak` below applies.
+      { id: "deepseek/deepseek-v4-pro", label: "DeepSeek V4 Pro", input: 0.792, output: 2.376, cachedInput: 0.0264, peak: 2, note: "Doubles in Lebrel's peak hours (weekdays 01-04 and 06-10 UTC)" },
+      { id: "deepseek/deepseek-v4.1-flash", label: "DeepSeek V4.1 Flash", input: 0.15, output: 0.6, cachedInput: 0.006 },
+      { id: "moonshotai/kimi-k3", label: "Kimi K3", input: 3.3, output: 16.5, cachedInput: 0.33 },
+      { id: "moonshotai/kimi-k3.1-pro", label: "Kimi K3.1 Pro", input: 1.95, output: 9.75, cachedInput: 0.195 },
+      { id: "qwen/qwen3.8-flash", label: "Qwen 3.8 Flash", input: 0.15, output: 0.49, cachedInput: 0.016 },
+      { id: "qwen/qwen3.8-max", label: "Qwen 3.8 Max", input: 2, output: 6, cachedInput: 0.25 },
+      { id: "qwen/qwen4-max", label: "Qwen 4 Max", input: 1.4, output: 4.2, cachedInput: 0.07 },
+      { id: "z-ai/glm-5.3", label: "GLM-5.3", input: 1.26, output: 3.96, cachedInput: 0.234 },
+      { id: "z-ai/glm-5.3-flash", label: "GLM-5.3 Flash", input: 0.17, output: 0.56, cachedInput: 0.034 },
+    ],
+  },
+  {
     id: "local",
     label: "Local server",
     kind: "openai",
@@ -294,7 +334,9 @@ export const AUTO_ROUTERS = ["orcarouter", "openrouter"];
 /** What a call on this provider costs at list price, in $/Mtok added
     input+output, for the model Automatic would call on it (the one picked for
     that vendor, else its default, else the first listed). Null when the provider has no priced model -- which is
-    how a local server says "I cost nothing you can predict". */
+    how a local server says "I cost nothing you can predict", and how an
+    unpriced default (Lebrel's own edition) says "nobody has quoted this",
+    since a zero here would win the price race and then bill nothing. */
 export function autoPriceOf(providerId: string, chosen?: string): number | null {
   const spec = providerSpec(providerId);
   if (!spec) return null;
@@ -302,7 +344,7 @@ export function autoPriceOf(providerId: string, chosen?: string): number | null 
      default only when none is picked (or the picked one is not in the list). */
   const m = (chosen ? spec.models.find((x) => x.id === chosen) : undefined) ??
     spec.models.find((x) => x.id === spec.defaultModel) ?? spec.models[0];
-  if (!m || typeof m.input !== "number" || typeof m.output !== "number") return null;
+  if (!m || m.priced === false || typeof m.input !== "number" || typeof m.output !== "number") return null;
   return m.input + m.output;
 }
 
@@ -422,6 +464,21 @@ function deepseekOffPeak(at: Date): boolean {
 }
 
 /**
+ * Lebrel's peak hours: weekdays 01:00-04:00 and 06:00-10:00 UTC, when the
+ * models carrying a peak schedule bill at their multiple (2x for DeepSeek V4
+ * Pro). Taken from the schedule the model listing itself publishes
+ * (lebrel.pricing.peak: multiplier 200%, weekdays 1-5, those two windows),
+ * read 2026-11-18. Chinese public holidays are off-peak and not tracked, so a
+ * holiday turn inside these hours is overstated, never under.
+ */
+function lebrelPeak(at: Date): boolean {
+  const day = at.getUTCDay();
+  if (day === 0 || day === 6) return false;
+  const hour = at.getUTCHours();
+  return (hour >= 1 && hour < 4) || (hour >= 6 && hour < 10);
+}
+
+/**
  * What a turn cost, in dollars.
  *
  * An unknown model prices at zero rather than at a guess. A made-up number
@@ -463,7 +520,11 @@ export function costParts(
   // which say so in cachedInput), a quarter more to write the five-minute cache and twice the price for the hour.
   const readPrice = spec.cachedInput !== undefined ? spec.cachedInput * (input / spec.input) : providerId === "anthropic" ? input * 0.1 : input;
   const writePrice = providerId === "anthropic" ? input * ((process.env.AUTORA_CACHE_TTL || "").trim() === "1h" ? 2 : 1.25) : input;
-  const scale = (providerId === "deepseek" && deepseekOffPeak(at) ? 0.5 : 1) / 1_000_000;
+  // What the hour does to the list price: DeepSeek halves it off-peak,
+  // Lebrel doubles it at peak. Both are multipliers on the same quoted rate.
+  const hourRate = providerId === "deepseek" && deepseekOffPeak(at) ? 0.5 : 1;
+  const peakRate = providerId === "lebrel" && spec.peak && lebrelPeak(at) ? spec.peak : 1;
+  const scale = (hourRate * peakRate) / 1_000_000;
   return {
     fresh: (inputTokens - read - write) * input * scale,
     cached: (read * readPrice + write * writePrice) * scale,
