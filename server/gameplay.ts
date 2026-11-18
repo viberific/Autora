@@ -103,7 +103,12 @@ export async function playPreview(
   files: Map<string, PreviewFile>,
   entry: string,
   steps: PlayStep[],
-  options: { width?: number; height?: number; cancelled?: () => boolean; onCancel?: (stop: () => void) => void } = {},
+  options: {
+    width?: number; height?: number; cancelled?: () => boolean; onCancel?: (stop: () => void) => void;
+    /** Files the game names on the editor's own origin (the engine's runtime: /gdevelop-editor/GDJS/Runtime/gd.js), which the
+        editor's preview page loads by absolute URL. Read-only static files, offered to the game by path and nothing else. */
+    runtime?: (pathname: string) => PreviewFile | null;
+  } = {},
 ): Promise<Played> {
   const width = Math.min(Math.max(Math.round(options.width ?? 800), 160), 1920);
   const height = Math.min(Math.max(Math.round(options.height ?? 600), 120), 1080);
@@ -117,8 +122,16 @@ export async function playPreview(
     await context.route("**/*", (route: Route) => {
       const url = new URL(route.request().url());
       // The game reaches its own files and nothing else: no network, no other origin.
-      if (url.origin !== ORIGIN) return void route.abort();
-      const found = files.get(decodeURIComponent(url.pathname));
+      const pathname = decodeURIComponent(url.pathname);
+      if (url.origin !== ORIGIN) {
+        /* The editor's preview page names its engine and its own files by absolute URL on the editor's origin (it always did, so
+           every play drew a black screen while frames ticked). Those two kinds of path are answered; any other request is not. */
+        const own = pathname.match(/\/preview\/(.+)$/);
+        const hit = options.runtime?.(pathname) ?? (own ? [...files.entries()].find(([key]) => key.endsWith(`/preview/${own[1]}`))?.[1] : undefined);
+        if (!hit) return void route.abort();
+        return void route.fulfill({ status: 200, body: hit.bytes, contentType: hit.type, headers: { "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" } });
+      }
+      const found = files.get(pathname);
       if (!found) return void route.fulfill({ status: 404, body: "" });
       return void route.fulfill({ status: 200, body: found.bytes, contentType: found.type, headers: { "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" } });
     });

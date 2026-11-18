@@ -150,6 +150,19 @@ const savedName = (session: string) => `game-${session}`;
 
 /** The editor, built into this server (npm run build): without it the tools are not offered. */
 const editorDir = (): string => path.join(process.cwd(), "dist", "gdevelop-editor");
+
+/** One file of the engine's runtime (GDJS), for the game played by game_play: only under /gdevelop-editor/GDJS/, and never outside it. */
+function engineFile(pathname: string): PreviewFile | null {
+  const prefix = "/gdevelop-editor/GDJS/";
+  if (!pathname.startsWith(prefix)) return null;
+  const root = path.join(editorDir(), "GDJS");
+  const file = path.resolve(root, pathname.slice(prefix.length));
+  if (!file.startsWith(root + path.sep)) return null;
+  try {
+    const type = file.endsWith(".js") ? "text/javascript" : file.endsWith(".json") ? "application/json" : "application/octet-stream";
+    return { bytes: fs.readFileSync(file), type, at: Date.now() };
+  } catch { return null; }
+}
 export const gameAvailable = (): boolean => fs.existsSync(path.join(editorDir(), "index.html"));
 
 /** A new game, as GDevelop makes an empty one: one scene, named, first to open. */
@@ -1347,7 +1360,7 @@ export async function runGameTool(session: string, name: string, args: Record<st
         const stale = preview.at < entry.changedAt ? ` The game was changed after this preview was made (${Math.round((entry.changedAt - preview.at) / 1000)} s later), so it is an earlier version: use fresh (the default) to play the current one.` : "";
         let played: Played;
         try {
-          played = await playPreview(preview.files, preview.entry, steps, { width: Number(args.width) || undefined, height: Number(args.height) || undefined, cancelled: hooks.cancelled, onCancel: hooks.onCancel });
+          played = await playPreview(preview.files, preview.entry, steps, { width: Number(args.width) || undefined, height: Number(args.height) || undefined, cancelled: hooks.cancelled, onCancel: hooks.onCancel, runtime: engineFile });
         } catch (err) {
           if (err instanceof PdfRenderError && err.code === "no-browser") return { ok: false, summary: `Playing the game needs a browser, and ${err.message.replace(/^.*?: /, "")}` };
           if (err instanceof PdfRenderError && err.code === "cancelled") return { ok: false, summary: "Stopped." };

@@ -491,6 +491,7 @@ const GAME = [
     "they decide, and you use exactly their words. There are no panels for camera, health, score, sound, particles or the like: they " +
     "are events you write, with no setting for a panel to move.",
   "  Saving. The game is saved as you go; the window's top bar (Autora Games, the game's name), on a desktop too, has Save, which keeps the GDevelop project in Artifacts as a .json named after the chat.",
+  "  Keys. A platformer jumps on Space and runs on the left and right arrows; ArrowUp does nothing for it (that is for ladders). A top-down object moves on all four arrows. To jump in a game_play script, press Space.",
   "  Playing the game. game_play starts the game in the window (the person sees it begin) and runs a copy in a browser of its own, with the keys, clicks and waits you give as a script " +
     "(press, hold, wait, click, shot), and brings back pictures of the screen, the errors the game threw, whether the screen changed, and how many frames it drew. Use it after you build " +
     "or change something and before you say it works: does it start, does it throw, does anything move when the keys are pressed. It needs the window open with its editor running to start the " +

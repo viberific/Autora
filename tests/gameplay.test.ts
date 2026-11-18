@@ -125,6 +125,22 @@ fetch("/api/sessions").then((r) => console.error("own origin answered " + r.stat
     assert.ok(out instanceof Error && /Stopped/.test(out.message), String(out));
     assert.ok(Date.now() - began < 12_000, `took ${Date.now() - began} ms`);
   });
+
+  await test("an editor preview that names its engine and files by absolute URL on the editor's origin still loads (it drew black before)", async () => {
+    const page = `<!doctype html><body><canvas id="c" width="400" height="200"></canvas>
+<script src="http://127.0.0.1:41999/gdevelop-editor/GDJS/Runtime/gd.js"></script>
+<script src="http://127.0.0.1:41999/api/game/s1/preview/game.js"></script>`;
+    const f = new Map<string, { bytes: Buffer; type: string }>([
+      ["/abc/preview/index.html", { bytes: Buffer.from(page), type: "text/html" }],
+      ["/abc/preview/game.js", { bytes: Buffer.from('console.error(typeof globalThis.__engine === "string" ? "engine " + __engine + " + game ran" : "no engine");'), type: "text/javascript" }],
+    ]);
+    const runtime = (pathname: string) => pathname === "/gdevelop-editor/GDJS/Runtime/gd.js" ? { bytes: Buffer.from('globalThis.__engine = "gd";'), type: "text/javascript" } : null;
+    const out = await playPreview(f, "/abc/preview/index.html", [], { width: 400, height: 200, runtime });
+    assert.ok(out.problems.some((p) => /engine gd \+ game ran/.test(p)), out.problems.join("|"));
+    // With no runtime to give, the engine's request is refused and the game says so rather than drawing nothing quietly.
+    const bare = await playPreview(f, "/abc/preview/index.html", [], { width: 400, height: 200 });
+    assert.ok(bare.problems.some((p) => /no engine/.test(p)), bare.problems.join("|"));
+  });
 }
 console.log(`gameplay: ${passed} passed`);
 setTimeout(() => process.exit(0), 50);

@@ -218,4 +218,5 @@ releaseNotes: >-
   installed on this server, and Video and PDF tools are no longer offered
   then. Slack is no longer suggested or listed, and integration suggestions
   match whole words only. A refusal because something is the person's to
-  write is no longer reported to the agent as a failure.
+  write is no longer reported to the agent as a failure. The agent's game
+  play-test now actually shows the game instead of a black screen.
