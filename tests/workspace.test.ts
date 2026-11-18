@@ -216,4 +216,12 @@ test("the room for work keeps clear of the work rail on whichever side of the ca
   assert.equal(withRail(null).width, 1004);
 });
 
+test("fitted work grows with a wide screen, up to a ceiling, and never past real size on a laptop", () => {
+  const small: WorkBox[] = [{ x: 0, y: 0, w: 400, h: 300 }];
+  assert.equal(fitWorkView(small, { width: 1440, height: 900 })!.zoom, 1);
+  assert.equal(fitWorkView(small, { width: 1000, height: 700 })!.zoom, 1);
+  assert.ok(Math.abs(fitWorkView(small, { width: 1920, height: 1080 })!.zoom - 1920 / 1440) < 1e-9);
+  assert.equal(fitWorkView(small, { width: 2560, height: 1440 })!.zoom, 1.6);
+});
+
 console.log(`\n${passed} passed`);

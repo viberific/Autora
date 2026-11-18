@@ -517,6 +517,10 @@ interface Outcome {
 
 class Refuse extends Error {}
 const refuse = (message: string): never => { throw new Refuse(message); };
+/** A refusal that is the person's decision (their words, their plan), not a mistake of the agent's: it comes back as `held`,
+    so the loop does not label it "this failed" or stop the call from being made again once they have said yes. */
+class Withheld extends Refuse {}
+const withhold = (message: string): never => { throw new Withheld(message); };
 
 /** Why the agent may not set a value, or null: its kind (`valueProblem`), or words that are the person's to write (`wordsOwner`). */
 function agentProblem(c: Canvas, key: string, v: unknown): string | null {
@@ -751,7 +755,7 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
           case "phase": {
             const pr = need();
             const to = phaseFor(pr, op.to) ?? refuse(`${where}: there is no phase "${String(op.to)}". Phases: ${pr.phases.map((x) => `${x.id} (${x.label})`).join(", ")}.`);
-            if (!pr.approved && to.id !== pr.phases[0]!.id) refuse(`${where}: the person has not approved the plan, so the work stays in ${pr.phases[0]!.label}. Show them the plan and ask; they approve it in the project strip, or say so, and then you call {op: "approve"}.`);
+            if (!pr.approved && to.id !== pr.phases[0]!.id) withhold(`${where}: the person has not approved the plan, so the work stays in ${pr.phases[0]!.label}. Show them the plan and ask; they approve it in the project strip, or say so, and then you call {op: "approve"}.`);
             if (enterPhase(c, to.id)) done.push(`moved to ${to.label}`);
             break;
           }
@@ -1029,7 +1033,7 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
       const done: string[] = [];
       /** Words are the person's unless they gave them to Autora: formatting is never held back, writing is. */
       const writes = (what: string) => {
-        if (mode !== "agent") refuse(`${what} changes the person's words, and "${s.title}" is theirs to write: you format and structure it. If they asked you to write it, or it is productivity work (a form, a report, minutes, a letter), switch it with {"op": "mode", "mode": "agent"} and say so; they can switch it back in the document's bar. For a story, a poem or anything creative, suggest the change in the chat and let them make it.`);
+        if (mode !== "agent") withhold(`${what} changes the person's words, and "${s.title}" is theirs to write: you format and structure it. If they asked you to write it, or it is productivity work (a form, a report, minutes, a letter), switch it with {"op": "mode", "mode": "agent"} and say so; they can switch it back in the document's bar. For a story, a poem or anything creative, suggest the change in the chat and let them make it.`);
       };
       ops.forEach((raw, i) => {
         const op = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
@@ -1116,7 +1120,7 @@ function edit(session: string, name: string, c: Canvas, args: Record<string, any
       const done: string[] = [];
       /** The cards' words are the person's unless they gave them to Autora: arranging is never held back, writing is. */
       const writes = (what: string) => {
-        if (b.mode !== "agent") refuse(`${what} writes or removes the person's words, and "${s.title}" is theirs: you arrange, link, colour and ask questions on it. If they asked you to fill it, or it is productivity work (a plan from a meeting, a sorted list), switch it with {"op": "mode", "mode": "agent"} and say so; they can switch it back on the board's bar. On a brainstorm or a story, ask a question ({"op": "ask"}) or suggest in the chat and let them write the card.`);
+        if (b.mode !== "agent") withhold(`${what} writes or removes the person's words, and "${s.title}" is theirs: you arrange, link, colour and ask questions on it. If they asked you to fill it, or it is productivity work (a plan from a meeting, a sorted list), switch it with {"op": "mode", "mode": "agent"} and say so; they can switch it back on the board's bar. On a brainstorm or a story, ask a question ({"op": "ask"}) or suggest in the chat and let them write the card.`);
       };
       ops.forEach((raw, i) => {
         const op = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
@@ -1389,7 +1393,7 @@ export async function runPanaceaTool(session: string, name: string, args: Record
         return { ok: false, summary: `Unknown Panacea tool: ${name}` };
     }
   } catch (err) {
-    return { ok: false, summary: err instanceof Refuse ? err.message : `Panacea could not do that: ${err instanceof Error ? err.message : String(err)}` };
+    return { ok: false, ...(err instanceof Withheld ? { held: true } : {}), summary: err instanceof Refuse ? err.message : `Panacea could not do that: ${err instanceof Error ? err.message : String(err)}` };
   }
 }
 

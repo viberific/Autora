@@ -5,6 +5,8 @@ type WindowKey = "widgets" | "browser" | "app" | "pdf" | "video" | "studio" | "p
 
 type ToolsState = {
   config: Record<WindowKey, { enabled: boolean }>;
+  /** Which windows have their editor built into this server; a window absent from it is taken as built. */
+  installed?: Partial<Record<WindowKey, boolean>>;
   groups: { group: string; available: boolean; enabled: boolean; detail: string }[];
 };
 
@@ -138,7 +140,7 @@ export function ToolsPage() {
           <div className="tw-head"><span className="tw-icon"><IconSparkle size={18} /></span><b>Panacea</b></div>
           <p className="jf-hint">One workspace for creative and productivity work. Choose a capability from the wrench in chat or
             Capabilities in Panacea. Native surfaces and all retained engines live together in one pannable, zoomable scene.
-            Bottom-left icons jump to existing work; Show all work frames everything. No tabs or exclusive work modes.</p>
+            The icons on the canvas jump to existing work; Show all work frames everything. No tabs or exclusive work modes.</p>
           <h3>Capability configuration</h3>
           <p className="jf-hint">These switches control abilities inside Panacea, not separate applications. Turning one off removes its tools
             from the agent on the next turn. Shell commands stay in the conversation.</p>
@@ -149,7 +151,8 @@ export function ToolsPage() {
             {WINDOWS.map((w) => {
               const on = state.config[w.key]?.enabled !== false;
               const group = w.key === "browser" ? state.groups.find((g) => g.group === "browser") : null;
-              const trouble = on && group && !group.available ? group.detail : null;
+              const missing = state.installed?.[w.key] === false;
+              const trouble = on && missing ? "Not installed on this server: its editor was not built, so the agent is not offered its tools." : on && group && !group.available ? group.detail : null;
               return (
                 <section key={w.key} className={`pw-capability${on ? " on" : ""}`}>
                   <div className="tw-head">

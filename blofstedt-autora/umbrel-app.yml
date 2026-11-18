@@ -152,7 +152,7 @@ description: >-
 
 
   • Integrations that grow as you go — when a task would be done better through
-  a service's API than its website (GitHub, Slack, Notion, a database...),
+  a service's API than its website (GitHub, Notion, a database...),
   Autora offers to set up an MCP server for it, and only installs it if you
   say yes.
 
@@ -208,13 +208,14 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  The chat window can be made as tall as your screen: pull its top edge up
-  and it stays at that height when you let go, instead of shrinking back to
-  the messages, and the height is remembered. On a tall screen the left
-  menu fills its empty middle with your recent chats. In Sheets, clicking a
-  cell no longer pops up a strip of tools; right-click for the menu, which
-  now has a row of pinned icons at the top (Bold, Italic, Cell colour and
-  AutoSum to start). Pin any entry with the pin at the end of its row.
-  Right-click the empty board for a menu of its own: New document,
-  spreadsheet, slides, PDF, board, flowchart or project, Open file, Add
-  piece, and View.
+  A tidy-up from a full tour of the app. The chat window now opens at about
+  half the screen's height instead of 600 pixels, and grows on a big screen;
+  fitted work is shown larger on wide screens instead of small in empty
+  grid. An app the agent opens is brought into view even if you had moved
+  the canvas, rather than waiting off-screen. The left menu starts as a
+  strip of icons on narrower screens, and the CPU, memory and disk bars show
+  only when one is running hot. The Tools page says when an editor is not
+  installed on this server, and Video and PDF tools are no longer offered
+  then. Slack is no longer suggested or listed, and integration suggestions
+  match whole words only. A refusal because something is the person's to
+  write is no longer reported to the agent as a failure.

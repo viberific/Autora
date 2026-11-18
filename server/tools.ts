@@ -381,23 +381,28 @@ export async function groupStates(): Promise<GroupState[]> {
 }
 
 /** A tool that lives in a built-in window the Tools page has switched off. */
-/** Whether this server has the editor for a hosted capability built in: PDF, Video and Music always do. */
+/** Whether this server has the editor for a hosted capability built in: Music always does. */
 function builtFor(id: Capability["id"]): boolean {
   if (id === "cad") return cadAvailable();
   if (id === "game") return gameAvailable();
   if (id === "photo") return photoAvailable();
   if (id === "office") return Boolean(officeDir());
+  // PDF and Video are fetched editors: without their built page the tools would open a white frame (video_open stalled
+  // for 90 s, then said "did not start"), so a server that never built them does not offer them.
+  if (id === "pdf") return editorBuilt("spectra-editor") && spectraAvailable().ok;
+  if (id === "video") return editorBuilt("opencut-editor");
   return true;
 }
+
+const editorBuilt = (editor: string) => fs.existsSync(path.join(process.cwd(), "dist", editor, "index.html"));
 
 /** Which Tools page windows this server has an editor for. A window that is not installed cannot be turned on, so the pages say
     "not installed" rather than "switched off" (the chooser, the new-file and load routes). */
 export function installedWindows(): Record<string, boolean> {
   const office = builtFor("office");
   // PDF and Video are fetched editors (docs/MAP.md): a server that never built them opens a white "Not Found" frame.
-  const built = (editor: string) => fs.existsSync(path.join(process.cwd(), "dist", editor, "index.html"));
   // The PDF window needs its page and its engine: the page alone opens on tools that cannot open a file.
-  return { pdf: built("spectra-editor") && spectraAvailable().ok, video: built("opencut-editor"), studio: true, pages: office, sheets: office, slides: office, cad: builtFor("cad"), game: builtFor("game"), photo: builtFor("photo") };
+  return { pdf: builtFor("pdf"), video: builtFor("video"), studio: true, pages: office, sheets: office, slides: office, cad: builtFor("cad"), game: builtFor("game"), photo: builtFor("photo") };
 }
 
 export function windowOff(name: string, settings: ToolSettings = toolSettings()): boolean {
@@ -4075,7 +4080,7 @@ export async function capabilityBriefing(): Promise<string> {
   }
   lines.push(
     "- Setting up MCP servers: always available. Tools: mcp_servers, mcp_offer. When the person asks about MCP servers or " +
-      "integrations, answer from mcp_servers. When a task lives on a service with an API (GitHub, Slack, Notion, a database, " +
+      "integrations, answer from mcp_servers. When a task lives on a service with an API (GitHub, Notion, a database, " +
       "maps, library docs) and no connected server covers it, offer one with mcp_offer before reaching for the browser -- " +
       "once, with the reason in a line -- and use its tools if they say yes. Failing a ready-made one, write a small " +
       "one (mcp_offer tools=...). Do not offer for one-off lookups a page read answers faster, and never ask for keys in chat.",

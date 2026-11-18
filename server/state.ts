@@ -953,7 +953,6 @@ export function allSecrets(): Record<string, string> {
     "ANTHROPIC_API_KEY",
     "AWS_ACCESS_KEY_ID",
     "AWS_SECRET_ACCESS_KEY",
-    "SLACK_BOT_TOKEN",
   ]) {
     if (process.env[k]?.trim()) result[k] = process.env[k]!.trim();
   }
@@ -1006,11 +1005,6 @@ export const SECRET_PRESETS: Record<string, { label: string; description: string
     label: "Deepgram API Key",
     description: "Reads replies aloud through Deepgram's hosted Aura voices, the same ones on every device.",
     placeholder: "a Deepgram API key",
-  },
-  SLACK_BOT_TOKEN: {
-    label: "Slack Bot Token",
-    description: "Bot user OAuth token for Slack notifications and integrations.",
-    placeholder: "xoxb-...",
   },
   AWS_ACCESS_KEY_ID: {
     label: "AWS Access Key ID",

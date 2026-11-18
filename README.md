@@ -414,7 +414,7 @@ notebook if asked -- so a screenshot can be evidence rather than a glance.
 tools reach the agent as `mcp__<server>__<tool>` from its next step.
 
 You rarely need to go there first. When a task lives on a service with an API --
-GitHub, Slack, Notion, a Postgres database, Google Maps, library docs -- and no
+GitHub, Notion, a Postgres database, Google Maps, library docs -- and no
 connected server covers it, the agent offers one in the conversation instead of
 reaching for the browser: a card saying what it is, why it beats clicking
 through the website, and exactly what will run. Nothing is installed until you

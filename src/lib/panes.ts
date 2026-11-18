@@ -22,14 +22,18 @@ const CHAT = { min: 300, max: 900 };
 /* The menu is never folded away on a desktop any more: whole, or a strip of icons. An old `collapsed` in storage is ignored. */
 type Panes = { rail: number | null; chat: number | null; /** Folded to a strip of icons. */ mini: boolean };
 
+/* Until the person has chosen, a short or narrow screen starts with the menu as a strip of icons: the whole menu is 11% of
+   a 1280 px window, and the work needs it more. Their own fold or unfold is remembered and wins from then on. */
+const smallScreen = () => typeof window !== "undefined" && window.innerWidth > 680 && window.innerWidth < 1366;
+
 const KEY = "autora.panes";
 function read(): Panes {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? "{}") as Partial<Panes>;
     const num = (n: unknown, lo: number, hi: number) => (typeof n === "number" && Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : null);
-    return { rail: num(raw.rail, RAIL.min, RAIL.max), chat: num(raw.chat, CHAT.min, CHAT.max), mini: raw.mini === true };
+    return { rail: num(raw.rail, RAIL.min, RAIL.max), chat: num(raw.chat, CHAT.min, CHAT.max), mini: typeof raw.mini === "boolean" ? raw.mini : smallScreen() };
   } catch {
-    return { rail: null, chat: null, mini: false };
+    return { rail: null, chat: null, mini: smallScreen() };
   }
 }
 
