@@ -119,6 +119,8 @@ test("the window opens at the bottom left, is held inside the world, and the mag
   const start = defaultFloat(room);
   // 55% of the room's height, not a fixed 600: a long thread must leave the work its share of a short screen.
   assert.deepEqual(start, { x: FLOAT_GAP, y: 900 - 495 - FLOAT_GAP, w: 360, h: 495, snap: "left" });
+  // A portrait tablet: 40% of the height, so the work keeps most of a tall, narrow screen.
+  assert.equal(defaultFloat({ w: 800, h: 1100 }).h, 440);
   // A big screen: the window grows with it, to a ceiling.
   assert.deepEqual(defaultFloat({ w: 2400, h: 1300 }), { x: FLOAT_GAP, y: 1300 - 715 - FLOAT_GAP, w: 480, h: 715, snap: "left" });
   // A short world: never below the window's smallest height, still a gap from the foot.

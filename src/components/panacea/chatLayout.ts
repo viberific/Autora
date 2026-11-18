@@ -57,7 +57,9 @@ export function defaultFloat(room: Room): FloatBox {
   // On a big screen the window grows with it (a fifth of the width, up to 480), so its words stay as readable as the work's.
   const wide = Math.min(480, Math.max(FLOAT_DEFAULT_W, Math.round(room.w * 0.2)));
   const w = Math.min(wide, Math.max(FLOAT_MIN_W, room.w - FLOAT_GAP * 2));
-  const tall = Math.min(FLOAT_DEFAULT_H_MAX, Math.round(room.h * FLOAT_DEFAULT_H_SHARE));
+  // A portrait screen (a tablet held upright) has height to spare and little width for the work beside it: shorter there.
+  const share = room.h > room.w * 1.2 ? 0.4 : FLOAT_DEFAULT_H_SHARE;
+  const tall = Math.min(FLOAT_DEFAULT_H_MAX, Math.round(room.h * share));
   const h = Math.min(tall, Math.max(FLOAT_MIN_H, room.h - FLOAT_GAP * 2));
   return clampFloat({ x: FLOAT_GAP, y: room.h - h - FLOAT_GAP, w, h, snap: "left" }, room);
 }
