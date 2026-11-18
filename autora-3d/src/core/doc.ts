@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Body3D, LibraryItem, Point2D, RepeatLink, SceneLook, ShapeGroup } from '../types';
+import { Body3D, LibraryItem, Point2D, RepeatLink, Rig, SceneLook, ShapeGroup } from '../types';
+import { refreshStale } from '../utils/rig';
 import { syncInstances } from '../utils/library';
 import { normalizeGroups } from '../utils/groups';
 import { syncRepeats } from '../utils/repeat';
@@ -19,6 +20,8 @@ export interface Doc {
   library: LibraryItem[];
   /** How the scene is lit (absent: the studio light). */
   look?: SceneLook;
+  /** The skeleton, when the model has one (absent: no rigging, and everything is as it was before rigs). */
+  rig?: Rig;
 }
 
 /** Makes ids. Each caller supplies its own so ids stay unique (the app uses time, an agent session a counter). */
@@ -35,8 +38,14 @@ export const settle = (raw: Doc): Doc => {
   const placed = syncInstances(d.bodies, d.groups, d.library);
   const synced = syncRepeats(placed.bodies, d.repeats);
   const grouped = normalizeGroups(synced.bodies, placed.groups);
-  return grouped.bodies === d.bodies && synced.repeats === d.repeats && grouped.groups === d.groups ? d : { ...d, repeats: synced.repeats, ...grouped };
+  const out = grouped.bodies === d.bodies && synced.repeats === d.repeats && grouped.groups === d.groups ? d : { ...d, repeats: synced.repeats, ...grouped };
+  // A shape edited after it was bound: its weights are marked stale (never silently reused).
+  const rig = refreshStale(out.rig, out.bodies);
+  return rig === out.rig ? out : { ...out, rig };
 };
+
+/** The saved form of a document: what doc_get, export json and the window's file hold. The rig is there only when there is one. */
+export const savedDoc = (doc: Doc) => ({ bodies: doc.bodies, groups: doc.groups, repeats: doc.repeats, library: doc.library, ...(doc.look ? { look: doc.look } : {}), ...(doc.rig ? { rig: doc.rig } : {}) });
 
 /** The scene a new document starts with: one plain block. */
 export const starterBodies = (): Body3D[] => {
@@ -68,7 +77,8 @@ export function parseDoc(raw: unknown): Doc | null {
   const d = raw as Partial<Doc>;
   if (!Array.isArray(d.bodies) || !Array.isArray(d.groups)) return null;
   const look = d.look && typeof d.look === 'object' && typeof d.look.environment === 'string' ? { look: d.look } : {};
-  return settle({ bodies: d.bodies, groups: d.groups, repeats: Array.isArray(d.repeats) ? d.repeats : [], library: Array.isArray(d.library) ? d.library : [], ...look });
+  const rig = d.rig && typeof d.rig === 'object' && Array.isArray(d.rig.bones) ? { rig: d.rig } : {};
+  return settle({ bodies: d.bodies, groups: d.groups, repeats: Array.isArray(d.repeats) ? d.repeats : [], library: Array.isArray(d.library) ? d.library : [], ...look, ...rig });
 }
 
 /** A counter-based id generator that never reuses an id already in `doc`. */

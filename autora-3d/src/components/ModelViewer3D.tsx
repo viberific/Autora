@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { AnimatePresence, motion } from 'motion/react';
 import { BevelPicker, DrawChip, MeasureReadout, RepeatChip } from './FloatingControls';
@@ -29,6 +29,8 @@ import { frameMatrix, frameNormal } from '../utils/frame';
 import { BodyTransform, scaleBodyAbout, selectionBounds, transformBody } from '../utils/transform';
 import { bendHandle, bendThrough, copyTransforms, stops, withCopies } from '../utils/repeat';
 import { Eye } from 'lucide-react';
+import type { Rig } from '../types';
+import { posePositions, skinMatrices, usableBind } from '../utils/rig';
 import ViewCube, { CubeFace } from './ViewCube';
 
 type GizmoKind = 'repeat-end' | 'repeat-bend' | 'extrude-height' | 'extrude-bottom' | 'offset-wall' | 'scale-corner' | 'edge-size' | 'rotate' | 'move-axis';
@@ -174,6 +176,14 @@ export interface ModelViewer3DProps {
   onGroom?: (id: string, stroke: GroomStroke, mirror?: 'x' | 'y') => void;
   /** A finished brush stroke: the shape's surface points after it (the person's own command, `sculpt_apply`). */
   onSculpt?: (id: string, positions: number[]) => void;
+  /** The skeleton, when the model has one. Its pose is previewed on the shapes bound to it. */
+  rig?: Rig;
+  /** The Rig card is open: the bones are drawn, and a joint can be picked and dragged. */
+  rigShown?: boolean;
+  boneId?: string | null;
+  onBone?: (id: string | null) => void;
+  /** A joint dragged: its new head, scene mm (its branch follows). */
+  onMoveBone?: (id: string, head: [number, number, number]) => void;
 }
 
 const ACCENT = '#8b7cf6';
@@ -385,6 +395,11 @@ export default function ModelViewer3D({
   look,
   groom,
   onGroom,
+  rig,
+  rigShown,
+  boneId,
+  onBone,
+  onMoveBone,
 }: ModelViewer3DProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   /** The circle that shows how far the sculpt brush reaches; moved by the stroke code, not by React. */
@@ -399,6 +414,7 @@ export default function ModelViewer3D({
   const gizmoGroupRef = useRef<THREE.Group | null>(null);
   const helperGroupRef = useRef<THREE.Group | null>(null);
   const previewGroupRef = useRef<THREE.Group | null>(null);
+  const rigGroupRef = useRef<THREE.Group | null>(null);
   const entriesRef = useRef<Map<string, BodyEntry>>(new Map());
   const heightArrowRef = useRef<THREE.Object3D | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -529,6 +545,11 @@ export default function ModelViewer3D({
     look,
     groom,
     onGroom,
+    rig,
+    rigShown,
+    boneId,
+    onBone,
+    onMoveBone,
   };
 
   // ---- Scene setup (once) -------------------------------------------------
@@ -643,7 +664,9 @@ export default function ModelViewer3D({
     gizmoFrame.matrixAutoUpdate = false;
     gizmoFrame.add(helperGroup, gizmoGroup);
     gizmoFrameRef.current = gizmoFrame;
-    scene.add(bodyGroup, gizmoFrame, hoverGroup, previewGroup);
+    const rigGroup = new THREE.Group();
+    scene.add(bodyGroup, gizmoFrame, hoverGroup, previewGroup, rigGroup);
+    rigGroupRef.current = rigGroup;
     bodyGroupRef.current = bodyGroup;
     gizmoGroupRef.current = gizmoGroup;
     helperGroupRef.current = helperGroup;
@@ -1640,8 +1663,43 @@ export default function ModelViewer3D({
       });
     };
 
+    // A joint of the skeleton: pressed it is picked, dragged it moves (its branch follows) in the plane facing the camera.
+    let boning: { id: string; pointerId: number; plane: THREE.Plane; grab: THREE.Vector3; moved: boolean } | null = null;
+    const startBone = (e: PointerEvent): boolean => {
+      if (!live.current.rigShown || !live.current.rig || !e.isPrimary || e.button !== 0) return false;
+      setRay(e.clientX, e.clientY);
+      const joint = raycaster.intersectObjects(rigGroup.children, false).find((h) => h.object.userData.boneId);
+      if (!joint) return false;
+      const id = joint.object.userData.boneId as string;
+      const at = joint.object.position.clone();
+      const normal = camera.getWorldDirection(new THREE.Vector3());
+      boning = { id, pointerId: e.pointerId, plane: new THREE.Plane().setFromNormalAndCoplanarPoint(normal, at), grab: at, moved: false };
+      live.current.onBone?.(id);
+      controls.enabled = false;
+      renderer.domElement.setPointerCapture(e.pointerId);
+      live.current.onDragStateChange?.(true);
+      return true;
+    };
+    const moveBone = (e: PointerEvent) => {
+      const st = boning;
+      if (!st) return;
+      setRay(e.clientX, e.clientY);
+      const at = raycaster.ray.intersectPlane(st.plane, new THREE.Vector3());
+      if (!at) return;
+      if (!st.moved && at.distanceTo(st.grab) < 2) return;
+      st.moved = true;
+      live.current.onMoveBone?.(st.id, [Math.round(at.x * 100) / 100, Math.round(at.y * 100) / 100, Math.round(at.z * 100) / 100]);
+    };
+    const endBone = (e: PointerEvent) => {
+      if (!boning) return;
+      boning = null;
+      controls.enabled = true;
+      if (renderer.domElement.hasPointerCapture(e.pointerId)) renderer.domElement.releasePointerCapture(e.pointerId);
+      live.current.onDragStateChange?.(false);
+    };
     const onPointerDown = (e: PointerEvent) => {
       if (live.current.draw) return;
+      if (startBone(e)) return;
       if (startStroke(e)) return; // the Draw tool reads the pointer while a sketch is open
       if (startGroom(e)) return;
       trackTouchDown(e);
@@ -1698,6 +1756,10 @@ export default function ModelViewer3D({
 
     const onPointerMove = (e: PointerEvent) => {
       if (live.current.draw) return;
+      if (boning) {
+        if (e.pointerId === boning.pointerId) moveBone(e);
+        return;
+      }
       if (stroke) {
         if (e.pointerId === stroke.pointerId) moveStroke(e);
         return;
@@ -1804,6 +1866,10 @@ export default function ModelViewer3D({
       }
     };
     const onPointerUp = (e: PointerEvent) => {
+      if (boning) {
+        endBone(e);
+        return;
+      }
       if (stroke) {
         endStroke(e, false);
         return;
@@ -1816,6 +1882,10 @@ export default function ModelViewer3D({
       finishPointer(e, false);
     };
     const onPointerCancel = (e: PointerEvent) => {
+      if (boning) {
+        endBone(e);
+        return;
+      }
       if (stroke) {
         endStroke(e, true);
         return;
@@ -2134,7 +2204,7 @@ export default function ModelViewer3D({
       window.clearTimeout(longPress);
       controls.dispose();
       entriesRef.current.clear();
-      [bodyGroup, gizmoGroup, helperGroup, previewGroup, hoverGroup].forEach(clearGroup);
+      [bodyGroup, gizmoGroup, helperGroup, previewGroup, hoverGroup, rigGroup].forEach(clearGroup);
       [shadowCatcher, grid, axisX, axisY].forEach(disposeObject);
       envTexture?.dispose();
       pmrem.dispose();
@@ -2246,6 +2316,72 @@ export default function ModelViewer3D({
   useEffect(() => {
     if (repeating && isSceneReady) frameViewRef.current('keep');
   }, [repeating, isSceneReady]);
+
+  // ---- The skeleton ----------------------------------------------------------
+  // Drawn over the shapes (never hidden by them) while the Rig card is open: a line for each bone, a dot at each head.
+  const rigBones = useMemo(() => (rigShown && rig ? rig.bones : []), [rig?.bones, rigShown]);
+  useLayoutEffect(() => {
+    const group = rigGroupRef.current;
+    if (!isSceneReady || !group) return;
+    clearGroup(group);
+    if (rigBones.length) {
+      let lo = Infinity, hi = -Infinity;
+      rigBones.forEach((b) => [b.head[1], b.tail[1]].forEach((y) => { lo = Math.min(lo, y); hi = Math.max(hi, y); }));
+      const r = clamp((hi - lo) * 0.012, 4, 40);
+      const dot = new THREE.SphereGeometry(1, 14, 10);
+      rigBones.forEach((b) => {
+        const on = b.id === boneId;
+        const color = on ? WARN : ACCENT_LIGHT;
+        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...b.head), new THREE.Vector3(...b.tail)]), new THREE.LineBasicMaterial({ color, depthTest: false, transparent: true, opacity: on ? 1 : 0.8 }));
+        line.renderOrder = 50;
+        const joint = new THREE.Mesh(dot, new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true, opacity: on ? 1 : 0.85 }));
+        joint.position.set(...b.head);
+        joint.scale.setScalar(on ? r * 1.5 : r);
+        joint.renderOrder = 51;
+        joint.userData.boneId = b.id;
+        group.add(line, joint);
+      });
+    }
+    invalidateRef.current();
+  }, [rigBones, boneId, isSceneReady]);
+
+  // A pose is previewed on the shapes bound to the skeleton: their surface moves with the bones (exports stay in the rest pose).
+  useLayoutEffect(() => {
+    if (!isSceneReady) return;
+    const posed = !!rig?.pose && Object.keys(rig.pose).length > 0;
+    const mats = posed && rig ? skinMatrices(rig) : null;
+    entriesRef.current.forEach((entry, id) => {
+      const mesh = entry.group.children[0] as THREE.Mesh | undefined;
+      const attr = mesh?.geometry?.getAttribute('position');
+      const nrm = mesh?.geometry?.getAttribute('normal');
+      if (!mesh || !attr) return;
+      const rest = mesh.userData.restPositions as Float32Array | undefined;
+      const bind = mats && !entry.body.frame ? usableBind(rig, id, attr.count) : null;
+      if (!bind) {
+        if (rest && rest.length === attr.array.length) {
+          (attr.array as Float32Array).set(rest);
+          if (nrm && mesh.userData.restNormals) (nrm.array as Float32Array).set(mesh.userData.restNormals as Float32Array);
+          attr.needsUpdate = true;
+          if (nrm) nrm.needsUpdate = true;
+          mesh.geometry.computeBoundingSphere();
+          mesh.geometry.computeBoundingBox();
+        }
+        delete mesh.userData.restPositions;
+        delete mesh.userData.restNormals;
+        return;
+      }
+      if (!rest || rest.length !== attr.array.length) {
+        mesh.userData.restPositions = new Float32Array(attr.array as Float32Array);
+        if (nrm) mesh.userData.restNormals = new Float32Array(nrm.array as Float32Array);
+      }
+      (attr.array as Float32Array).set(posePositions(mesh.userData.restPositions as Float32Array, bind, mats!));
+      attr.needsUpdate = true;
+      mesh.geometry.computeVertexNormals();
+      mesh.geometry.computeBoundingSphere();
+      mesh.geometry.computeBoundingBox();
+    });
+    invalidateRef.current(true);
+  }, [rig, bodies, isSceneReady, fastId]);
 
   // ---- Handles for what is selected ---------------------------------------
   useLayoutEffect(() => {

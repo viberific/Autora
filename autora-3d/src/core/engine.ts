@@ -5,7 +5,7 @@
 
 import { AgentHost, ExecuteOptions, ToolResponse, execute } from './agent';
 import { CommandEntry, CommandRecord, MAX_LOG, Who, describeEdit, summarizeArgs } from './commands';
-import { Doc, IdGen, counterIds, emptyDoc, settle } from './doc';
+import { Doc, IdGen, counterIds, emptyDoc, savedDoc, settle } from './doc';
 import { TOOL_SPECS, ToolSpec } from './tools';
 
 /**
@@ -134,6 +134,6 @@ export class Engine implements AgentHost {
   }
 
   toJSON() {
-    return { bodies: this.doc.bodies, groups: this.doc.groups, repeats: this.doc.repeats, library: this.doc.library, ...(this.doc.look ? { look: this.doc.look } : {}) };
+    return savedDoc(this.doc);
   }
 }

@@ -2106,6 +2106,139 @@ export const cadSPECS: ToolSpec[] = [
     }
   },
   {
+    "name": "cad_rig_get",
+    "group": "files",
+    "description": "The skeleton, or null when there is none: each bone with its id, name, parent, head and tail (mm; x right, y away, z up), which shapes are bound to it (and whether an edit made that stale), and the preview pose.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  {
+    "name": "cad_rig_add",
+    "group": "files",
+    "description": "Give the model a skeleton. \"bip29\" is the 29-bone biped (bip Pelvis, Spine, Neck, Head, both arms with fingers, both legs), standing on the ground as tall as the model, arms out in a T, character facing the front. Its names match Little-Farm's characters. \"custom\" starts with one root bone to build on with cad_rig_bone_set. Then cad_rig_bind ties the shapes to it.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "template": {
+          "type": "string",
+          "enum": [
+            "bip29",
+            "custom"
+          ]
+        },
+        "replace": {
+          "type": "boolean",
+          "description": "Start over when a skeleton already exists (its weights are lost)."
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "cad_rig_bone_set",
+    "group": "files",
+    "description": "Move or rename a bone: head and tail are points in mm (x right, y away, z up). Moving a head carries the end of the bone before it along, and with move_children:true the whole branch beyond. Without id it adds a new bone (head, tail, optional parent and name). Weights are not recomputed: call cad_rig_bind again.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "head": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number",
+              "description": "Height above the ground (default 0)."
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "description": "A point in the model, mm: x, y on the ground and z up."
+        },
+        "tail": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number",
+              "description": "Height above the ground (default 0)."
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "description": "A point in the model, mm: x, y on the ground and z up."
+        },
+        "parent": {
+          "type": "string",
+          "description": "A new bone only: the bone it hangs from."
+        },
+        "move_children": {
+          "type": "boolean"
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "cad_rig_bind",
+    "group": "files",
+    "description": "Tie every visible shape to the skeleton automatically: each point of the shape's surface follows its nearest bones (up to four, nearer pulls harder), the head and hair follow the head alone, and below the pelvis each side follows its own leg. Changing a bound shape afterwards marks its weights stale: bind again. Returns how many shapes and points were bound.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  {
+    "name": "cad_rig_pose",
+    "group": "files",
+    "description": "Preview a pose: turn one bone by x, y, z degrees about its own axes (its branch follows), or reset one bone or all. It is a preview in the window only: cad_export always leaves in the rest pose.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "bone": {
+          "type": "string"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "z": {
+          "type": "number"
+        },
+        "reset": {
+          "type": "boolean",
+          "description": "Clear the pose of this bone, or of all when no bone is given."
+        }
+      },
+      "required": []
+    }
+  },
+  {
     "name": "cad_doc_get",
     "group": "files",
     "description": "The whole document as JSON (shapes, groups, repeats): save it, or hand it back to cad_doc_set later.",
@@ -2183,7 +2316,7 @@ export const cadSPECS: ToolSpec[] = [
   {
     "name": "cad_export",
     "group": "files",
-    "description": "Export the visible shapes. format \"stl\" (binary, Z-up), \"glb\" (binary glTF for game engines: metres, Y-up, keeps colours, materials, textures and hair), \"obj\" (text) or \"json\" (the document). glb options: scale (output metres per scene mm, default 0.001), pivot (\"scene\" as placed, \"asset\" centred on the ground, \"shape\" one pivot per shape at the centre of its base) and hair (false leaves hair and fur out; with it each shape's hair is thinned to a size an engine takes). STL and OBJ never carry hair. The file is saved as an artifact the person can download from the thread, and the reply names it; pass name to choose the file name.",
+    "description": "Export the visible shapes. format \"stl\" (binary, Z-up), \"glb\" (binary glTF for game engines: metres, Y-up, keeps colours, materials, textures and hair), \"obj\" (text) or \"json\" (the document). glb options: scale (output metres per scene mm, default 0.001), pivot (\"scene\" as placed, \"asset\" centred on the ground, \"shape\" one pivot per shape at the centre of its base), rig (true writes the skeleton: one skin, bone nodes and weights for the shapes cad_rig_bind tied to it, in the rest pose; shapes with stale weights are refused until bound again) and hair (false leaves hair and fur out; with it each shape's hair is thinned to a size an engine takes). STL and OBJ never carry hair. The file is saved as an artifact the person can download from the thread, and the reply names it; pass name to choose the file name.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -2208,6 +2341,9 @@ export const cadSPECS: ToolSpec[] = [
           ]
         },
         "hair": {
+          "type": "boolean"
+        },
+        "rig": {
           "type": "boolean"
         },
         "name": {
