@@ -22,7 +22,8 @@ export const MIN_SHARE = 0.02;
  * left is +x; the figure faces +z; arms out in a T). The names are Little-Farm's. The first 21 are the spec's tree; the last
  * eight (four fingers on each hand) bring it to 29 and are Autora's own choice, not read from Little-Farm.
  */
-const FINGERS = 4;
+/** Two fingers a side, each of two segments, named as Little-Farm's characters name them: Finger0/Finger01, Finger1/Finger11. */
+const FINGERS: [number, number][] = [[0, 0.018], [1, 0.006]];
 const bip29Table = (): [string, string | null, V3, V3][] => {
   const t: [string, string | null, V3, V3][] = [
     ['bip Pelvis', null, [0, 0.53, 0], [0, 0.57, 0]],
@@ -39,9 +40,11 @@ const bip29Table = (): [string, string | null, V3, V3][] => {
       [`${P}Forearm`, `${P}UpperArm`, [0.25 * s, 0.79, 0], [0.39 * s, 0.79, 0]],
       [`${P}Hand`, `${P}Forearm`, [0.39 * s, 0.79, 0], [0.44 * s, 0.79, 0]],
     );
-    for (let f = 0; f < FINGERS; f++) {
-      const z = (1.5 - f) * 0.012;
-      t.push([`${P}Finger${f}`, `${P}Hand`, [0.44 * s, 0.79, z], [0.5 * s, 0.79, z]]);
+    for (const [finger, z] of FINGERS) {
+      t.push(
+        [`${P}Finger${finger}`, `${P}Hand`, [0.44 * s, 0.79, z], [0.47 * s, 0.79, z]],
+        [`${P}Finger${finger}1`, `${P}Finger${finger}`, [0.47 * s, 0.79, z], [0.5 * s, 0.79, z]],
+      );
     }
     t.push(
       [`${P}Thigh`, 'bip Pelvis', [0.05 * s, 0.53, 0], [0.05 * s, 0.29, 0]],

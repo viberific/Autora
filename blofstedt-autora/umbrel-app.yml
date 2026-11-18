@@ -208,13 +208,11 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  The chat window can be made as tall as your screen: pull its top edge up
-  and it stays at that height when you let go, instead of shrinking back to
-  the messages, and the height is remembered. On a tall screen the left
-  menu fills its empty middle with your recent chats. In Sheets, clicking a
-  cell no longer pops up a strip of tools; right-click for the menu, which
-  now has a row of pinned icons at the top (Bold, Italic, Cell colour and
-  AutoSum to start). Pin any entry with the pin at the end of its row.
-  Right-click the empty board for a menu of its own: New document,
-  spreadsheet, slides, PDF, board, flowchart or project, Open file, Add
-  piece, and View.
+  The 3D window can put a skeleton inside a model and move it. Add one to
+  what you have built — the 29-bone skeleton is fitted to your model's own
+  height, and its bones are named the same as the characters in Little-Farm —
+  then bind it with one click, pose the bones, and export a GLB that carries
+  the skeleton and the skin, so a game can play an animation on it. Editing
+  the model after binding marks the bind stale instead of quietly using the
+  old weights. Exporting a model with no skeleton writes exactly the file it
+  wrote before.
