@@ -157,6 +157,13 @@ await test("the 3D manual teaches organic forms: blend, loft, smooth, and that t
   }
 });
 
+await test("the 3D manual teaches the Rig card and the cad_rig_* tools", () => {
+  const cad = manualText("cad");
+  for (const needle of ["the Rig card", "Add skeleton", "bip29", "cad_rig_bind", "cad_rig_pose", "cad_rig_bone_set", "rig:true", "stale"]) {
+    assert.ok(cad.includes(needle), `the 3D manual lacks "${needle}"`);
+  }
+});
+
 await test("the 3D manual teaches surfaces, hair and light: where each control is, and that grooming is the person's", () => {
   const cad = manualText("cad");
   for (const needle of ["cad_surface_set", "cad_hair_set", "cad_scene_look", "Texture", "Picture…", "Grow hair", "Grow fur", "Comb, Cut, Lengthen and Puff", "hair_groom", "is refused to you", "their strokes stay", "Bends light", "Back to the finish", "STL never does", "Panacea's 3D panels"]) {

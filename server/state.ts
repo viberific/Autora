@@ -1304,10 +1304,18 @@ export function resolveProvider(): Resolved {
            price race -- and a forgotten Ollama on :8000 would quietly take
            every turn. It is the answer when nothing priced is connected, not
            a racer (the old order kept it last for the same reason). */
-        const avg = p.id === "local" ? Infinity : rows.length > 0 ? spent / rows.length : (autoPriceOf(p.id, state.models[p.id]) ?? 0);
+        /* An unpriced model is not a cheap one: nobody has quoted it, so it
+           cannot win a price race against a vendor that has. It stays
+           choosable when it is the only thing connected. */
+        const avg =
+          p.id === "local"
+            ? Infinity
+            : rows.length > 0
+              ? spent / rows.length
+              : (autoPriceOf(p.id, state.models[p.id]) ?? Infinity);
         return { id: p.id, avg, calls: rows.length };
       })
-      .sort((a, b) => a.avg - b.avg || b.calls - a.calls);
+      .sort((a, b) => (a.avg === b.avg ? 0 : a.avg - b.avg) || b.calls - a.calls);
     chosen = scored[0]?.id ?? "";
     if (!chosen) {
       /* Automatic never picks a router (see AUTO_ROUTERS), so a person whose only

@@ -303,7 +303,7 @@ const MOST = 24_000;
 
 /** Calls that only read: nothing to watch, so never by hand. */
 const READS = new Set([
-  "scene_get", "shape_get", "shape_faces", "shape_edges", "shape_measure", "library_list", "library_thumbnail", "library_export", "doc_get", "export", "history_log",
+  "scene_get", "shape_get", "shape_faces", "shape_edges", "shape_measure", "library_list", "library_thumbnail", "library_export", "doc_get", "export", "history_log", "rig_get",
 ]);
 /** Calls the window has no control for: done here, and the agent is told so. */
 const NO_CONTROL: Record<string, string> = {
@@ -313,6 +313,10 @@ const NO_CONTROL: Record<string, string> = {
   sculpt_blend: "the window has no control that blends parts into a form",
   sculpt_loft: "the window has no control that lofts sections into a tube",
   sculpt_smooth: "the window has no control that smooths a surface",
+  rig_add: "the window's Rig card is not driven by hand yet",
+  rig_bone_set: "the window's Rig card is not driven by hand yet",
+  rig_bind: "the window's Rig card is not driven by hand yet",
+  rig_pose: "the window's Rig card is not driven by hand yet",
 };
 /** Undo and redo: done in the window with its own buttons, on the history the model already has. */
 const HISTORY = new Set(["history_undo", "history_redo"]);
@@ -651,6 +655,7 @@ export function cadBriefing(on: boolean): string {
     "the extruded shapes cannot make those, so for organic forms build them or import a free CC0 mesh). " +
     "cad_sculpt_blend makes ONE smooth organic shape by melting spheres, tapered capsules and ellipsoids together (an animal's body, neck, head and legs; mirror reflects half of it), " +
     "cad_sculpt_loft a smooth tube through changing cross-sections (a leg, tail, horn), and cad_sculpt_smooth evens out any mesh shape. " +
+    "cad_rig_add gives the model a 29-bone skeleton (bip29), cad_rig_bind ties the shapes to it, cad_rig_pose previews a pose, and cad_export with rig:true writes a skinned GLB. " +
     "cad_surface_set: glass, velvet, skin, patterns, pictures; cad_hair_set: hair or fur (the person grooms it); cad_scene_look: the light. " +
     "Shapes are flat outlines pushed up to a height, in millimetres, x right, y away, z up. Model what the person asks to " +
     "make, print or design with these, not code. The window opens beside the chat on first use and the person can work " +

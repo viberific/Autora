@@ -1304,6 +1304,19 @@ export async function listModels(
     const prompt = Number(m.pricing?.prompt);
     const completion = Number(m.pricing?.completion);
     const quoted = Number.isFinite(prompt) && Number.isFinite(completion);
+    /* Lebrel quotes its prices in the same list, in millionths of a dollar per
+       million tokens under `lebrel.pricing`, so they arrive already per-million
+       and only need the micro dollars taken out. Its own edition has no pricing
+       block at all, which must come back unpriced rather than at zero dollars.
+       Its routed models also say how a peak hour multiplies the rate. */
+    const micro = m.lebrel?.pricing;
+    const microIn = Number(micro?.input_microusd_per_million_tokens);
+    const microOut = Number(micro?.output_microusd_per_million_tokens);
+    const microCached = Number(micro?.cached_input_microusd_per_million_tokens);
+    const microQuoted =
+      Number.isFinite(microIn) && Number.isFinite(microOut) && microIn > 0 && microOut > 0;
+    const peakPercent = Number(micro?.peak?.multiplier_percent);
+    const peak = Number.isFinite(peakPercent) && peakPercent > 100 ? peakPercent / 100 : undefined;
     /* What a token served from the prompt cache costs, which the same vendors
        also quote ("input_cache_read", a decimal string per token). Leaving it
        out is not neutral: readPrice then falls back to the fresh price, so a
@@ -1320,10 +1333,13 @@ export async function listModels(
     return {
       id: String(m.id),
       label: m.name || String(m.id),
-      input: quoted ? prompt * 1_000_000 : 0,
-      output: quoted ? completion * 1_000_000 : 0,
-      cachedInput: cacheQuoted ? cacheRead * 1_000_000 : undefined,
-      priced: quoted,
+      input: microQuoted ? microIn / 1_000_000 : quoted ? prompt * 1_000_000 : 0,
+      output: microQuoted ? microOut / 1_000_000 : quoted ? completion * 1_000_000 : 0,
+      cachedInput: microQuoted
+        ? Number.isFinite(microCached) && microCached > 0 ? microCached / 1_000_000 : undefined
+        : cacheQuoted ? cacheRead * 1_000_000 : undefined,
+      priced: quoted || microQuoted,
+      peak,
       window,
       note: window ? `${windowLabel(window)} context` : undefined,
     };

@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.117"
+version: "0.3.126"
 port: 8096
 # umbrelOS only hands a container the GPU when the manifest says so: with this
 # permission it adds /dev/dri plus the render/video groups those nodes belong
@@ -60,8 +60,12 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  Delete show now actually clears the show out of Flix: it is hidden from the home rows, search, Discover, My List,
-  Continue watching and the Queue, not just had its files removed. It comes back by itself when a new episode or
-  season reaches the source after the delete, and it lands in its own place rather than in the Queue. Watched
-  episodes stay ticked and Continue watching resumes where you left off even if the show was deleted and its files
-  downloaded again. Settings -> Torrents lists the hidden shows, with Restore.
+  A verbose log that records one viewing's whole story: when something goes wrong while you watch, the log now
+  has the answer instead of a gap.
+  An episode that will not decode is converted so it plays, and a slow segment is waited for rather than failing.
+  Playback drift is mended, memory is read right, prebuild is quieter, and Health shows the GPU.
+  Previous and next episode sit in the player, with a clearer clock. A paused show stays paused through a reload.
+  Search is forgiving: typos, word order, spacing, accents and initials all find the show.
+  A delete now clears the show from the home rows, search, Discover, My List, Continue watching and the Queue, and
+  Settings -> Torrents lists the hidden shows with Restore.
+  UI polish across home, show page, player, settings and profile, with no cross-fade between episodes.

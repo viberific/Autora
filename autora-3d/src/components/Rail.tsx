@@ -46,6 +46,7 @@ import {
   Ungroup,
   Unlink,
   X,
+  Bone,
   type LucideIcon,
 } from 'lucide-react';
 import { SHAPE_LABELS, ShapeKind } from '../utils/primitives';
@@ -53,7 +54,8 @@ import Sidebar from './Sidebar';
 import { HairPanel, LightPanel, MaterialPanel, TexturePanel } from './SurfacePanels';
 import type { HairArgs, SurfaceArgs } from '../core/ops';
 import type { GroomBrush } from '../utils/hair';
-import type { SceneLook, Surface } from '../types';
+import type { Rig, SceneLook, Surface } from '../types';
+import RigPanel from './RigPanel';
 import { useFading } from '../hooks/useFading';
 import { EdgePanel, FacePanel, SculptPanel, SizePositionPanel, sculptable, selectionMode, type TopBarProps } from './TopBar';
 
@@ -124,6 +126,14 @@ export interface RailProps extends TopBarProps {
   onGroomOn: (on: boolean) => void;
   look: SceneLook | undefined;
   onLook: (patch: Partial<SceneLook>) => void;
+  /** The skeleton, if the model has one, and the bone picked in it. */
+  rig: Rig | undefined;
+  boneId: string | null;
+  onBone: (id: string | null) => void;
+  onRigAdd: () => void;
+  onRigBind: () => void;
+  onRigPose: (id: string, axis: 0 | 1 | 2, degrees: number) => void;
+  onRigReset: () => void;
 }
 
 interface Tool {
@@ -201,6 +211,7 @@ export default function Rail(props: RailProps) {
     { id: 'material', label: 'Material', group: 'Surface', icon: Palette, color: C.text, desktop: true, on: openId === 'material', disabled: !(props.selected.length === 1 && !props.group), hint: picked, run: toggleOpen('material') },
     { id: 'texture', label: 'Texture', group: 'Surface', icon: Grid3x3, color: C.gold, desktop: true, on: openId === 'texture', disabled: !(props.selected.length === 1 && !props.group), hint: picked, run: toggleOpen('texture') },
     { id: 'hair', label: 'Hair', group: 'Surface', icon: Wind, color: C.amber, phone: true, desktop: true, on: openId === 'hair', disabled: !(props.selected.length === 1 && !props.group && !props.selected[0]?.frame), hint: 'Select a shape that stands upright', run: toggleOpen('hair') },
+    { id: 'rig', label: 'Rig', group: 'Shape', icon: Bone, color: C.insert, desktop: true, on: openId === 'rig', disabled: props.bodyCount < 1, hint: 'Make a shape first', run: toggleOpen('rig') },
     { id: 'light', label: 'Light', group: 'Surface', icon: Sun, color: C.amber, on: openId === 'light', disabled: props.bodyCount < 1, run: toggleOpen('light') },
     { id: 'sculpt', label: 'Sculpt', group: 'Shape', icon: Brush, color: C.draw, phone: true, desktop: true, on: openId === 'sculpt', disabled: !(props.selected.length === 1 && sculptable(props.selected[0])), hint: 'Select a mesh shape', run: toggleOpen('sculpt') },
     { id: 'edges', label: 'Pick edges', group: 'Shape', icon: SquareDashed, color: C.shape, on: openId === 'edges', disabled: mode !== 'edge', hint: 'Tap an edge of a shape', run: toggleOpen('edges') },
@@ -239,6 +250,8 @@ export default function Rail(props: RailProps) {
     // Texture and Hair stand on the bar once the shape has a pattern, a picture or hair; until then Material leads to them.
     if (t.id === 'texture') return !t.disabled && hasTexture(props.selected[0]);
     if (t.id === 'hair') return !t.disabled && !!props.selected[0]?.hair;
+    // The Rig stands on the bar once the model has a skeleton; until then it is reached from All tools.
+    if (t.id === 'rig') return !!props.rig;
     return !t.disabled;
   };
   const wanted = ids.filter((id) => needed(byId.get(id)!));
@@ -326,6 +339,7 @@ export default function Rail(props: RailProps) {
       case 'material': return one ? <MaterialPanel selected={props.selected} onSurface={props.onSurface} onOpen={setOpenId} /> : null;
       case 'texture': return one ? <TexturePanel selected={props.selected} onSurface={props.onSurface} /> : null;
       case 'hair': return !one || props.selected[0].frame ? null : <HairPanel selected={props.selected} onHair={props.onHair} groomBrush={props.groomBrush} onGroomBrush={props.onGroomBrush} groomOn={props.groomOn} onGroomOn={props.onGroomOn} />;
+      case 'rig': return <RigPanel rig={props.rig} shapes={props.bodyCount} boneId={props.boneId} onBone={props.onBone} onAdd={props.onRigAdd} onBind={props.onRigBind} onPose={props.onRigPose} onResetPose={props.onRigReset} />;
       case 'light': return <LightPanel look={props.look} onLook={props.onLook} />;
       case 'file': return <Sidebar {...sidebar} section="export" />;
       case 'edges': return <EdgePanel {...props} />;

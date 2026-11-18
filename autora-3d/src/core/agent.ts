@@ -3,10 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { Rig } from '../types';
 import { glbBytes } from '../utils/glb';
 import { objText, stlBytes, toBase64 } from '../utils/serialize';
 import { initManifold } from '../utils/manifoldBoolean';
-import { Doc, IdGen, emptyDoc, parseDoc, settle } from './doc';
+import { Doc, IdGen, emptyDoc, parseDoc, savedDoc, settle } from './doc';
 import type { CommandEntry, Who } from './commands';
 import { AgentError } from './errors';
 import { ShapeSummary, summarize } from './inspect';
@@ -101,7 +102,7 @@ function runOne(host: AgentHost, doc: Doc, ids: IdGen, name: string, args: unkno
   const a = (args && typeof args === 'object' ? args : {}) as Record<string, any>;
   switch (name) {
     case 'doc_get':
-      return { doc, result: { bodies: doc.bodies, groups: doc.groups, repeats: doc.repeats, library: doc.library }, changed: false };
+      return { doc, result: savedDoc(doc), changed: false };
     case 'doc_set': {
       const next = parseDoc(a.doc);
       if (!next) throw new AgentError('doc must be a document from doc_get: { bodies: [...], groups: [...], repeats: [...], library: [...] }.');
@@ -128,7 +129,7 @@ function runOne(host: AgentHost, doc: Doc, ids: IdGen, name: string, args: unkno
     }
     case 'export': {
       const bodies = doc.bodies;
-      if (a.format === 'json') return { doc, result: { format: 'json', filename: 'craft3d.json', text: JSON.stringify({ bodies: doc.bodies, groups: doc.groups, repeats: doc.repeats, library: doc.library }) }, changed: false };
+      if (a.format === 'json') return { doc, result: { format: 'json', filename: 'craft3d.json', text: JSON.stringify(savedDoc(doc)) }, changed: false };
       if (a.format === 'obj') {
         const text = objText(bodies);
         if (!text) throw new AgentError('Nothing visible to export.');
@@ -140,9 +141,18 @@ function runOne(host: AgentHost, doc: Doc, ids: IdGen, name: string, args: unkno
         return { doc, result: { format: 'stl', filename: 'craft3d.stl', encoding: 'base64', bytes: bytes.length, data: toBase64(bytes) }, changed: false };
       }
       if (a.format === 'glb') {
-        const bytes = glbBytes(bodies, { scale: a.scale, pivot: a.pivot, groups: doc.groups, hair: a.hair !== false });
+        let rig: Rig | undefined;
+        if (a.rig) {
+          rig = doc.rig;
+          if (!rig) throw new AgentError('There is no skeleton to export.', 'Call rig_add, then rig_bind.');
+          const binds = Object.values(rig.bind ?? {});
+          if (!binds.length) throw new AgentError('No shape is bound to the skeleton yet.', 'Call rig_bind.');
+          const stale = Object.entries(rig.bind ?? {}).filter(([, b]) => b.stale).map(([id]) => id);
+          if (stale.length) throw new AgentError(`These shapes changed after they were bound: ${stale.join(', ')}.`, 'Call rig_bind again, then export.');
+        }
+        const bytes = glbBytes(bodies, { scale: a.scale, pivot: a.pivot, groups: doc.groups, hair: a.hair !== false, rig });
         if (!bytes) throw new AgentError('Nothing visible to export.');
-        return { doc, result: { format: 'glb', filename: 'craft3d.glb', encoding: 'base64', bytes: bytes.length, data: toBase64(bytes) }, changed: false };
+        return { doc, result: { format: 'glb', filename: 'craft3d.glb', encoding: 'base64', bytes: bytes.length, data: toBase64(bytes), ...(rig ? { rig: { bones: rig.bones.length, shapes: Object.keys(rig.bind ?? {}).length } } : {}) }, changed: false };
       }
       throw new AgentError('format must be "stl", "glb", "obj" or "json".');
     }

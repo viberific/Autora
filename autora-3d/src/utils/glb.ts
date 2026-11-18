@@ -4,7 +4,8 @@
  */
 
 import * as THREE from 'three';
-import { Body3D, ShapeGroup } from '../types';
+import { Body3D, Rig, ShapeGroup } from '../types';
+import { bindPoints, usableBind } from './rig';
 import { buildBodyGeometry } from './bodyGeometry';
 import { frameMatrix } from './frame';
 import { encodePng, imageBytes, patternPixels, resolveSurface, textureRepeat } from './surface';
@@ -23,6 +24,11 @@ export interface GlbOptions {
   groups?: ShapeGroup[];
   /** Write the hair and fur (default true). Each shape's is capped (EXPORT_STRANDS, and EXPORT_STRANDS_TOTAL for the file). */
   hair?: boolean;
+  /**
+   * The skeleton. Shapes with a usable bind (made by autoBind, not stale, still the same triangles) get one skin, JOINTS_0 and
+   * WEIGHTS_0; the rest, and any export without a rig, are written exactly as before. The rest pose is always what is written.
+   */
+  rig?: Rig;
 }
 
 const pad = (n: number) => (4 - (n % 4)) % 4;
@@ -32,7 +38,7 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
   const unit = options.scale ?? 0.001;
   const pivot = options.pivot ?? 'scene';
   /** One mesh to write: a shape's solid, or the hair grown on it (`hair`), which carries a colour per vertex. */
-  type Part = { body: Body3D; pos: Float32Array; nrm: Float32Array; idx: Uint32Array; min: THREE.Vector3; max: THREE.Vector3; uv?: Float32Array; col?: Float32Array; hair?: boolean; baseRepeat?: number };
+  type Part = { body: Body3D; pos: Float32Array; nrm: Float32Array; idx: Uint32Array; min: THREE.Vector3; max: THREE.Vector3; uv?: Float32Array; col?: Float32Array; hair?: boolean; baseRepeat?: number; joints?: Uint16Array; weights?: Float32Array };
   const parts: Part[] = [];
   const growing: { body: Body3D; g: THREE.BufferGeometry; m: THREE.Matrix4; normalMatrix: THREE.Matrix3 }[] = [];
   const withHair = options.hair === false ? 0 : bodies.filter((b) => b.visible && b.hair).length;
@@ -92,7 +98,13 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
         uv[i * 2 + 1] = 1 - (u * sn + w * c);
       }
     }
-    parts.push({ body, pos, nrm, idx, min, max, uv, baseRepeat: baseSlot ? textureRepeat(body, baseSlot) : 1 });
+    const part: Part = { body, pos, nrm, idx, min, max, uv, baseRepeat: baseSlot ? textureRepeat(body, baseSlot) : 1 };
+    const bound = usableBind(options.rig, body.id, p.count);
+    if (bound) {
+      part.joints = Uint16Array.from(bound.joints);
+      part.weights = Float32Array.from(bound.weights);
+    }
+    parts.push(part);
     if (body.hair && options.hair !== false) growing.push({ body, g, m, normalMatrix });
   }
   // Hair, once every shape is known: it rests on the others rather than passing through them (their boxes, in the world).
@@ -120,7 +132,14 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
           v.fromBufferAttribute(hn, i).applyMatrix3(normalMatrix).normalize();
           hnrm.set([v.x, v.y, v.z], i * 3);
         }
-        parts.push({ body, pos: hpos, nrm: hnrm, idx: new Uint32Array(strands.getIndex()!.array), min: hmin, max: hmax, col: new Float32Array(hc.array as Float32Array), hair: true });
+        const strand: Part = { body, pos: hpos, nrm: hnrm, idx: new Uint32Array(strands.getIndex()!.array), min: hmin, max: hmax, col: new Float32Array(hc.array as Float32Array), hair: true };
+        // Hair on a bound shape is skinned too, by where each strand vertex is.
+        if (options.rig && parts.some((q) => q.body.id === body.id && q.joints)) {
+          const w = bindPoints(hpos, options.rig);
+          strand.joints = Uint16Array.from(w.joints);
+          strand.weights = Float32Array.from(w.weights);
+        }
+        parts.push(strand);
       }
     }
   }
@@ -239,14 +258,15 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
 
   for (const q of parts) {
     // Pivot: the point (in scene units) that becomes this node's origin.
+    // A skinned shape's own node transform is ignored by glTF, so its place is baked into the vertices (never a per-shape pivot).
     const origin =
-      pivot === 'shape' ? new THREE.Vector3((q.min.x + q.max.x) / 2, q.min.y, (q.min.z + q.max.z) / 2) : pivot === 'asset' ? assetShift : new THREE.Vector3();
+      q.joints ? (pivot === 'asset' ? assetShift : new THREE.Vector3()) : pivot === 'shape' ? new THREE.Vector3((q.min.x + q.max.x) / 2, q.min.y, (q.min.z + q.max.z) / 2) : pivot === 'asset' ? assetShift : new THREE.Vector3();
     const pos = new Float32Array(q.pos.length);
     const lo = [Infinity, Infinity, Infinity];
     const hi = [-Infinity, -Infinity, -Infinity];
     for (let i = 0; i < pos.length; i += 3) {
       for (let k = 0; k < 3; k++) {
-        const val = (q.pos[i + k] - (pivot === 'shape' ? origin.getComponent(k) : pivot === 'asset' ? origin.getComponent(k) : 0)) * unit;
+        const val = (q.pos[i + k] - (q.joints || pivot !== 'scene' ? origin.getComponent(k) : 0)) * unit;
         pos[i + k] = val;
         lo[k] = Math.min(lo[k], val);
         hi[k] = Math.max(hi[k], val);
@@ -268,13 +288,20 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
       attributes.COLOR_0 = accessors.length;
       accessors.push({ bufferView: addView(new Uint8Array(q.col.buffer), 34962), componentType: 5126, count: q.col.length / 3, type: 'VEC3' });
     }
+    if (q.joints && q.weights) {
+      attributes.JOINTS_0 = accessors.length;
+      accessors.push({ bufferView: addView(new Uint8Array(q.joints.buffer), 34962), componentType: 5123, count: q.joints.length / 4, type: 'VEC4' });
+      attributes.WEIGHTS_0 = accessors.length;
+      accessors.push({ bufferView: addView(new Uint8Array(q.weights.buffer), 34962), componentType: 5126, count: q.weights.length / 4, type: 'VEC4' });
+    }
     const label = (q.hair ? `${q.body.name}_hair` : q.body.name).replace(/\s+/g, '_');
     meshes.push({ name: label, primitives: [{ attributes, indices: aPos + 2, material: materials.length - 1, mode: 4 }] });
     const node: Record<string, any> = { name: label, mesh: meshes.length - 1 };
-    if (pivot === 'shape') node.translation = [origin.x * unit, origin.y * unit, origin.z * unit];
+    if (q.joints) node.skin = 0;
+    if (pivot === 'shape' && !q.joints) node.translation = [origin.x * unit, origin.y * unit, origin.z * unit];
     // With "asset" the shift is baked in, so the node stays at the origin.
     nodes.push(node);
-    if (q.hair) {
+    if (q.hair && !q.joints) {
       // The hair hangs off its shape's node, so it moves with it in an engine.
       const owner = partNode.get(q.body.id);
       if (owner !== undefined) {
@@ -283,6 +310,9 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
         ((nodes[owner] as Record<string, any>).children ??= []).push(nodes.length - 1);
         hairNodes.add(nodes.length - 1);
       }
+      continue;
+    }
+    if (q.hair) {
       continue;
     }
     partNode.set(q.body.id, nodes.length - 1);
@@ -307,6 +337,7 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
     node.translation = [d.x * unit, d.y * unit, d.z * unit];
   };
   const placed = new Set<number>();
+  const boneNodes = new Set<number>();
   groups.forEach((g) => {
     const me = nodes[groupNode.get(g.id)!] as Record<string, any>;
     const parent = g.parentId && groupNode.has(g.parentId) ? g.parentId : undefined;
@@ -319,17 +350,49 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
   parts.forEach((q) => {
     const owner = groups.find((g) => g.id === q.body.groupId);
     if (!owner) return;
+    if (q.joints && pivot === 'shape') return;
     const idx = partNode.get(q.body.id)!;
     rel(nodes[idx] as Record<string, any>, partOrigin.get(q.body.id)!, groupOrigin.get(owner.id));
     (nodes[groupNode.get(owner.id)!] as any).children.push(idx);
     placed.add(idx);
   });
 
+  // The skeleton: one root node holding the bone nodes (each placed by its head from its parent's), and one skin over them.
+  let skins: object[] | undefined;
+  const rig = options.rig;
+  if (rig && rig.bones.length && parts.some((q) => q.joints)) {
+    const shift = pivot === 'asset' ? assetShift : new THREE.Vector3();
+    const first = nodes.length;
+    const index = new Map(rig.bones.map((b, i) => [b.id, first + i]));
+    rig.bones.forEach((b) => {
+      const parent = b.parentId ? rig.bones.find((x) => x.id === b.parentId) : undefined;
+      const from = parent ? parent.head : [shift.x, shift.y, shift.z];
+      nodes.push({ name: b.name, translation: [0, 1, 2].map((k) => (b.head[k] - from[k]) * unit) });
+    });
+    const root = nodes.length;
+    const roots = rig.bones.filter((b) => !b.parentId || !index.has(b.parentId));
+    nodes.push({ name: 'rig_CharRoot', children: roots.map((b) => index.get(b.id)!) });
+    rig.bones.forEach((b) => {
+      const at = b.parentId ? index.get(b.parentId) : undefined;
+      if (at !== undefined) ((nodes[at] as Record<string, any>).children ??= []).push(index.get(b.id)!);
+    });
+    // Inverse bind matrices (column-major): each bone's rest world is a translation to its head, so the inverse is the opposite one.
+    const ibm = new Float32Array(rig.bones.length * 16);
+    rig.bones.forEach((b, i) => {
+      ibm.set([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -(b.head[0] - shift.x) * unit, -(b.head[1] - shift.y) * unit, -(b.head[2] - shift.z) * unit, 1], i * 16);
+    });
+    const aIbm = accessors.length;
+    accessors.push({ bufferView: addView(new Uint8Array(ibm.buffer), 0), componentType: 5126, count: rig.bones.length, type: 'MAT4' });
+    skins = [{ name: 'rig', joints: rig.bones.map((_, i) => first + i), inverseBindMatrices: aIbm, skeleton: root }];
+    rig.bones.forEach((_, i) => boneNodes.add(first + i));
+  }
+
   const json = {
     asset: { version: '2.0', generator: 'Autora 3D' },
     scene: 0,
-    scenes: [{ nodes: nodes.map((_, i) => i).filter((i) => !placed.has(i) && !hairNodes.has(i)) }],
+    scenes: [{ nodes: nodes.map((_, i) => i).filter((i) => !placed.has(i) && !hairNodes.has(i) && !boneNodes.has(i)) }],
     nodes,
+    ...(skins ? { skins } : {}),
     meshes,
     materials,
     ...(textures.length ? { textures, images, samplers: [{ magFilter: 9729, minFilter: 9987, wrapS: 10497, wrapT: 10497 }] } : {}),
