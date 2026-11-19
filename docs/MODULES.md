@@ -1191,3 +1191,12 @@ browser, pictures by default until R7 is measured on an Umbrel box and a phone).
   and a value in an internal slot (a parameter list that starts at 1 has `""` at 0); `game_template camera-3d` is the every-frame camera event; `placeholderPng` makes rounded, triangle, ring,
   arrow, shaded ball and button pictures; in `App.tsx` the shortcuts for Mind and voice are Alt+K and Alt+V and a bare letter with nothing focused goes to the message box
   (`tests/ui-typing.test.ts`), and with no model connected the composer shows a "Connect a model" button.
+
+- **The browser on the graphics chip** (`server/browsergpu.ts`, `launch` in `server/browser.ts`, `tests/gpu.test.ts`): a headless Chromium in a container draws WebGL on the CPU (SwiftShader /
+  llvmpipe) unless given the chip, so a 3D page or game ran at about a frame a second on a machine whose own Chrome ran it perfectly. Three parts: the compose file passes `/dev/dri`, the
+  Dockerfile installs Mesa (`mesa-dri-gallium`, `mesa-egl`, `mesa-gbm`, `mesa-gles`, and `mesa-vulkan-intel` where it exists), and `gpuCandidates` lists routes (ANGLE over EGL, over Vulkan
+  pointed at the chip's own ICD, over GLES) that `pickGpu` tries in turn. Each is **verified**: the browser is asked for its WebGL `UNMASKED_RENDERER` (`webglRenderer`), and one that is
+  SwiftShader / llvmpipe is closed and the next tried; if none gets the chip the browser starts as it always did. With no render node nothing is tried. The outcome is remembered for the life of
+  the server (`gpuChoice`) and logged (`[browser] graphics chip in use (OpenGL (EGL)): ANGLE (Intel, ...)`, or `drawing on the CPU`). `AUTORA_BROWSER_GPU=off` turns it off; `AUTORA_BROWSER_GPU_ARGS`
+  replaces the routes with the person's own flags. The picture stream to the window is unchanged (JPEG from the screencast); only the drawing moved. **Not verified on a real chip in the
+  sandbox it was written in**: the selection and fallback are tested, a faked render node proved the fallback end to end, but which route an N95 accepts is learned from its log line.

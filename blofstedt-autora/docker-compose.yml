@@ -41,6 +41,13 @@ services:
     # docker-compose.umbreld.yml.
     mem_limit: 3g
     memswap_limit: 3g
+    # The box's graphics chip, for the browser the agent drives and you watch. Without it Chromium draws every 3D page and
+    # game on the CPU (a frame a second on a small box) though the same machine's own Chrome runs it perfectly; with it the
+    # server's browser uses the chip (server/browsergpu.ts picks the route and checks it worked, and falls back to the CPU).
+    # Every Umbrel machine has /dev/dri (an Intel or AMD chip, or a Pi's). A virtual machine with no graphics device has
+    # none, and Docker will not start a container that asks for a device that is not there.
+    devices:
+      - "/dev/dri:/dev/dri"
     # Optional HTTPS origin for an authenticated proxy or tunnel. It enforces
     # the same trusted-peer restriction as HTTP, not a direct browser login.
     # Keep the port stable for existing tunnel configurations.

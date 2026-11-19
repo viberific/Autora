@@ -219,5 +219,7 @@ releaseNotes: >-
   jumping pages (Mind is now Alt+K), and with no model connected there
   is a button to connect one. Also new in 3D: triangles, carving and
   paint for the agent's models, and meshes that can be joined and cut.
-  Autora uses less of your computer when idle, and the sliders under
+  The browser Autora drives now uses the machine's graphics chip when it
+  can, so 3D pages and games stop crawling at a frame a second. Autora
+  uses less of your computer when idle, and the sliders under
   browser cards and in the canvas history are gone.
