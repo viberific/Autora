@@ -9,7 +9,7 @@
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { chromium, type Browser, type Frame, type Page } from "playwright-core";
+import { chromium, type Browser } from "playwright-core";
 import { sleep, startApp } from "./e2e-harness";
 import { CHROME } from "./chrome";
 import { openWorkButtons } from "./ui-workspace-ready";
@@ -24,16 +24,6 @@ const guardOk = (req: { system: string; tools: string[] }) =>
   /You check one action/.test(req.system) ? { text: '{"destructive": false, "requested": true}' }
     : req.tools.length === 0 ? { text: "SKIP" }
       : null;
-
-async function editorIn(page: Page, app: string): Promise<Frame> {
-  for (let i = 0; i < 200; i++) {
-    const frame = page.frames().find((f) => f.url().includes(`/office-app/${app}/`));
-    if (frame) return frame;
-    await sleep(100);
-  }
-  throw new Error(`the ${app} editor's frame never appeared`);
-}
-
 
 async function until<T>(what: string, fn: () => Promise<T | null | false>, ms = 30_000): Promise<T> {
   const end = Date.now() + ms;
@@ -121,13 +111,6 @@ try {
 
   /** What the agent was told by its last tool call. */
   const lastTold = () => JSON.stringify(app.seen.flatMap((r) => r.messages).filter((m: { role: string }) => m.role === "tool").slice(-1));
-
-  await test("with Visible work on, the agent's change is typed by its hand in the Pages window, where the document is open", async () => {
-    await app.turn(s, "move the launch to Monday in the document", 120_000);
-    assert.match(lastTold(), /Typed by hand in the Autora Pages window/, lastTold().slice(-800));
-    const docs = await editorIn(page, "docs");
-    await until("the new day in the editor", async () => /Monday/.test(await docs.evaluate(() => document.body.innerText)), 30_000);
-  });
 
   await test("each window's change is typed in that window: the cell goes to the Sheets window, not the Pages one", async () => {
     await openWorkButtons(page);

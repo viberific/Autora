@@ -102,6 +102,7 @@ interface StoredMeta {
       ask -- the person's own words for when to ask. */
   permissions?: "yolo" | "ask";
   askWhen?: string;
+  learn?: boolean;
 }
 
 /** What a session's log holds, without holding the log. */

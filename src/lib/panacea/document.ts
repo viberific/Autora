@@ -343,20 +343,6 @@ export function blockRange(doc: PMNode, id: string): { from: number; to: number 
   return out;
 }
 
-/** How one block is formatted, as the document's own controls read it with that block selected (`paramsFromState`). */
-export function paramsAtBlock(state: EditorState, id: string): Record<string, Value> | null {
-  const r = blockRange(state.doc, id);
-  if (!r) return null;
-  return paramsFromState(state.apply(state.tr.setSelection(TextSelection.create(state.doc, r.from, r.to))));
-}
-
-/** Every text block, in order: its id, kind, words, and its whole shape (marks, alignment) as one string to compare. */
-export function blockShapes(doc: PMNode): Array<{ id: string; kind: string; text: string; shape: string }> {
-  const shapes: string[] = [];
-  doc.descendants((node) => { if (node.isTextblock) shapes.push(JSON.stringify(node.toJSON())); return true; });
-  return blocksOf(doc).map((b, i) => ({ ...b, shape: shapes[i] ?? "" }));
-}
-
 /** The headings, in order: the outline. */
 export function outlineOf(doc: PMNode): Array<{ id: string; level: number; text: string }> {
   const out: Array<{ id: string; level: number; text: string }> = [];

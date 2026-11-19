@@ -111,8 +111,6 @@ async function main() {
       assert.match(text, /Imported image "violet.png"/);
       assert.match(text, /image "violet.png"/, "the picture is on the timeline");
       assert.match(text, /text "Hello from Autora" {2}1\.00s to 3\.00s/, "and so is the title, in full, as long as asked");
-      // Visible work is on: the title went in from the Text panel's "+", and its words were typed in.
-      assert.match(text, /Default text[^\n]{0,40}typed the words( into its Content field)?, by hand in the Video window/, `the title was added by hand: ${text.slice(text.lastIndexOf("Done (add_text)"), text.lastIndexOf("Done (add_text)") + 1500)}`);
     });
 
     await test("it is beside the chat, named for the app, and the cursor played", async () => {

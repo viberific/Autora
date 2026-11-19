@@ -48,9 +48,8 @@ Spectra's fetched renderer is most of what is on disk.
   ones. Edits run one at a time on the stream as the last left it, matches last
   first; the page stays vector, nothing is rasterised. Where it worked, and each
   object `pdf_edit` places (`cueForItem`), go to the window as `cues` on
-  `desk.open`. Nothing plays them, on purpose: Visible work is live, never a replay (docs/VISIBLE-WORK.md); with it on,
-  `pdf_edit` is done in the editor by the agent's hand instead -- `pdfhand.ts` hands it to the window, `spectra-editor/src/autora/hand.ts`
-  does it with Spectra's own tools and saves, and `expectHandSave` in `pdfdesk.ts` keeps that save as the agent's change), `pdfdesk.ts` (the PDF window: the file the
+  `desk.open`. Nothing plays them: the agent works on the file at speed and the window shows the result; the way to see how a
+  tool is used is Learn mode, docs/LEARN.md), `pdfdesk.ts` (the PDF window: the file the
   agent works on, open beside the chat in Spectra-PDF's editor (`spectra.ts`, `spectra/`, `spectra-editor/`). What `pdf_edit`
   places becomes the editor's own movable objects, each keeping the item it
   came from so the file shows exactly what was drawn until the person changes
@@ -61,15 +60,8 @@ Spectra's fetched renderer is most of what is on disk.
   document can be open beside the conversation at once, each with its own document, versions and engine (`deskAt` in
   `officeRoutes`, keyed by a `DeskKey` -- session and kind together -- so a call cannot reach the wrong app's
   document), each with a tab on the desktop (`App.tsx`: `OFFICE_PANES`, every open window kept mounted and only the
-  chosen one shown, the strip run to the top of the screen) named for the app rather than the file. The agent's cursor:
-  Visible work is live (docs/VISIBLE-WORK.md): with it on and the document open in its window, `office_edit`
-  works out the finished file, `server/officehand.ts` (`handSteps`) compares it with the window's document and hands the changes
-  in words (paragraphs, cells, slide boxes) to the window (`officedesk.hand`, claimed by the first window), and
-  `office/shim/hand.js` types them in the editor with its own cursor -- insert-text into Pages' ProseMirror page and Slides'
-  `.slide-text-editor`, the name box and the formula bar's tick in Sheets; `handing()` in `officedesk.ts` makes `personSaved`,
-  the engine-file poll and `/presence` ignore the editor meanwhile (and `quietUntil` a few seconds after); then `showInWindow`
-  puts the finished file in. The window's agent pointer and the in-between-files replay are gone (`officestage.ts`,
-  `OfficeCursor.tsx`, `cursor.js`). Test: `tests/ui-office-hand.test.ts`. Briefing text: `OFFICE_GUIDE`/`WINDOWS_GUIDE` in `guides.ts`. The
+  chosen one shown, the strip run to the top of the screen) named for the app rather than the file. `office_edit` changes the file and `showInWindow`
+  puts it in; there is no cursor and no in-between-files replay. Briefing text: `OFFICE_GUIDE`/`WINDOWS_GUIDE` in `guides.ts`. The
   document the agent works on, open beside the chat in
   GenOffice's own editor for it, built by `scripts/build-office.mjs` into
   `dist/office/web/{docs,slides,sheets}` and served at `/office-app` with a sandbox
@@ -379,8 +371,7 @@ Spectra's fetched renderer is most of what is on disk.
     files kept to compare) and emits `file.edit` cards -- lines added, removed
     and a little context; lock files, environment files, build output and
     Autora's own state dir are never shown; a folder over `MAX_TRACKED` files
-    is not followed. `FileCell` types a card that has just arrived (a replay of
-    code already written, off with the agent-cursor switch in `lib/agentCursor.ts`).
+    is not followed. `FileCell` shows the diff whole (no typing replay).
   - `presence.ts`: working side by side. One record per chat of what the person
     touches (`touchPresence` in `server.ts`, from the input routes), leases that
     run out a few seconds after their last touch, and explicit control they take
@@ -393,15 +384,10 @@ Spectra's fetched renderer is most of what is on disk.
     every few seconds while held) and `personChanges` touches each object the
     person changed; `pdf_edit` skips objects they hold, does the rest of the call
     and says what it left (`PdfOutcome.held` when nothing could be done).
-  - `domdiff.ts` + `LiveBrowser.domMap/markAt/glideTo` (`browser.ts`): after code
-    changes the preview's page is compared with how it was (matched by tag,
-    words and class, never position) and the cursor -- drawn into the page, so
-    it is in the streamed frames -- glides to what is new or restyled and
-    outlines it with a name. A served folder is reloaded by the loop on a code
-    change as well as by its file watcher, which misses files replaced whole.
+  - A served folder is reloaded by the loop on a code change as well as by its file watcher, which misses files replaced whole.
     `app_preview` click/hover/type/press/scroll use the page as a person would,
     in the window the person is watching, and are refused while planning.
-    All of it follows the one agent-cursor switch (`state.agentCursor`).
+    The agent's pointer is not drawn: it works at speed.
   - The browser's pointer (`CURSOR_SCRIPT` in `browser.ts`) wears the Office cursor's arrow and name and is driven by the
     real input events (move, press, keys, wheel), not by announcements; the stream runs at its faster rate while the
     agent moves it (`touched()`). `tests/browser-cursor.test.ts`.
@@ -517,15 +503,7 @@ Spectra's fetched renderer is most of what is on disk.
   colours only); `changed` -> `PUT /api/cad/:session/doc`; an agent change -> `caddesk` over the socket -> the frame is sent the new
   model. Each change carries `by` (agent or person) so the window reloads only for the agent's: a drag in progress is never
   answered with an echo; and a model that came down is not sent back up, even as a new object (`embed.ts` compares content), or
-  a late echo would undo the agent's next change. With Visible work on, a page watching and the window open, every call that
-  changes the model is done by hand (`byHand`; not `READS`, and `NO_CONTROL` says why not): worked out on a copy, pushed as
-  `cad.hand` until the page claims it (`/hand/claim`, 4 s or done here; the claim answers with `goal`, the model as the call
-  leaves it, and `need`, what it names), posted to the frame as `{autora3d: "hand"}`, done by `runHand` (`agentHand.ts`, using
-  the viewer's `project`, `toPlane`, `hitAt`, `handles` and `mmPerPixel`), answered with `handed` and `/hand/reply`; then the
-  copy's model goes in with the window's new ids swapped in. A batch goes one command at a time. While `entry.handing`, the
-  window's `PUT /doc` is its hand's steps and is not taken, so a call stays one step of the model's history. Undo and redo
-  (`historyByHand`) read where the model's history leads without taking it, the hand presses until the window is there, then
-  the history steps. `cad_export` is saved as an artifact (the STL never goes through the conversation). Traps: the window opens
+  a late echo would undo the agent's next change. `cad_export` is saved as an artifact (the STL never goes through the conversation). Traps: the window opens
   on the agent's first call; an incognito chat has none; tool names in the engine's messages are prefixed on the way out
   (`asAgentSees`). The phone shows it as a tab in the pinned view like the other windows (`Thread.tsx`, `lib/stage.ts` kind `cad`).
   **Meshes** (`autora-3d/src/utils/meshImport.ts`, `docs/autora-3d-mesh.patch`): a shape can be a triangle mesh brought in from a file
@@ -587,8 +565,7 @@ Spectra's fetched renderer is most of what is on disk.
   Glass, a pattern Texture, hair Hair), through the same activity route as the canvas's own offers. Thumbnails show glass see-through, a
   pattern's colours and hair as a soft edge (`thumbnail.ts` `looks`). `node scripts/sync-autora-3d.mjs --specs` rewrites `server/specs/cad.ts` from the copy here while a patch is not
   upstream yet. Traps: a pattern's colour, size and relief need a pattern first, and the hair's numbers need hair on; clear glass is kept slightly
-  tinted on screen (transmission at most 0.94, opacity 0.92) so it reads against the dark studio. Tests: `tests/surface-3d.test.ts`, `tests/cad-pictures.test.ts`, the `surface` and
-  `hair` cases of `tests/ui-cad-hand-tools.test.ts`.
+  tinted on screen (transmission at most 0.94, opacity 0.92) so it reads against the dark studio. Tests: `tests/surface-3d.test.ts`, `tests/cad-pictures.test.ts`.
 - `server/studio.ts`, `server/specs/studio.ts`, `src/lib/studio/`, `src/components/StudioWindow.tsx` + `src/components/studio/`:
   **Autora Music**, the music window, and the agent's `studio_*` tools. A song is tracks of clips of notes, in beats
   (`src/lib/studio/model.ts`: plain JSON, no DOM/React/Node, imported by the server *and* the page, so there is one idea of a valid
@@ -603,14 +580,7 @@ Spectra's fetched renderer is most of what is on disk.
   (`by: "agent"`, `rev++`); the person's edits are saved by `useSong.ts` (`PUT /doc` with the `rev` they last saw: **409 when the
   agent has changed the song since**, so a save never undoes the agent's work unseen; the window then loads theirs and says so).
   The window loads the agent's change, lights the clips it touched (`touched()`), and puts the old song on its own undo stack, so
-  Ctrl+Z takes any agent change back. With Visible work on and the window up, `byHand` first sends the window a `hand`
-  command: `studioSteps` (`lib/studio/handsteps.ts`, pure, shared) turns the song before and after into steps with the window's
-  controls, and `runStudioHand` (`components/studio/hand.ts`) does them with synthetic pointer, mouse and key events into the
-  elements the window drew (`data-track`/`data-clip` on rows, clips and mixer strips; `pointerPlace` moves the agent's pointer
-  while it drags), the way a person's edits are made and saved (as `person` while it goes). It answers which steps were done and
-  the ids it gave what it made; the server keeps those ids in the finished song, commits it as `agent` with `quiet` set so the
-  window takes it without lighting anything, and tells the agent what was done by hand and what was not. Synthetic events use
-  `pointerId: 1` (the mouse), so `setPointerCapture` in the lane and the roll accepts them. While a note is being dragged
+  Ctrl+Z takes any agent change back. While a note is being dragged
   (`hold`) an agent change waits for the pointer. `focus` (the clip
   open in the editor) is posted to the server so "this clip" means something to the agent (`studio_look`, the turn note). The
   agent cannot hear: `studio_look` adds `review()` observations (empty clips, notes outside the key, no bass, volumes far apart).
@@ -624,11 +594,10 @@ Spectra's fetched renderer is most of what is on disk.
   until a tap, so `studio_play` reports `blocked` rather than pretending; the phone shows it as the `studio` kind in the pinned view
   (`stage.ts`), and `.stage-body[data-active="studio"]` is not height-limited. Tests: `tests/studio.test.ts` (theory, tools, wire),
   `tests/e2e-studio.test.ts` (a real turn), `tests/ui-studio.test.ts` (a real browser: draws, plays, bounces a WAV and checks it has
-  sound, an agent change lights up and undoes with Visible off, and with it on adds a track, draws a clip with notes, types a
-  tempo and clicks drum hits by hand), `tests/studiohand.test.ts` (the steps).
+  sound, an agent change lights up and undoes).
 - `server/panacea.ts`, `server/specs/panacea.ts`, `src/lib/panacea/`, `src/components/PanaceaWindow.tsx` + `src/components/panacea/`,
   `server/projectbook.ts`: **Panacea**, the single workspace (design and plan: `docs/PANACEA.md`).
-  `src/components/PanaceaWorkspace.tsx` hosts the scene and has no bar of its own in the app: Follow and the Visible work eye sit in `App.tsx`'s header (`.top-work`), and Capabilities is the wrench by the message box.
+  `src/components/PanaceaWorkspace.tsx` hosts the scene and has no bar of its own in the app: Follow and the Learn switch sit in `App.tsx`'s header (`.top-work`), and Capabilities is the wrench by the message box.
   There is no mode selector or exclusive pane: `panacea/Board.tsx` renders every native surface and hosted engine card under
   one world transform. `workspaceScene.ts` gives hosted contents stable identities even when other work is inserted.
   The viewport-level right icon dock jumps the camera, Zoom out is anchored, and Show all work fits native/engine bounds together.
@@ -652,7 +621,7 @@ Spectra's fetched renderer is most of what is on disk.
   and server names what else must learn of it; plan: `docs/PANACEA-ENGINE.md`), `surfaces.ts` (what the image and data each
   publish, tables: `tableFrom`, `filteredRows`, `aggregate`), `canvas.ts` (the document, `normalizeCanvas`, placement `placeFor` / `nearestFree`, `refocus` /
   `fade` / `restore`, values), `library.ts` (180 built-in recipes, `instantiate`, `searchLibrary`), `document.ts` (the document engine: ProseMirror schema, selection-driven parameters, `applyParam`, the agent's block-level hands; pure, runs on server and page; `tests/panacea-doc.test.ts`), `board.ts` (the board: cards, links, Autora's questions, who writes, tidy and the Markdown outline; pure; drawn by `components/panacea/BoardView.tsx`; `tests/panacea-board.test.ts`), `rules.ts` (starters and offers,
-  `addSurfaceTo`, `placeRecipe` / `placeComposed`), `profile.ts` (what is learned), `handsteps.ts` (Visible work's plan), `project.ts` (a project on the canvas:
+  `addSurfaceTo`, `placeRecipe` / `placeComposed`), `profile.ts` (what is learned), `project.ts` (a project on the canvas:
   phases each with a region `REGION_W` apart, steps, decisions, links, the stack; `canvas.ts` `phaseView` / `phaseBox` /
   `enterPhase` place work in the current phase's region; the agent's `panacea_project`, the person's
   `components/panacea/ProjectStrip.tsx`; plan: `docs/PANACEA-NEXT.md`). One canvas
@@ -668,7 +637,7 @@ Spectra's fetched renderer is most of what is on disk.
   `onScroll` resets), or a `scrollIntoView` would shift its chrome; a panel's height is estimated before it is drawn
   (`estimateHeight`), and the board pans to show a new panel measured as drawn. `projectbook.ts` keeps each project folder's
   notebook (a note per chat, written at the end of a turn in `server.ts`; attached with the folder in the message route).
-  **The capability table** (`server/capabilities.ts`, `tests/capabilities.test.ts`): the seven hosted editors as data. Add an editor by adding a row, and the test names every other table that is not yet in step (the family in `toolload.ts`, the manual in `handbook.ts`, `loadable()`, the row in `docs/VISIBLE-WORK.md`, the workspace mode, the desk).
+  **The capability table** (`server/capabilities.ts`, `tests/capabilities.test.ts`): the seven hosted editors as data. Add an editor by adding a row, and the test names every other table that is not yet in step (the family in `toolload.ts`, the manual in `handbook.ts`, `loadable()`, the workspace mode, the desk).
   **The window handshake** (`server/handshake.ts`, `tests/handshake.test.ts`): `createHandshake()` is what every editor uses to hand a call to its window: `offer` (push with an id, again every `resendMs` until claimed; `claimMs` for "nobody took it", `replyMs` from the claim, `totalMs` from the offer; a timeout is a made-up reply, `UNTAKEN` or an error), `claim` (the first to ask wins once; `info` goes back with it), `reply` / `fail` (the window's answer; Music, Panacea and Video accept one that was not claimed first, `unclaimed: true`), `cancelAll` (the window or chat closed). Used by `caddesk.ts`, `photodesk.ts`, `pdfhand.ts`, `officehand.ts` (the `*/hand/claim` and `*/hand/reply` routes) and `studio.ts`, `panacea.ts`, `opencut.ts` (`command()`). A new editor's server half is `createHandshake()` plus its two routes.
   **Document log and suggestions** (`src/lib/panacea/doclog.ts`, `Suggestion` in `document.ts`, `DocSide` in `components/panacea/DocView.tsx`): the server keeps a log per document (`Entry.docLogs`, saved with the canvas; the page's copy of a document is only its tree, which is why) and `commit()` appends a ProseMirror step with its inverse for every change to a tree, by whoever made it (a person's typing within 5 s joins one step). `undoOp` takes one step out and keeps the later ones, refusing when a later step touched the same words. Suggestions are part of `DocState` (`panacea_doc` op `suggest`: a rewording about as long as the block, or a removal, with a reason; never new writing) and change nothing until the person answers through `POST /api/panacea/:session/doc/:surface/suggestion`, which applies it as their edit and refuses it when the words have since changed; `.../undo` and `GET .../log` serve History. Tests: `tests/panacea-doclog.test.ts`, the last two cases of `tests/panacea.test.ts`, and the browser case in `tests/ui-panacea.test.ts`.
 - `spectra-editor/`: Spectra-PDF's renderer (github.com/jasonulbright/Spectra-PDF), the PDF window's
@@ -722,10 +691,7 @@ Spectra's fetched renderer is most of what is on disk.
   project..."; a machine that did not answer is remembered in the editor's preferences, `autora-no-gpu`, and not waited
   on again, and a browser with no `navigator.gpu` does not wait at all; the "open OpenCut in Chrome" banner is gone
   from the overlay `page.tsx`); `PUT /api/opencut/file` streams the clip to disk (it used `express.raw`, which held
-  the whole file in RAM and took small servers down); the agent's timeline edits with Visible work on are done with
-  the editor's controls (`byHand` in
-  `OpenCutWindow.tsx`, `hand_point`/`hand_tap` in `commands.ts`, `data-element-id`/`data-in-track` on clips and
-  `data-track-id` on track rows from the overlay's `timeline-element.tsx` and `timeline-track.tsx`; `tests/ui-video-hand.test.ts`); the project list
+  the whole file in RAM and took small servers down); the project list
   that picks the first project is asked again rather than read as empty; (3) a command can arrive in two tabs: `/api/opencut/claim` makes one of them do it, and the
   server sends an unclaimed one again every 1.5 s; (4) theme: the window reads Autora's tokens off its own page and
   posts them (`--a-*`), so a different theme here is a different one there; (5) automatic captions are removed (they
@@ -854,17 +820,11 @@ Spectra's fetched renderer is most of what is on disk.
   identifies the work the camera may follow; the phone falls back to `busiestSurface` for a live page. A manual icon jump stops Follow and
   holds the camera while other surfaces open. Jumping to work keeps every engine mounted in the same spatial scene;
   it never changes exclusive visibility. Typing, dragging and pins block automatic camera movement.
-- The agent's hand halting (`lib/handHalt.ts`): `haltHands(stop)` on Visible off (the rest done unseen) or Stop (no more
-  steps); every in-page hand's pauses are `handPause`, and frames get `autora:halt`. `pointerFollow` in `lib/pointer.ts` is
-  the board's one cursor following a frame's reported hand (docs/VISIBLE-WORK.md).
-- The agent's pointer outside the Office windows: `lib/pointer.ts` (a layer on the body: arc, rest, press ring, typed
-  words beside it; it goes only where a real element or a frame-confirmed point is). Music points at the clips that
-  lit up (`StudioWindow`). The PDF window plays the server's cues (`cueForItem`, with the page's size so a place on a
-  page is a fraction of it): `SpectraWindow` asks the frame where a page is (`autora:spectra:locate`, answered in
-  `spectra-editor/src/autora/host.ts`, which also scrolls the place into view). Autora 3D draws its own, inside the
-  frame (`autora-3d/src/agentCursor.ts`): `caddesk.ts` says the tool (`cue`) with the model, the frame goes to the
-  tool's button, applies the model, then goes to the shapes that changed (`ViewerApi.screenOf`). The PDF editor is
-  opened on `deskDocument` (the pages with the agent's objects drawn in), not on `deskBase`.
+- Learn mode (docs/LEARN.md): `lib/learn.ts` reads the lesson off the log (shared with the server), `lib/learnTarget.ts` finds the
+  control a step names, `components/LearnGuide.tsx` rings it and waits for the person, `components/LearnToggle.tsx` is the header switch,
+  and `server/learn.ts` has the tool, the briefing and the step route. There is no agent cursor: the agent works at speed. The PDF
+  editor is opened on `deskDocument` (the pages with the agent's objects drawn in), not on `deskBase`.
+
 - The PDF editor is one page (`singlePage` in `spectra-editor/vite.config.ts`: script, styles and workers inline,
   `inlineDynamicImports`, English only), because a frame with no origin fetches without cookies and a login proxy
   refuses it (`tests/ui-pdfwindow-proxy.test.ts`). pdf.js's data (`dist/spectra-editor/pdfjs/`, shipped by
@@ -905,13 +865,7 @@ Spectra's fetched renderer is most of what is on disk.
   skips the GPU canvas on a software adapter. The pin never moves. The All tools catalogue (`menus::menu_items`,
   ~800 commands each checked for live/enabled/ticked) is costly: it is kept in `Rail::catalogue` and made again only
   when All tools opens or after a command ran, never per frame (it made every scroll and pan stutter); the bar asks
-  its own few items' enabled state live. **Visible work** (docs/VISIBLE-WORK.md): with it on and the window open,
-  `photo_edit` is handed to the window (`byHand` in `photodesk.ts`: a `photodesk.hand` message, claimed by the first
-  window, answered with the picture and each command's result) and done by the overlay's hand (`hand_*` in
-  `autora.rs`): its own cursor, real egui input through a `raw_input_hook` patched into `web.rs`, All tools ->
-  search -> tile -> the command's dialog -> OK (the OK's rect and its result come from two patches in `widgets.rs`
-  and `dialogs.rs`). Nobody claims it within 4 s -> the CLI does it. The state's `hand` is the revision the window
-  made, so it does not reload it. Test: `tests/photo-hand.test.ts`.
+  its own few items' enabled state live. `photo_edit` runs on the server's copy at speed and the window loads the result. Test: `tests/photo-hand.test.ts`.
 - Second pass on a phone: the pages (Sessions, Artifacts, Tools, Settings, Mind...), the drawer, the composer and the thread were already
   one column and needed only a thumb's size on their controls (`styles.css`, "Everything else on a phone": 36-40px pills, filters and
   selects, switches and check boxes with an invisible margin, 16px fields so the browser does not zoom). The terminal's bar names it and
@@ -1116,26 +1070,14 @@ Spectra's fetched renderer is most of what is on disk.
 - **Background model.** With no Background role or fast model named, unwatched work runs on `cheaperSibling` (the provider's
   priced default, when it costs at most half the main model); a call that fails on it is made again on the main model.
 
-## The agent's cursor and the few words beside it
+## Learn mode, and no agent cursor
 
-Every window that shows the agent working has a cursor that goes to a real element the way a hand does (`lib/humanPath.ts`
-for the app's windows: arc, easing, tremor, overshoot, rest, press; `server/human.ts` for the browser's page; `autora-3d/src/agentCursor.ts`
-in the 3D frame). Beside it, a short thought, **made from the act and never written by the model**: `lib/thought.ts` turns the
-tool call in flight (`thoughtForTool`, read from the log by `liveTool`) or the browser's own description of its click, fill or
-page (`thoughtFromAction`) into "Clicking “Save”", under `MAX` characters, and says nothing for an act with nothing to say.
-`components/AgentThought.tsx` (mounted once in `App.tsx`) puts the tool's words at the position every cursor reports to
-`lib/cursorPos.ts` -- Office, Video, Game, and `lib/pointer.ts` (PDF, Music, Photo) -- and keeps them 3 s after the call answers,
-since the windows play the work after it; the browser (and so Creator) draws its own inside the page (`__autoraThought` in
-`CURSOR_SCRIPT`, set from `LiveBrowser`'s `hooks.onAction`) and the 3D frame inside its own pointer. Photo draws its own,
-inside the editor (the hand, `hand_*` in `photo/overlay/autora.rs`), live while `photo_edit` is done there; nothing is
-played over a picture the server changed. Shell commands have no terminal window or cursor replay: their streamed
-output is a collapsible card in the conversation, whether Visible work is on or off.
-**Whose cursor**: `lib/cursorWho.ts` reads the chat's `agent.started` line and lays `--agent-accent(-rgb)` on the
-page, which every cursor style reads; the tag carries the agent's name and the polygon of its mark (`lib/pointer.ts` on the board,
-`pointer.ts`); the browser's page pointer is told by `LiveBrowser`'s `who` hook (`cursorWhoFor` in `server.ts`), the
-3D frame by `{autora3d:"who"}`. All of it is off with the
-agent-cursor switch. Tests: `thought.test.ts`,
-`browser-cursor.test.ts`.
+The agent has no cursor. It works at its own speed, in every window, and the window shows the result. How it teaches instead
+is Learn mode (docs/LEARN.md). What remains of the old pointer machinery: `server/human.ts` (the browser's page, with a person's
+pointer and typing rhythm only where a CAPTCHA asks for the hand), and `CURSOR_SCRIPT` in `browser.ts`, which draws the *person's*
+own tap in the live copy. `lib/thought.ts` keeps `thoughtForTool`, the few words a tool card shows for a call. Shell commands have
+no terminal window: their streamed output is a collapsible card in the conversation. Tests: `thought.test.ts`, `learn.test.ts`,
+`ui-learn.test.ts`.
 
 ## The mirror view (the browser's live copy)
 

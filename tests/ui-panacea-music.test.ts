@@ -29,7 +29,6 @@ async function main() {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   try {
-    await app.api("PATCH", "/api/agent-cursor", { on: false });
     const s = await app.newSession("Music panels", "build");
     const doc = async () => ((await app.api("GET", `/api/studio/${s}/doc`)).body as { doc: Project }).doc;
     const until = async (what: string, fn: () => Promise<boolean> | boolean, ms = 8000) => {

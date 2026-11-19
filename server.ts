@@ -113,6 +113,8 @@ import {
   looksOnly, permissionBriefing, permissionsOf, phaseFor, planRefusal, readOnlyCommand, PERMISSION_INFO, WORK_MODES, workMode,
   type Permissions, type WorkMode,
 } from "./server/modes";
+import { learnBriefing, learnRoutes } from "./server/learn";
+import { lessonFrom } from "./src/lib/learn";
 import {
   agentModelFor, backgroundTarget, conversationTargets, mainTarget, workerTarget, type Target,
 } from "./server/roles";
@@ -121,7 +123,6 @@ import { ErrorBudget } from "./server/errorbudget";
 import { forgetPresence, presenceFor, type Surface } from "./server/presence";
 import { cleanRemark, REMARK_SYSTEM, remarkPrompt, RemarkGate, SETTLE_MS as REMARK_SETTLE_MS, WINDOW_MS as REMARK_WINDOW_MS, worthRemarking } from "./server/companion";
 import { editFile, type EditArgs } from "./server/editfile";
-import { diffDom } from "./server/domdiff";
 import type { AutoraEvent, Notice, PreviewRun, Session, SessionOrigin } from "./server/session-types";
 import { Workspace, type DiffLine, type FileChange as CodeChange } from "./server/codediff";
 import { runSubagent, type SubagentDeps } from "./server/subagent";
@@ -147,8 +148,6 @@ import {
   addressIn, DEVICES, isLocalUrl, localAddress, serveFolder, waitForServer,
   type Device, } from "./server/preview";
 import { deskDocument, deskBriefing, deskHooks, deskRoutes, deskState, dropDesk, onDeskChange, onDeskCommand, onDeskTouch, personBase } from "./server/pdfdesk";
-import { pdfHandRoutes } from "./server/pdfhand";
-import { officeHandRoutes } from "./server/officehand";
 import { staticDir } from "./server/staticfiles";
 import { memoryRoutes } from "./server/routes/memory";
 import { skillRoutes } from "./server/routes/skills";
@@ -171,9 +170,9 @@ import { DESKS } from "./server/desks";
 import { cadRoutes, cadState, onCadCommand, serveCad } from "./server/caddesk";
 import { gameRoutes, gameState, onGamePlayRequest, serveGame } from "./server/gamedesk";
 import { onPhotoCommand, photoPickNote, photoRoutes, photoState, servePhoto } from "./server/photodesk";
-import { onStudioCommand, studioRoutes, studioState, studioTurnNote, studioVisible } from "./server/studio";
+import { onStudioCommand, studioRoutes, studioState, studioTurnNote } from "./server/studio";
 import { appOfArtifact, appOfFile, appOfTool } from "./src/lib/panacea/flows";
-import { dropPanacea, noteFlow, onPanaceaChange, panaceaJoins, onPanaceaTouch, panaceaRoutes, panaceaState, panaceaSuggester, panaceaTurnNote, panaceaVisible } from "./server/panacea";
+import { dropPanacea, noteFlow, onPanaceaChange, panaceaJoins, onPanaceaTouch, panaceaRoutes, panaceaState, panaceaSuggester, panaceaTurnNote } from "./server/panacea";
 import { installedWindows, joinProjects, windowOff } from "./server/tools";
 import { capabilityOf } from "./server/capabilities";
 import { forgetJoins, joinsTouched, startOfficeJoins } from "./server/officejoin";
@@ -359,6 +358,7 @@ const metaOf = (session: Session) => ({
   mode: session.mode,
   permissions: session.permissions,
   askWhen: session.askWhen,
+  learn: session.learn,
 });
 
 // Settings used to live here, in a module-level object that lasted exactly as
@@ -416,6 +416,7 @@ for (const stored of loadSessionIndex()) {
       ? { permissions: stored.permissions }
       : stored.mode === "ask" ? { permissions: legacyPermissions(stored.mode) } : {}),
     ...(stored.askWhen ? { askWhen: cleanAskWhen(stored.askWhen) } : {}),
+    ...(stored.learn === true ? { learn: true } : {}),
     events: [],
     seqCounter: counts.seq,
     counts,
@@ -974,7 +975,6 @@ function browserFor(session: Session): LiveBrowser {
     },
     onFields: () => broadcastBrowserState(session),
     who: () => cursorWhoFor(session.id),
-    visible: () => state.agentCursor,
     onAction: (action, at, url) => {
       emitEvent(session, "browser.action", "agent", {
         action,
@@ -1020,13 +1020,11 @@ function previewRunFor(session: Session, device: Device): PreviewRun {
   const run: PreviewRun = {
     live: null as unknown as LiveBrowser,
     opened: false, openedAt: 0, url: null, title: null, device, how: null, serve: null, watch: null, job: null, comments: [],
-    serverDown: null, timers: { reload: null, console: null, job: null, follow: null },
-    dom: null, domUrl: null, following: false, again: false, cues: { seq: 0, items: [] },
+    serverDown: null, timers: { reload: null, console: null, job: null },
   };
   const current = () => previews.get(session.id) === run && run.opened;
   run.live = new LiveBrowser({
     watchers: () => sessionSockets.get(session.id)?.size ?? 0,
-    visible: () => state.agentCursor,
     onFrame: (jpegBase64) => {
       const size = run.live.viewport();
       sendEphemeral(session.id, {
@@ -1074,7 +1072,6 @@ function previewState(session: Session) {
     consoleErrors: errors.slice(-6).map((e) => e.text),
     serverDown: run.serverDown,
     fields: run.live.status().fields,
-    cues: run.cues,
   };
 }
 
@@ -1128,7 +1125,6 @@ async function previewAct(
       return { error: `${found.error}${found.options.length ? ` On the page: ${found.options.map((o) => JSON.stringify(o)).join(", ")}.` : ""}` };
     }
     const x = found.x + found.w / 2, y = found.y + found.h / 2;
-    if (state.agentCursor) await live.glideTo(x, y);
     return { x, y, said: `${found.tag}${found.label ? ` ${JSON.stringify(found.label)}` : ""}${found.count > 1 ? ` (the first of ${found.count} matches)` : ""}` };
   };
   try {
@@ -1181,8 +1177,6 @@ async function previewAct(
       }
       case "scroll": {
         const dy = Number.isFinite(args.dy) && args.dy !== 0 ? Number(args.dy) : 500;
-        const size = live.viewport();
-        if (state.agentCursor) await live.glideTo(size.width / 2, size.height / 2);
         await live.mouseWheel(0, Math.max(-5000, Math.min(5000, dy)), false);
         await settle();
         done = `Scrolled ${dy > 0 ? "down" : "up"} ${Math.abs(dy)} pixels.`;
@@ -1195,75 +1189,6 @@ async function previewAct(
     return await previewLook(run, done);
   } catch (err) {
     return { ok: false, summary: `That did not work: ${String((err as Error)?.message ?? err).split("\n")[0]}` };
-  }
-}
-
-/**
- * The page has probably changed because the agent wrote code: find what, and
- * take the cursor there. A dev server updates the page a moment after the file
- * is saved, so the page is looked at a few times until it differs. What was on
- * the page is remembered between looks; a different address starts afresh
- * rather than marking a whole new page. Switched off with the agent cursor,
- * the page is still remembered so a later look compares with the right thing.
- */
-function followPreviewChange(session: Session, delayMs = 400) {
-  const run = previews.get(session.id);
-  if (!run?.opened) return;
-  if (run.following) {
-    run.again = true;
-    return;
-  }
-  if (run.timers.follow) clearTimeout(run.timers.follow);
-  run.timers.follow = setTimeout(() => {
-    run.timers.follow = null;
-    void lookForChange(session, run, 0);
-  }, delayMs);
-  run.timers.follow.unref?.();
-}
-
-async function lookForChange(session: Session, run: PreviewRun, attempt: number): Promise<void> {
-  if (previews.get(session.id) !== run || !run.opened) return;
-  run.following = true;
-  try {
-    const now = await run.live.domMap();
-    if (!now) return;
-    if (!run.dom || run.domUrl !== run.url) {
-      run.dom = now;
-      run.domUrl = run.url;
-      return;
-    }
-    const cues = diffDom(run.dom, now, run.live.viewport());
-    if (cues.length === 0 && attempt < 5) {
-      // Nothing yet: a slow hot reload. Look again shortly.
-      run.following = false;
-      run.timers.follow = setTimeout(() => {
-        run.timers.follow = null;
-        void lookForChange(session, run, attempt + 1);
-      }, 600);
-      run.timers.follow.unref?.();
-      return;
-    }
-    run.dom = now;
-    // The cursor is real mouse movement: never over a page the person is using.
-    if (cues.length > 0 && state.agentCursor && !presenceFor(session.id).blocked("app") && previews.get(session.id) === run && run.opened) {
-      run.cues = { seq: run.cues.seq + 1, items: cues };
-      broadcastPreview(session);
-      for (const cue of cues) {
-        if (previews.get(session.id) !== run || !run.opened) break;
-        await run.live.markAt(cue.x, cue.y, cue.w, cue.h, cue.label);
-        await new Promise((resolve) => setTimeout(resolve, 850));
-      }
-    }
-  } catch (err) {
-    log("debug", "preview", `could not look for what changed: ${(err as Error)?.message ?? err}`);
-  } finally {
-    if (run.following) {
-      run.following = false;
-      if (run.again) {
-        run.again = false;
-        followPreviewChange(session, 300);
-      }
-    }
   }
 }
 
@@ -1381,7 +1306,7 @@ async function previewStop(session: Session, say = true, keep = false): Promise<
   const was = run.opened;
   run.opened = false;
   for (const timer of Object.values(run.timers)) if (timer) clearTimeout(timer);
-  run.timers = { reload: null, console: null, job: null, follow: null };
+  run.timers = { reload: null, console: null, job: null };
   if (run.job) stopJob(run.job);
   run.job = null;
   run.watch?.close();
@@ -1441,7 +1366,7 @@ async function previewStart(
             run.timers.reload = null;
             if (!run.opened) return;
             run.live.clearConsole();
-            void run.live.reload().catch(() => undefined).then(() => followPreviewChange(session, 300));
+            void run.live.reload().catch(() => undefined);
           }, 350);
           run.timers.reload.unref?.();
         });
@@ -1518,9 +1443,6 @@ async function previewStart(
   emitEvent(session, "preview.open", "agent", { url, how }, span);
   broadcastPreview(session);
   void run.live.nudge();
-  // What the page looks like now, so the first change to it can be found.
-  run.dom = null;
-  void run.live.domMap().then((map) => { if (previews.get(session.id) === run && map) { run.dom = map; run.domUrl = run.url; } });
   const errors = run.live.consoleTail(5).filter((e) => e.kind === "error");
   return {
     ok: true,
@@ -1564,8 +1486,6 @@ const running = new Map<string, RunningTurn>();
  * for.
  */
 function stopTurn(sessionId: string, why: "person" | "superseded" = "person") {
-  // Whatever the agent's hand is doing in the page stops being shown at once (src/lib/handHalt.ts).
-  sendEphemeral(sessionId, { type: "hands.halt", stop: true });
   const turn = running.get(sessionId);
   if (!turn) return;
   turn.stopped = true;
@@ -2513,6 +2433,8 @@ async function systemInstructionFor(
   if (modeNote) notes.push(modeNote);
   const permNote = permissionBriefing(permissionsOf(own?.permissions), own?.askWhen ?? "");
   if (permNote) notes.push(permNote);
+  const learnNote = learnBriefing(own?.learn === true, own ? lessonFrom(own.events) : null);
+  if (learnNote) notes.push(learnNote);
   const unfinished = resuming.get(sessionId);
   if (unfinished) notes.push(resumeNote(unfinished));
   /* The agent and the person share the windows. Said every turn, and then what
@@ -3950,7 +3872,7 @@ function pdfInChat(session: Session): boolean {
 function autoLoadTools(session: Session, text: string) {
   if (!allToolsOn()) {
     const have = loadedFromLog(session.events);
-    for (const id of loadedFamilies({ events: session.events, said: text, hasPdf: pdfInChat(session), lazy: true })) {
+    for (const id of loadedFamilies({ events: session.events, said: text, hasPdf: pdfInChat(session), learn: session.learn === true, lazy: true })) {
       if (!have.has(id)) emitEvent(session, "tools.enable", "system", { family: id, why: "wanted" });
     }
     // An open canvas is what the message is about, whatever its words: its tools come with it.
@@ -4845,7 +4767,6 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
             run.live.clearConsole();
             await run.live.reload().catch(() => undefined);
             broadcastPreview(session);
-            followPreviewChange(session, 200);
             return { ok: true, summary: "Reloaded the preview." };
           },
           look: async () => {
@@ -4854,6 +4775,9 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
             return previewLook(run, "");
           },
           act: (args) => previewAct(session, args),
+        },
+        teach: (lesson) => {
+          emitEvent(session, "learn.lesson", "agent", { lesson: `l${Date.now().toString(36)}${session.seqCounter}`, ...lesson }, span);
         },
         setPhase: (to, reason) => {
           const work = workMode(session.mode);
@@ -5358,9 +5282,6 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
           touchPresence(session.id, "code", f.path, "edit",
             `${f.kind === "added" ? "created" : f.kind === "removed" ? "deleted" : "edited"} ${f.path}${f.added || f.removed ? ` (+${f.added} -${f.removed})` : ""}`);
         }
-        // The page is theirs to have changed: remember it, so the cursor does not mark their work as the agent's.
-        const run = previews.get(session.id);
-        if (run?.opened) setTimeout(() => { void run.live.domMap().then((m) => { if (m && previews.get(session.id) === run) { run.dom = m; run.domUrl = run.url; } }); }, 1500).unref?.();
       };
       if (canSeeCode) {
         // A folder watched before: whatever changed since the last turn is somebody else's work.
@@ -5399,9 +5320,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
           const run = previews.get(session.id);
           if (run?.opened && run.how === "folder") {
             run.live.clearConsole();
-            void run.live.reload().catch(() => undefined).then(() => followPreviewChange(session, 300));
-          } else {
-            followPreviewChange(session);
+            void run.live.reload().catch(() => undefined);
           }
         }
       };
@@ -6389,6 +6308,7 @@ async function startServer() {
         mode: workMode(s.mode),
         permissions: permissionsOf(s.permissions),
         ask_when: s.askWhen ?? "",
+        learn: s.learn === true,
         created_at: s.createdAt,
         updated_at: s.counts.lastTs || s.createdAt,
         events: s.counts.events,
@@ -6410,9 +6330,9 @@ async function startServer() {
   app.patch("/api/sessions/:id", (req: Request, res: Response) => {
     const session = sessions.get(req.params.id);
     if (!session) return res.status(404).json({ error: "Session not found" });
-    const { title: rawTitle, pinned, mode: rawMode, permissions: rawPerms, ask_when: rawWhen } = req.body ?? {};
+    const { title: rawTitle, pinned, mode: rawMode, permissions: rawPerms, ask_when: rawWhen, learn: rawLearn } = req.body ?? {};
     if (rawTitle === undefined && typeof pinned !== "boolean" && rawMode === undefined &&
-        rawPerms === undefined && rawWhen === undefined) {
+        rawPerms === undefined && rawWhen === undefined && typeof rawLearn !== "boolean") {
       return res.status(400).json({ error: "Nothing to change." });
     }
     if (rawMode !== undefined && !isWorkMode(rawMode)) {
@@ -6448,6 +6368,19 @@ async function startServer() {
       log("info", "sessions", `"${session.title}" permissions: ${perms}`);
     }
     if (rawWhen !== undefined) session.askWhen = cleanAskWhen(rawWhen);
+    if (typeof rawLearn === "boolean" && rawLearn !== (session.learn === true)) {
+      session.learn = rawLearn || undefined;
+      const open = lessonFrom(session.events);
+      /* Switched off in the middle of a lesson: it ends with the mode, so nothing stays highlighted. */
+      if (!rawLearn && open) emitEvent(session, "learn.end", "person", { lesson: open.lesson.id, how: "left" });
+      emitEvent(session, "context.note", "system", {
+        text: rawLearn
+          ? "Learn is on. Autora will show you how to use the tools, one highlighted step at a time, instead of doing the work for you."
+          : "Learn is off. Autora works at its own speed.",
+        learn: rawLearn,
+      });
+      log("info", "sessions", `"${session.title}" learn: ${rawLearn ? "on" : "off"}`);
+    }
     if (rawTitle !== undefined) {
       const title = typeof rawTitle === "string" ? rawTitle.trim().slice(0, 120) : "";
       if (!title) return res.status(400).json({ error: "A title is required." });
@@ -6457,17 +6390,13 @@ async function startServer() {
     saveMeta(metaOf(session));
     res.json({
       ok: true, title: session.title, pinned: !!session.pinned, mode: workMode(session.mode),
-      permissions: permissionsOf(session.permissions), ask_when: session.askWhen ?? "",
+      permissions: permissionsOf(session.permissions), ask_when: session.askWhen ?? "", learn: session.learn === true,
     });
   });
 
   /** Gone for good: its log, its pictures, and its browser. */
   // The PDF window: its pages, and what the person changes in it.
   deskRoutes(app, { exists: (id) => sessions.has(id), cwd: () => terminalDir() });
-  // Visible work in the PDF window: the agent's pdf_edit, done there by hand.
-  pdfHandRoutes(app, { exists: (id) => sessions.has(id), push: (id, message) => sendEphemeral(id, message), visible: () => state.agentCursor });
-  // ...and in Pages, Sheets and Slides: office_edit's typing, done there by hand.
-  officeHandRoutes(app, { exists: (id) => sessions.has(id), push: (id, message) => sendEphemeral(id, message), visible: () => state.agentCursor });
 
   /* The PDF window's editor (server/spectra.ts): Spectra-PDF's own UI and its
      own PDF engine, with the desk above as the document both sides share. */
@@ -6493,17 +6422,12 @@ async function startServer() {
     exists: (id: string) => sessions.has(id),
     incognito: (id: string) => Boolean(sessions.get(id)?.incognito),
     off: () => windowOff("cad_scene_get"),
-    push: (id: string, message: Record<string, unknown>) => sendEphemeral(id, message),
-    visible: () => state.agentCursor,
-    watched,
   });
   // Autora Photo: the photo window's picture, and opening and putting it away.
   photoRoutes(app, {
     exists: (id: string) => sessions.has(id),
     incognito: (id: string) => Boolean(sessions.get(id)?.incognito),
     off: () => windowOff("photo_look"),
-    push: (id: string, message: Record<string, unknown>) => sendEphemeral(id, message),
-    visible: () => state.agentCursor,
   });
   // Autora Games: the game window's game and files, and opening and putting it away.
   gameRoutes(app, {
@@ -6518,7 +6442,6 @@ async function startServer() {
     off: () => windowOff("studio_look"),
     push: (id: string, message: Record<string, unknown>) => sendEphemeral(id, message),
   });
-  studioVisible(() => state.agentCursor);
   const fileLoadGuards: FileLoadGuards = {
     exists: (id) => sessions.has(id),
     incognito: (id) => Boolean(sessions.get(id)?.incognito),
@@ -6537,7 +6460,6 @@ async function startServer() {
     push: (id: string, message: Record<string, unknown>) => sendEphemeral(id, message),
     loadFile: (id, artifact, options) => loadPanaceaFile(id, artifact, options, fileLoadGuards),
   });
-  panaceaVisible((session) => state.agentCursor && watched(session));
 
   /* File -> Export PDF in the Office window: the server lays the document out (the same pages office_pdf
      makes), and the PDF opens in the PDF editor -- PDFs always go to our own. */
@@ -7058,7 +6980,7 @@ async function startServer() {
     res.json({ ok: true, approved, who });
   });
 
-  memoryRoutes(app, { mind, haltHands: () => { for (const id of sessions.keys()) sendEphemeral(id, { type: "hands.halt" }); } });
+  memoryRoutes(app, { mind });
   skillRoutes(app);
 
   const todaysLedger = () => {
@@ -7081,6 +7003,7 @@ async function startServer() {
     },
   });
 
+  learnRoutes(app, { session: (id) => sessions.get(id), emit: (session, kind, actor, payload) => emitEvent(session, kind, actor, payload) });
   proactiveRoutes(app, {
     gatherSignals, answeredOffers, saveProactive, noticer, createJob, webPush, appLink, notices,
     latestNotice: () => noticeSeq,

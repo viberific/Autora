@@ -6721,22 +6721,14 @@ body:has(.panacea-workspace.is-phone .pw-engine) .install-offer { display: none;
 .pane-follow:hover { color: var(--text); }
 .pane-follow.is-on { color: var(--live); border-color: rgba(var(--live-rgb), 0.45); background: rgba(var(--live-rgb), 0.1); }
 .pane-follow:not(.is-on) .watch-dot { opacity: 0.35; animation: none; }
-/* Visible work and Follow, together at the right of the tab strip. */
+/* Follow, at the right of the tab strip. */
 .pane-acts { flex: 0 0 auto; margin: 0 0 5px auto; position: sticky; right: 0; display: flex; align-items: center; gap: 6px; }
 .pane-acts .pane-follow { margin: 0; position: static; }
-/* Visible work on: the accent, because it is the agent's cursor that is being shown. */
-.pane-follow.visible-work.is-on, .stage-follow.visible-work.is-on { color: var(--accent-light); border-color: var(--accent-line); background: var(--accent-soft); }
-.stage-follow.visible-work { margin-left: auto; }
-.stage-follow.visible-work.is-compact { width: 28px; padding: 0; justify-content: center; }
-.stage-follow.visible-work + .stage-follow { margin-left: 6px; }
-/* Follow and Visible work in the header, beside the page's own action. */
+/* Follow in the header, beside the page's own action. */
 .top-work { flex: 0 0 auto; display: inline-flex; align-items: center; gap: inherit; }
-.top-work .stage-follow, .top-work .stage-follow.visible-work, .top-work .stage-follow.visible-work + .stage-follow { margin: 0; }
+.top-work .stage-follow { margin: 0; }
 /* On a phone the open page's address would take the room Follow and the eye need; the browser card has its own close. */
 @media (max-width: 680px) { header.top .badge.browsing { display: none; } }
-.immersive-follow.visible-work { display: inline-flex; align-items: center; gap: 5px; }
-.immersive-follow.visible-work.is-compact { aspect-ratio: 1; padding: 0; justify-content: center; }
-.immersive-follow.visible-work.is-on { opacity: 1; }
 @keyframes appPaneIn { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
 
 .app-window { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; outline: none; background: var(--bg); }
@@ -7147,15 +7139,8 @@ button.app-url:hover { border-color: var(--border-strong); color: var(--text); }
 
 /* Code written out in the thread: the card's header says so, and a small
    cursor with the agent's name rides the end of the line being typed. */
-.diff-writing { font-size: var(--fs-xs); color: var(--accent); animation: diff-pulse 1s ease-in-out infinite; }
 @keyframes diff-pulse { 50% { opacity: .45; } }
-.diff-replay { background: none; border: 0; color: var(--text-3); cursor: pointer; padding: 3px 6px; border-radius: var(--r-xs); display: inline-flex; }
-.diff-replay:hover { color: var(--text); background: rgba(255, 255, 255, .06); }
-.diff-caret { display: inline-block; width: 0; position: relative; }
-.diff-caret::before { content: ""; position: absolute; left: 1px; top: -1px; width: 2px; height: 1.1em; background: var(--accent-light); animation: diff-blink .8s steps(1) infinite; }
-.diff-caret i { position: absolute; left: 6px; top: -1.45em; font: 600 10px/13px var(--sans, system-ui); font-style: normal; padding: 0 5px; border-radius: var(--r-sm); background: var(--accent-light); color: #fff; white-space: nowrap; }
 @keyframes diff-blink { 50% { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .diff-writing, .diff-caret::before { animation: none; } }
 
 /* The switch for the agent's cursor in the app window's bar. */
 
@@ -9009,28 +8994,6 @@ body.is-resizing iframe { pointer-events: none; }
 /* The agent's pointer takes the theme's accent, as its label does. */
 .office-cursor-arrow path, .agent-pointer .cursor-pop > svg path { fill: var(--agent-accent); }
 
-/* The few words beside the agent's cursor (components/AgentThought.tsx): a pill up and to the right of the pointer, its
-   tail pointing back at it, above the pointer layer so it is never under what it describes. */
-.agent-thought {
-  position: fixed; left: 0; top: 0; z-index: 2147483001; pointer-events: none;
-  transition: transform 0.09s linear;
-}
-.agent-thought > span {
-  position: absolute; left: 16px; bottom: 10px; max-width: 240px; white-space: nowrap;
-  padding: 3px 10px; border-radius: var(--r-pill); font-size: var(--fs-xs); font-weight: 550; line-height: 16px;
-  color: var(--text); background: color-mix(in srgb, var(--s2) 94%, transparent); border: 1px solid rgba(var(--agent-accent-rgb), 0.5);
-  box-shadow: var(--shadow); animation: thoughtPop var(--dur-1) var(--ease) both;
-}
-.agent-thought > span::before {
-  content: ""; position: absolute; left: -3px; bottom: -3px; width: 7px; height: 7px; border-radius: 50%;
-  background: color-mix(in srgb, var(--s2) 94%, transparent); border: 1px solid rgba(var(--agent-accent-rgb), 0.5);
-}
-.agent-thought.is-flipped > span { left: auto; right: 8px; }
-.agent-thought.is-flipped > span::before { left: auto; right: -3px; }
-.agent-thought.is-below > span { bottom: auto; top: 26px; }
-@keyframes thoughtPop { from { opacity: 0; transform: translateY(3px) scale(0.96); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .agent-thought { transition: none; } .agent-thought > span { animation: none; } }
-
 /* Artifacts: a folder's head carries its rename and remove beside the fold. */
 .art-head-row { display: flex; align-items: center; gap: 4px; }
 .art-head-row .art-toggle { flex: 1 1 auto; min-width: 0; }
@@ -9060,7 +9023,6 @@ header.top .badge,
 header.top .badge.mode-pill,
 header.top .top-work .stage-follow { height: var(--top-pill-h); min-height: 0; box-sizing: border-box; }
 header.top .badge.mode-pill.is-dot,
-header.top .top-work .stage-follow.visible-work.is-compact { width: var(--top-pill-h); }
 
 /* --- a vendor delegate answering for itself (VendorCell.tsx) ---------------
    A job handed to Claude or Gemini. It has to be tellable from Autora's own
@@ -9257,7 +9219,7 @@ body {
 
 /* What floats over the work or the words is frosted: the blur is what keeps it readable at a fifth opaque. */
 .shot-picker, .slash-menu, .mode-menu, .mode-sel-sheet, .pane-follow, .gm-back, .shot-menu, .pa-summon, .pa-selbar,
-.pa-toast, .pa-proj, .agent-thought > span, .pa-panel, .todo-dock, .jump-pill, .notice {
+.pa-toast, .pa-proj, .pa-panel, .todo-dock, .jump-pill, .notice {
   background: var(--glass-sheen), var(--glass-veil), var(--glass);
   border-color: var(--glass-line-strong);
   backdrop-filter: var(--glass-blur);
@@ -9379,3 +9341,45 @@ body::before {
   .pw-jump-dock.is-phone button { width: 36px; height: 36px; }
   .conversation-flow__move { width: 36px; height: 36px; }
 }
+
+/* ------------------------------------------------------------ Learn mode -- */
+/* The header's switch beside the chat's other choices (LearnToggle), and the guide that rings a control and waits for the
+   person to use it (LearnGuide). Nothing here takes a click except its own buttons: the ring lets everything through. */
+.learn-toggle {
+  display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 11px; flex: 0 0 auto;
+  border-radius: var(--r-pill); border: 1px solid var(--border-strong); background: var(--s2);
+  color: var(--text-2); font: inherit; font-size: var(--fs-sm); font-weight: 600; cursor: pointer;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+.learn-toggle:hover { background: var(--s3); color: var(--text); }
+.learn-toggle.is-on { color: var(--accent-light); border-color: var(--accent-line); background: var(--accent-soft); }
+.learn-toggle.is-compact { width: 34px; padding: 0; justify-content: center; }
+
+.learn-guide { position: fixed; inset: 0; z-index: var(--z-float); pointer-events: none; }
+.learn-ring {
+  position: fixed; border-radius: var(--r-sm); border: 2px solid var(--accent-light);
+  box-shadow: 0 0 0 4px var(--accent-soft), 0 0 24px 2px var(--accent-line);
+  transition: left var(--dur-2) var(--ease), top var(--dur-2) var(--ease), width var(--dur-2) var(--ease), height var(--dur-2) var(--ease);
+  animation: learn-breathe 1.8s ease-in-out infinite;
+}
+@keyframes learn-breathe { 50% { box-shadow: 0 0 0 7px var(--accent-soft), 0 0 28px 4px var(--accent-line); } }
+.learn-card {
+  position: fixed; pointer-events: auto; box-sizing: border-box; padding: 12px 14px;
+  border-radius: var(--r-lg); border: 1px solid var(--accent-line); background: var(--s2); color: var(--text);
+  box-shadow: var(--shadow-lg); font-size: var(--fs-base);
+}
+.learn-card.is-docked { left: 50%; bottom: 20px; transform: translateX(-50%); width: min(340px, calc(100vw - 32px)); }
+.learn-card-head { display: flex; align-items: center; gap: 8px; }
+.learn-card-head b { flex: 1 1 auto; min-width: 0; font-size: var(--fs-sm); color: var(--accent-light); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.learn-count { font-size: var(--fs-xs); color: var(--text-3); }
+.learn-x { display: grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: 50%; background: transparent; color: var(--text-3); cursor: pointer; }
+.learn-x:hover { background: var(--s3); color: var(--text); }
+.learn-say { margin: 8px 0 10px; line-height: 1.45; }
+.learn-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.learn-next, .learn-skip {
+  height: 28px; padding: 0 12px; border-radius: var(--r-pill); font: inherit; font-size: var(--fs-sm); font-weight: 600; cursor: pointer;
+  border: 1px solid var(--border-strong); background: transparent; color: var(--text-2);
+}
+.learn-skip:hover { background: var(--s3); color: var(--text); }
+.learn-next { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent-light); }
+@media (prefers-reduced-motion: reduce) { .learn-ring { animation: none; } }

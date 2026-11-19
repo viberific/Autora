@@ -3,12 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useWindowFull } from "../lib/fullscreen";
 import { SaveButton, keptAs, settle } from "./SaveButton";
 import { LoadButton } from "./LoadButton";
-import { cadStateNow, onCadHand, onCadState, useCadState } from "../lib/caddesk";
-import { framePoint, isWorkVisible } from "../lib/frameCoordinates";
-import { pointerFollow } from "../lib/pointer";
-import { holdFocus } from "../lib/keepFocus";
-import { useAgentCursor } from "../lib/agentCursor";
-import { useCursorWho, whoColors, getCursorWho } from "../lib/cursorWho";
+import { cadStateNow, onCadState, useCadState } from "../lib/caddesk";
 import { IconCube, IconMaximize, IconMinimize } from "./Icons";
 
 /** The colours Autora sends the frame: the custom properties its own pages are drawn from (autora-3d/src/embed.ts maps them). */
@@ -36,13 +31,6 @@ function themeNow(): Record<string, string> {
  *   - the person changes it (the frame says so, after a pause in their edits) -> it is saved on the server;
  *   - the agent changes it (the server says so) -> the model is fetched again and sent down.
  */
-/** What the 3D frame is told about the cursor: null for Autora's own, else the agent's name, colour and the corners of its mark. */
-function whoNow(): { name: string; color: string; rgb: string; sides: number } | null {
-  const w = getCursorWho();
-  const c = whoColors(w);
-  return c && w.look ? { name: w.name, color: c.accent, rgb: c.rgb, sides: w.look.sides } : null;
-}
-
 export function CadWindow({ sessionId, phone }: { sessionId: string; phone: boolean }) {
   const cad = useCadState();
   const frame = useRef<HTMLIFrameElement>(null);
@@ -51,27 +39,18 @@ export function CadWindow({ sessionId, phone }: { sessionId: string; phone: bool
   const known = useRef(-1);
   const [trouble, setTrouble] = useState<string | null>(null);
   const [full, setFull] = useWindowFull();
-  /* The agent's cursor goes with its changes (the frame draws it: it knows where the toolbar and the shapes are). */
-  const [cursorOn] = useAgentCursor();
-  const cursorRef = useRef(cursorOn);
-  cursorRef.current = cursorOn;
-
   const post = useCallback((msg: Record<string, unknown>) => {
     frame.current?.contentWindow?.postMessage(msg, window.location.origin);
   }, []);
-  /* Whose cursor the frame draws: the agent of the Organization this chat belongs to, else Autora (lib/cursorWho.ts). */
-  const who = useCursorWho();
-  useEffect(() => { if (ready.current) post({ autora3d: "who", who: whoNow() }); }, [who, post]);
-
-  /** The model as the server has it, sent to the frame. `agent`: the agent just changed it, so its cursor shows how. */
-  const load = useCallback(async (agent = false) => {
+  /** The model as the server has it, sent to the frame. */
+  const load = useCallback(async () => {
     try {
       const res = await fetch(`/api/cad/${encodeURIComponent(sessionId)}/doc`);
-      const body = (await res.json().catch(() => null)) as { doc?: unknown; rev?: number; cue?: { seq: number; tool: string }; error?: string } | null;
+      const body = (await res.json().catch(() => null)) as { doc?: unknown; rev?: number; error?: string } | null;
       if (!res.ok || !body?.doc) throw new Error(body?.error ?? `Autora answered ${res.status}`);
       known.current = Number(body.rev ?? 0);
       for (const k of picturesOf(body.doc as Parameters<typeof picturesOf>[0]).keys()) serverHas.current.add(k);
-      post({ autora3d: "load", doc: body.doc, ...(agent && cursorRef.current && body.cue ? { cue: body.cue } : {}) });
+      post({ autora3d: "load", doc: body.doc });
       setTrouble(null);
     } catch (err) {
       setTrouble(`The model could not be loaded: ${err instanceof Error ? err.message : String(err)}`);
@@ -120,23 +99,11 @@ export function CadWindow({ sessionId, phone }: { sessionId: string; phone: bool
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (!frame.current || e.source !== frame.current.contentWindow || e.origin !== window.location.origin) return;
-      const msg = e.data as { autora3d?: string; doc?: unknown; id?: unknown; did?: unknown; skipped?: unknown; x?: unknown; y?: unknown } | null;
+      const msg = e.data as { autora3d?: string; doc?: unknown } | null;
       if (!msg || typeof msg !== "object") return;
-      if (msg.autora3d === "cursor" && typeof msg.x === "number" && typeof msg.y === "number") {
-        // The board's one cursor follows the frame's hand (lib/pointer.ts), which draws none of its own.
-        const point = framePoint(frame.current, { x: msg.x, y: msg.y });
-        if (point) pointerFollow(point);
-        return;
-      }
-      if (msg.autora3d === "handed" && typeof msg.id === "string") {
-        handing.current.get(msg.id)?.({ did: msg.did, skipped: msg.skipped, doc: msg.doc });
-        return;
-      }
       if (msg.autora3d === "ready") {
         ready.current = true;
         post({ autora3d: "theme", vars: themeNow() });
-        post({ autora3d: "who", who: whoNow() });
-        post({ autora3d: "board", on: true });
         void load();
       } else if (msg.autora3d === "changed" && msg.doc) {
         void save(msg.doc);
@@ -161,44 +128,11 @@ export function CadWindow({ sessionId, phone }: { sessionId: string; phone: bool
       onCadState(() => {
         const now = cadStateNow();
         if (!now.open || now.rev === undefined || !ready.current) return;
-        if (now.by === "agent" && now.rev > known.current) void load(true);
+        if (now.by === "agent" && now.rev > known.current) void load();
         else known.current = Math.max(known.current, now.rev);
       }),
     [load],
   );
-
-  /** The agent's calls being done in the frame by hand, by id: answered when the frame says what its hand did. */
-  const handing = useRef(new Map<string, (answer: Record<string, unknown>) => void>());
-
-  /* With Visible work on, the agent's call is done in the modeller by its hand (autora-3d/src/agentHand.ts). The first window
-     to claim it does it; one whose modeller is still starting waits for it, so the work is done in front of the person. */
-  useEffect(() => onCadHand((hand) => {
-    if (!frame.current || !isWorkVisible(frame.current)) return;
-    void (async () => {
-      const q = `/api/cad/${encodeURIComponent(sessionId)}/hand`;
-      const claim = await fetch(`${q}/claim?id=${encodeURIComponent(hand.id)}`, { method: "POST" })
-        .then((r) => (r.ok ? (r.json() as Promise<{ won?: boolean; goal?: unknown; need?: unknown }>) : { won: false, goal: undefined, need: undefined }))
-        .catch(() => ({ won: false, goal: undefined, need: undefined }));
-      if (!claim.won) return;
-      for (let waited = 0; !ready.current && waited < 45_000; waited += 250) await new Promise((r) => setTimeout(r, 250));
-      // The modeller may take the keyboard while it works; the person's place is theirs again after (lib/keepFocus.ts).
-      const held = holdFocus(frame.current);
-      const answer = ready.current
-        ? await new Promise<Record<string, unknown>>((resolve) => {
-          const timer = setTimeout(() => resolve({ did: [], skipped: "the modeller did not answer" }), 140_000);
-          handing.current.set(hand.id, (a) => { clearTimeout(timer); resolve(a); });
-          post({ autora3d: "hand", id: hand.id, name: hand.name, args: hand.args, goal: claim.goal, need: claim.need });
-        })
-        : { did: [], skipped: "the modeller did not start" };
-      handing.current.delete(hand.id);
-      held.release();
-      await fetch(`${q}/reply?id=${encodeURIComponent(hand.id)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(answer),
-      }).catch(() => undefined);
-    })();
-  }), [post, sessionId]);
 
   // Autora's theme, followed as it is changed in Settings.
   useEffect(() => {

@@ -1,14 +1,10 @@
 /**
- * The few words beside the agent's cursor: what it is doing, as it does it.
+ * The few words a tool card shows for a call: what it is doing.
  *
- * Never a guess and never invented. Every phrase here is made from the act itself -- the tool call that is in flight
- * (`thoughtForTool`), or the browser's own description of the click, fill or page it is on (`thoughtFromAction`) -- so
- * the bubble can only say what the cursor is really doing, in the same breath. Short enough to read while it moves:
- * a gerund and the name of the thing, under `MAX` characters. Pure, so it can be tested, and shared with the server (the
- * browser draws its own pointer inside the page).
+ * Never a guess and never invented. Every phrase here is made from the tool call itself (`thoughtForTool`), so the card can
+ * only say what the call really does. Short enough to read at a glance: a gerund and the name of the thing, under `MAX`
+ * characters. Pure, so it can be tested.
  */
-import { Kind, type AutoraEvent } from "./types";
-
 export const MAX = 34;
 
 const clip = (t: string, n = MAX): string => {
@@ -18,27 +14,6 @@ const clip = (t: string, n = MAX): string => {
 const quote = (t: string, room: number): string => `“${clip(t, room)}”`;
 const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
 const host = (url: string): string => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return clip(url, 24); } };
-
-/** What the browser says it is doing ("click [4] button "Add to cart""), as a thought. */
-export function thoughtFromAction(action: string): string | null {
-  const a = action.trim();
-  let m: RegExpExecArray | null;
-  if ((m = /^click \[\d+\]\s*(\w+)?\s*(?:"(.*)")?$/.exec(a))) return m[2] ? `Clicking ${quote(m[2], 22)}` : `Clicking the ${m[1] || "element"}`;
-  if (/^(double-click|click) at /.test(a)) return a.startsWith("double") ? "Double-clicking here" : "Clicking here";
-  if ((m = /^fill \[\d+\]\s*"(.*)"/.exec(a))) return m[1] ? `Filling in ${quote(m[1], 20)}` : "Filling in the field";
-  if (a === "submit") return "Sending the form";
-  if ((m = /^upload .* to \[\d+\]/.exec(a))) return "Attaching a file";
-  if ((m = /^open (\S+)/.exec(a))) return `Opening ${clip(host(m[1]), 24)}`;
-  if ((m = /^press (.+)/.exec(a))) return `Pressing ${clip(m[1], 20)}`;
-  if (a === "navigated forward") return "Going forward";
-  if (a === "back" || a === "navigated back") return "Going back";
-  if (a === "reloaded page") return "Reloading the page";
-  if (/^scroll/i.test(a)) return /up/i.test(a) ? "Scrolling up" : "Scrolling down";
-  if (/^captcha: tick/.test(a)) return "Ticking the box";
-  if (/^captcha: picture/.test(a)) return "Reading the pictures";
-  if (/^cloudflare/.test(a)) return "Waiting for the check";
-  return null;
-}
 
 const count = (v: unknown): number => (Array.isArray(v) ? v.length : 0);
 const noun = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -112,19 +87,4 @@ export function thoughtForTool(name: string, args: Record<string, any> = {}): st
       if (name.startsWith("cad_")) return "Shaping the model";
       return null;
   }
-}
-
-/** The tool call in flight in the turn now, if any: opened and not yet answered. */
-export function liveTool(events: AutoraEvent[]): { name: string; args: Record<string, any>; seq: number } | null {
-  const open = new Map<string, AutoraEvent>();
-  for (let i = events.length - 1; i >= 0; i -= 1) {
-    const e = events[i];
-    if (e.kind === Kind.AgentDone || e.kind === Kind.SessionEnded || e.kind === Kind.UserMessage) break;
-    if ((e.kind === Kind.ToolResult || e.kind === Kind.ToolError) && e.span) open.set(e.span, e);
-    if (e.kind === Kind.ToolCall) {
-      if (e.span && open.has(e.span)) continue;
-      return { name: String(e.payload?.name ?? ""), args: e.payload?.args ?? {}, seq: e.seq };
-    }
-  }
-  return null;
 }

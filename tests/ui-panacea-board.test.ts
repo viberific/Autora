@@ -35,7 +35,6 @@ async function main() {
   const shot = async (name: string) => { if (shots) await page.screenshot({ path: `${shots}/${name}.png` }); };
   onFail = () => shot("board-failed");
   try {
-    await app.api("PATCH", "/api/agent-cursor", { on: false });
     const s = await app.newSession("Board", "build");
     await page.goto(`${app.base}/?session=${s}`);
     await page.waitForSelector('textarea[aria-label="Ask Autora"]');

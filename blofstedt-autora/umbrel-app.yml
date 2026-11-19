@@ -20,9 +20,15 @@ description: >-
   picture challenge is answered by the connected model or by arithmetic on the images.
 
 
-  • Real-time browser view — watch the cursor move, text appear, and pages load
-  exactly as the agent drives them, then click and type in the page yourself
-  when it hands over (sign-ins, CAPTCHAs) or once it has finished.
+  • Real-time browser view — watch pages load and change as the agent works, then
+  click and type in the page yourself when it hands over (sign-ins, CAPTCHAs) or
+  once it has finished.
+
+
+  • Learn mode — turn on Learn in a chat and, instead of doing the work, Autora
+  shows you how to use the tools: it rings each real control one step at a time,
+  waits until you have used it, and moves on. Ask it to just do a step and it
+  does. With Learn off it works at its own speed.
 
 
   • Persistent browser auth — sign in once to Gmail, Google Calendar, or any
@@ -66,7 +72,7 @@ description: >-
 
   • Panacea video — OpenCut's open-source engine inside the shared workspace. Ask for
   a video and Autora imports your footage, pictures and music and builds the cut on
-  the timeline (clips, trims, splits, titles, subtitles) while you watch it happen;
+  the timeline (clips, trims, splits, titles, subtitles);
   take control and edit it yourself, then export an mp4 or webm. Autora can use
   every part of the editor (effects, masks, keyframes, speed, stickers, shapes,
   subtitles, scenes, settings, any control on its screen) and look at a frame to check
@@ -103,8 +109,8 @@ description: >-
   with GDevelop's own AI, account, shop and cloud taken out: Autora is what helps.
   Ask for a game and Autora builds it in the project file GDevelop itself saves —
   scenes, objects, behaviors (platformer, physics, pathfinding), events, pictures
-  and sound — checking every instruction against the engine's own list, while you
-  watch it appear and change anything by hand; your edits are saved as you go. Play
+  and sound — checking every instruction against the engine's own list; watch it
+  appear and change anything by hand; your edits are saved as you go. Play
   it from the Preview button (it runs in a box of its own) or export it as a web
   game. The idea, the story, the look and the feel stay yours: Autora does the
   wiring and asks about the rest. Your games stay on your server. Configure its
@@ -115,7 +121,7 @@ description: >-
   browser) inside the shared workspace: layers, masks, adjustment layers, filters,
   type, brushes and real PSD files. Ask for a retouch, a cut-out, a resize or a
   colour grade and Autora does it with the editor's own commands (the same ones in
-  its menus) while you watch, and checks the result by looking at it; paint and edit
+  its menus), and checks the result by looking at it; paint and edit
   by hand at the same time, undo anything it did, and export PNG, JPEG, WebP, TIFF
   or PSD. The look, the mood and what the picture is of stay yours. Configure its
   capability on the Tools page.
@@ -208,10 +214,12 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  The browser is much faster. Each step the agent takes in it (a
-  scroll, a click, opening a page) used to wait a fixed time and then
-  take and store a picture of the page; it now carries on as soon as
-  the page has stopped changing, and keeps no pictures. Scrolling is
-  about three times quicker and opening a page about four times.
-  The browser card in the chat is now only the live page: there is no
-  record of earlier pages left to go back through.
+  Learn mode replaces the agent's cursor. There is no cursor to watch any
+  more: the agent works at its own speed in every window, and the window shows
+  the result. Turn on Learn (the new switch in the header, beside the
+  permissions) and, instead of doing a task for you, Autora teaches it: it
+  rings the real control for each step, waits until you have used it, and
+  moves on. You can skip a step, leave the lesson, or press "Do this one for
+  me". The Visible work switch, in Settings and beside Follow, is gone. For
+  now, controls inside an editor's own frame (PDF, Pages, Sheets, Slides,
+  Video, Photo, 3D, Games) are described in words rather than ringed.

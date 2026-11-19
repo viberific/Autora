@@ -4,12 +4,7 @@ import { LoadButton } from "./LoadButton";
 import { useWindowFull } from "../lib/fullscreen";
 import { useCollab } from "../lib/collab";
 import { TakeControl } from "./TakeControl";
-import { onOfficeHand, onOfficePush, useOfficeWindow, type OfficeHand, type OfficeKind } from "../lib/officedesk";
-import { clearCursor } from "../lib/cursorPos";
-import { pointerFollow } from "../lib/pointer";
-import { holdFocus, type HeldFocus } from "../lib/keepFocus";
-import { framePoint, isWorkVisible } from "../lib/frameCoordinates";
-import { getCursorWho, whoColors } from "../lib/cursorWho";
+import { onOfficePush, useOfficeWindow, type OfficeKind } from "../lib/officedesk";
 import { OfficePages } from "./OfficePages";
 import { useFrameTheme } from "../lib/frameTheme";
 import { IconEdit, IconDownload, IconFile, IconMaximize, IconMinimize } from "./Icons";
@@ -31,18 +26,6 @@ const APP: Record<OfficeKind, string> = { docx: "docs", pptx: "slides", xlsx: "s
 const THING: Record<OfficeKind, string> = { docx: "document", pptx: "presentation", xlsx: "spreadsheet" };
 /** The app each kind opens in, by its name. */
 const NAME: Record<OfficeKind, string> = { docx: "Autora Pages", pptx: "Autora Slides", xlsx: "Autora Sheets" };
-/** How long an edit waits for an editor that is still starting before it simply appears instead. */
-const EDITOR_START_MS = 45_000;
-
-/** The cursor's colour as #rrggbb, which the editor draws it in: the chat's agent's own, else the theme's accent. */
-function cursorColor(): string {
-  const own = whoColors()?.accent;
-  if (own && /^#[0-9a-f]{6}$/i.test(own)) return own;
-  const rgb = getComputedStyle(document.documentElement).getPropertyValue("--accent-rgb").split(",").map((v) => Number(v.trim()));
-  if (rgb.length !== 3 || rgb.some((v) => !Number.isFinite(v))) return "#6e5bff";
-  return `#${rgb.map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("")}`;
-}
-
 export function OfficeWindow({ sessionId, kind, phone }: { sessionId: string; kind: OfficeKind; phone: boolean }) {
   // The window for this app: Autora Pages, Autora Sheets and Autora Slides each have their own, all open at once.
   const word = useOfficeWindow(kind) ?? { open: false, kind };
@@ -62,13 +45,6 @@ export function OfficeWindow({ sessionId, kind, phone }: { sessionId: string; ki
   const pages = phone && !editing;
   const collab = useCollab();
   const mine = collab.held.includes("office");
-  /** The `loadRev` the editor has opened its document at: the agent's hand works only in an editor that has one. */
-  const [openedRev, setOpenedRev] = useState(-1);
-  const openedRef = useRef(openedRev);
-  openedRef.current = openedRev;
-  /** The agent's edits being typed in the editor by hand, by id: answered when the editor says it is done. */
-  const handing = useRef(new Map<string, (said: { results?: unknown; error?: unknown }) => void>());
-  const holding = useRef<HeldFocus | null>(null);
   /** Every call says which window it is about, since each app's document is open beside the chat at the same time. */
   const api = useCallback((path: string) => {
     const at = `/api/officedesk/${encodeURIComponent(sessionId)}${path}`;
@@ -115,20 +91,16 @@ export function OfficeWindow({ sessionId, kind, phone }: { sessionId: string; ki
                 const body = (await res.json().catch(() => ({}))) as { path?: string; name?: string; error?: string };
                 if (!res.ok) throw new Error(body.error ?? `the server answered ${res.status}`);
                 reply(true, { path: body.path, name: body.name });
-                setOpenedRev(wordRef.current.loadRev ?? 0);
                 break;
               }
               // The document the person is to see; later versions are pushed.
               shown.current = wordRef.current.loadRev ?? 0;
               const bytes = await fetchDocument();
               reply(true, { bytes, name: wordRef.current.name ?? "document.docx" }, undefined, [bytes]);
-              setOpenedRev(wordRef.current.loadRev ?? 0);
               break;
             }
             case "ipc":
             case "ipc-send": {
-              // The editor is talking to its engine: it is up (a workbook's page never asks to open, it just starts).
-              setOpenedRev((was) => (was === (wordRef.current.loadRev ?? 0) ? was : wordRef.current.loadRev ?? 0));
               // The editor's ipc, for the engine behind a deck or a workbook.
               const res = await fetch(api(`/${m.op}?rev=${wordRef.current.loadRev ?? 0}`), {
                 method: "POST", headers: { "Content-Type": "application/json" },
@@ -145,26 +117,6 @@ export function OfficeWindow({ sessionId, kind, phone }: { sessionId: string; ki
               if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `the server answered ${res.status}`);
               setTrouble(null);
               reply(true, { ok: true });
-              break;
-            }
-            case "handed": {
-              // The agent's hand is done in the editor (office/shim/hand.js): what each step did.
-              handing.current.get(String(payload.id))?.(payload);
-              reply(true, {});
-              break;
-            }
-            case "stray-key": {
-              // A key the person pressed while the editor had the keyboard for the hand: it belongs where they were typing.
-              holding.current?.type(String(payload.key ?? ""));
-              reply(true, {});
-              break;
-            }
-            case "hand-cursor": {
-              // Where the hand's cursor is, for the few words beside it (AgentThought).
-              const point = frame.current && Number.isFinite(payload.x) && Number.isFinite(payload.y)
-                ? framePoint(frame.current, { x: Number(payload.x), y: Number(payload.y) }) : null;
-              if (point) pointerFollow(point);
-              reply(true, {});
               break;
             }
             case "presence": {
@@ -234,52 +186,12 @@ export function OfficeWindow({ sessionId, kind, phone }: { sessionId: string; ki
   useEffect(() => {
     if (engine || word.loadRev === undefined || shown.current === 0 || word.loadRev === shown.current) return;
     shown.current = word.loadRev;
-    const rev = word.loadRev;
     void fetchDocument()
       .then((bytes) => {
         post({ type: "autora:office-push", op: "load", payload: { bytes, name: wordRef.current.name ?? "document.docx" } }, [bytes]);
-        // The editor has this version now: the agent's hand may work in it.
-        setOpenedRev(rev);
       })
       .catch((err: any) => setTrouble(`The document could not be loaded: ${err?.message ?? err}`));
   }, [engine, word.loadRev, fetchDocument, post]);
-
-  /* The agent's hand (Visible work on): what its office_edit changes in the words is typed in the editor, live, by the
-     hand in the frame (office/shim/hand.js), while the call waits. The window only carries it: the first window of the
-     chat to claim it hands it to its editor -- once the editor has the document open, which it waits for -- and tells
-     the server what was done. Nothing is played over a document the server changed: that would be a recording. */
-  const byHand = useCallback(async (hand: OfficeHand) => {
-    if (!frame.current || !isWorkVisible(frame.current)) return;
-    const at = (p: string) => `/api/officedesk/${encodeURIComponent(sessionId)}/hand/${p}?id=${encodeURIComponent(hand.id)}`;
-    const claim = await fetch(at("claim"), { method: "POST" })
-      .then((r) => (r.ok ? (r.json() as Promise<{ won?: boolean }>) : { won: false }))
-      .catch(() => ({ won: false }));
-    if (!claim.won) return;
-    const reply = (body: Record<string, unknown>) => fetch(at("reply"), {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-    }).catch(() => undefined);
-    const ready = () => openedRef.current === (wordRef.current.loadRev ?? 0) && !!frame.current?.contentWindow;
-    for (let waited = 0; !ready() && waited < EDITOR_START_MS; waited += 250) await new Promise((r) => setTimeout(r, 250));
-    if (!ready()) { await reply({ results: [], error: "the editor did not start" }); return; }
-    // A document just opened is laid out a moment after it is opened.
-    await new Promise((r) => setTimeout(r, 1200));
-    // The editor takes the keyboard to type; the person's place (the chat) is theirs again when it is done (lib/keepFocus.ts).
-    const held = holdFocus(frame.current);
-    holding.current = held;
-    const said = await new Promise<{ results?: unknown; error?: unknown }>((resolve) => {
-      handing.current.set(hand.id, resolve);
-      // The board draws the cursor (one for the whole board): the frame only says where its hand is.
-      post({ type: "autora:office-hand", id: hand.id, steps: hand.steps, who: { name: getCursorWho().name, color: cursorColor(), board: true } });
-    });
-    handing.current.delete(hand.id);
-    if (holding.current === held) holding.current = null;
-    held.release();
-    clearCursor();
-    await reply({ results: said.results ?? [], ...(typeof said.error === "string" ? { error: said.error } : {}) });
-  }, [post, sessionId]);
-  useEffect(() => onOfficeHand((hand) => {
-    if (hand.kind === kind && !pages) void byHand(hand);
-  }), [byHand, kind, pages]);
 
   const restore = useCallback(async (n: number) => {
     setVersionsOpen(false);
@@ -348,7 +260,6 @@ export function OfficeWindow({ sessionId, kind, phone }: { sessionId: string; ki
         <LoadButton app={kind === "docx" ? "pages" : kind === "xlsx" ? "sheets" : "slides"} session={sessionId} phone={phone} />
         <SaveButton onSave={keep} phone={phone} disabled={!word.name} />
         <TakeControl sessionId={sessionId} surface="office" mine={mine} phone={phone} thing="document" />
-        {/* Whether the agent's cursor shows is Visible work, the eye beside Follow: not a switch of this window's own. */}
         {word.working && (
           <a
             className="btn icon ghost"

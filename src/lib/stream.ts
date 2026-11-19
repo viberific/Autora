@@ -13,7 +13,6 @@ type Handlers = {
   onPreview?: (state: unknown) => void;
   /** The PDF window: whether a PDF is open, and what is on it. */
   onPdfDesk?: (state: unknown) => void;
-  onPdfHand?: (msg: unknown) => void;
   /** One event for the PDF editor: an engine reply, or the document changing
       under it. The window passes on the ones the editor asked for. */
   onSpectra?: (msg: { event: string; payload: unknown }) => void;
@@ -24,21 +23,16 @@ type Handlers = {
   onGameDesk?: (state: unknown) => void;
   onGamePlay?: () => void;
   onPhotoDesk?: (state: unknown) => void;
-  onPhotoHand?: (msg: unknown) => void;
   /** Autora Music's window: whether it is open, and what changed last. */
   onStudioDesk?: (state: unknown) => void;
   /** Something only a browser can do, asked of the music window: play, stop, bounce. */
   onStudioCommand?: (cmd: { id: string; name: string; args: Record<string, unknown> }) => void;
   /** Panacea's window: whether it is open, and what changed last. */
   onPanaceaDesk?: (state: unknown) => void;
-  /** Something only the canvas window can do: steps by the agent's hand, a picture rendered, a chart drawn. */
+  /** Something only the canvas window can do: a picture rendered, a chart drawn. */
   onPanaceaCommand?: (cmd: { id: string; name: string; args: Record<string, unknown> }) => void;
-  /** The turn was stopped, or Visible work switched off elsewhere: the agent's hand stops showing (lib/handHalt.ts). */
-  onHandsHalt?: (stop: boolean) => void;
   onOfficeDesk?: (state: unknown) => void;
   onOfficePush?: (msg: unknown) => void;
-  onOfficeHand?: (msg: unknown) => void;
-  onCadHand?: (msg: unknown) => void;
   /** Who has hold of what: surfaces the person has taken, and ones in use. */
   onPresence?: (state: unknown) => void;
 };
@@ -172,9 +166,6 @@ export class SessionStream {
         case "pdfdesk":
           this.handlers.onPdfDesk?.(msg.state);
           break;
-        case "pdfdesk.hand":
-          this.handlers.onPdfHand?.(msg);
-          break;
         case "spectra":
           if (typeof msg.event === "string") this.handlers.onSpectra?.({ event: msg.event, payload: msg.payload });
           break;
@@ -189,12 +180,6 @@ export class SessionStream {
         case "officedesk.push":
           this.handlers.onOfficePush?.(msg);
           break;
-        case "officedesk.hand":
-          this.handlers.onOfficeHand?.(msg);
-          break;
-        case "cad.hand":
-          this.handlers.onCadHand?.(msg);
-          break;
         case "gamedesk":
           this.handlers.onGameDesk?.(msg.state);
           break;
@@ -203,9 +188,6 @@ export class SessionStream {
           break;
         case "photodesk":
           this.handlers.onPhotoDesk?.(msg.state);
-          break;
-        case "photodesk.hand":
-          this.handlers.onPhotoHand?.(msg);
           break;
         case "caddesk":
           this.handlers.onCadDesk?.(msg.state);
@@ -217,9 +199,6 @@ export class SessionStream {
           if (typeof msg.id === "string" && typeof msg.name === "string") {
             this.handlers.onStudioCommand?.({ id: msg.id, name: msg.name, args: msg.args && typeof msg.args === "object" ? msg.args : {} });
           }
-          break;
-        case "hands.halt":
-          this.handlers.onHandsHalt?.(msg.stop === true);
           break;
         case "panaceadesk":
           this.handlers.onPanaceaDesk?.(msg.state);

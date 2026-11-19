@@ -99,8 +99,6 @@ type Desk = {
   cueRev?: number;
   /** When they were made, so a page that loads later does not play them again. */
   cueAt?: number;
-  /** Until when a save from the editor is ignored: it may be the agent's hand's typing, trailing (officehand.ts). */
-  quietUntil?: number;
   /** Sheets: every change as a command (who, what, the version just before), oldest first. See commandlog.ts. */
   log?: OfficeCommand[];
   /** The number the next command gets. */
@@ -578,7 +576,7 @@ function persist(session: DeskKey) {
     try {
       fs.mkdirSync(DIR, { recursive: true, mode: 0o700 });
       fs.writeFileSync(path.join(DIR, `${session}.${extOf(desk.kind)}`), desk.data, { mode: 0o600 });
-      const { data: _data, problem: _problem, quietUntil: _quiet, pick: _pick, ...meta } = desk;
+      const { data: _data, problem: _problem, pick: _pick, ...meta } = desk;
       fs.writeFileSync(path.join(DIR, `${session}.json`), JSON.stringify(meta), { mode: 0o600 });
     } catch (err: any) {
       console.warn(`[worddesk] ${session}: could not save the window: ${err?.message ?? err}`);
@@ -789,30 +787,11 @@ async function reloadLive(session: DeskKey): Promise<boolean> {
   }
 }
 
-/* The agent's hand is typing in the window (officehand.ts): what the editor saves meanwhile is that typing, which the
-   finished file replaces once the hand is done -- never the person's change. A little after, too: a save can trail. */
-const handingKeys = new Set<DeskKey>();
-const HAND_GRACE_MS = 4_000;
-export function handing(session: string, kind: OfficeKind): { end: () => void } {
-  const key = keyOf(session, kind);
-  handingKeys.add(key);
-  return {
-    end: () => {
-      handingKeys.delete(key);
-      const desk = load(key);
-      if (desk) desk.quietUntil = Date.now() + HAND_GRACE_MS;
-    },
-  };
-}
-
 /** The person saved in the editor: the file changed under the engine. */
 function checkEngineFile(session: DeskKey) {
   const engine = engines.get(session);
   const desk = load(session);
   if (!engine || !desk || desk.kind !== engine.kind) return;
-  if (handingKeys.has(session)) return;
-  // A step being shown is not something the person did.
-  if (Date.now() < (desk.quietUntil ?? 0)) return;
   try {
     const st = fs.statSync(engine.file);
     if (st.mtimeMs === engine.mtime && st.size === engine.size) return;
@@ -1003,9 +982,8 @@ export function officeHooks(session: string): OfficeHooks {
       }
       // A deck or workbook the person has open is changed in place; only if that fails does the window load it again.
       const live = Boolean(was && carried && kind !== "docx" && was.open && engines.get(key)?.wc != null);
-      /* No replay: the window is not handed in-between files while a cursor pretends to type them. With Visible work
-         on, the agent's typing was done in the editor itself before this (server/officehand.ts); the file the
-         operations made now simply goes in. */
+      /* No replay: the window is not handed in-between files while a cursor pretends to type them; the file the
+         operations made simply goes in. */
       const desk: Desk = {
         open: true, kind,
         name: next.name, data: next.data, working: next.working, source: next.source, outName: next.outName,
@@ -1151,7 +1129,7 @@ export function sincePersonSave(session: string, kind: OfficeKind): number {
 export function joinedChange(session: string, kind: OfficeKind, data: Buffer, label: string): boolean {
   const key = keyOf(session, kind);
   const desk = load(key);
-  if (!desk || handingKeys.has(key) || Date.now() < (desk.quietUntil ?? 0) || data.equals(desk.data)) return false;
+  if (!desk || data.equals(desk.data)) return false;
   if (desk.dirty) snapshot(key, desk, "Your changes", "person");
   const beforeV = desk.vseq > 0 ? desk.vseq : null;
   desk.data = data;
@@ -1175,7 +1153,6 @@ function personSaved(session: DeskKey, data: Buffer): string | null {
   if (!isOffice(data, desk.kind)) return `That is not a file ${THING[desk.kind]} opens.`;
   if (data.byteLength > MAX_ARTIFACT_BYTES) return "That file is over 50 MB.";
   // The editor may be holding the agent's typing: it is not the document, and must never replace it.
-  if (handingKeys.has(session) || Date.now() < (desk.quietUntil ?? 0)) return null;
   if (data.equals(desk.data)) return null;
   const before = desk.data;
   const run = openPersonRun(desk.log ?? [], desk.dirty);
@@ -1355,7 +1332,7 @@ export function officeRoutes(app: Express, opts: { exists: (session: string) => 
     const key = KIND.includes(said as OfficeKind) ? keyOf(id, said as OfficeKind) : null;
     // The agent's own hand typing there (and its trailing saves) is not the person at work.
     const desk = key ? load(key) : null;
-    if (key && desk && !handingKeys.has(key) && Date.now() >= (desk.quietUntil ?? 0)) touched(key, "document", "edit", "is working in the document", { tell: false });
+    if (key && desk) touched(key, "document", "edit", "is working in the document", { tell: false });
     res.json({ ok: true });
   });
 

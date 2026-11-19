@@ -62,7 +62,7 @@ task is about the PDF editor's shim or overlay.
 - Sessions: `/api/sessions`, `/api/sessions/:id` (patch/delete), `/events`, `/blobs/:blob`, `/trace`, `/presence`, `/control`, `/message`, `/interrupt`, `/ask/:askId`, `/frame`
 - Browser: `/api/sessions/:id/browser/*` (scroll, click, type, key, navigate, tabs, find, devtools...), `/api/browser/*`, `/api/extensions/*`
 - App window: `/api/sessions/:id/preview/*`, `/api/versions`, `/api/versions/restore`
-- Mind: `/api/memory*`, `/api/collaboration`, `/api/agent-cursor`, `/api/memory-settings`
+- Mind: `/api/memory*`, `/api/collaboration`, `/api/memory-settings`
 - Skills: `/api/skills*`, `/api/skills-check`, `/api/skills-import` (`server/routes/skills.ts`)
 - Automation: `/api/jobs*`, `/api/triggers*`, `/api/automation`, `/api/autonomy*`, `/api/policy/:requestId`, `/api/proactive*`
 - Settings: `/api/settings`, `/api/secrets*`, `/api/credentials*`, `/api/providers/:id/*`, `/api/usage*`, `/api/speech*`
@@ -92,11 +92,12 @@ task is about the PDF editor's shim or overlay.
 | Working notes | `todos.ts`, `ledger.ts`, `requirements.ts` |
 | Sub-agent | `subagent.ts` (+ `researchFor` in `runTurn`) |
 | Memory | `memory.ts`, `mindrules.ts`, `site.ts`, `learning.ts` |
+| Learn mode (the agent teaches by ringing controls; no agent cursor) | `server/learn.ts`, `server/specs/learn.ts`, `src/lib/learn.ts`, `src/lib/learnTarget.ts`, `components/LearnGuide.tsx`, `components/LearnToggle.tsx`; `docs/LEARN.md` |
 | Skills | `skills.ts` (SKILL.md folders, the catalogue in the briefing, drafts and versions), `specs/skills.ts` (the `skill` tool), `routes/skills.ts` |
 | Improvements log | `improvements.ts` (`docs/improvements/`: what agents hit that Autora should do better; the `improvements` tool in `specs/memory.ts`) |
 | Cost per task | `taskledger.ts` (a record per turn: kind of work, cost of every call it made, how it went; `routes/tasks.ts`; the Usage page's `TaskCosts.tsx`) |
 | Browser | `browser.ts` (4.5k: `LiveBrowser`), `mirror.ts` + `mirror-script.ts` (the live copy: DOM instead of pictures), `human.ts`, `captcha*.ts`, `pagedescribe.ts`, `browsedata.ts`, `extensions.ts`, `cookies.ts`, `signins.ts`, `liveview.ts` |
-| App window | `preview.ts`, `pick.ts`, `domdiff.ts`, `snapshots.ts` |
+| App window | `preview.ts`, `pick.ts`, `snapshots.ts` |
 | Code | `codediff.ts` (`Workspace`), `codesearch.ts`, `editfile.ts`, `syntaxcheck.ts` (does it still parse), `merge3.ts`, `background.ts` (long jobs) |
 | Video | `opencut.ts` (the project store, the window's state, commands to the editor, the `video_*` tools), `specs/video.ts` |
 | PDF | `pdf.ts` (3k: every `pdf_*` tool), `pdftext.ts`, `pdfrender.ts`, `compose.ts`, `pdfdesk.ts` (window state), `spectra.ts` + `spectra/{engine,commands}.ts` (the window's editor and its Python engine) |
@@ -126,7 +127,7 @@ task is about the PDF editor's shim or overlay.
 | Thread | `components/Thread.tsx` (`TurnBucket`, `CellView`, `Reply`), cells: `ToolCell`, `TerminalCell`, `FileCell`, `ImageCell`, `AskCell`, `PermissionCell`, `TodoCell`, `MemoryCell`, `LearnedCell`, `RemarkCell`, `WidgetCell`, `ScreencastCell`, `Markdown` |
 | Phone stage | `lib/stage.ts`, `components/Stage.tsx`, `ImmersiveChat.tsx`, `lib/fullscreen.ts`, `lib/cursorPos.ts` |
 | Unified workspace | `components/PanaceaWorkspace.tsx`, `lib/workspace.ts` (modes and contextual guidance), `components/ToolsSheet.tsx` (capability chooser); shared by desktop and phone Stage. Engine components below are integrated surfaces, not standalone applications. `lib/workspaceThread.ts` keeps collapsible command cards in chat rather than the Activity surface. |
-| Windows | Video: `OpenCutWindow`, `lib/opencut.ts`. Games: `GameWindow`, `lib/gamedesk.ts`. 3D: `CadWindow`, `lib/caddesk.ts`. Photo: `PhotoWindow`, `lib/photodesk.ts`. Music: `StudioWindow` + `studio/{Arrangement,PianoRoll,Mixer,useSong,hand}`, `lib/studio.ts`, `lib/studio/{model,engine,handsteps}.ts` (the agent's hand: `handsteps` plans, `hand` does). Panacea: `PanaceaWindow` + `panacea/{Board,PanelCard,Atoms,Surfaces,Chart,Summon,History,Bespoke,useCanvas,hand,imagegl}`, `lib/panacea.ts`. Browser: `ScreencastCell`, `MirrorView` (the live copy), `lib/liveFrame.ts`, `lib/liveMirror.ts`, `lib/mirrorDom.ts`, `lib/pageInput.ts`. App: `AppPreview`, `AppInspector`, `AppReview`, `AppVersions`, `DevtoolsPanel`, `lib/preview.ts`, `lib/appApi.ts`. PDF: `SpectraWindow`, `lib/spectra.ts`, `lib/pdfdesk.ts`. Office: `OfficeWindow`, `OfficePages`, `lib/officedesk.ts`, `lib/officeSelection.ts`; the agent's hand in the editors: `office/shim/hand.js`, `server/officehand.ts` |
+| Windows | Video: `OpenCutWindow`, `lib/opencut.ts`. Games: `GameWindow`, `lib/gamedesk.ts`. 3D: `CadWindow`, `lib/caddesk.ts`. Photo: `PhotoWindow`, `lib/photodesk.ts`. Music: `StudioWindow` + `studio/{Arrangement,PianoRoll,Mixer,useSong}`, `lib/studio.ts`, `lib/studio/{model,engine}.ts`. Panacea: `PanaceaWindow` + `panacea/{Board,PanelCard,Atoms,Surfaces,Chart,Summon,History,Bespoke,useCanvas,hand,imagegl}`, `lib/panacea.ts`. Browser: `ScreencastCell`, `MirrorView` (the live copy), `lib/liveFrame.ts`, `lib/liveMirror.ts`, `lib/mirrorDom.ts`, `lib/pageInput.ts`. App: `AppPreview`, `AppInspector`, `AppReview`, `AppVersions`, `DevtoolsPanel`, `lib/preview.ts`, `lib/appApi.ts`. PDF: `SpectraWindow`, `lib/spectra.ts`, `lib/pdfdesk.ts`. Office: `OfficeWindow`, `OfficePages`, `lib/officedesk.ts`, `lib/officeSelection.ts` |
 | Pages (menu) | `components/Rail.tsx`; lazy: `components/pages/*` (Organization and Threads: `OrganizationPage`, `ThreadsPage`, `lib/organization.ts`) ; eager: `Settings.tsx`, `Sessions.tsx`, `Schedule.tsx`, `Triggers.tsx` |
 | Settings cards | `Settings.tsx` (1.5k), `SecretStore`, `Credentials`, `VoiceCard`, `NotifyCard`, `QuietCard`, `CaptchaCard`, `AutomationCard`, `CollabSettings`, `TimeZoneCard`, `ModelPicker`, `SetupCard` |
 | Composer | `DictateButton`, `AttachButton`, `SlashMenu` + `lib/commands.ts`, `ModeSelect`, `PermissionsPill`, `SpendBar`/`SpendPeek` + `lib/spend.ts`, `LiveChat` + `lib/voice.ts` (1.9k), `lib/liveview.ts` |

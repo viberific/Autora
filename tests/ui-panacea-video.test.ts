@@ -44,7 +44,6 @@ async function main() {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   try {
-    await app.api("PATCH", "/api/agent-cursor", { on: false });
     const up = await fetch(`${app.base}/api/artifacts`, { method: "POST", headers: { "Content-Type": "application/octet-stream", "X-File-Name": "violet.png" }, body: new Uint8Array(png()) });
     const picture = (await up.json()).artifact.id as string;
     const s = await app.newSession("Video panels", "build");

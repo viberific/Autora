@@ -190,6 +190,7 @@ const LOOKS_ONLY = new Set([
   "ledger",
   "requirements",
   "tools_enable",
+  "learn_show",
   "set_mode",
   "browser_handoff",
 ]);

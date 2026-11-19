@@ -138,8 +138,7 @@ export const panaceaSPECS: ToolSpec[] = [
       "Set values on the canvas: surface parameters (\"@img1.exposure\": 0.4, \"@dat1.filter.Region\": [\"EU\"]) and shared values (\"budget\": 1200). Each is checked " +
       "against what it is (a number in range, one of a choice's options) and the controls bound to it move. Words in a text or list field are refused " +
       "while its panel says \"You write\" (a brainstorm, a story's characters): ask and suggest in the chat; panacea_arrange writes lets you fill it when " +
-      "they asked or it is productivity work. With Visible work on, your cursor moves the " +
-      "person's own sliders and switches to the values while they watch.",
+      "they asked or it is productivity work. The person's own sliders and switches move to the values.",
     parameters: {
       type: "object",
       properties: { values: { type: "object", description: "Bind -> value." } },

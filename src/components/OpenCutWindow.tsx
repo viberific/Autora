@@ -1,16 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAgentCursor } from "../lib/agentCursor";
 import { useBootWatch } from "../lib/bootWatch";
 import { useCollab } from "../lib/collab";
 import { TakeControl } from "./TakeControl";
 import { SaveButton } from "./SaveButton";
 import { LoadButton } from "./LoadButton";
 import { useFullscreen } from "../lib/fullscreen";
-import { along, humanRoute, restMs, routeMs, typingDelays, type Point } from "../lib/humanPath";
-import { clearCursor } from "../lib/cursorPos";
-import { beginHandRun, handPause, handsHalted, handsStopped } from "../lib/handHalt";
-import { pointerFollow, pointerTyping } from "../lib/pointer";
-import { framePoint, isWorkVisible } from "../lib/frameCoordinates";
 import { onVideoCommand, useVideoState, type VideoCommand } from "../lib/opencut";
 import { IconMaximize, IconMinimize, IconVideo } from "./Icons";
 
@@ -27,10 +21,7 @@ import { IconMaximize, IconMinimize, IconVideo } from "./Icons";
  *   here -> frame   the answers, Autora's theme, and the agent's commands
  *
  * The agent does not edit the project behind the editor's back. It asks the
- * editor to, and the editor does it with its own timeline commands. Before it
- * does, the agent's cursor goes to the place the way the other windows' do --
- * an arc, a rest, a click -- and a title is typed a few letters at a time into
- * the project, so the person watches the cut being made and can take over.
+ * editor to, and the editor does it with its own timeline commands.
  */
 
 /** The theme tokens the editor takes from this page (opencut-editor/src/autora/autora.css, `--a-*`). */
@@ -54,82 +45,18 @@ function themeVars(): Record<string, string> {
   return out;
 }
 
-/** A pause between the hand's acts: none once the hand is halted (lib/handHalt.ts). */
-const sleep = handPause;
-
-/** Commands that change nothing on the screen the person is looking at: they are answered without the cursor. */
-const SILENT = new Set([
-  "state", "catalog", "frame", "scene_list", "project_list", "keyframes", "play", "pause", "undo", "redo", "copy",
-  "ui_read", "ui_press", "ui_scroll", "ui_commit", "locate", "select",
-]);
-
-const numArg = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
-
-/** Where on the screen a command is about, for the cursor to go to; null for none, {} for the playhead. */
-function whereFor(cmd: VideoCommand): Record<string, unknown> | null {
-  const a = cmd.args;
-  const n = cmd.name;
-  if (SILENT.has(n)) return null;
-  if (n === "ui_click" || n === "ui_type") {
-    const target: Record<string, unknown> = {};
-    for (const k of ["ref", "label", "elementId", "trackId", "selector"]) if (a[k] !== undefined) target[k] = a[k];
-    return { target };
-  }
-  if (n === "ui_drag") return null;
-  if (typeof a.elementId === "string") return { elementId: a.elementId };
-  if (Array.isArray(a.elementIds) && typeof a.elementIds[0] === "string") return { elementId: a.elementIds[0] };
-  if (typeof a.trackId === "string") return { trackId: a.trackId };
-  if (n === "panel") return { panel: a.tab };
-  if (n === "settings") return { panel: "settings" };
-  if (n === "import_media") return { panel: "media" };
-  if (n === "export") return { target: { label: "Export" } };
-  if (n.startsWith("scene_")) return { target: { label: "scene" } };
-  const t = numArg(a.start) ?? numArg(a.time) ?? numArg(a.from);
-  return t === null ? {} : { time: t };
-}
-
 /** How long the editor may take: an export or an import is as long as the file. */
 const LONG: Record<string, number> = { export: 31 * 60_000, import_media: 11 * 60_000 };
-
-type Located = { x: number; y: number; view: { w: number; h: number } };
-/** A place the editor gives the hand: where, and for a clip how many pixels a second is and where it is in time. */
-type HandSpot = Located & { pps?: number; start?: number; duration?: number; selector?: string };
-
-/** The edits done with the editor's own controls when Visible work is on (`byHand`). */
-const HAND = new Set([
-  "split", "delete", "move", "trim", "add_clip", "add_text", "set", "set_params", "duplicate", "undo", "redo", "seek", "select",
-  "toggle_mute", "toggle_visibility", "copy", "paste", "separate_audio",
-]);
-
-/** A text clip's own fields in the Properties panel, by the key the agent names and the words on the row. */
-const TEXT_FIELDS: Record<string, { label: string; how: "words" | "hex" | "choice" }> = {
-  content: { label: "Content", how: "words" },
-  fontFamily: { label: "Font Family", how: "words" },
-  fontSize: { label: "Font Size", how: "words" },
-  color: { label: "Color", how: "hex" },
-  textAlign: { label: "Text Align", how: "choice" },
-  fontWeight: { label: "Font Weight", how: "choice" },
-};
 
 export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: boolean }) {
   const desk = useVideoState();
   const frame = useRef<HTMLIFrameElement>(null);
-  const [cursorOn] = useAgentCursor();
-  const cursorOnRef = useRef(cursorOn);
-  cursorOnRef.current = cursorOn;
   /* The project the frame opens on is the one open when the window mounted, and the frame's address never changes
      after that: it moves between projects itself, and a new address would reload it in the middle of the agent's work. */
   const [opening] = useState(desk.projectId ?? null);
   const mine = useCollab().held.includes("video");
   const [full, setFull] = useFullscreen();
   const [trouble, setTrouble] = useState<string | null>(null);
-
-  // The agent's cursor, over the editor.
-  const [cursor, setCursor] = useState<Point | null>(null);
-  const [ring, setRing] = useState<Point | null>(null);
-  const [gone, setGone] = useState(false);
-  const layer = useRef<HTMLDivElement>(null);
-  const cursorAt = useRef<Point | null>(null);
 
   /** This window's frame has said it is up: until then a command sent to it would be lost, so it claims none. */
   const up = useRef(false);
@@ -282,388 +209,10 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
     return () => observer.disconnect();
   }, [post]);
 
-  // ----------------------------------------------------- the agent's hand --
-
-  const tween = useCallback((ms: number, step: (p: number) => void) => new Promise<void>((resolve) => {
-    // Halted: straight to the end, nothing shown on the way.
-    if (handsHalted()) { step(1); resolve(); return; }
-    const started = performance.now();
-    const tick = () => {
-      const p = Math.min(1, (performance.now() - started) / ms);
-      step(p);
-      if (p < 1) requestAnimationFrame(tick); else resolve();
-    };
-    requestAnimationFrame(tick);
-  }), []);
-
-  /** Go to a spot the way a hand does, and press there. */
-  const goTo = useCallback(async (target: Point, view: { w: number; h: number }) => {
-    setGone(false);
-    const from = cursorAt.current ?? { x: Math.min(view.w - 8, Math.max(8, target.x + 70)), y: Math.max(6, target.y - 46) };
-    setCursor(from);
-    const route = humanRoute(from, target);
-    await tween(routeMs(Math.hypot(target.x - from.x, target.y - from.y)), (p) => setCursor(along(route, p)));
-    cursorAt.current = target;
-    await sleep(restMs());
-    setRing(target);
-    await sleep(360);
-    setRing(null);
-  }, [tween]);
-
-  /** Where the editor says this is on its screen (it moves its playhead or scrolls to it first). */
-  const locate = useCallback(async (where: Record<string, unknown>): Promise<Located | null> => {
-    try {
-      return (await toFrame("locate", where)) as Located | null;
-    } catch {
-      return null;
-    }
-  }, [toFrame]);
-
-  /** Words go in a few letters at a time, at a person's pace. */
-  const typed = useCallback(async (text: string, at: (shown: string, first: boolean) => Promise<unknown>) => {
-    pointerTyping(true);
-    const chars = Array.from(text);
-    const gaps = typingDelays(text, 2400);
-    const chunk = Math.max(1, Math.ceil(chars.length / 14));
-    let last: unknown = null;
-    for (let n = chunk; ; n += chunk) {
-      // Stopped: no more of it. Switched off: the rest at once.
-      if (handsStopped()) break;
-      if (handsHalted()) n = chars.length;
-      const upto = Math.min(chars.length, n);
-      last = await at(chars.slice(0, upto).join(""), n === chunk);
-      if (upto >= chars.length) break;
-      await sleep(gaps.slice(upto - chunk, upto).reduce((a, b) => a + b, 0) || 90);
-    }
-    pointerTyping(false);
-    return last;
-  }, []);
-
-  // ------------------------------------------- the agent's hand, live --
-
-  /** Where something is in the editor for the hand (`hand_point`, opencut-editor/src/autora/commands.ts). */
-  const handAt = useCallback(async (kind: string, a: Record<string, unknown>) =>
-    (await toFrame("hand_point", { kind, ...a }).catch(() => null)) as HandSpot | null, [toFrame]);
-
-  /** Go there and press, with the editor's own mouse events. */
-  const press = useCallback(async (p: HandSpot, shift = false) => {
-    await goTo({ x: p.x, y: p.y }, p.view);
-    await toFrame("hand_tap", { x: p.x, y: p.y, shift });
-  }, [goTo, toFrame]);
-
-  /** Take hold at `from` and drag to `to`, the cursor travelling with what it holds. */
-  const pull = useCallback(async (from: HandSpot, to: Point) => {
-    await goTo({ x: from.x, y: from.y }, from.view);
-    const route = humanRoute({ x: from.x, y: from.y }, to);
-    const moving = tween(Math.max(420, Math.min(1100, Math.hypot(to.x - from.x, to.y - from.y) * 2.2)), (p) => setCursor(along(route, p)));
-    await Promise.all([toFrame("ui_drag", { from: { x: from.x, y: from.y }, to, steps: 30 }), moving]);
-    cursorAt.current = to;
-    await sleep(220);
-  }, [goTo, toFrame, tween]);
-
-  /** A tool by its name: on the tool bar, or in its All tools grid. */
-  const tool = useCallback(async (label: string) => {
-    const onBar = await locate({ target: { selector: `.rail-bar button[aria-label="${label}"]` } });
-    if (onBar) {
-      await goTo({ x: onBar.x, y: onBar.y }, onBar.view);
-      await toFrame("ui_click", { selector: `.rail-bar button[aria-label="${label}"]` });
-      return;
-    }
-    const grid = await locate({ target: { selector: '.rail-bar button[aria-label="All tools"]' } });
-    if (!grid) throw new Error(`${label} is not on the screen`);
-    await goTo({ x: grid.x, y: grid.y }, grid.view);
-    await toFrame("ui_click", { selector: '.rail-bar button[aria-label="All tools"]' });
-    await sleep(300);
-    const tile = await locate({ target: { label } });
-    if (!tile) throw new Error(`${label} is not in All tools`);
-    await goTo({ x: tile.x, y: tile.y }, tile.view);
-    await toFrame("ui_click", { label });
-  }, [goTo, locate, toFrame]);
-
-  /**
-   * One of the agent's edits done with the editor's own controls, as a person does it: the clip picked, the playhead put
-   * where the cut goes by a click on the ruler, the tool bar's Split or Delete, a clip dragged by its body or its edge, a
-   * tile's "+" in the media or text panel. Where the editor lands somewhere else (snapping, a clip that will not go
-   * there), the exact edit is made after, and the answer says so. Undefined when it cannot be done by hand (nothing it
-   * needs is on the screen): then the command goes to the editor as it is, at once.
-   */
-  const byHand = useCallback(async (name: string, args: Record<string, unknown>): Promise<unknown> => {
-    type Clip = {
-      id: string; start: number; duration: number; trimStart: number; trimEnd: number; type: string;
-      text?: string; style?: Record<string, unknown>; muted?: boolean; hidden?: boolean;
-    };
-    type State = { duration: number; playhead: number; tracks: Array<{ id: string; clips: Clip[] }>; media: Array<{ id: string; name: string }> };
-    const now = async () => (await toFrame("state", {})) as State;
-    const clips = (st: State) => st.tracks.flatMap((t) => t.clips.map((c) => ({ ...c, track: t.id })));
-    const clipOf = (st: State, id: string) => clips(st).find((c) => c.id === id);
-    const near = (a: number, b: number) => Math.abs(a - b) < 0.06;
-    const said = (st: unknown, how: string, fixed?: string) =>
-      ({ ...(st as Record<string, unknown>), byHand: `${how}, by hand in the Video window, where the person watched${fixed ? `; then ${fixed}, directly` : ""}` });
-    /** Not by hand after all: why, for whoever is looking at the console. */
-    const skip = (why: string) => { console.debug(`[video hand] ${name}: not by hand (${why})`); return undefined; };
-    const before = await now();
-    const id = typeof args.elementId === "string" ? args.elementId : "";
-    const idsOf = () => (Array.isArray(args.elementIds) ? args.elementIds.filter((v): v is string => typeof v === "string") : id ? [id] : []);
-    /** Clip by clip picked with a click (Shift for each after the first); how many were there to pick. */
-    const pick = async (ids: string[]) => {
-      let picked = 0;
-      for (const one of ids) {
-        const body = await handAt("clip", { elementId: one });
-        if (!body) continue;
-        await press(body, picked > 0);
-        picked++;
-      }
-      return picked;
-    };
-    const cap = (w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
-    /** One field of the Properties panel: clicked, and the value typed in a key at a time (or its option picked from the list). */
-    const setField = async (key: string, value: unknown): Promise<boolean> => {
-      const f = TEXT_FIELDS[key];
-      if (!f || (typeof value !== "string" && typeof value !== "number")) return false;
-      const spot = await handAt("field", { name: f.label });
-      if (!spot?.selector) return false;
-      await goTo({ x: spot.x, y: spot.y }, spot.view);
-      await toFrame("ui_click", { selector: spot.selector });
-      if (f.how === "choice") {
-        await sleep(250);
-        const option = cap(String(value));
-        const row = await locate({ target: { label: option } });
-        if (!row) { await toFrame("ui_press", { key: "escape" }).catch(() => undefined); return false; }
-        await goTo({ x: row.x, y: row.y }, row.view);
-        await toFrame("ui_click", { label: option });
-        await sleep(200);
-        return true;
-      }
-      const text = f.how === "hex" ? String(value).replace(/^#/, "") : String(value);
-      await typed(text, (shown) => toFrame("ui_type", { selector: spot.selector, text: shown, replace: true, enter: false, blur: false }));
-      // The words in a box are done by leaving it; a number or a colour, by Enter.
-      await toFrame("ui_commit", { selector: spot.selector, how: key === "content" ? "blur" : "enter" });
-      await sleep(150);
-      return true;
-    };
-    const same = (a: unknown, b: unknown) => {
-      if (typeof a === "number" || typeof b === "number") return Math.abs(Number(a) - Number(b)) < 0.01;
-      return String(a ?? "").replace(/^#/, "").toLowerCase() === String(b ?? "").replace(/^#/, "").toLowerCase();
-    };
-    /** The fields a text clip should have, typed in; what is still not right after is set exactly, and the result says so. */
-    const fillText = async (clipId: string, want: Record<string, unknown>): Promise<string[]> => {
-      const fixed: string[] = [];
-      for (const [key, value] of Object.entries(want)) await setField(key, value).catch(() => false);
-      const end = clipOf(await now(), clipId);
-      const wrong: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(want)) {
-        const have = key === "content" ? end?.text : end?.style?.[key];
-        if (!end || !same(have, value)) wrong[key] = value;
-      }
-      if (Object.keys(wrong).length) {
-        await toFrame("set_params", { elementId: clipId, params: wrong });
-        fixed.push(`${Object.keys(wrong).join(", ")} ${Object.keys(wrong).length === 1 ? "was" : "were"} set exactly`);
-      }
-      return fixed;
-    };
-
-    if (name === "split") {
-      const at = typeof args.time === "number" ? args.time : null;
-      if (!id || at === null) return skip("1");
-      const body = await handAt("clip", { elementId: id });
-      if (!body) return skip("2");
-      await press(body);
-      const cut = await handAt("time", { time: at });
-      if (!cut) return skip("3");
-      await press(cut);
-      await tool("Split");
-      const after = await now();
-      if (clips(after).length > clips(before).length) return said(after, "picked the clip, clicked the ruler at the cut and pressed Split");
-      return said(await toFrame("split", args), "picked the clip and put the playhead there", "the cut was made");
-    }
-
-    if (name === "delete") {
-      const ids = Array.isArray(args.elementIds) ? args.elementIds.filter((v): v is string => typeof v === "string") : id ? [id] : [];
-      if (!ids.length) return skip("4");
-      if (!(await pick(ids))) return skip("5");
-      await tool("Delete");
-      const after = await now();
-      const left = ids.filter((one) => clipOf(after, one));
-      if (!left.length) return said(after, `picked ${ids.length === 1 ? "the clip" : `the ${ids.length} clips`} and pressed Delete`);
-      return said(await toFrame("delete", { elementIds: left }), "picked the clips and pressed Delete", `${left.length} left over were removed`);
-    }
-
-    if (name === "move") {
-      const to = typeof args.start === "number" ? args.start : null;
-      const was = clipOf(before, id);
-      if (!was || to === null) return skip("6");
-      const body = await handAt("clip", { elementId: id });
-      if (!body?.pps) return skip("7");
-      let y = body.y;
-      if (typeof args.trackId === "string" && args.trackId !== was.track) {
-        const row = await handAt("track", { trackId: args.trackId });
-        if (!row) return skip("8");
-        y = row.y;
-      }
-      await pull(body, { x: body.x + (to - was.start) * body.pps, y });
-      const after = await now();
-      const now_ = clipOf(after, id);
-      if (now_ && near(now_.start, to) && (typeof args.trackId !== "string" || now_.track === args.trackId)) return said(after, "dragged the clip to its place");
-      return said(await toFrame("move", args), "dragged the clip", "it was put exactly where asked");
-    }
-
-    if (name === "trim") {
-      const was = clipOf(before, id);
-      if (!was) return skip("9");
-      const body = await handAt("clip", { elementId: id });
-      if (!body) return skip("10");
-      await press(body);
-      const from = typeof args.from === "number" ? args.from : was.trimStart;
-      const source = was.trimStart + was.duration + was.trimEnd;
-      const to = typeof args.to === "number" ? Math.min(source, args.to) : source - was.trimEnd;
-      if (!near(from, was.trimStart)) {
-        const left = await handAt("clip", { elementId: id, part: "left" });
-        if (left?.pps) await pull(left, { x: left.x + (from - was.trimStart) * left.pps, y: left.y });
-      }
-      const mid = clipOf(await now(), id);
-      if (mid && !near(mid.duration, to - from)) {
-        const right = await handAt("clip", { elementId: id, part: "right" });
-        if (right?.pps) await pull(right, { x: right.x + ((to - from) - mid.duration) * right.pps, y: right.y });
-      }
-      const after = await now();
-      const end = clipOf(after, id);
-      if (end && near(end.trimStart, from) && near(end.duration, to - from)) return said(after, "dragged the clip's edges");
-      return said(await toFrame("trim", args), "dragged the clip's edges", "the trim was set exactly");
-    }
-
-    if (name === "add_clip" || name === "add_text") {
-      const start = typeof args.start === "number" ? args.start : name === "add_clip" ? before.duration : before.playhead;
-      // A size the editor would refuse is said by the editor, not worked around.
-      const size = args.fontSize;
-      if (name === "add_text" && size !== undefined && (typeof size !== "number" || !(size > 0) || size > 45)) return skip("size");
-      // The ruler only reaches the end of what is there: past it, the clip goes in at the end and is dragged out after.
-      const place = Math.min(start, before.duration);
-      const tileName = name === "add_text" ? "Default text" : before.media.find((m) => m.id === args.mediaId)?.name;
-      if (!tileName) return skip("12");
-      const at = await handAt("time", { time: place });
-      if (!at) return skip("13");
-      await press(at);
-      await tool(name === "add_text" ? "Text" : "Media");
-      await sleep(300);
-      const tile = await handAt("tile", { name: tileName });
-      if (!tile) return skip("14");
-      await press(tile);
-      const known = new Set(clips(before).map((c) => c.id));
-      let after = await now();
-      const made = clips(after).find((c) => !known.has(c.id));
-      if (!made) return said(await toFrame(name, args), `clicked "${tileName}" in its panel`, "it was added");
-      const fixed: string[] = [];
-      if (name === "add_text") {
-        // The words, and then its look, typed into the Properties panel's own fields, with the clip picked.
-        const body = await handAt("clip", { elementId: made.id });
-        if (body) await press(body);
-        const want: Record<string, unknown> = {};
-        if (typeof args.text === "string" && args.text) want.content = args.text;
-        for (const key of ["fontFamily", "fontSize", "color", "textAlign", "fontWeight"]) if (args[key] !== undefined) want[key] = args[key];
-        fixed.push(...(await fillText(made.id, want)));
-      }
-      const want = typeof args.duration === "number" ? args.duration : name === "add_text" ? 3 : null;
-      if (want !== null && !near(made.duration, want)) {
-        // Its edges are handles only once it is picked.
-        const body = await handAt("clip", { elementId: made.id });
-        if (body) await press(body);
-        const right = await handAt("clip", { elementId: made.id, part: "right" });
-        if (right?.pps) await pull(right, { x: right.x + (want - made.duration) * right.pps, y: right.y });
-      }
-      after = await now();
-      let end = clipOf(after, made.id);
-      if (end && !near(end.start, start)) {
-        // Past the end of the timeline: the clip is taken by its body and dragged out to its time, when that is on screen.
-        const body = await handAt("clip", { elementId: made.id });
-        if (body?.pps) {
-          const to = { x: body.x + (start - end.start) * body.pps, y: body.y };
-          if (to.x > 0 && to.x < body.view.w - 24) await pull(body, to);
-        }
-        end = clipOf(await now(), made.id);
-        if (end && !near(end.start, start)) { await toFrame("move", { elementId: made.id, start }); fixed.push("it was put exactly at its time"); }
-      }
-      if (end && want !== null && !near(end.duration, want)) fixed.push(`it is ${end.duration}s long, not ${want}s (drag its right edge, or trim it)`);
-      return said(await now(), `clicked the ruler at ${place}s and pressed "+" on "${tileName}"${name === "add_text" ? ", typed the words into its Content field" : ""}${place !== start ? " and dragged the clip out to its time" : ""}`, fixed.join(", ") || undefined);
-    }
-
-    if (name === "set" || name === "set_params") {
-      const params = (args.params ?? {}) as Record<string, unknown>;
-      const keys = Object.keys(params);
-      const was = clipOf(before, id);
-      // Only a title's own fields have a place on the panel to type into; the rest of a clip's properties are done directly.
-      if (!was || was.type !== "text" || !keys.length || keys.some((k) => !TEXT_FIELDS[k])) return skip("set");
-      if (typeof params.fontSize !== "undefined" && (typeof params.fontSize !== "number" || params.fontSize > 45)) return skip("size");
-      if (!(await pick([id]))) return skip("set-pick");
-      const fixed = await fillText(id, params);
-      return said(await now(), `picked the clip and typed ${keys.join(", ")} into its fields in the Properties panel`, fixed.join(", ") || undefined);
-    }
-
-    if (name === "duplicate" || name === "copy" || name === "separate_audio") {
-      const ids = idsOf();
-      if (!ids.length || !(await pick(ids))) return skip("pick");
-      const label = name === "duplicate" ? "Duplicate" : name === "copy" ? "Copy" : "Extract audio";
-      await tool(label);
-      const after = await now();
-      if (name === "copy") return said({ copied: true, ...after }, `picked the clip and pressed ${label}`);
-      if (clips(after).length > clips(before).length) return said(after, `picked the clip${ids.length === 1 ? "" : "s"} and pressed ${label}`);
-      return skip("nothing new");
-    }
-
-    if (name === "toggle_mute" || name === "toggle_visibility") {
-      const was = clipOf(before, id);
-      if (!was || !(await pick([id]))) return skip("pick");
-      await tool(name === "toggle_mute" ? "Mute" : "Show / hide");
-      const after = await now();
-      const now_ = clipOf(after, id);
-      const key = name === "toggle_mute" ? "muted" : "hidden";
-      if (now_ && Boolean(now_[key]) !== Boolean(was[key])) return said(after, `picked the clip and pressed ${name === "toggle_mute" ? "Mute" : "Show / hide"}`);
-      return skip("unchanged");
-    }
-
-    if (name === "paste") {
-      if (typeof args.time === "number") {
-        const at = await handAt("time", { time: args.time });
-        if (!at) return skip("paste-time");
-        await press(at);
-      }
-      await tool("Paste");
-      const after = await now();
-      if (clips(after).length > clips(before).length) return said(after, "put the playhead there and pressed Paste");
-      return skip("nothing pasted");
-    }
-
-    if (name === "select") {
-      const ids = idsOf();
-      if (args.all === true) { await tool("Select all"); return said(await now(), "pressed Select all"); }
-      if (!ids.length || !(await pick(ids))) return skip("select");
-      return said({ selected: ids }, `clicked ${ids.length === 1 ? "the clip" : `the ${ids.length} clips`}`);
-    }
-
-    if (name === "seek") {
-      const to = typeof args.time === "number" ? Math.max(0, args.time) : null;
-      if (to === null) return skip("seek");
-      const at = await handAt("time", { time: to });
-      if (!at) return skip("seek-ruler");
-      await press(at);
-      const after = await now();
-      if (near(after.playhead, to)) return said(after, `clicked the ruler at ${to}s`);
-      return said(await toFrame("seek", args), `clicked the ruler at ${to}s`, "the playhead was put exactly there");
-    }
-
-    if (name === "undo" || name === "redo") {
-      await tool(name === "undo" ? "Undo" : "Redo");
-      return said(await now(), `pressed ${name === "undo" ? "Undo" : "Redo"} on the tool bar`);
-    }
-    return skip("15");
-  }, [goTo, handAt, locate, press, pull, toFrame, tool, typed]);
-
-  /** One command from the agent: pointed at, then done, then answered. */
+  /** One command from the agent, done by the editor and answered. */
   const play = useCallback(async (cmd: VideoCommand): Promise<unknown> => {
-    // Its typing happens in the editor's frame, which keeps its own keyboard down.
-    beginHandRun(false);
     let args = cmd.args;
     const name = cmd.name;
-    const onScreen = !!frame.current && isWorkVisible(frame.current);
     // A file to import comes through the app's own route, by a link the agent's tool made.
     if (name === "import_media" && typeof args.sourceToken === "string") {
       const res = await fetch(`/api/opencut/source/${encodeURIComponent(args.sourceToken)}?${query}`);
@@ -672,78 +221,8 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
       args = { ...rest, file: await res.blob() };
       await toFrame("panel", { tab: "media" }).catch(() => undefined);
     }
-    // Visible work: the edits a person makes with the timeline and the tool bar are made that way, live.
-    if (cursorOnRef.current && onScreen && HAND.has(name)) {
-      const done = await byHand(name, args).catch((err: unknown) => { console.debug(`[video hand] ${name}: ${String((err as Error)?.message ?? err)}`); return undefined; });
-      if (done !== undefined) {
-        await sleep(400);
-        setGone(true);
-        return done;
-      }
-    }
-    const where = cursorOnRef.current && onScreen ? whereFor({ ...cmd, args }) : null;
-    let spot: Located | null = null;
-    if (where) {
-      spot = await locate(where);
-      if (spot) await goTo({ x: spot.x, y: spot.y }, spot.view);
-    }
-    const finish = async <T,>(result: T): Promise<T> => {
-      if (spot) {
-        await sleep(450);
-        setGone(true);
-      }
-      return result;
-    };
-
-    // Typing: a title, a clip's words, a name, or a field on the screen.
-    if (name === "add_text" && typeof args.text === "string" && args.text.length > 1 && spot) {
-      const full = args.text;
-      let clipId: string | undefined;
-      const made = await typed(full, async (shown, first) => {
-        if (first) {
-          const r = (await toFrame("add_text", { ...args, text: shown })) as { tracks?: Array<{ clips: Array<{ id: string; type: string; text?: string }> }> };
-          clipId = r.tracks?.flatMap((t) => t.clips).filter((c) => c.type === "text" && c.text === shown).pop()?.id;
-          return r;
-        }
-        return clipId ? toFrame("set_params", { elementId: clipId, params: { content: shown }, history: false }) : null;
-      });
-      return finish(made);
-    }
-    if ((name === "set_params" || name === "set") && spot && typeof (args.params as Record<string, unknown> | undefined)?.content === "string" && String((args.params as Record<string, unknown>).content).length > 1) {
-      const full = String((args.params as Record<string, unknown>).content);
-      const rest = { ...(args.params as Record<string, unknown>) };
-      const result = await typed(full, (shown, first) => toFrame("set_params", { ...args, params: { ...rest, content: shown }, history: first }));
-      // The last step is the one that is kept as it is, undone in one go.
-      return finish(await toFrame("set_params", { ...args, params: { ...rest, content: full }, history: true }).then(() => result).catch(() => result));
-    }
-    if (name === "rename" && typeof args.name === "string" && args.name.length > 1 && spot) {
-      const full = args.name;
-      return finish(await typed(full, (shown) => toFrame("rename", { name: shown })));
-    }
-    if (name === "ui_type" && typeof args.text === "string" && spot) {
-      const full = args.text;
-      const replace = args.replace !== false;
-      const result = await typed(full, (shown, first) => toFrame("ui_type", { ...args, text: shown, replace: first ? replace : true, enter: false, blur: false }));
-      if (args.enter === true || args.blur === true) await toFrame("ui_commit", { ...args, how: args.blur === true ? "blur" : "enter" });
-      return finish(result);
-    }
-    if (name === "ui_drag") {
-      const from = args.from as { x: number; y: number } | undefined;
-      const to = args.to as { x: number; y: number } | undefined;
-      if (cursorOnRef.current && from && to) {
-        const view = { w: 1280, h: 800 };
-        await goTo(from, view);
-        const route = humanRoute(from, to);
-        const moving = tween(560, (p) => setCursor(along(route, p)));
-        const done = toFrame("ui_drag", { ...args, steps: 28 });
-        const [result] = await Promise.all([done, moving]);
-        cursorAt.current = to;
-        setGone(true);
-        return result;
-      }
-    }
-    return finish(await toFrame(name, args));
-  }, [byHand, goTo, locate, query, toFrame, tween, typed]);
+    return await toFrame(name, args);
+  }, [query, toFrame]);
 
   // The agent's commands for this chat. The first window to claim one does it: the same chat open in two tabs must not cut twice.
   useEffect(() => onVideoCommand((cmd) => {
@@ -760,15 +239,6 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
       }
     })();
   }), [play, query, send]);
-
-  // Where the cursor is on screen, for the line the agent says beside it.
-  useEffect(() => {
-    const r = layer.current?.getBoundingClientRect();
-    const point = cursor && r && frame.current ? framePoint(frame.current, cursor) : null;
-    // The board's one cursor goes there (lib/pointer.ts): this window draws only the press.
-    if (point) pointerFollow(point);
-  }, [cursor]);
-  useEffect(() => clearCursor, []);
 
   /** Save: the editor writes the project now. A video project is yours across chats, so it stays here (Export makes the
       video file, which goes to Artifacts). */
@@ -810,12 +280,6 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
           sandbox="allow-scripts allow-downloads allow-modals allow-popups"
           allow="autoplay; fullscreen"
         />
-        {cursor && (
-          <div ref={layer} className="office-cursor-layer" aria-hidden="true" data-office-cursor={gone ? "gone" : "on"}>
-            {ring && <span className="office-click" style={{ left: ring.x - 14, top: ring.y - 14 }} />}
-            {/* The arrow itself is the board's one cursor (lib/pointer.ts pointerFollow), which travels between windows. */}
-          </div>
-        )}
       </div>
     </div>
   );

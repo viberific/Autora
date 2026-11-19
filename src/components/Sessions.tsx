@@ -21,6 +21,8 @@ export type SessionRow = {
   mode?: "build" | "plan" | "agent";
   permissions?: "yolo" | "ask";
   ask_when?: string;
+  /** Learn mode is on for this chat (server/learn.ts). */
+  learn?: boolean;
 };
 
 function when(ts: number | undefined): string {

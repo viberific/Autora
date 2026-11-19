@@ -179,9 +179,7 @@ async function main() {
       const bytes = (await fileOf())!;
       const text = (pptxParagraphs(bytes) ?? []).join("\n");
       assert.match(text, /Annual review.*moved to Monday/);
-      // With Visible work on, the agent's hand typed the title in the editor itself.
-      assert.match(JSON.stringify(app.seen.flatMap((r) => r.messages).filter((m: { role: string }) => m.role === "tool").slice(-1)), /Typed by hand in the Autora Slides window/);
-      assert.equal(await page.locator(".office-ghost").count(), 0, "nothing is drawn over the slide: the typing is in the document");
+      assert.equal(await page.locator(".office-ghost").count(), 0, "nothing is drawn over the slide: the change is in the document");
       // The editor took the change where it stood: the same page, not a new one.
       await sleep(3000);
       assert.equal(await frame.evaluate(() => (window as any).__kept).catch(() => null), "same page", "the window was not reloaded");
@@ -261,8 +259,7 @@ async function main() {
       await app.turn(s, "add a Gadget row with quantity 2", 120_000);
       const cells = xlsxCells((await fileOf())!)!;
       assert.ok([...cells.entries()].some(([k, v]) => /A3$/.test(k) && v === "Gadget"), JSON.stringify([...cells]));
-      assert.match(JSON.stringify(app.seen.flatMap((r) => r.messages).filter((m: { role: string }) => m.role === "tool").slice(-1)), /Typed by hand in the Autora Sheets window/);
-      assert.equal(await page.locator(".office-ghost").count(), 0, "nothing is drawn over the sheet: the typing is in the document");
+      assert.equal(await page.locator(".office-ghost").count(), 0, "nothing is drawn over the sheet: the change is in the document");
       assert.ok([...cells.entries()].some(([k, v]) => /B2$/.test(k) && v === "7"), "their change is still there");
       await sleep(4000);
       assert.equal(await frame.evaluate(() => (window as any).__kept).catch(() => null), "same page", "the window was not reloaded");

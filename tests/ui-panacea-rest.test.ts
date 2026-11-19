@@ -24,7 +24,6 @@ async function main() {
   const browser = await chromium.launch({ executablePath: CHROME, args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
   const errors: string[] = [];
   try {
-    await app.api("PATCH", "/api/agent-cursor", { on: false });
     const s = await app.newSession("Rest", "build");
     const page: Page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
     page.on("pageerror", (e) => errors.push(e.message));

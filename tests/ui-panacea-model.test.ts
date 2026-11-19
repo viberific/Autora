@@ -38,7 +38,6 @@ async function main() {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   try {
-    await app.api("PATCH", "/api/agent-cursor", { on: false });
     const s = await app.newSession("3D panels", "build");
     const doc = async () => ((await app.api("GET", `/api/cad/${s}/doc`)).body as { doc: ModelDoc }).doc;
     const until = async (what: string, fn: () => Promise<boolean> | boolean, ms = 8000) => {

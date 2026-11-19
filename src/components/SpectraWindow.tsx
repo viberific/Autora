@@ -4,13 +4,8 @@ import { LoadButton } from "./LoadButton";
 import { useWindowFull } from "../lib/fullscreen";
 import { useCollab } from "../lib/collab";
 import { TakeControl } from "./TakeControl";
-import { onDeskHand, useDeskState, type DeskHand } from "../lib/pdfdesk";
+import { useDeskState } from "../lib/pdfdesk";
 import { useBootWatch } from "../lib/bootWatch";
-import { clearCursor } from "../lib/cursorPos";
-import { pointerFollow } from "../lib/pointer";
-import { holdFocus } from "../lib/keepFocus";
-import { framePoint, isWorkVisible } from "../lib/frameCoordinates";
-import { getCursorWho, whoColors } from "../lib/cursorWho";
 import { onSpectraEvent } from "../lib/spectra";
 import { useFrameTheme } from "../lib/frameTheme";
 import { IconDownload, IconFile, IconMaximize, IconMinimize } from "./Icons";
@@ -30,18 +25,6 @@ import { IconDownload, IconFile, IconMaximize, IconMinimize } from "./Icons";
  * events the frame asked for. That is the whole of the wire between them; the
  * editor's own state, its UI and its history are its own.
  */
-/** How long an edit waits for an editor that is still starting before the server does it instead. */
-const EDITOR_START_MS = 45_000;
-
-/** The cursor's colour as #rrggbb, which the frame draws with: the chat's agent's own, else the theme's accent. */
-function cursorColor(): string {
-  const own = whoColors()?.accent;
-  if (own && /^#[0-9a-f]{6}$/i.test(own)) return own;
-  const rgb = getComputedStyle(document.documentElement).getPropertyValue("--accent-rgb").split(",").map((v) => Number(v.trim()));
-  if (rgb.length !== 3 || rgb.some((v) => !Number.isFinite(v))) return "#6e5bff";
-  return `#${rgb.map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("")}`;
-}
-
 export function SpectraWindow({ sessionId, phone }: { sessionId: string; phone: boolean }) {
   const desk = useDeskState();
   const frame = useRef<HTMLIFrameElement>(null);
@@ -77,37 +60,6 @@ export function SpectraWindow({ sessionId, phone }: { sessionId: string; phone: 
     frame.current?.contentWindow?.postMessage(msg, "*");
   }, []);
   useFrameTheme(frame);
-
-  /* The agent's hand (Visible work on): its pdf_edit is done in the editor, live, with the editor's own tools
-     (spectra-editor/src/autora/hand.ts), and saved there. The window only carries it: the first window of the chat to
-     claim it hands it to its frame -- once the editor is up, which it waits for -- and tells the server what was done.
-     Nothing is played over a file the server changed: that would be a recording of work already done. */
-  const handing = useRef(new Map<string, (answer: { results?: unknown; saved?: unknown; error?: unknown }) => void>());
-  const byHand = useCallback(async (hand: DeskHand) => {
-    if (!frame.current || !isWorkVisible(frame.current)) return;
-    const q = `/api/pdfdesk/${encodeURIComponent(sessionId)}/hand`;
-    const claim = await fetch(`${q}/claim?id=${encodeURIComponent(hand.id)}`, { method: "POST" })
-      .then((r) => (r.ok ? (r.json() as Promise<{ won?: boolean }>) : { won: false }))
-      .catch(() => ({ won: false }));
-    if (!claim.won) return;
-    const reply = (body: Record<string, unknown>) => fetch(`${q}/reply?id=${encodeURIComponent(hand.id)}`, {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-    }).catch(() => undefined);
-    for (let waited = 0; !booted.current && waited < EDITOR_START_MS; waited += 250) await new Promise((r) => setTimeout(r, 250));
-    if (!booted.current) { await reply({ results: [], saved: false, error: "the editor did not start" }); return; }
-    // The editor may take the keyboard while it works; the person's place is theirs again after (lib/keepFocus.ts).
-    const held = holdFocus(frame.current);
-    const answer = await new Promise<{ results?: unknown; saved?: unknown; error?: unknown }>((resolve) => {
-      handing.current.set(hand.id, resolve);
-      // The board draws the cursor (one for the whole board): the frame only says where its hand is.
-      post({ type: "autora:spectra:hand", id: hand.id, job: hand.job, who: { name: getCursorWho().name, color: cursorColor(), board: true } });
-    });
-    handing.current.delete(hand.id);
-    held.release();
-    clearCursor();
-    await reply({ results: answer.results ?? [], saved: answer.saved === true, ...(typeof answer.error === "string" ? { error: answer.error } : {}) });
-  }, [post, sessionId]);
-  useEffect(() => onDeskHand((hand) => { void byHand(hand); }), [byHand]);
 
   /** One command from the editor, answered by Autora's server. */
   const invoke = useCallback(
@@ -171,12 +123,6 @@ export function SpectraWindow({ sessionId, phone }: { sessionId: string; phone: 
         void fetch(path)
           .then(async (res) => answer(res.status, res.headers.get("content-type"), res.ok ? await res.arrayBuffer() : null))
           .catch(() => answer(502, null, null));
-      } else if (msg.type === "autora:spectra:handed" && typeof msg.id === "string") {
-        handing.current.get(msg.id)?.(msg);
-      } else if (msg.type === "autora:spectra:cursor" && typeof msg.x === "number" && typeof msg.y === "number") {
-        // The agent's cursor in the editor, for the few words beside it (AgentThought).
-        const point = framePoint(frame.current, { x: msg.x, y: msg.y });
-        if (point) pointerFollow(point);
       } else if (msg.type === "autora:spectra:pick" && typeof msg.text === "string") {
         // The words the person has selected in the page, for the agent's next briefing.
         void fetch(`/api/pdfdesk/${encodeURIComponent(sessionId)}/pick`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: msg.text }) }).catch(() => undefined);

@@ -1,7 +1,6 @@
 /**
- * Autora Photo, Visible work: the agent's photo_edit is handed to the open window to do by hand, the first window to
- * claim it does it and answers with the picture, and with nobody to claim it (or Visible work off) it runs on the
- * server at speed. The editor's side is in photo/overlay/autora.rs; here a stand-in command line and a stand-in window.
+ * Autora Photo's agent path: photo_edit runs on the server at speed, whatever is open, and is kept as the agent's change;
+ * and the layer the person is on is told to the agent. Here a stand-in command line.
  *
  *   npx tsx tests/photo-hand.test.ts
  */
@@ -47,17 +46,8 @@ async function test(name: string, fn: () => Promise<void> | void) {
 }
 
 const session = "hand-chat";
-let visible = true;
-const pushes: Array<Record<string, unknown>> = [];
-let onPush: (m: Record<string, unknown>) => void = () => undefined;
 const app = express();
-photo.photoRoutes(app, {
-  exists: (id) => id === session,
-  incognito: () => false,
-  off: () => false,
-  push: (_id, m) => { pushes.push(m); onPush(m); },
-  visible: () => visible,
-});
+photo.photoRoutes(app, { exists: (id) => id === session, incognito: () => false, off: () => false });
 const server = app.listen(0, "127.0.0.1");
 await new Promise((r) => server.once("listening", r));
 const base = `http://127.0.0.1:${(server.address() as { port: number }).port}/api/photo/${session}`;
@@ -70,93 +60,14 @@ await fetch(`${base}/open`, { method: "POST" });
 const commands = [{ id: "filter.blur.gaussianBlur", params: { radius: 3 } }, { id: "layer.new.layer", params: {} }];
 const edit = () => photo.runPhotoTool(session, "photo_edit", { commands }, { cwd: dir });
 
-/** A window that claims what it is sent and answers as the editor would. */
-function windowAnswers(results: unknown[], bytes: string) {
-  onPush = (m) => {
-    if (m.type !== "photodesk.hand") return;
-    void (async () => {
-      const claim = (await (await fetch(`${base}/hand/claim?id=${m.id}`, { method: "POST" })).json()) as { won: boolean };
-      if (!claim.won) return;
-      await fetch(`${base}/hand/reply?id=${m.id}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/octet-stream", "X-Photo-Hand": encodeURIComponent(JSON.stringify({ results })) },
-        body: bytes,
-      });
-    })();
-  };
-}
-
-await test("with Visible work on, the window is handed the edit and its picture is kept as the agent's", async () => {
-  windowAnswers([{ command: "filter.blur.gaussianBlur", ok: true, how: "ui" }, { command: "layer.new.layer", ok: true, how: "ui" }], "edited by hand");
-  const out = await edit();
-  assert.equal(out.ok, true, out.summary);
-  assert.match(out.summary, /by hand in the window/);
-  const sent = pushes.find((m) => m.type === "photodesk.hand") as { commands: unknown } | undefined;
-  assert.deepEqual(sent?.commands, commands);
-  assert.equal(fs.readFileSync(path.join(process.env.AUTORA_STATE_DIR!, "photo", session, "work.pcraft"), "utf8"), "edited by hand");
-  const now = photo.photoState(session);
-  assert.equal(now.by, "agent");
-  // The window made this revision itself, so it is told not to load it again.
-  assert.equal(now.hand, now.rev);
-});
-
-await test("a second window cannot claim an edit the first one took", async () => {
-  let second: boolean | undefined;
-  onPush = (m) => {
-    if (m.type !== "photodesk.hand") return;
-    void (async () => {
-      const a = (await (await fetch(`${base}/hand/claim?id=${m.id}`, { method: "POST" })).json()) as { won: boolean };
-      const b = (await (await fetch(`${base}/hand/claim?id=${m.id}`, { method: "POST" })).json()) as { won: boolean };
-      second = b.won;
-      if (a.won) await fetch(`${base}/hand/reply?id=${m.id}`, { method: "POST", headers: { "X-Photo-Hand": encodeURIComponent(JSON.stringify({ results: [{ ok: true }, { ok: true }] })) }, body: "again" });
-    })();
-  };
-  assert.equal((await edit()).ok, true);
-  assert.equal(second, false);
-});
-
-await test("a command that failed in the window stops the edit and says which", async () => {
-  windowAnswers([{ command: "filter.blur.gaussianBlur", ok: false, error: "no pixels selected", how: "ui" }], "partly");
-  const out = await edit();
-  assert.equal(out.ok, false);
-  assert.match(out.summary, /Stopped at command 1/);
-  assert.match(out.summary, /no pixels selected/);
-});
-
-await test("a window whose editor never started gives the edit back, and the server does it", async () => {
-  windowAnswers([], "");
-  onPush = ((answer) => (m: Record<string, unknown>) => {
-    if (m.type !== "photodesk.hand") return;
-    void (async () => {
-      const claim = (await (await fetch(`${base}/hand/claim?id=${m.id}`, { method: "POST" })).json()) as { won: boolean };
-      if (claim.won) await fetch(`${base}/hand/reply?id=${m.id}`, { method: "POST", headers: { "X-Photo-Hand": encodeURIComponent(JSON.stringify(answer)) }, body: "" });
-    })();
-  })({ results: [], error: "the editor did not start" });
-  const out = await edit();
-  assert.equal(out.ok, true, out.summary);
-  assert.doesNotMatch(out.summary, /by hand/);
-  assert.equal(photo.photoState(session).hand, undefined);
-});
-
-await test("with nobody to claim it, the edit runs on the server at speed", async () => {
-  onPush = () => undefined;
-  pushes.length = 0;
+await test("photo_edit runs on the server at speed and is kept as the agent's change", async () => {
   const started = Date.now();
   const out = await edit();
   assert.equal(out.ok, true, out.summary);
   assert.doesNotMatch(out.summary, /by hand/);
-  assert.ok(pushes.length > 0, "the window was asked first");
   assert.ok(Date.now() - started < 9000);
   assert.equal(fs.readFileSync(path.join(process.env.AUTORA_STATE_DIR!, "photo", session, "work.pcraft"), "utf8"), "saved by the command line");
-  assert.equal(photo.photoState(session).hand, undefined);
-});
-
-await test("with Visible work off, the window is not asked at all", async () => {
-  visible = false;
-  pushes.length = 0;
-  const out = await edit();
-  assert.equal(out.ok, true, out.summary);
-  assert.equal(pushes.filter((m) => m.type === "photodesk.hand").length, 0);
+  assert.equal(photo.photoState(session).by, "agent");
 });
 
 await test("the layer the person is on is told to the agent, and cleared", async () => {
