@@ -1,5 +1,7 @@
 # Panacea, tried as someone who has never made a game (2026-11-19, 0.9.377)
 
+Two parts: **part 1** the game in 2D (below), **part 2** the same game in 3D (after "Not covered").
+
 For: usability review. The brief: act as a first-timer, open Panacea, work out where to start, and end up with a simple game
 with mobile controls where you shoot balls to break a piece of glass. Evidence is in `docs/screenshots/try-2026-11-19-game/`;
 the finished game's source is in `docs/examples/break-the-glass/`.
@@ -67,3 +69,77 @@ things that went wrong are findings below (F8, F9).
 
 A real model driving the tools (its choices, its questions to the person, how it recovers from F8); sound; Visible work with
 the game window; a real phone (an iPhone 13 profile with touch events was used, not a device).
+
+
+---
+
+# Part 2: the same game, in 3D
+
+Same persona, same challenge: a first-timer wants a game where you shoot balls at a window to break it, with phone controls,
+this time in 3D. Evidence: `docs/screenshots/try-2026-11-19-game-3d/`; the finished game's source:
+`docs/examples/break-the-glass-3d/`. Same method and same limits as part 1 (real browser and server, a scripted stand-in model,
+no model key, an iPhone 13 touch profile); IDs continue from part 1 (F12 onward).
+
+## The result
+
+An over-the-shoulder 3D view: a window in a wooden frame stands at the end of a floor, a cannon in front slides with the arrow
+buttons, FIRE shoots balls that are real physics bodies. Two hits crack the glass, four crack it a lot, six shatter it into 44
+pieces that fall and settle on the floor, then "You broke it!" and "Play again". **Played on a phone profile with real touches,
+start to shatter to restart: it works** (`10-phone-playthrough.jpg`). The glass, the cracks, the cannon, the ball and the shards
+were all modelled in Autora 3D with its own tools (54 calls; the cracks are thin cuts made with `cad_shapes_subtract`) and sent to
+the game with `game_from_model`, which kept their colours and see-through glass and gave them physics (static window and floor,
+a bouncy ball, falling shards). The buttons and text are flat pictures on a second, 2D layer over the 3D one.
+
+## What a first-timer meets
+
+| # | Pri | Finding | Evidence / reproduce |
+|---|---|---|---|
+| F12 | P1 | **There is no way to start a 3D game from the 3D tile.** "3D: A block to shape" opens a modeller with one grey block; nothing says it is not a game, or how a model becomes one. The bridge exists, but it is under **Export & file** ("Just looks / Falls / Stays put / Send to the game"), after you know to look for it, and only works once a Games window exists. | `01`, `04` |
+| F13 | P1 | **No Sphere.** A ball is the first thing this game needs and Shapes offers Box, Rounded box, Cylinder, Triangle, Wedge, Pentagon, Hexagon, Octagon, Star. By hand the best a newcomer can do is a Cylinder with every edge rounded (the bevel stops at 17 of the 20 mm needed): a slightly flat-sided puck, and only if they know that trick. The agent can make a true sphere (`cad_sculpt_blend`); the person cannot. | `02`, `03` |
+| F14 | P1 | **Visible work is on for a new person, and it makes the agent build at a human's pace.** With it on, the agent typed each shape's size into the window's fields with a cursor: 17 shapes took over 4 minutes, so the 54-shape model would take well over 15. The switch is the eye icon in the header, with no label. With it off the same 54 calls took seconds. By hand the window also names shapes `body_1795101618192_992`, not `body_2`, so an agent that predicts the next id fails (two calls did). | `05`; `PATCH /api/agent-cursor {"on":false}` |
+| F15 | **P1** | **Two dependent calls run at the same time.** The runtime ran `cad_sculpt_blend` and `game_from_model` together ("2 calls checked for overlap and run at the same time"), so the send failed with "The 3D model has nothing visible to send". A model that makes a ball and sends it in one response, the natural thing, hits this. | Put both in one reply. `game_from_model` reads the 3D model, so it conflicts with every `cad_*` write. |
+| F16 | **P1** | **A follow-up request starts in planning again, and the held edits look like work done.** Every turn starts in planning ("Every turn starts in planning"); my follow-up asked for 35 edits and the thread said **"Making 35 changes"** with a small grey "PLANNING FIRST" tag. They were all "Not run". The agent's next message said "ok". The person sees a normal-looking step and a game that did not change. | Send a second message after the game is made without `set_mode`. |
+| F17 | **P1** | **A 3D game is black until it has lights, and nothing says so.** Everything `game_from_model` makes is a lit material. With no light layer effect the whole screen is black, including a floor that fills the view. The reply to `game_from_model` warns about the camera ("seen from above by the default camera") and about falling for ever, but not about lights. | `06` (a black screen, no errors in the console). Fix: add `Scene3D::AmbientLight` and `DirectionalLight` as layer effects; mention it in the reply. |
+| F18 | P1 | **The camera looks the wrong way and nothing shows it.** "Look at a position" aims once, from where the camera is at that moment, and the game moves the camera on the next frame, so a single call at the start aims from the wrong place: I saw only the cannon. The view is only right if place-then-look-at runs **every frame**. The direction is a trap too: in the top-down view +y points up the screen, so a camera at positive y looking at y = 0 faces away unless it turns. | `07` (the real layout, from above), `08` (right once fixed, but too close) |
+| F19 | P1 | **`game_check` still cannot see a shifted value.** Instructions whose parameters are numbered from 1 have an internal slot 0 that must be `""`. I put the operator there: every value moved up one place, the camera actions did nothing useful, and the check said "Nothing looks wrong" (it counts parameters, not which slot each is in). It did catch the unquoted layer name `UI` and said exactly how to write it. Same class as F8. | `SetCameraCenterX ["=", "0", "", "0"]` vs `["", "=", "0", "", "0"]` |
+| F20 | P2 | **The editor's scene view does not show what the player sees.** With the 3D camera set, the design canvas shows an odd top-down slice (grey strips, a cannon seen from above, no window), nothing like the game. A newcomer cannot judge their scene from it. | `09` |
+| F21 | P2 | **Play does not refresh a running game.** After I edited the game and pressed Play, nothing changed: while a game is "Playing" the button is Stop, so the preview I opened was the old game (twice I judged an old version). The old black screen was exactly this. | Edit while playing; press Play. |
+| F22 | P3 | A 3D shape that is a mesh (the ball) shows an orange **cube** in the Shapes list: thumbnails are drawn from the footprint. | `11` |
+
+## What works well (keep it)
+
+- **The 3D to game handoff is the best part.** One call per piece, plain words for physics (`bouncy`), a clear reply ("made the 3D
+  object Ball ... dynamic physics (sphere, density 1, friction 0.3, bounce 0.85) ... it follows the model"), and the result
+  behaves: the ball bounces, the shards fall and settle, the glass is see-through.
+- The modelling tools are enough for a real scene: stock shapes, a true sphere, thin cuts for cracks, groups, glass surfaces.
+  The model-side cost was 54 small calls, none of which needed a mesh tool.
+- Hints that earn their keep: "set a 3D camera to watch it fall from the side", "it will fall for ever: pass ground: true".
+- `game_check` explained the one thing it did catch precisely (the quoted layer name), and `game_play` ran the 3D game headless
+  ("played 5.6 s") and returned pictures.
+- The phone controls from part 1 carried over unchanged (flat buttons on a 2D layer over the 3D one).
+
+## 2D and 3D side by side
+
+| | 2D (part 1) | 3D (part 2) |
+|---|---|---|
+| Pieces | 10 pictures drawn by a script | 7 models built with the modeller, 54 calls |
+| First wall | no art (F3) | no way in from the 3D tile (F12), no sphere (F13) |
+| Silent failures | keys never fire (F8) | black screen (F17), camera (F18), shifted slots (F19) |
+| Game logic | 20 events | 16 events, real physics instead of hand-made motion |
+| Feel | flat, fast | a cannon with a window to aim at; shards that fall and bounce |
+| Cost | one `game_edit` | modelling, sending, lights, camera, then rules |
+
+## Suggested order for part 2
+
+1. F15, F16, F17 (calls that run together; held edits that look done; the black screen). All three are one reply away from a
+   working game and need no design.
+2. F18, F19 (a camera example with place-then-look-at every frame in `game_catalog` or the manual; a slot check for numbered-from-1
+   instructions, which also closes F8's cousin).
+3. F14 (Visible work: ask before turning a 50-step build into minutes, or build fast and replay).
+4. F12, F13 (a path into a game from the 3D tile; a Sphere in Shapes).
+5. F20 to F22.
+
+## Not covered (part 2)
+
+A real model driving these tools (whether it would hit F15 by itself, how it handles F16); shadows, a shatter sound, a score;
+Visible work on the Games window; a real device and a real GPU (this was a software renderer: frame times are not meaningful).
