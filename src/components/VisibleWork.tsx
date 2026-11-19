@@ -11,7 +11,7 @@ import { IconEye, IconEyeOff } from "./Icons";
 export function VisibleWork({ className, compact = false }: { className: string; compact?: boolean }) {
   const [on, setOn] = useAgentCursor();
   const title = on
-    ? "Visible work: you see the agent's cursor click and type. Click to let it work at speed instead"
+    ? "Visible work: you watch the agent's cursor click and type, at a person's pace, so a big build takes minutes. Click to let it work at speed instead"
     : "Working at speed: no cursor, the changes just land. Click to watch the agent work";
   return (
     <button

@@ -273,7 +273,27 @@ export function placeModel(project: Json, layout: Json, input: ModelObjectInput,
     layout.instances.push({ ...JSON.parse(JSON.stringify(t.instance)), name: object.name, x: Math.round(spot.x), y: Math.round(spot.y), z, layer: "" });
     did.push(`placed ${object.name} at ${Math.round(spot.x)}, ${Math.round(spot.y)}${z ? `, ${z} up` : ""}`);
   }
+  if (lightScene(layout)) did.push("lit the scene (an ambient light and a sun on the base layer: 3D objects are black without light)");
   return { object: object.name, did };
+}
+
+/** Whether a layer has a 3D light effect (ambient, directional or hemisphere). */
+const hasLight = (layer: Json): boolean => list(layer?.effects).some((e: Json) => /^Scene3D::(?:Ambient|Directional|Hemisphere)Light$/.test(String(e?.effectType)));
+
+/**
+ * Gives the base layer an ambient light and a sun when it has no light of its own. Everything made from a model is a lit material,
+ * and a 3D scene with no light draws black; one a person lit themselves is left as it is. Returns whether it added them.
+ */
+export function lightScene(layout: Json): boolean {
+  layout.layers = list(layout.layers);
+  const base = layout.layers.find((l: Json) => l?.name === "");
+  if (!base || hasLight(base)) return false;
+  base.effects = [
+    ...list(base.effects),
+    { effectType: "Scene3D::AmbientLight", name: "Ambient light", doubleParameters: { intensity: 0.9 }, stringParameters: { color: "255;255;255" }, booleanParameters: {} },
+    { effectType: "Scene3D::DirectionalLight", name: "Sun", doubleParameters: { intensity: 1.2, elevation: 55, rotation: 215 }, stringParameters: { color: "255;246;230", top: "Z+" }, booleanParameters: { isCastingShadow: false } },
+  ];
+  return true;
 }
 
 /**

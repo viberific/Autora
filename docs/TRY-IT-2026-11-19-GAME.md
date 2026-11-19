@@ -6,6 +6,37 @@ For: usability review. The brief: act as a first-timer, open Panacea, work out w
 with mobile controls where you shoot balls to break a piece of glass. Evidence is in `docs/screenshots/try-2026-11-19-game/`;
 the finished game's source is in `docs/examples/break-the-glass/`.
 
+## Status (fixes made after both parts, same branch)
+
+Fixed, with tests (`tests/overlap.test.ts`, `tests/panacea-rest.test.ts`, `tests/game.test.ts`, `tests/game-physics.test.ts`,
+`tests/sculpt.test.ts`, `tests/ui-typing.test.ts`, the Games and 3D manuals in `server/handbook.ts` and `tests/handbook.test.ts`):
+
+| Finding | What changed |
+|---|---|
+| F1 | With no model connected, the message box shows a "Connect a model" button that opens Settings |
+| F3 (part) | `game_import` placeholders: rounded, triangle, ring, arrow (any direction), a shaded ball and a shaded button, besides rect and circle. Bundled art for a whole game is not done |
+| F4 | A letter with nothing focused goes to the message box; Mind and voice are Alt+K and Alt+V |
+| F8 | `game_check` flags an unquoted key, mouse button, layer or scene; the condition template shows the quoted form |
+| F9 | The animation template says how to hold a frame (`timeBetweenFrames` 100000, then `ChangeSprite`) |
+| F10, F18 (text) | Games manual: create what appears later instead of hiding it; the camera runs every frame |
+| F12 (part) | The 3D tile says "Shape things; send them to a game". A start-a-game path from the 3D window is not done |
+| F13 | `Sphere` in the Shapes menu and as `shape_add kind sphere` (a true ball) |
+| F14 (part) | The Visible work switch says what watching costs; the 3D manual tells the agent the pace, the ids and to suggest turning it off for a big build. The default is unchanged (a product decision) |
+| F15 | `game_from_model` reads the 3D model, so it waits for the call that makes it (`server/overlap.ts`) |
+| F16 | A step the app held back reads "Not run: ..." in the thread, not "Making 35 changes" |
+| F17 | `game_from_model` gives the base layer an ambient light and a sun when it has none, and says so |
+| F18 | `game_template camera-3d`: a camera event that runs every frame, placed then aimed, with the right slots |
+| F19 | `game_check` flags a value in an internal slot (a parameter list that starts at 1 has `""` at 0) |
+
+Still open, and why:
+- **F2** (the by-hand route is GDevelop's own vocabulary), **F5/F6** (capability and double-click menus offer nothing about games),
+  **F7** (the Games card on a phone opens small), **F11** (a leave-the-page dialog): design work, not a one-line fix.
+- **F14** default: Visible work stays on for a new person; asking first for a big build, or building fast and replaying it, is a decision for the person who owns that behaviour.
+- **F20** (the editor's scene view does not show the 3D camera), **F21** (Play does not refresh a running game), **F22** (a mesh's
+  card shows a cube): each is in the editor or the 3D list and needs its own change.
+- **Not fixed here:** `tests/ui-game.test.ts` "the agent's next edit lands in the open editor" fails in this sandbox on the code as
+  it was before this session as well (the dog is never listed); it is not caused by these changes.
+
 ## How this was done, and what it can and cannot tell you
 
 - A real browser (Chromium, desktop and an iPhone 13 profile with touch), the real server, and the real Games editor

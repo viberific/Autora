@@ -1498,22 +1498,33 @@ export function App() {
         target!.blur();
         return;
       }
-      if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (typing || e.metaKey || e.ctrlKey) return;
+
+      /* Mind and voice are Alt+K and Alt+V: a bare letter is never a shortcut. Someone who clicked the empty canvas and typed
+         "make me a game" was taken to the Mind page at the k (docs/TRY-IT-2026-11-19-GAME.md, F4). A letter with nothing focused is
+         the start of a message: it goes to the message box, and is typed there. */
+      if (e.altKey) {
+        if (e.code === "KeyK") {
+          e.preventDefault();
+          navigate(page === "mind" ? "chat" : "mind");
+        } else if (e.code === "KeyV") {
+          e.preventDefault();
+          if (!live) return;
+          if (voiceReady) toggleLive();
+          else if (voiceBlocked) setVoiceHelp(true);
+        }
+        return;
+      }
+      const printable = e.key.length === 1 && e.key !== " " && !e.repeat;
+      if (printable && e.key !== "/" && page === "chat" && composerRef.current && !document.querySelector("[role=dialog], [aria-modal=true]")) {
+        composerRef.current.focus();
+        return;
+      }
 
       switch (e.key) {
         case "/":
           e.preventDefault();
           composerRef.current?.focus();
-          break;
-        case "k":
-          e.preventDefault();
-          navigate(page === "mind" ? "chat" : "mind");
-          break;
-        case "v":
-          e.preventDefault();
-          if (!live) break;
-          if (voiceReady) toggleLive();
-          else if (voiceBlocked) setVoiceHelp(true);
           break;
         case "Escape":
           setSessionsOpen(false);
@@ -2485,6 +2496,10 @@ export function App() {
                       onPick={(c) => runCommand(c, "")}
                     />
                   )}
+                  {modelReady === false && (
+                    // The placeholder alone says what is missing and not where to go: this is the way (docs/TRY-IT-2026-11-19-GAME.md, F1).
+                    <button type="button" className="composer-connect" onClick={openModelSettings}>Connect a model</button>
+                  )}
                   <textarea
                     ref={composerRef}
                     value={draft}
@@ -2493,7 +2508,7 @@ export function App() {
                     aria-keyshortcuts="/"
                     title="Press / anywhere to come back here"
                     placeholder={modelReady === false
-                      ? "Connect a model to start…"
+                      ? "Then ask for anything…"
                       : "What should I do?"}
                     onChange={(e) => {
                       setDraft(e.target.value);

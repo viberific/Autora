@@ -78,10 +78,10 @@ export const TOOL_SPECS: ToolSpec[] = [
   {
     name: 'shape_add',
     description:
-      'Add a stock shape: box, roundedBox, cylinder, triangle, wedge, pentagon, hexagon, octagon or star. It is centred at x,y (default: beside the existing shapes), stands on elevation (default 0, the ground) and rises height mm. With onTopOf it sits on top of that shape.',
+      'Add a stock shape: box, roundedBox, sphere (a true ball: width is its diameter), cylinder, triangle, wedge, pentagon, hexagon, octagon or star. It is centred at x,y (default: beside the existing shapes), stands on elevation (default 0, the ground) and rises height mm. With onTopOf it sits on top of that shape.',
     inputSchema: obj(
       {
-        kind: { type: 'string', enum: ['box', 'roundedBox', 'cylinder', 'triangle', 'wedge', 'pentagon', 'hexagon', 'octagon', 'star'] },
+        kind: { type: 'string', enum: ['box', 'roundedBox', 'sphere', 'cylinder', 'triangle', 'wedge', 'pentagon', 'hexagon', 'octagon', 'star'] },
         x: { type: 'number' },
         y: { type: 'number' },
         width: { type: 'number', description: 'Size along x, mm (default 60).' },

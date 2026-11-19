@@ -18,7 +18,7 @@ import { FileCell } from "./FileCell";
 import { RemarkCell } from "./RemarkCell";
 import { ChimeCell } from "./ChimeCell";
 import { VendorCell } from "./VendorCell";
-import { ToolCell, describeArgs, heldWords, stepWords } from "./ToolCell";
+import { ToolCell, describeArgs, heldTitle, heldWords, stepWords } from "./ToolCell";
 import { TodoCell } from "./TodoCell";
 import { usePreviewState } from "../lib/preview";
 import { useDeskState } from "../lib/pdfdesk";
@@ -1003,7 +1003,7 @@ const StepGroup = memo(function StepGroup({ steps, unfolded = false, ...cell }: 
   const many = steps.length > 1;
   const last = steps[steps.length - 1];
   const doing = running ? steps.find((s) => stepStatus(s) === "running") ?? last : last;
-  const title = many ? `${steps.length} steps` : stepLine(steps[0]) || steps[0].kind;
+  const title = heldTitle(many ? `${steps.length} steps` : stepLine(steps[0]) || steps[0].kind, heldBack.length, steps.length);
   const tail = many ? stepLine(doing) : "";
   const tone = failed ? "is-bad" : declined ? "is-warn" : running ? "is-live" : "";
 

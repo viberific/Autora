@@ -39,7 +39,7 @@ const TOOLS: Tool[] = [
   { kind: "photo", app: "Images", setting: "photo", what: "Layers, masks and brushes", icon: (s) => <IconImage size={s} /> },
   { kind: "video", app: "Video", setting: "video", what: "A new video project", icon: (s) => <IconVideo size={s} /> },
   { kind: "studio", app: "Music", setting: "studio", what: "A new song", icon: (s) => <IconMusic size={s} /> },
-  { kind: "cad", app: "3D", setting: "cad", what: "A block to shape", icon: (s) => <IconCube size={s} /> },
+  { kind: "cad", app: "3D", setting: "cad", what: "Shape things; send them to a game", icon: (s) => <IconCube size={s} /> },
   { kind: "game", app: "Games", setting: "game", what: "A new game", icon: (s) => <IconGame size={s} /> },
 ];
 

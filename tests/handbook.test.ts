@@ -382,6 +382,21 @@ await test("the Panacea manual teaches laying out the windows: the person's gest
   }
 });
 
+await test("the Games manual carries what the usability trial found: quoted keys, internal slots, lights, the camera every frame, placeholder shapes", () => {
+  const g = manualText("game");
+  for (const needle of ["QUOTED", "never fires", "slot 0 is internal", "camera-3d", "EVERY frame", "ambient light and a sun", "ball that is shaded", "100000", "ChangeSprite", "second layer set to 2d"]) {
+    assert.ok(g.includes(needle), `the Games manual lacks "${needle}"`);
+  }
+});
+
+await test("the 3D manual says there is a Sphere, what Visible work costs, and not to guess ids", () => {
+  const c = manualText("cad");
+  for (const needle of ["Sphere (a true ball", "takes many minutes", "never guess the next one", "cannot use an id made earlier in the same batch"]) {
+    assert.ok(c.includes(needle), `the 3D manual lacks "${needle}"`);
+  }
+  assert.ok(manualText("game").includes("runs after the 3D calls that change the model"));
+});
+
 await test("the Panacea manual teaches the canvas as it is: no toolbar, the library and atoms, ghosts, fading, the history", () => {
   const p = manualText("panacea");
   for (const needle of ["single workspace", "Capabilities", "share one camera", "no nested canvas", "right-side icons", "same dotted grid", "about twenty ready-made panels", "at most 8 controls in view", "Keep in library", "ghost", "Not now",

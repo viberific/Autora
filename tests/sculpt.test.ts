@@ -285,4 +285,23 @@ await test("mesh shapes join and cut as solids: one mesh shape comes out, each p
   assert.ok(!no.ok && /not a closed solid/.test(JSON.stringify(no)), JSON.stringify(no));
 });
 
+await test("a Sphere is a stock shape: a ball that stands on the ground, sized by its width, and moves like any mesh", async () => {
+  // Usability trial 2026-11-19 (F13): Shapes had no sphere; by hand a ball was a bevelled cylinder.
+  const e = new core.Engine(core.emptyDoc());
+  const r = await e.execute("shape_add", { kind: "sphere", width: 80, x: 100, y: 50, color: "#e8691c" });
+  assert.ok(r.ok, JSON.stringify(r));
+  const id = (r.result as { id: string }).id;
+  const b = e.getDoc().bodies.find((x: { id: string }) => x.id === id);
+  assert.ok(b.mesh && b.mesh.positions.length > 300, "a mesh");
+  assert.equal(b.name, "Sphere 1");
+  assert.equal(b.color, "#e8691c");
+  assert.ok(Math.abs(b.extrusionHeight - 80) < 3, `as tall as it is wide: ${b.extrusionHeight}`);
+  assert.ok((b.elevation ?? 0) < 1, "standing on the ground");
+  const xs = b.points.map((p: { x: number }) => p.x);
+  assert.ok(Math.abs((Math.min(...xs) + Math.max(...xs)) / 2 - 100) < 2, "centred where it was put");
+  const up = await e.execute("shape_add", { kind: "sphere", onTopOf: id, width: 30 });
+  assert.ok(up.ok, JSON.stringify(up));
+  assert.ok(!(await e.execute("shape_add", { kind: "sphere", width: 0.2 })).ok, "too small is refused in words");
+});
+
 console.log("sculpt tests passed");

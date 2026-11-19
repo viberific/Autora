@@ -1075,6 +1075,12 @@ input[type="checkbox"]:disabled { opacity: 0.5; cursor: default; }
   font-family: inherit; font-size: var(--fs-md); line-height: 1.55;
 }
 .composer textarea:focus { outline: none; }
+.composer-connect {
+  display: block; margin: 0 0 4px; padding: 2px 0; border: 0; background: none; cursor: pointer;
+  color: var(--accent-light, var(--accent)); font: inherit; font-size: var(--fs-sm); font-weight: 600; text-align: left;
+}
+.composer-connect:hover { text-decoration: underline; }
+.composer-connect:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-sm); }
 .composer textarea::placeholder { color: var(--text-3); }
 .composer-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 /* The row wraps for one thing: a note that has something to say -- a file

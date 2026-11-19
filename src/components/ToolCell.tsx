@@ -25,7 +25,7 @@ export function ToolCell({ span }: { span: SpanState }) {
       >
         {detail ? <IconChevron size={10} /> : <span className="cell-line-dot" />}
         <b>{span.name}</b>
-        <span className="cell-line-text">{stepWords(span.name, span.args)}</span>
+        <span className="cell-line-text">{span.status === "denied" && span.held ? heldTitle(stepWords(span.name, span.args), 1, 1) : stepWords(span.name, span.args)}</span>
         {span.status === "running" && <em className="cell-chip is-running">running</em>}
         {span.status === "denied" && <em className={`cell-chip ${span.held ? "" : "is-warn"}`.trim()}>{heldWords(span.held)}</em>}
         {span.status === "error" && <em className="cell-chip is-bad">failed</em>}
@@ -38,6 +38,15 @@ export function ToolCell({ span }: { span: SpanState }) {
 /** Why a step was not run, where that is the app's own rule working and not a failure. */
 export function heldWords(held: SpanState["held"]): string {
   return held === "planning" ? "planning first" : held === "theirs" ? "yours to write" : held === "busy" ? "waited for you" : "declined";
+}
+
+/**
+ * A title for steps the app held back: when every one of them was, it says so first, because "Making 35 changes" with a small
+ * chip beside it reads as work that was done.
+ */
+export function heldTitle(title: string, held: number, total: number): string {
+  if (held === 0 || held < total) return title;
+  return `Not run: ${title.charAt(0).toLowerCase()}${title.slice(1)}`;
 }
 
 /** The part of a call a person would recognise as what it was about: a command, a file, a search, a page. */

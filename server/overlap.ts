@@ -83,6 +83,9 @@ export function footprint(name: string, args: Record<string, any> = {}): Footpri
   if (name === "terminal" || name.startsWith("browser_")) return ALONE;
   // The person's edits are told from the agent's by what changed between two calls, so a change is never made beside another.
   if (name === "edit_file") return ALONE;
+  // Sending the 3D model to the game exports the model as it is when the call runs: it reads the 3D window's work, so it comes
+  // after any call that changes the model, and it changes the game's window like any game call.
+  if (name === "game_from_model") return { reads: ["window:cad_"], writes: ["window:game_"] };
   const window = WINDOWS.find((w) => name.startsWith(w));
   if (window && looksOnly(name, args)) {
     // Opening or starting one is a change of what the window shows; reading it is not.

@@ -5,11 +5,12 @@
 
 import { Body3D, Point2D } from '../types';
 
-export type ShapeKind = 'box' | 'roundedBox' | 'cylinder' | 'triangle' | 'wedge' | 'pentagon' | 'hexagon' | 'octagon' | 'star';
+export type ShapeKind = 'box' | 'roundedBox' | 'sphere' | 'cylinder' | 'triangle' | 'wedge' | 'pentagon' | 'hexagon' | 'octagon' | 'star';
 
 export const SHAPE_LABELS: Record<ShapeKind, string> = {
   box: 'Box',
   roundedBox: 'Rounded box',
+  sphere: 'Sphere',
   cylinder: 'Cylinder',
   triangle: 'Triangle',
   wedge: 'Wedge',

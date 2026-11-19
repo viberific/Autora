@@ -150,19 +150,66 @@ const validSession = (id: string) => /^[A-Za-z0-9_-]{1,80}$/.test(id);
 const savedName = (session: string) => `game-${session}`;
 
 /** The editor, built into this server (npm run build): without it the tools are not offered. */
-/** A solid picture for an object that has no art yet: a rectangle or a circle in one colour, as a PNG. Null for a bad description. */
-function placeholderPng(spec: Json): Buffer | null {
+/** The shapes a placeholder picture can be (game_import placeholder.shape). */
+export const PLACEHOLDER_SHAPES = ["rect", "circle", "rounded", "triangle", "ring", "ball", "button", "arrow"] as const;
+
+/**
+ * A picture for an object that has no art yet, as a PNG: a plain shape in one colour, or a shaded ball or button that already
+ * looks like something. `direction` (right, left, up, down) points a triangle or an arrow. Null for a bad description. A first game
+ * should not stop for lack of a picture (docs/TRY-IT-2026-11-19-GAME.md, F3), so these are the shapes it needs first.
+ */
+export function placeholderPng(spec: Json): Buffer | null {
   const width = Math.trunc(Number(spec.width ?? 32)), height = Math.trunc(Number(spec.height ?? 32));
   const color = /^#?([0-9a-f]{6})$/i.exec(String(spec.color ?? "#4f8cff"));
   const shape = String(spec.shape ?? "rect");
-  if (!(width >= 1 && width <= 1024 && height >= 1 && height <= 1024) || !color || (shape !== "rect" && shape !== "circle")) return null;
+  const direction = String(spec.direction ?? "right");
+  if (!(width >= 1 && width <= 1024 && height >= 1 && height <= 1024) || !color || !(PLACEHOLDER_SHAPES as readonly string[]).includes(shape) || !["right", "left", "up", "down"].includes(direction)) return null;
   const [r, g, b] = [0, 2, 4].map((i) => parseInt(color[1]!.slice(i, i + 2), 16));
+  const mix = (a: number, c: number, t: number) => Math.round(a + (c - a) * t);
+  const edge = (d: number) => Math.max(0, Math.min(1, 0.5 - d)); // coverage from a signed distance in pixels (negative inside)
+  const rounded = (px: number, py: number, radius: number) => {
+    const qx = Math.abs(px - width / 2) - (width / 2 - radius), qy = Math.abs(py - height / 2) - (height / 2 - radius);
+    return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - radius;
+  };
+  const ellipse = (px: number, py: number) => (Math.hypot((px - width / 2) / (width / 2), (py - height / 2) / (height / 2)) - 1) * Math.min(width, height) / 2;
+  /** Whether a point is in a triangle pointing `direction` that fills the picture: returns a signed distance-ish value. */
+  const triangle = (px: number, py: number) => {
+    // Work in a frame where it points right: u runs along the point, v across.
+    let u = px / width, v = py / height;
+    if (direction === "left") u = 1 - u;
+    if (direction === "up") [u, v] = [1 - py / height, px / width];
+    if (direction === "down") [u, v] = [py / height, px / width];
+    const half = (1 - u) / 2; // half the width of the triangle at u
+    return Math.max(Math.abs(v - 0.5) - half, -u) * Math.min(width, height);
+  };
   const rows: Buffer[] = [];
   for (let y = 0; y < height; y += 1) {
     const row = Buffer.alloc(1 + width * 4); // filter byte 0, then RGBA
     for (let x = 0; x < width; x += 1) {
-      const inside = shape === "rect" || ((x + 0.5 - width / 2) / (width / 2)) ** 2 + ((y + 0.5 - height / 2) / (height / 2)) ** 2 <= 1;
-      row.set([r!, g!, b!, inside ? 255 : 0], 1 + x * 4);
+      const px = x + 0.5, py = y + 0.5;
+      let alpha = 1, light = 0; // light: toward white (+) or black (-)
+      switch (shape) {
+        case "circle": alpha = edge(ellipse(px, py)); break;
+        case "rounded": alpha = edge(rounded(px, py, Math.min(width, height) / 4)); break;
+        case "triangle": case "arrow": alpha = edge(triangle(px, py)); break;
+        case "ring": { const d = ellipse(px, py), t = Math.min(width, height) / 6; alpha = Math.min(edge(d), edge(-(d + t))); break; }
+        case "ball": {
+          const d = ellipse(px, py);
+          alpha = edge(d);
+          const hx = (px - width * 0.36) / (width / 2), hy = (py - height * 0.32) / (height / 2);
+          light = Math.max(0, 0.75 - Math.hypot(hx, hy)) - Math.max(0, (Math.hypot((px - width / 2) / (width / 2), (py - height / 2) / (height / 2)) - 0.7)) * 0.9;
+          break;
+        }
+        case "button": {
+          const d = rounded(px, py, Math.min(width, height) / 3);
+          alpha = edge(d);
+          light = 0.28 - (py / height) * 0.5 + (d > -2 ? 0.25 : 0);
+          break;
+        }
+        default: break; // rect
+      }
+      const shade = (c: number) => (light >= 0 ? mix(c, 255, Math.min(1, light)) : mix(c, 0, Math.min(1, -light)));
+      row.set([shade(r!), shade(g!), shade(b!), Math.round(alpha * 255)], 1 + x * 4);
     }
     rows.push(row);
   }
@@ -609,7 +656,7 @@ const behaviorTypeKnown = (type: string, project: Json): boolean =>
 
 /** Parameter types the engine reads as a string expression, which needs its quotes ("Player", not Player); a key or mouse button is a plain choice and is written bare. Found by playing:
     an unquoted scene name logged "no scene called" every frame and passed game_check. */
-const QUOTED_PARAMS = new Set(["string", "layer", "sceneName", "stringWithSelector"]);
+const QUOTED_PARAMS = new Set(["string", "layer", "sceneName", "stringWithSelector", "keyboardKey", "mouseButton"]);
 
 type InstructionVisitor = (kind: "action" | "condition", instruction: Json, where: string) => void;
 
@@ -659,6 +706,15 @@ function checkInstruction(
     // The shape asked for, slot by slot: the visible ones named, the internal and trailing optional ones as "" (what a model gets wrong).
     const shape = Array.from({ length: known.n }, (_, i) => { const p = known.params.find((q) => q.i === i); return p ? `<${p.description}${p.optional ? ", optional: \"\" to leave out" : ""}>` : '""'; });
     warn(`${where}: ${type} takes ${known.n} parameters, this has ${params.length}. Every slot is written, the internal ones and the optional ones left out as "": [${shape.join(", ")}].`);
+  }
+  // The slots no parameter is numbered with are internal (the scene, a hidden choice): a value there shifts every value after it by
+  // one place, and the count above still matches. The usual slip: the first value put in slot 0 when parameters start at 1.
+  for (let i = 0; i < Math.min(params.length, known.n); i++) {
+    if (known.params.some((q) => q.i === i)) continue;
+    if (typeof params[i] === "string" && params[i]) {
+      warn(`${where}: ${type}: slot ${i} is internal and must be "" (the visible values start at slot ${known.params[0]?.i ?? 0}): [${Array.from({ length: known.n }, (_, k) => { const q = known.params.find((x) => x.i === k); return q ? `<${q.description}>` : '""'; }).join(", ")}].`);
+      break;
+    }
   }
   for (const p of known.params) {
     const given = params[p.i];
@@ -913,6 +969,18 @@ const EVENT_TEMPLATES: Record<string, Json> = {
   while: { type: "BuiltinCommonInstructions::While", whileConditions: [], conditions: [], actions: [], events: [] },
   foreach: { type: "BuiltinCommonInstructions::ForEach", object: "ObjectName", conditions: [], actions: [], events: [] },
   condition: { type: { inverted: false, value: "TypeFromGameCatalog" }, parameters: ["", "..."], subInstructions: [] },
+  /* A 3D camera: placed and aimed EVERY frame, in this order. "Look at" turns the camera from where it is when the action runs, and the
+     layer moves the camera on the next frame, so one call at the start aims from the wrong place (usability trial 2026-11-19, F18). The
+     visible values start at slot 1: slot 0 is internal and stays "". A camera at a larger y than its target faces toward smaller y. */
+  "camera-3d": {
+    type: "BuiltinCommonInstructions::Standard", conditions: [], events: [],
+    actions: [
+      { type: { value: "SetCameraCenterX" }, parameters: ["", "=", "0", "", "0"], subInstructions: [] },
+      { type: { value: "SetCameraCenterY" }, parameters: ["", "=", "1300", "", "0"], subInstructions: [] },
+      { type: { value: "Scene3D::SetCameraZ" }, parameters: ["", "=", "450", "", "0"], subInstructions: [] },
+      { type: { value: "Scene3D::TurnCameraTowardPosition" }, parameters: ["", "0", "0", "150", "", "0", "no"], subInstructions: [] },
+    ],
+  },
   action: { type: { value: "TypeFromGameCatalog" }, parameters: ["", "..."], subInstructions: [] },
   variable: { name: "Score", type: "number", value: 0 },
   "variable-structure": { name: "Player", type: "structure", children: [{ name: "Health", type: "number", value: 100 }] },
@@ -935,7 +1003,7 @@ function templateFor(args: Record<string, any>): { ok: boolean; text: string } {
         name: "", useMultipleDirections: false,
         directions: [{ looping: false, timeBetweenFrames: 0.08, sprites: images.map((image) => ({ image, points: [], originPoint: { name: "origine", x: 0, y: 0 }, centerPoint: { automatic: true, name: "centre", x: 0, y: 0 }, hasCustomCollisionMask: false, customCollisionMask: [] })) }],
       };
-      return { ok: true, text: `One animation, for a Sprite's animations list (name it, e.g. "Walk"; looping: true to repeat; timeBetweenFrames in seconds). Each frame's image is a resource name from game_import; ${frames.length ? "yours are filled in" : "pass images: [names] for yours"}.\n${json(animation)}` };
+      return { ok: true, text: `One animation, for a Sprite's animations list (name it, e.g. "Walk"; looping: true to repeat; timeBetweenFrames in seconds). Each frame's image is a resource name from game_import; ${frames.length ? "yours are filled in" : "pass images: [names] for yours"}. Frames play one after another and stop on the last: for frames that are STATES the game chooses between (a pane whole, cracked, smashed), set timeBetweenFrames to 100000 so it stays on the first, and pick one with the Sprite action ChangeSprite ("Change the animation frame").\n${json(animation)}` };
     }
     case "layer":
       return { ok: true, text: `A layer, for a scene's layers list (the base layer is named "").\n${json({ ...t.layer, name: "Layer 2" })}` };
@@ -961,7 +1029,7 @@ function templateFor(args: Record<string, any>): { ok: boolean; text: string } {
     default: {
       const found = EVENT_TEMPLATES[kind];
       if (!found) return { ok: false, text: `kind is one of: scene, layer, instance, object, animation, behavior, resource, ${Object.keys(EVENT_TEMPLATES).join(", ")}.` };
-      const extra = kind === "event" ? " Conditions all hold for the actions to run; with none the actions run every frame. Nested events run when their parent's conditions hold." : kind === "condition" || kind === "action" ? " Take type and the parameter list from game_catalog; parameters are strings, in order from 0." : "";
+      const extra = kind === "camera-3d" ? " A 3D camera behind the action looking at a point: x, y, z of the camera, then of the point it looks at. Keep it as an event with no condition, so it runs every frame (placing the camera, then aiming it, in this order: aimed once at the start it points the wrong way). Give the base layer lights too (game_from_model adds them). Make the values the scene's." : kind === "condition" ? " Take type and the parameter list from game_catalog; parameters are strings, in order from 0. A key, a mouse button, a layer or a scene is an expression: write it quoted, like [\"\", \"\\\"Left\\\"\"] for KeyFromTextPressed." : kind === "event" ? " Conditions all hold for the actions to run; with none the actions run every frame. Nested events run when their parent's conditions hold." : kind === "action" ? " Take type and the parameter list from game_catalog; parameters are strings, in order from 0 (slot 0 is internal, \"\", when the visible ones start at 1)." : "";
       return { ok: true, text: `${kind}:${extra}\n${json(found)}` };
     }
   }
@@ -1246,7 +1314,7 @@ async function modelToGame(session: string, args: Record<string, any>): Promise<
   if (entry.models[placed.object].follow) void followModel(session);
   const notes = [
     physics && physics.body === "Dynamic" && !layout.objects.some((o: Json) => asArray(o.behaviors).some((b: Json) => b?.type === PHYSICS3D && b.bodyType === "Static")) ? "Nothing in the scene stays put yet, so it will fall for ever: pass ground: true, or give something static physics." : "",
-    "A 3D scene is seen from above by the default camera: set a 3D camera (game_catalog \"camera\") to watch it fall from the side.",
+    "A 3D scene is seen from above by the default camera: game_template camera-3d is a camera event to copy (set it every frame: placed, then aimed) for a view from the side or behind.",
     entry.models[placed.object].follow ? `It follows the model: change those shapes in Autora 3D and ${placed.object} is updated (its physics and placements stay).` : "",
   ].filter(Boolean);
   return {
@@ -1410,7 +1478,7 @@ export async function runGameTool(session: string, name: string, args: Record<st
       case "game_import": {
         // A placeholder picture made here (a Sprite with no image is invisible, and the agent has no paint tool): no file is read.
         const made = isObject(args.placeholder) ? placeholderPng(args.placeholder) : null;
-        if (isObject(args.placeholder) && !made) return { ok: false, summary: "placeholder is { width, height (1 to 1024 pixels), color: \"#rrggbb\", shape: \"rect\" or \"circle\" }." };
+        if (isObject(args.placeholder) && !made) return { ok: false, summary: `placeholder is { width, height (1 to 1024 pixels), color: \"#rrggbb\", shape: ${PLACEHOLDER_SHAPES.join(", ")}, direction: right, left, up or down }.` };
         const given = made ? "" : need(args, "file");
         const art = !made && /^file_[0-9a-f]{16}$/.test(given) ? getArtifact(given) : null;
         let file = made || art ? "" : path.resolve(hooks.cwd ?? process.cwd(), given);

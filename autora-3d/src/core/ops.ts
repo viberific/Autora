@@ -165,6 +165,19 @@ export function addShape(doc: Doc, ids: IdGen, a: AddShapeArgs): OpResult<{ id: 
   if (a.y !== undefined) cy = num(a.y, 'y');
   if (elevation < 0) return fail('elevation cannot be below the ground (0).');
 
+  if (a.kind === 'sphere') {
+    // A ball is a smooth mesh, not an outline pushed up: width is its diameter, and it stands on its elevation like the rest.
+    const diameter = a.width !== undefined ? num(a.width, 'width') : BASE_SIZE;
+    if (!(diameter >= 1)) return fail('width (a sphere\'s diameter) must be at least 1 mm.');
+    const r = diameter / 2;
+    try {
+      return addSurface(doc, ids, blendMesh([{ kind: 'sphere', a: { x: cx, y: cy, z: elevation + r }, radius: r }], { smooth: 0, detail: 48 }), { name: a.name, color: a.color, material: a.material }, 'Sphere');
+    } catch (e) {
+      if (e instanceof OrganicError) return fail(e.message);
+      throw e;
+    }
+  }
+
   const width = a.width !== undefined ? num(a.width, 'width') : BASE_SIZE;
   const depth = a.depth !== undefined ? num(a.depth, 'depth') : a.width !== undefined && ['cylinder', 'box', 'roundedBox', 'octagon', 'hexagon', 'pentagon', 'star'].includes(a.kind) && a.depth === undefined ? width : BASE_SIZE;
   if (width < 1 || depth < 1) return fail('width and depth must be at least 1 mm.');

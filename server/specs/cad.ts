@@ -90,7 +90,7 @@ export const cadSPECS: ToolSpec[] = [
   {
     "name": "cad_shape_add",
     "group": "files",
-    "description": "Add a stock shape: box, roundedBox, cylinder, triangle, wedge, pentagon, hexagon, octagon or star. It is centred at x,y (default: beside the existing shapes), stands on elevation (default 0, the ground) and rises height mm. With onTopOf it sits on top of that shape.",
+    "description": "Add a stock shape: box, roundedBox, sphere (a true ball: width is its diameter), cylinder, triangle, wedge, pentagon, hexagon, octagon or star. It is centred at x,y (default: beside the existing shapes), stands on elevation (default 0, the ground) and rises height mm. With onTopOf it sits on top of that shape.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -99,6 +99,7 @@ export const cadSPECS: ToolSpec[] = [
           "enum": [
             "box",
             "roundedBox",
+            "sphere",
             "cylinder",
             "triangle",
             "wedge",

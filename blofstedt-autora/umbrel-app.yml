@@ -208,12 +208,16 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Autora 3D can make much more: the agent can build a shape from its
-  own triangles, carve into a blended form (eye sockets, a mouth),
-  use rounded boxes and tilted parts, paint parts of one form in
-  different colours (a black mane, white socks) and join or cut
-  meshes as solids. Autora also uses less of your computer: the
-  browser stops encoding pictures while nobody has the chat open, and
-  the Autora mark no longer animates at rest, so an idle page does a
-  tenth of the work. The slider under browser cards and the drag track
-  in the canvas history are gone; Undo and Redo stay.
+  Making a first game is easier. A 3D model you send to a game is lit
+  and the camera guidance is spelled out, so it no longer comes out
+  black; a model and the call that sends it can be asked for together.
+  Controls the agent writes for keys and buttons are checked properly
+  (they used to look fine and do nothing), placeholder pictures now
+  include a shaded ball, a button and arrows, and Autora 3D has a
+  Sphere. A step Autora held back says "Not run" instead of looking
+  done, typing on the canvas goes to the message box instead of
+  jumping pages (Mind is now Alt+K), and with no model connected there
+  is a button to connect one. Also new in 3D: triangles, carving and
+  paint for the agent's models, and meshes that can be joined and cut.
+  Autora uses less of your computer when idle, and the sliders under
+  browser cards and in the canvas history are gone.

@@ -1,0 +1,79 @@
+diff --git a/autora-3d/src/components/Rail.tsx b/autora-3d/src/components/Rail.tsx
+index 8f5e18c..ec66663 100644
+--- a/autora-3d/src/components/Rail.tsx
++++ b/autora-3d/src/components/Rail.tsx
+@@ -8,6 +8,7 @@ import {
+   BookmarkPlus,
+   Boxes,
+   Circle,
++  CircleDot,
+   Combine,
+   Eye,
+   EyeOff,
+@@ -65,6 +66,7 @@ const hasTexture = (b?: { surface?: Surface }) => !!(b?.surface?.pattern || b?.s
+ const SHAPE_ICONS: Record<ShapeKind, LucideIcon> = {
+   box: Square,
+   roundedBox: SquareRoundCorner,
++  sphere: CircleDot,
+   cylinder: Circle,
+   triangle: Triangle,
+   wedge: TriangleRight,
+diff --git a/autora-3d/src/core/ops.ts b/autora-3d/src/core/ops.ts
+index 8fbbe0b..860d90c 100644
+--- a/autora-3d/src/core/ops.ts
++++ b/autora-3d/src/core/ops.ts
+@@ -165,6 +165,19 @@ export function addShape(doc: Doc, ids: IdGen, a: AddShapeArgs): OpResult<{ id:
+   if (a.y !== undefined) cy = num(a.y, 'y');
+   if (elevation < 0) return fail('elevation cannot be below the ground (0).');
+ 
++  if (a.kind === 'sphere') {
++    // A ball is a smooth mesh, not an outline pushed up: width is its diameter, and it stands on its elevation like the rest.
++    const diameter = a.width !== undefined ? num(a.width, 'width') : BASE_SIZE;
++    if (!(diameter >= 1)) return fail('width (a sphere\'s diameter) must be at least 1 mm.');
++    const r = diameter / 2;
++    try {
++      return addSurface(doc, ids, blendMesh([{ kind: 'sphere', a: { x: cx, y: cy, z: elevation + r }, radius: r }], { smooth: 0, detail: 48 }), { name: a.name, color: a.color, material: a.material }, 'Sphere');
++    } catch (e) {
++      if (e instanceof OrganicError) return fail(e.message);
++      throw e;
++    }
++  }
++
+   const width = a.width !== undefined ? num(a.width, 'width') : BASE_SIZE;
+   const depth = a.depth !== undefined ? num(a.depth, 'depth') : a.width !== undefined && ['cylinder', 'box', 'roundedBox', 'octagon', 'hexagon', 'pentagon', 'star'].includes(a.kind) && a.depth === undefined ? width : BASE_SIZE;
+   if (width < 1 || depth < 1) return fail('width and depth must be at least 1 mm.');
+diff --git a/autora-3d/src/core/tools.ts b/autora-3d/src/core/tools.ts
+index e741669..2cbd04f 100644
+--- a/autora-3d/src/core/tools.ts
++++ b/autora-3d/src/core/tools.ts
+@@ -78,10 +78,10 @@ export const TOOL_SPECS: ToolSpec[] = [
+   {
+     name: 'shape_add',
+     description:
+-      'Add a stock shape: box, roundedBox, cylinder, triangle, wedge, pentagon, hexagon, octagon or star. It is centred at x,y (default: beside the existing shapes), stands on elevation (default 0, the ground) and rises height mm. With onTopOf it sits on top of that shape.',
++      'Add a stock shape: box, roundedBox, sphere (a true ball: width is its diameter), cylinder, triangle, wedge, pentagon, hexagon, octagon or star. It is centred at x,y (default: beside the existing shapes), stands on elevation (default 0, the ground) and rises height mm. With onTopOf it sits on top of that shape.',
+     inputSchema: obj(
+       {
+-        kind: { type: 'string', enum: ['box', 'roundedBox', 'cylinder', 'triangle', 'wedge', 'pentagon', 'hexagon', 'octagon', 'star'] },
++        kind: { type: 'string', enum: ['box', 'roundedBox', 'sphere', 'cylinder', 'triangle', 'wedge', 'pentagon', 'hexagon', 'octagon', 'star'] },
+         x: { type: 'number' },
+         y: { type: 'number' },
+         width: { type: 'number', description: 'Size along x, mm (default 60).' },
+diff --git a/autora-3d/src/utils/primitives.ts b/autora-3d/src/utils/primitives.ts
+index f561b45..d5284e9 100644
+--- a/autora-3d/src/utils/primitives.ts
++++ b/autora-3d/src/utils/primitives.ts
+@@ -5,11 +5,12 @@
+ 
+ import { Body3D, Point2D } from '../types';
+ 
+-export type ShapeKind = 'box' | 'roundedBox' | 'cylinder' | 'triangle' | 'wedge' | 'pentagon' | 'hexagon' | 'octagon' | 'star';
++export type ShapeKind = 'box' | 'roundedBox' | 'sphere' | 'cylinder' | 'triangle' | 'wedge' | 'pentagon' | 'hexagon' | 'octagon' | 'star';
+ 
+ export const SHAPE_LABELS: Record<ShapeKind, string> = {
+   box: 'Box',
+   roundedBox: 'Rounded box',
++  sphere: 'Sphere',
+   cylinder: 'Cylinder',
+   triangle: 'Triangle',
+   wedge: 'Wedge',
