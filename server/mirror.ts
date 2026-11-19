@@ -30,7 +30,7 @@ export type MirrorStatus = { status: "off" | "starting" | "live" | "fallback"; r
 
 // ------------------------------------------------------------- tokens --
 
-export type ResourceKind = "css" | "img" | "any";
+type ResourceKind = "css" | "img" | "any";
 type TokenEntry = { url: string; kind: ResourceKind; referer: string };
 
 /**
@@ -66,7 +66,7 @@ export class ResourceTokens {
 }
 
 /** The addresses a mirror may load: the web, and pictures or fonts written into the page. */
-export function loadable(url: string): "web" | "data" | null {
+function loadable(url: string): "web" | "data" | null {
   if (/^https?:\/\//i.test(url)) return "web";
   if (/^data:(image\/(png|jpe?g|gif|webp|avif|bmp|x-icon|vnd\.microsoft\.icon|svg\+xml)|font\/|application\/(font|x-font))/i.test(url)) return "data";
   return null;
@@ -119,7 +119,7 @@ export type MirrorNode = {
   v?: string; k?: number; sx?: number; sy?: number;
 };
 
-export type Sanitiser = {
+type Sanitiser = {
   tokens: ResourceTokens;
   /** The page's base address, for the relative addresses left in style text. */
   base: string;
@@ -154,7 +154,7 @@ function cleanSrcset(value: string, s: Sanitiser): string {
 }
 
 /** One attribute made safe, or null to drop it. */
-export function cleanAttr(tag: string, name: string, value: string, s: Sanitiser, all: Record<string, string> = {}): string | null {
+function cleanAttr(tag: string, name: string, value: string, s: Sanitiser, all: Record<string, string> = {}): string | null {
   if (!ATTR_OK.test(name)) return null;
   const lower = name.toLowerCase();
   if (lower.startsWith("on") || DROP_ATTRS.has(lower)) return null;
@@ -238,7 +238,7 @@ function cleanSheets(sheets: unknown, s: Sanitiser): string[] {
   return Array.isArray(sheets) ? sheets.filter((x): x is string => typeof x === "string").map((css) => rewriteCss(css, s.base, s.tokens, s.referer)) : [];
 }
 
-export type MirrorOp = Record<string, any> & { o: string };
+type MirrorOp = Record<string, any> & { o: string };
 
 /** One change from the recorder, made safe, or null to drop it. Picture-region boxes stay on the server. */
 export function cleanOp(op: MirrorOp, s: Sanitiser, tags: Map<number, string>): MirrorOp | null {
@@ -302,7 +302,7 @@ type CDP = {
   off?: (event: string, fn: (e: any) => void) => unknown;
 };
 
-export type MirrorDeps = {
+type MirrorDeps = {
   /** Where tokens point: `/api/sessions/<id>/browser/mirror/r/`. */
   prefix: string;
   /** A message for the person's mirror (ephemeral, never logged). */

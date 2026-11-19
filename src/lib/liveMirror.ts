@@ -11,7 +11,7 @@ import type { MirrorRegion, MirrorSnapshot } from "./mirrorDom";
  */
 
 type Msg = Record<string, any> & { op: string };
-export type MirrorState = { status: "off" | "starting" | "live" | "fallback"; reason: string | null; url: string };
+type MirrorState = { status: "off" | "starting" | "live" | "fallback"; reason: string | null; url: string };
 
 let session: string | null = null;
 let status: MirrorState | null = null;
@@ -97,7 +97,7 @@ function write(key: string, value: string) {
 const memory = new Map<string, string>();
 const get = (key: string, fallback: string) => memory.get(key) ?? read(key, fallback);
 
-export type BrowserView = "mirror" | "picture";
+type BrowserView = "mirror" | "picture";
 
 export function setBrowserView(view: BrowserView) { write(KEY, view); }
 export function setMirrorReadout(on: boolean) { write(READOUT, on ? "on" : "off"); }
