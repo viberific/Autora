@@ -81,7 +81,7 @@ async function main() {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
   const live = new LiveBrowser({
-    onFrame: () => {}, onKeyframe: () => {}, onNav: () => {}, onAction: () => {},
+    onFrame: () => {}, onNav: () => {}, onAction: () => {},
     onFields: () => {}, watchers: () => 0,
   });
   const refOf = (page: { outline: string }, pattern: RegExp) => {

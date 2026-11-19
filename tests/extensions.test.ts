@@ -110,7 +110,7 @@ async function main() {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const origin = `http://127.0.0.1:${(server.address() as any).port}`;
   const live = new LiveBrowser({
-    onFrame: () => {}, onKeyframe: () => {}, onNav: () => {}, onAction: () => {}, onFields: () => {}, watchers: () => 0,
+    onFrame: () => {}, onNav: () => {}, onAction: () => {}, onFields: () => {}, watchers: () => 0,
   });
   try {
     await test("the extension runs on the page", async () => {

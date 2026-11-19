@@ -48,6 +48,10 @@ await test("the browser manual says who has the browser and how it comes back", 
   }
 });
 
+await test("the browser manual says the card is the live page, with no earlier pages kept", () => {
+  assert.ok(manualText("browser").includes("no picture of an earlier page is kept"));
+});
+
 await test("the browser manual says how the person sees the page: pictures, or the live copy", () => {
   const browser = manualText("browser");
   for (const needle of ["Live copy (preview)", "Picture mode", "falls back to pictures", "Pictures · try the live copy", "only a view"]) {

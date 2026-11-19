@@ -44,7 +44,7 @@ async function main() {
     const card = bucket.cells[0];
     assert.equal(card.kind, "screen");
     if (card.kind !== "screen") return;
-    assert.equal(card.shots.length, 2);
+    assert.equal(card.shots.length, 0, "no picture of an earlier page is kept: the card is the live page or none");
     assert.deepEqual(card.log.map((c) => c.kind === "reply" && c.turn.text), ["Opened the page.", "Clicked through."]);
     assert.equal(card.live, true);
   });
@@ -67,7 +67,7 @@ async function main() {
     assert.deepEqual(bucket.cells.map((c) => c.kind), ["screen"]);
     const card = bucket.cells[0];
     if (card.kind !== "screen") return;
-    assert.equal(card.shots.length, 3);
+    assert.equal(card.shots.length, 0);
     assert.deepEqual(card.log.map((c) => c.kind), ["reply", "reply", "terminal", "reply"]);
   });
 
@@ -83,7 +83,7 @@ async function main() {
     assert.deepEqual(buckets.map((b) => b.cells.map((c) => c.kind)), [["reply"], ["reply", "screen"]]);
     const card = buckets[1].cells[1];
     if (card.kind !== "screen") return;
-    assert.equal(card.shots.length, 3, "the earlier pages stay in the card's history");
+    assert.equal(card.shots.length, 0, "no earlier page is kept to go back to");
     assert.equal(card.url, "https://example.org");
   });
 

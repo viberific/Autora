@@ -34,8 +34,9 @@ const VIEWPORT = { w: 1280, h: 800 };
  * one page is how a sign-in ends up half typed by each -- and unlocks when the
  * agent finishes, stops, or asks you to take over.
  *
- * Older cards are the record: every frame the agent produced stays with the
- * card, and the strip under it moves through them.
+ * A browser card shows the live page or no page: older cards keep what the
+ * agent did and said there, never a picture of an earlier page to go back to.
+ * A desktop card keeps its newest picture.
  */
 export function ScreencastCell({
   sessionId, source, url, shots, actions, live, followsFeed = false, ownsFeed = false, current = false,

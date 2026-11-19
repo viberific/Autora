@@ -78,7 +78,7 @@ async function main() {
   const origin = `http://127.0.0.1:${(server.address() as any).port}`;
   const got: Array<{ name: string; bytes: Buffer }> = [];
   const live = new LiveBrowser({
-    onFrame: () => {}, onKeyframe: () => {}, onNav: () => {}, onAction: () => {}, onFields: () => {}, watchers: () => 0,
+    onFrame: () => {}, onNav: () => {}, onAction: () => {}, onFields: () => {}, watchers: () => 0,
     onDownload: (f) => { got.push(f); },
   });
   try {

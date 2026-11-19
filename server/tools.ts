@@ -3032,12 +3032,11 @@ async function runToolUnredacted(
           });
         }
         const png = await live.capture();
-        const blob = ctx.putBlob(png, "image/png");
         const status = live.status();
-        ctx.showScreen("browser", blob, { w: VIEWPORT.width, h: VIEWPORT.height });
-        /* Four pictures of a page that has not moved a pixel is the same loop
-           as four reads of it: the picture is still shown to the person, but
-           the model is told what to do instead of handed it again. */
+        /* Not logged into the chat: the browser's card is the live page, and a picture of the page kept there was
+           a step back in time for the person to scroll through. The picture is the model's, in the result.
+           Four pictures of a page that has not moved a pixel is the same loop as four reads of it: the model is told
+           what to do instead of handed it again. */
         const unmoved = live.shotNote(png);
         if (unmoved) {
           return { ok: true, summary: unmoved, preview: status.url ?? "screenshot" };
@@ -3051,12 +3050,12 @@ async function runToolUnredacted(
         return {
           ok: true,
           summary:
-            "A picture of the page as it is now is in this result, and on the " +
-            "browser screen where the person can see it. This is the only way to " +
+            "A picture of the page as it is now is in this result; the person sees the " +
+            "same page live on the browser's card. This is the only way to " +
             "see the page rather than read it: use it when the person asks what " +
             "something looks like, when a page seems to be stuck, or when a click " +
             "did nothing and the text gives no reason." +
-            (picture ? "" : " It is too large to hand back as a picture; it is on the person's screen."),
+            (picture ? "" : " It is too large to hand back as a picture; the person sees it on the live card."),
           preview: status.url ?? "screenshot",
           ...(picture ? { images: [picture] } : {}),
         };

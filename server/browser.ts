@@ -20,9 +20,9 @@
  * clicking there, and the camera is pointed at it.
  *
  * Frames are ephemeral: they go out over the socket and are never written to
- * the event log. What the log keeps is keyframes -- one after each navigation
- * and each action -- so scrolling back through a session still shows what the
- * page looked like at each step without the log becoming a video file.
+ * the event log, and no picture is kept after an action. The page is live or it
+ * is not shown: there is no record of earlier pages to go back through, and an
+ * action never waits on a screenshot.
  *
  * Playwright is an optional dependency and the browser binary is the system's.
  * Neither being present is an ordinary condition, not a crash: `status()` says
@@ -464,7 +464,6 @@ interface BrowserHooks {
   /** A live frame: base64 JPEG, ephemeral, never stored. */
   onFrame: (jpegBase64: string) => void;
   /** A frame worth keeping in the transcript. */
-  onKeyframe: (jpeg: Buffer, url: string, title: string) => void;
   onNav: (url: string, title: string) => void;
   /** Something the agent did, with where it did it when that is meaningful. */
   onAction: (action: string, at: { x: number; y: number } | null, url: string) => void;
@@ -504,7 +503,7 @@ const num = (value: string | undefined, fallback: number) => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
 
-/** How long typing has to stop before it is logged and a frame is kept. */
+/** How long typing has to stop before it is logged. */
 const TYPING_PAUSE_MS = 1200;
 /** How often live frames go out. Ten a second read as a slideshow to a person scrolling or typing into the page;
     twenty-four follows a hand. A slow link is still protected: the tiers below step the picture down when a viewer
@@ -2250,7 +2249,7 @@ export class LiveBrowser {
         await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 }).catch(() => undefined);
         await this.settle();
         const read = await this.read();
-        await this.keyframe();
+        await this.mapFields();
         return read;
       }
       return { tabs: this.tabList() };
@@ -2338,7 +2337,7 @@ export class LiveBrowser {
       await page.goForward({ waitUntil: "domcontentloaded", timeout: 15_000 }).catch(() => undefined);
       await this.settle();
       const read = await this.read();
-      await this.keyframe();
+      await this.mapFields();
       return read;
     });
   }
@@ -2460,8 +2459,11 @@ export class LiveBrowser {
       this.noteConsole("error", `Uncaught: ${String(err?.message ?? err)}`);
     });
     const began = new WeakMap<object, number>();
-    page.on("request", (req: any) => { began.set(req, Date.now()); });
+    const out = new Map<object, number>();
+    this.inflight.set(page, out);
+    page.on("request", (req: any) => { began.set(req, Date.now()); out.set(req, Date.now()); });
     page.on("requestfinished", (req: any) => {
+      out.delete(req);
       void (async () => {
         const res = await req.response?.().catch(() => null);
         const length = Number(res?.headers?.()["content-length"] ?? 0);
@@ -2479,6 +2481,7 @@ export class LiveBrowser {
       if (status >= 400 && !/\/favicon\.ico(\?|$)/.test(where)) this.noteConsole("error", `${status} ${where.slice(0, 160)}`);
     });
     page.on("requestfailed", (req: any) => {
+      out.delete(req);
       this.noteDev(page, {
         kind: "request", level: String(req.resourceType?.() ?? "other"), text: String(req.url?.() ?? "").slice(0, 400),
         method: String(req.method?.() ?? "GET"), failed: String(req.failure?.()?.errorText ?? "failed"),
@@ -3121,25 +3124,11 @@ export class LiveBrowser {
     return next;
   }
 
-  /** A frame worth keeping: taken after the page has settled, so the log
-      shows the result of an action rather than the middle of it. */
-  private async keyframe() {
-    if (!this.page || this.closing) return;
-    try {
-      const shot: Buffer = await this.page.screenshot({ type: "jpeg", quality: 70 });
-      this.hooks.onKeyframe(shot, this.currentUrl ?? "", this.currentTitle ?? "");
-    } catch {
-      // A page that navigated out from under the shot is not an error worth
-      // reporting; the next action takes another one.
-    }
-    await this.mapFields();
-  }
-
   /** Last known typeable fields, for `status()`. */
   private fields: Array<[number, number, number, number]> = [];
 
   /** Find the fields you can type into, and tell the watchers if they moved.
-      Taken alongside every kept frame, which is after every action. */
+      Taken after every action, once the page has settled. */
   private async mapFields() {
     if (!this.page || this.closing) return;
     // A string, because this file is compiled without the DOM's types.
@@ -3170,11 +3159,32 @@ export class LiveBrowser {
     this.hooks.onFields();
   }
 
-  /** Let whatever the action started finish painting before we photograph it.
-      Short, because this sits in front of every action and a browser that
-      feels like a slideshow is worse than one frame early. */
+  /** Let whatever the action started finish before the page is read: done as soon as the page has been quiet (no DOM
+      change, no scrolling, no fresh request) for QUIET_MS, and never longer than `ms`. It used to sleep the whole of
+      `ms` on every action, still page or not, which was most of the time each step took. */
   private async settle(ms = 450) {
-    await this.page?.waitForTimeout?.(ms).catch(() => undefined);
+    const page = this.page;
+    if (!page) return;
+    const until = Date.now() + ms;
+    for (;;) {
+      const left = until - Date.now();
+      if (left <= 0) return;
+      const quiet = await page.evaluate(QUIET_SCRIPT(Math.min(QUIET_MS, left), left)).catch(() => false);
+      if (quiet && !this.loading(page)) return;
+      // A navigation took the document away mid-wait, or a request is still out: look again shortly.
+      await page.waitForTimeout(Math.min(60, Math.max(until - Date.now(), 0))).catch(() => undefined);
+    }
+  }
+
+  /** Requests each tab has out, by when they began. */
+  private inflight = new WeakMap<Page, Map<object, number>>();
+
+  /** Whether a request the page made lately is still out. One older than LONG_REQUEST_MS is a stream or a long poll,
+      which never finishes and is no sign the page is still changing. */
+  private loading(page: Page): boolean {
+    const now = Date.now();
+    for (const at of this.inflight.get(page)?.values() ?? []) if (now - at < LONG_REQUEST_MS) return true;
+    return false;
   }
 
   goto(rawUrl: string): Promise<PageRead> {
@@ -3184,13 +3194,12 @@ export class LiveBrowser {
       this.heldClick = null;
       this.hooks.onAction(`open ${url}`, null, url);
       await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
-      await this.settle();
-      // A page that draws itself with script is a blank one at this point:
-      // give the network a moment, then give an empty page time to fill.
-      await page.waitForLoadState("networkidle", { timeout: 2500 }).catch(() => undefined);
+      // A page that draws itself with script is a blank one at this point: let its requests come back and its
+      // drawing stop (Playwright's networkidle always sat out a further half second), then give an empty page time to fill.
+      await this.settle(2900);
       await this.awaitContent(4500);
       const read = await this.read();
-      await this.keyframe();
+      await this.mapFields();
       return read;
     });
   }
@@ -3204,7 +3213,7 @@ export class LiveBrowser {
       await this.settle();
       await this.awaitContent(3000);
       const read = await this.read();
-      await this.keyframe();
+      await this.mapFields();
       return read;
     });
   }
@@ -3278,7 +3287,7 @@ export class LiveBrowser {
             "(browser_press), or browser_eval with __autora.click(__autora.byText(\"its words\")).",
         ];
       }
-      await this.keyframe();
+      await this.mapFields();
       return read;
     });
   }
@@ -3495,7 +3504,7 @@ export class LiveBrowser {
       }
       const read = await this.read();
       read.notes = notes;
-      await this.keyframe();
+      await this.mapFields();
       return read;
     });
   }
@@ -3580,7 +3589,7 @@ export class LiveBrowser {
       await this.arrive();
       const read = await this.read();
       read.notes = notes;
-      await this.keyframe();
+      await this.mapFields();
       return read;
     });
   }
@@ -3635,7 +3644,7 @@ export class LiveBrowser {
       await this.settle(400);
       await this.arrive();
       const read = await this.read();
-      await this.keyframe();
+      await this.mapFields();
       return read;
     });
   }
@@ -3716,7 +3725,7 @@ export class LiveBrowser {
       await this.settle(300);
       await this.arrive();
       const read = await this.read();
-      await this.keyframe();
+      await this.mapFields();
       return { page: read, value: failure ? `The script failed: ${failure}` : describeScriptValue(value), hits, elapsed };
     });
   }
@@ -3755,7 +3764,7 @@ export class LiveBrowser {
       }
       const read = await this.read();
       read.notes = notes;
-      await this.keyframe();
+      await this.mapFields();
       return read;
     });
   }
@@ -3851,7 +3860,7 @@ export class LiveBrowser {
       }
       await this.settle(600);
       const read = await this.read();
-      await this.keyframe();
+      await this.mapFields();
       return read;
     });
   }
@@ -3903,7 +3912,7 @@ export class LiveBrowser {
             "color", "file", "image", "hidden"].includes(type);
         })()`)
         .catch(() => false);
-      await this.keyframe();
+      await this.mapFields();
       return { editable, select: null };
     });
   }
@@ -3970,7 +3979,7 @@ export class LiveBrowser {
         this.currentUrl ?? "",
       );
       await this.settle(150);
-      await this.keyframe();
+      await this.mapFields();
       return { ok: picked !== null, label: picked };
     });
   }
@@ -4007,7 +4016,7 @@ export class LiveBrowser {
       await page.mouse.up();
       this.pointer = { x: cx, y: cy };
       await this.settle(180);
-      await this.keyframe();
+      await this.mapFields();
       return { ok: true };
     });
   }
@@ -4066,7 +4075,7 @@ export class LiveBrowser {
       void this.run(async () => {
         if (!this.page || this.closing) return;
         this.hooks.onAction(parts.join("; "), null, this.currentUrl ?? "");
-        await this.keyframe();
+        await this.mapFields();
       });
     }, TYPING_PAUSE_MS);
     this.typed.timer.unref?.();
@@ -4079,7 +4088,7 @@ export class LiveBrowser {
       if (person) await this.personHand();
       await page.mouse.wheel(deltaX, deltaY);
       await this.settle(150);
-      await this.keyframe();
+      await this.mapFields();
     });
   }
 
@@ -4091,7 +4100,7 @@ export class LiveBrowser {
       await page.reload({ waitUntil: "domcontentloaded", timeout: 30_000 }).catch(() => undefined);
       await this.settle();
       const read = await this.read();
-      await this.keyframe();
+      await this.mapFields();
       return read;
     });
   }
@@ -4104,7 +4113,7 @@ export class LiveBrowser {
       await page.goBack({ waitUntil: "domcontentloaded", timeout: 15_000 }).catch(() => undefined);
       await this.settle();
       const read = await this.read();
-      await this.keyframe();
+      await this.mapFields();
       return read;
     });
   }
@@ -4516,7 +4525,7 @@ export class LiveBrowser {
           this.hooks.onAction(`captcha: ${standing.widget} -- ${report.detail}`, null, this.currentUrl ?? "");
           await this.settle(400);
           const read = await this.read();
-          await this.keyframe();
+          await this.mapFields();
           return {
             outcome: report.outcome === "solved" ? "solved" : "challenge",
             kind: hits[0]?.kind ?? null,
@@ -4593,7 +4602,7 @@ export class LiveBrowser {
       this.hooks.onAction(`captcha: ${outcome}`, null, this.currentUrl ?? "");
       await this.settle(400);
       const read = await this.read();
-      await this.keyframe();
+      await this.mapFields();
       return {
         outcome,
         kind: target.kind,
@@ -4800,6 +4809,31 @@ const FOCUS_TYPEABLE_SCRIPT = `(() => {
 })()`;
 
 /** Scroll as asked and say where that left things; see LiveBrowser.scroll. */
+/** How long the page must go without changing before an action counts as finished. */
+const QUIET_MS = 120;
+/** A request out longer than this is a stream or a long poll, not the page still loading. */
+const LONG_REQUEST_MS = 3000;
+
+/**
+ * Resolves true once the document has gone `quiet` ms without a DOM change or a scroll, or once `cap` ms have passed.
+ * Autora's own cursor lives in a closed shadow root, so its movement is not the page changing; its host is skipped.
+ */
+const QUIET_SCRIPT = (quiet: number, cap: number) => `new Promise((done) => {
+  const start = performance.now();
+  let last = start;
+  const mo = new MutationObserver((list) => {
+    for (const m of list) if (!(m.target && m.target.id === "__autora_cursor")) { last = performance.now(); return; }
+  });
+  mo.observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+  let sx = scrollX, sy = scrollY;
+  const tick = () => {
+    const now = performance.now();
+    if (scrollX !== sx || scrollY !== sy) { sx = scrollX; sy = scrollY; last = now; }
+    if (now - last >= ${quiet} || now - start >= ${cap}) { mo.disconnect(); done(true); } else setTimeout(tick, 16);
+  };
+  setTimeout(tick, 16);
+})`;
+
 const SCROLL_SCRIPT = (how: ScrollRequest) => `((o) => {
   const doc = document.scrollingElement || document.documentElement;
   const scrollable = (el) => {
