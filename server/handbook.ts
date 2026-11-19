@@ -84,6 +84,8 @@ const BROWSER = [
     "carry falls back to pictures, with a Pictures · try the live copy button on the bar. Picture mode in the same menu turns it off, " +
     "and Show the copy's readout shows its speed. It is only a view: your browser_* tools, the page, its sign-ins and what " +
     "browser_screenshot shows are the same whichever they use, so never tell them to switch views to fix a page.",
+  "  The browser's card in the chat is the live page only: no picture of an earlier page is kept, so there is nothing to scroll " +
+    "back through. An older card keeps what you did and said there; browser_screenshot is a picture for you, not one kept in the chat.",
 ].join("\n");
 
 const CREATOR = [

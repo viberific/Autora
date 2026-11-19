@@ -113,7 +113,7 @@ async function main() {
   }
 
   const live = new LiveBrowser({
-    onFrame: () => {}, onKeyframe: () => {}, onNav: () => {}, onAction: () => {},
+    onFrame: () => {}, onNav: () => {}, onAction: () => {},
     onFields: () => {}, watchers: () => 0,
   });
   const url = `file://${path.resolve("tests/fixtures/form.html")}`;
@@ -277,7 +277,7 @@ async function main() {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const origin = `http://127.0.0.1:${(server.address() as any).port}`;
   const first = new LiveBrowser({
-    onFrame: () => {}, onKeyframe: () => {}, onNav: () => {}, onAction: () => {},
+    onFrame: () => {}, onNav: () => {}, onAction: () => {},
     onFields: () => {}, watchers: () => 0,
   });
   try {
@@ -299,7 +299,7 @@ async function main() {
     await first.close();
   }
   const tabbed = new LiveBrowser({
-    onFrame: () => {}, onKeyframe: () => {}, onNav: () => {}, onAction: () => {},
+    onFrame: () => {}, onNav: () => {}, onAction: () => {},
     onFields: () => {}, watchers: () => 0,
   });
   try {
@@ -332,7 +332,7 @@ async function main() {
   let watching = 0;
   let frames = 0;
   const watched = new LiveBrowser({
-    onFrame: () => { frames++; }, onKeyframe: () => {}, onNav: () => {}, onAction: () => {},
+    onFrame: () => { frames++; }, onNav: () => {}, onAction: () => {},
     onFields: () => {}, watchers: () => watching,
   });
   try {
@@ -352,7 +352,7 @@ async function main() {
     await watched.close();
   }
   const second = new LiveBrowser({
-    onFrame: () => {}, onKeyframe: () => {}, onNav: () => {}, onAction: () => {},
+    onFrame: () => {}, onNav: () => {}, onAction: () => {},
     onFields: () => {}, watchers: () => 0,
   });
   try {

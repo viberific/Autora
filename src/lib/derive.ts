@@ -1027,8 +1027,9 @@ export function derive(events: AutoraEvent[]): Derived {
           }
           if (screenOf === "desktop") hasDesktop = true;
           const screen = screenCell(screenOf, e.seq);
+          /* The browser's card shows the live page or nothing: no picture of an earlier page is kept to go back to. */
           if (screenOf === "browser") screen.url = url;
-          screen.shots.push({ blob: picture.blob, seq: e.seq, ts: e.ts });
+          else screen.shots.push({ blob: picture.blob, seq: e.seq, ts: e.ts });
           break;
         }
         const cell = current();
@@ -1070,17 +1071,10 @@ export function derive(events: AutoraEvent[]): Derived {
         break;
       }
 
+      /* Pictures an older build kept after each browser action. The browser's card is the live page or nothing now,
+         so they are not shown: there is no stepping back through earlier pages. */
       case Kind.BrowserFrame:
-        if (e.blob) {
-          if (e.payload.url) url = e.payload.url;
-          const cell = screenCell("browser", e.seq);
-          cell.url = url;
-          cell.shots.push({
-            blob: e.blob, seq: e.seq, ts: e.ts,
-            ...(pendingMark ? { mark: pendingMark } : {}),
-          });
-          pendingMark = null;
-        }
+        if (e.payload.url) url = e.payload.url;
         break;
 
       case Kind.BrowserNav: {
@@ -1098,9 +1092,6 @@ export function derive(events: AutoraEvent[]): Derived {
         cell.actions.push(
           `${e.payload.action}${e.payload.selector ? ` ${e.payload.selector}` : ""}`.trim(),
         );
-        if (e.payload.x != null && e.payload.y != null) {
-          pendingMark = { x: e.payload.x, y: e.payload.y };
-        }
         break;
       }
 

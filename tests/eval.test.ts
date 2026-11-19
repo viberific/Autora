@@ -129,7 +129,7 @@ async function main() {
   }
 
   const live = new LiveBrowser({
-    onFrame: () => {}, onKeyframe: () => {}, onNav: () => {}, onAction: () => {},
+    onFrame: () => {}, onNav: () => {}, onAction: () => {},
     onFields: () => {}, watchers: () => 0,
   });
   const url = `file://${path.resolve("tests/fixtures/script-dialog.html")}`;

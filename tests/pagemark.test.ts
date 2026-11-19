@@ -32,7 +32,7 @@ await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve
 const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/`;
 
 const live = new LiveBrowser({
-  onFrame: () => {}, onKeyframe: () => {}, onNav: () => {}, onAction: () => {}, onFields: () => {}, watchers: () => 0,
+  onFrame: () => {}, onNav: () => {}, onAction: () => {}, onFields: () => {}, watchers: () => 0,
 }, { viewport: { width: 800, height: 500 } });
 const reader = await chromium.launch({ executablePath: exe });
 const readerPage = await reader.newPage();

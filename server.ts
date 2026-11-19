@@ -958,10 +958,6 @@ function browserFor(session: Session): LiveBrowser {
       sendEphemeralRaw(session.id, message.op === "region" ? raw : redactForPerson(raw));
     },
     mirrorPrefix: `/api/sessions/${encodeURIComponent(session.id)}/browser/mirror/r/`,
-    onKeyframe: (jpeg, url) => {
-      const blob = putBlob(session.id, jpeg, "image/jpeg");
-      emitEvent(session, "browser.frame", "agent", { url, w: VIEWPORT.width, h: VIEWPORT.height }, null, blob);
-    },
     onNav: (url, title) => {
       recordVisit(url, title);
       emitEvent(session, "browser.nav", "agent", { url, title });
@@ -1038,7 +1034,6 @@ function previewRunFor(session: Session, device: Device): PreviewRun {
         data: jpegBase64, w: size.width, h: size.height, ts: Date.now(),
       });
     },
-    onKeyframe: () => undefined,
     onNav: (url, title) => {
       run.url = url;
       run.title = title;
@@ -6805,17 +6800,6 @@ async function startServer() {
         case "back":
           read = await live.back();
           break;
-        case "shot": {
-          const png = await live.capture();
-          const blob = putBlob(session.id, png, "image/png");
-          emitEvent(session, "browser.frame", "agent", {
-            url: live.status().url ?? "",
-            w: VIEWPORT.width,
-            h: VIEWPORT.height,
-          }, null, blob);
-          broadcastBrowserState(session);
-          return res.json({ ok: true, blob });
-        }
         case "close":
           await live.close();
           browsers.delete(session.id);
