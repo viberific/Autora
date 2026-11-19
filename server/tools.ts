@@ -417,8 +417,11 @@ export async function availableTools(): Promise<ToolSpec[]> {
   const groups = await groupStates();
   const usable = new Set(groups.filter((g) => g.available).map((g) => g.group));
   const settings = toolSettings();
+  /* A delegate to a vendor's CLI is offered only when that CLI is installed and signed in here: otherwise every call fails (they
+     were the tools that failed every time in the logs), and the briefing already tells the agent not to call them. */
+  const delegateMissing = (name: string) => (name === "claude_cli" && !vendorReady("claude").ok) || (name === "gemini_cli" && !vendorReady("gemini").ok);
   return [
-    ...TOOLS.filter((t) => !windowOff(t.name, settings) && (
+    ...TOOLS.filter((t) => !windowOff(t.name, settings) && !delegateMissing(t.name) && (
       t.group === "person" || t.group === "files" || t.group === "schedule" ||
       /* Muting the voice is the one thing that survives having muted it: a
          tool that takes itself away with the thing it turns off would leave
