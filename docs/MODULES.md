@@ -1124,3 +1124,51 @@ page, which every cursor style reads; the tag carries the agent's name and the p
 3D frame by `{autora3d:"who"}`. All of it is off with the
 agent-cursor switch. Tests: `thought.test.ts`,
 `browser-cursor.test.ts`.
+
+## The mirror view (the browser's live copy)
+
+Intent: `intent/2026-11-19-new-web-browser-architecture.md`. Chromium stays on the server and is the only browser; the mirror
+changes only how the person sees and touches it. Behind the browser menu's **Live copy (preview)** (`lib/liveMirror.ts`, kept per
+browser, pictures by default until R7 is measured on an Umbrel box and a phone).
+
+- **Recorder** (`server/mirror-script.ts`): plain JS run by CDP in an isolated world (`MIRROR_WORLD`) of the top frame, so the
+  page's script cannot see, call or fingerprint it; output goes through a binding that exists only in that world. One snapshot
+  (`ser`: ids per node, absolute addresses, form values, scroll offsets, open shadow roots and adopted sheets, `<style>` text read
+  from `cssRules` so `insertRule` sheets come too), then batches once a frame: `kids` (a node's whole child list, known children
+  as `{r: id}`, so ordering can never go wrong), `attr`, `text`, `css`, `val`, `scroll`, `focus`, `ptr` (trusted mouse events:
+  the agent's hand), `vp`, `rect` (picture regions, document coordinates). A poll (250 ms) catches values set by script, grown
+  sheets and moved regions. A password is its length only, from here on.
+- **Server** (`server/mirror.ts`, `MirrorRecorder` on the tab's CDP session; `LiveBrowser.setView`): `cleanNode`/`cleanOp`
+  drop scripts, `on*`, `javascript:`, frames, meta/base, forms' actions, `srcdoc`, `integrity`; links become `#`; every
+  sub-resource (img, srcset, stylesheet `<link>`, CSS `url()`/`@import`, SVG `use`) becomes a `ResourceTokens` token, redeemed by
+  `GET /api/sessions/:id/browser/mirror/r/:token` through the browser context's own request session (its cookies), cached in
+  memory (`ResourceCache`, 48 MB), CSS rewritten again, served with `Content-Security-Policy: sandbox`, `nosniff`, and never as
+  HTML (`servedType`). Messages go out through `hooks.onMirror` -> `sendEphemeralRaw` in `server.ts`, redacted as JSON text
+  (`redactForPerson`; a DOM is deeper than `redactDeep` walks), never written to the log. Health: snapshot over
+  `MIRROR_LIMITS.snapshotBytes` (6 MB), more than 4000 changes a second for 3 s, or picture regions over half the viewport ->
+  `fallback` for that page (it tries again on the next page, or on **Pictures · try the live copy**).
+- **Pictures only when needed**: each window says its view (`POST /browser/view`, every 15 s, lease 40 s). While every viewer is
+  on a live copy `LiveBrowser.syncPictures` stops Chrome's screencast (no encoding at all); a Picture viewer, a fallback or a
+  lapsed lease starts it again with a `nudge`. Canvas, video, iframes, embeds and closed-shadow custom elements are **picture
+  regions**: `captureRegions` clips them with `Page.captureScreenshot` (document coordinates), video 4/s, others 2/s, only on
+  change, at most four per tick, and the client paints them into a canvas in their place.
+- **Client** (`components/MirrorView.tsx`, `lib/mirrorDom.ts`): an iframe with `sandbox="allow-same-origin"` (never
+  `allow-scripts`) whose first document carries a CSP that loads nothing but Autora (`'self'`, `data:`); `MirrorDom` re-checks
+  every tag, attribute and address before it builds. The copy is laid over a spacer `<img class="frame">` of the page's size, so
+  the stage's picture rules size it, and fitted inside it like `object-fit: contain`. It is built under the picture and swapped
+  in once its style sheets are in; when it falls back it stays until a newer picture arrives. A copy whose document comes out
+  more than 35% longer or shorter than the real one reports itself unhealthy (pictures for that page).
+- **Input**: where the person works the page directly (desktop, the board, full screen) the copy takes it (`local`): scrolling
+  is the copy's own and is sent as an offset (`POST /browser/mirror/scroll`, `__autoraMirror.scroll`); a wheel the copy cannot
+  absorb goes to the real page as a wheel; clicks carry the node id and the place within it (`LiveBrowser.mirrorPoint`, falling
+  back to the coordinates); typing echoes in the copy's own field at once and goes out batched (`type`, `key`), the page's value
+  waiting 1.5 s behind the person's typing; hover rests send `POST /browser/hover` (the copy's own `:hover` needs nothing). Every
+  input uses the existing routes, so `agentDriving` and Take control hold unchanged. On a phone in the thread the copy takes no
+  pointer and the stage's handlers act as on the picture (a finger scrolls the chat).
+- **Not yet** (each is a phase in the intent): the server's viewport still is the agent's 1280x800 (R1.5: the copy is scaled
+  like the picture, not reflowed to the pane); every iframe is a picture region (R5.1, R5.2); R7's figures are not measured yet,
+  the readout (Show the copy's readout) is there to measure them; the copy is not the default (phase 5).
+- Tests: `mirror.test.ts` (cleaning, tokens, masking, and a real Chromium: snapshot, change, rect, scroll, canvas region,
+  fallback, a `__pwned` probe in the sandboxed frame, no request from the viewer to the site); `ui-browser-mirror.test.ts` (the
+  built app: the copy is drawn, scrolling asks for no pictures and moves the real page, a click and typing reach the real page,
+  a canvas is a live picture, Picture mode brings pictures back).

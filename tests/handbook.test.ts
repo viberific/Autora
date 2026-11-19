@@ -48,6 +48,13 @@ await test("the browser manual says who has the browser and how it comes back", 
   }
 });
 
+await test("the browser manual says how the person sees the page: pictures, or the live copy", () => {
+  const browser = manualText("browser");
+  for (const needle of ["Live copy (preview)", "Picture mode", "falls back to pictures", "Pictures · try the live copy", "only a view"]) {
+    assert.ok(browser.includes(needle), `the browser manual lacks "${needle}"`);
+  }
+});
+
 await test("every retained engine's manual identifies its integrated Panacea work mode", () => {
   for (const id of MANUAL_IDS.filter((id) => id !== "terminal" && id !== "panacea")) {
     const text = manualText(id);

@@ -1,3 +1,4 @@
+import { pushMirror } from "./liveMirror";
 import type { AutoraEvent, BrowserState, LiveFrame } from "./types";
 
 type Handlers = {
@@ -157,6 +158,10 @@ export class SessionStream {
             mime: String(msg.mime ?? "image/jpeg"),
             ts: Number(msg.ts ?? Date.now()),
           });
+          break;
+        case "mirror":
+          // The mirror view (lib/liveMirror.ts): like a frame, never part of the log.
+          pushMirror(msg, typeof raw.data === "string" ? raw.data.length : 0);
           break;
         case "browser":
           this.handlers.onBrowser?.(msg.state);

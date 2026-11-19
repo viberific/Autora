@@ -8,6 +8,7 @@
 import express, { type Express, type Request, type Response } from "express";
 import { addBookmark, bookmarks, clearHistory, downloads, history, removeBookmark } from "../browsedata";
 import { addressFor } from "../browser";
+import { RESOURCE_HEADERS } from "../mirror";
 import { installFromStore, installPackage, listExtensions, removeExtension, setExtensionEnabled } from "../extensions";
 import { isLocalUrl, localAddress } from "../preview";
 import { versions as folderVersions, restore as restoreVersion } from "../snapshots";
@@ -98,14 +99,19 @@ export function browserRoutes(app: Express, deps: {
     const live = targetBrowser(session, req);
     if (!live?.status().open) return res.status(400).json({ error: "No page is open." });
 
-    const x = Number(req.body?.x);
-    const y = Number(req.body?.y);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    const px = Number(req.body?.x);
+    const py = Number(req.body?.y);
+    if (!Number.isFinite(px) || !Number.isFinite(py)) {
       return res.status(400).json({ error: "Invalid click coordinates." });
     }
 
     try {
       const button = req.body?.button === "right" ? "right" : req.body?.button === "middle" ? "middle" : "left";
+      // From the mirror view: aimed at a node, so it lands on that element even if the page moved under it.
+      const node = Number(req.body?.node);
+      const { x, y } = Number.isFinite(node) && node > 0
+        ? await live.mirrorPoint(node, Number(req.body?.fx), Number(req.body?.fy), px, py)
+        : { x: px, y: py };
       // What the person is about to click, said to the agent as they do it.
       const under = await describeOnPage(live, { x, y });
       touchPresence(session.id, isPreview(req) ? "app" : "browser", "*", "click", `${req.body?.double ? "double-clicked" : "clicked"} ${under.what}`);
@@ -115,6 +121,64 @@ export function browserRoutes(app: Express, deps: {
     } catch (err: any) {
       res.status(500).json({ error: err?.message ?? "Click failed" });
     }
+  });
+
+  // ----------------------------------------------------------- the mirror view (server/mirror.ts) --
+
+  // A sub-resource of the mirrored page, by the token the mirror was given for it. Fetched through the server
+  // browser's own session; served so it can never be a page on this origin. No side effect here: GET is safe.
+  app.get("/api/sessions/:id/browser/mirror/r/:token", async (req: Request, res: Response) => {
+    const live = browsers.get(req.params.id);
+    if (!sessions.has(req.params.id) || !live) return res.status(404).end();
+    const found = await live.mirrorResource(String(req.params.token)).catch(() => null);
+    for (const [k, v] of Object.entries(RESOURCE_HEADERS)) res.setHeader(k, v);
+    if (!found) return res.status(404).end();
+    res.setHeader("Content-Type", found.type);
+    res.end(found.body);
+  });
+
+  // Which view a window shows the live page in: the mirror, or pictures. Said when it opens and every 15 seconds.
+  app.post("/api/sessions/:id/browser/view", async (req: Request, res: Response) => {
+    const session = sessions.get(req.params.id);
+    if (!session) return res.status(404).json({ error: "Session not found" });
+    const viewer = String(req.body?.viewer ?? "").replace(/[^\w-]/g, "").slice(0, 64);
+    const live = browserFor(session);
+    if (req.body?.mode === "none") { await live.dropView(viewer); return res.json({ ok: true }); }
+    const mode = req.body?.mode === "mirror" ? "mirror" : "picture";
+    // A window that saw the mirror's layout come out wrong: this page is shown as pictures.
+    if (mode === "picture" && typeof req.body?.fallback === "string") await live.mirrorFallBack(String(req.body.fallback).slice(0, 120));
+    const status = await live.setView(viewer || "anon", mode, req.body?.retry === true);
+    res.json({ ok: true, ...status });
+  });
+
+  app.post("/api/sessions/:id/browser/mirror/resync", async (req: Request, res: Response) => {
+    const live = browsers.get(req.params.id);
+    if (!sessions.has(req.params.id) || !live) return res.status(404).json({ error: "Session not found" });
+    await live.mirrorResnapshot();
+    res.json({ ok: true });
+  });
+
+  // The person scrolled the mirror; the real page is scrolled to the same place.
+  app.post("/api/sessions/:id/browser/mirror/scroll", async (req: Request, res: Response) => {
+    const session = sessions.get(req.params.id);
+    if (!session) return res.status(404).json({ error: "Session not found" });
+    if (agentDriving(session)) return res.status(409).json({ error: DRIVING });
+    const live = browsers.get(session.id);
+    if (!live?.status().open) return res.status(400).json({ error: "No page is open." });
+    touchPresence(session.id, "browser", "*", "scroll", "scrolled the page", { tell: false });
+    const ok = await live.mirrorScroll(Number(req.body?.node) || 0, Number(req.body?.x) || 0, Number(req.body?.y) || 0);
+    res.json({ ok });
+  });
+
+  // The person's pointer rested on something in the mirror: the real mouse goes there, for menus that open on hover.
+  app.post("/api/sessions/:id/browser/hover", async (req: Request, res: Response) => {
+    const session = sessions.get(req.params.id);
+    if (!session) return res.status(404).json({ error: "Session not found" });
+    if (agentDriving(session)) return res.status(409).json({ error: DRIVING });
+    const live = browsers.get(session.id);
+    if (!live?.status().open) return res.status(400).json({ error: "No page is open." });
+    await live.userHover(Number(req.body?.x) || 0, Number(req.body?.y) || 0);
+    res.json({ ok: true });
   });
 
   // A drag from the person's own hand, in three parts, so what they are

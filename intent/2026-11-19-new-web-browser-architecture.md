@@ -23,6 +23,37 @@ The person's browser draws that copy natively, so scrolling, text and hover are 
 scrolls are sent back to the real page, matched element by element. The picture stream stays as the fallback: for regions
 the DOM cannot carry (canvas, WebGL, video, plugins) and for whole pages where mirroring fails.
 
+## Status (2026-11-19)
+
+Built behind the browser menu's **Live copy (preview)**; pictures stay the default (phase 5 waits on R7). How it works and
+where: `docs/MODULES.md`, "The mirror view". Decisions taken in planning:
+- **Serializer**: purpose-built, not rrweb. A recorder (`server/mirror-script.ts`) in a CDP isolated world plus a
+  `MutationObserver`, so the page's own script cannot see or fingerprint it and no dependency is added.
+- **Hover**: the copy's own `:hover` styles are local and need nothing; only a pointer that rests on a new element moves the real
+  mouse (`POST /browser/hover`), for menus opened by script.
+- **Fonts and images**: in memory per session (`ResourceCache`, 48 MB, oldest out first), fetched through the browser
+  context's own request session.
+- **The frame**: `sandbox="allow-same-origin"` without `allow-scripts`, plus a CSP meta in its first document, so Autora's
+  code can build the copy and nothing the site wrote can run.
+- **Input** uses the existing `/browser/*` POST routes (so `agentDriving`, Take control and `crosssite.ts` hold unchanged);
+  mirror *output* is ephemeral socket traffic, redacted as text and never logged.
+
+| Requirement | State |
+| --- | --- |
+| R1.1-R1.4, R1.6 | Done (`mirror.test.ts`, `ui-browser-mirror.test.ts`) |
+| R1.5 viewport follows the pane | Not yet: the server keeps the agent's 1280x800 and the copy is scaled like the picture |
+| R2.1-R2.3 | Done for click, double and context click, mouse drag, wheel, keys, text, IME composition and paste; file pickers go through the click as before |
+| R3.1 | Done for canvas, video, iframe, embed, object and closed-shadow custom elements |
+| R3.2 | Size, mutation rate, region share and a layout-length check fall back per page; Picture mode in the menu; CAPTCHAs: the copy shows them as the page draws them (a CAPTCHA frame is a picture region) |
+| R3.3 | Done: built under the picture, kept until a newer picture after a fall-back |
+| R4.1, R4.3 | Done: a view only |
+| R4.2 | The real mouse's moves are drawn over the copy while the agent drives; no UI test of an agent click over the copy yet |
+| R5.3 | Done (open shadow roots serialized; closed ones are picture regions) |
+| R5.1, R5.2 | Not yet: every iframe is a picture region |
+| R6 | Done (`mirror.test.ts` security cases, `__pwned` probe, no request from the viewer to the site) |
+| R7 | Not measured: the readout (menu: Show the copy's readout) shows fps while scrolling, click-to-change latency, KB/s, changes/s and snapshot size; the phase 1 site list and an Umbrel-class box are still to do |
+| R8.1, R8.3 | Desktop, board, phone full screen take input on the copy; a phone in the thread passes it through the stage as with pictures; manual updated |
+
 ## Requirements
 
 ### R1 Mirror view (the default view of the live browser)

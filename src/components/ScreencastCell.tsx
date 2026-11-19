@@ -7,11 +7,13 @@ import {
   type CSSProperties, type ReactNode,
 } from "react";
 import type { Shot } from "../lib/derive";
-import { onField, useLiveFrame, useLiveTabs } from "../lib/liveFrame";
+import { onField, useLiveFrame, useLiveTabs, useOwnsLive } from "../lib/liveFrame";
+import { VIEWER_ID, setBrowserView, setMirrorReadout, useBrowserView, useMirrorStatus } from "../lib/liveMirror";
 import { NAMED_KEYS, SENTINEL } from "../lib/pageInput";
 import { BrowserPanel, setBookmark, useBrowserData, type BrowserPanelKind } from "./BrowserPanel";
 import { DevtoolsPanel } from "./DevtoolsPanel";
 import { Frame } from "./Frame";
+import { MirrorView } from "./MirrorView";
 import {
   IconArrowLeft, IconArrowRight, IconChevron, IconGlobe, IconMaximize, IconMinimize, IconMonitor, IconMousePointer,
   IconDownload, IconMenu, IconPlus, IconRotateCcw, IconSearch, IconStar, IconStop, IconX,
@@ -66,6 +68,14 @@ export function ScreencastCell({
   children?: ReactNode;
 }) {
   const feed = useLiveFrame(followsFeed, ownsFeed);
+  /* The mirror view (MirrorView, server/mirror.ts): the page as a copy of its DOM rather than pictures, when the
+     person has turned it on. Only the card the live page belongs to shows it, as with the frames. */
+  const ownsLive = useOwnsLive(followsFeed, ownsFeed);
+  const { view, readout } = useBrowserView();
+  const tellsView = source === "browser" && current && ownsLive;
+  const wantsMirror = tellsView && view === "mirror";
+  const mirror = useMirrorStatus(sessionId, wantsMirror);
+  const [mirrorReady, setMirrorReady] = useState(false);
   const tabs = useLiveTabs(source === "browser" && current);
   const [panel, setPanel] = useState<BrowserPanelKind | "devtools" | null>(null);
   const [menu, setMenu] = useState(false);
@@ -156,7 +166,23 @@ export function ScreencastCell({
   const mine = source === "browser" && collab.held.includes("browser");
   const driving = agentDriving && !mine;
 
-  const watching = !!feed && !held;
+  /* The copy is built under the picture and swapped in once it is drawn; when it falls back, it stays until a
+     picture newer than the fall-back has arrived (Frame.tsx's rule: never a moment with nothing to show). */
+  const mirrorLive = wantsMirror && !held && mirror?.status === "live";
+  const [bridgeFrom, setBridgeFrom] = useState<number | null>(null);
+  const wasShown = useRef(false);
+  useEffect(() => {
+    const shownNow = mirrorLive && mirrorReady;
+    if (wasShown.current && !shownNow && wantsMirror) setBridgeFrom(Date.now());
+    wasShown.current = shownNow;
+  }, [mirrorLive, mirrorReady, wantsMirror]);
+  useEffect(() => {
+    if (bridgeFrom !== null && (!wantsMirror || (feed && feed.ts > bridgeFrom) || Date.now() - bridgeFrom > 4000)) setBridgeFrom(null);
+  }, [bridgeFrom, feed, wantsMirror]);
+  const mirrorMounted = mirrorLive || bridgeFrom !== null;
+  const mirrorShown = mirrorMounted && (mirrorReady || bridgeFrom !== null);
+
+  const watching = (!!feed || mirrorShown) && !held;
   const canUse = source === "browser" && current && watching && !driving;
 
   // Losing the page (the agent took it back, or it closed) drops the keyboard;
@@ -193,6 +219,30 @@ export function ScreencastCell({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
+  // Which view this window shows the page in, said to the server when it opens and every 15 seconds: while every
+  // window is on a live copy, the server's Chrome stops encoding pictures.
+  useEffect(() => {
+    if (!tellsView) return;
+    const say = (body: Record<string, unknown>) => fetch(`/api/sessions/${sessionId}/browser/view`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ viewer: VIEWER_ID, ...body }),
+    }).catch(() => undefined);
+    void say({ mode: view });
+    const timer = window.setInterval(() => void say({ mode: view }), 15_000);
+    return () => { window.clearInterval(timer); void say({ mode: "none" }); };
+  }, [tellsView, view, sessionId]);
+  const onMirrorReady = useCallback((ready: boolean) => setMirrorReady(ready), []);
+  const onMirrorUnhealthy = useCallback((reason: string) => {
+    void fetch(`/api/sessions/${sessionId}/browser/view`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ viewer: VIEWER_ID, mode: "picture", fallback: reason }),
+    }).then(() => fetch(`/api/sessions/${sessionId}/browser/view`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ viewer: VIEWER_ID, mode: "mirror" }),
+    })).catch(() => undefined);
+  }, [sessionId]);
+  const retryMirror = () => void fetch(`/api/sessions/${sessionId}/browser/view`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ viewer: VIEWER_ID, mode: "mirror", retry: true }),
+  }).catch(() => undefined);
+
   /** Keystrokes are gathered for a moment and sent as one: a request per
       character made a fast typist wait on a round trip for every letter. */
   const pendingText = useRef("");
@@ -226,7 +276,8 @@ export function ScreencastCell({
 
   /** Client pixels to page pixels, against the picture actually drawn. */
   const toPage = (clientX: number, clientY: number) => {
-    const img = stageRef.current?.querySelector("img.frame") as HTMLImageElement | null;
+    // The copy's own box when the live copy is shown (it is fitted inside the picture's box), else the picture.
+    const img = stageRef.current?.querySelector(".mirror-wrap:not(.is-hidden) .mirror-layer, img.frame:not(.mirror-spacer)") as HTMLElement | null;
     if (!img) return null;
     const b = img.getBoundingClientRect();
     const x = ((clientX - b.left) / b.width) * VIEWPORT.w;
@@ -451,18 +502,46 @@ export function ScreencastCell({
     if (el && logFollows.current) el.scrollTop = el.scrollHeight;
   });
 
-  if (shots.length === 0 && actions.length === 0 && !feed) return null;
+  if (shots.length === 0 && actions.length === 0 && !feed && !mirrorMounted) return null;
 
   const shot = shots[Math.min(Math.max(at, 0), shots.length - 1)];
   const Icon = source === "browser" ? IconGlobe : IconMonitor;
-  const stageSrc = watching
+  const stageSrc = watching && feed
     ? `data:${feed.mime};base64,${feed.data}`
     : shot
       ? `/api/sessions/${sessionId}/blobs/${shot.blob}`
       : null;
   const latest = actions[actions.length - 1];
   const big = bigChoice ?? (source === "browser" && live && (watching || !stageSrc));
-  const waiting = !stageSrc && source === "browser" && live;
+  /** A stage to draw: a picture, or the copy. */
+  const staged = !!stageSrc || mirrorMounted;
+  const waiting = !stageSrc && !mirrorShown && source === "browser" && live;
+  /** The copy takes the pointer itself where the person works the page directly; on a phone in the thread a finger
+      scrolls the chat, so there the stage's own handlers have it, as with the picture. */
+  const mirrorLocal = canUse && (!onPhone || dragScrollsPage);
+  /** The page fell back to pictures while the person wants the copy: said, with a way to try again. */
+  const fellBack = wantsMirror && mirror?.status === "fallback";
+
+  /** What sits over the page, the picture or the copy alike: a tap's ripple, where the agent acted, what it says. */
+  const overlays = (
+    <>
+            {ripples.map((r) => (
+              <span
+                key={r.id}
+                className="click-ripple"
+                style={{ left: `${(r.x / VIEWPORT.w) * 100}%`, top: `${(r.y / VIEWPORT.h) * 100}%` }}
+              />
+            ))}
+            {!watching && shot?.mark && (
+              <span
+                className="marker"
+                style={{ left: `${(shot.mark.x / VIEWPORT.w) * 100}%`, top: `${(shot.mark.y / VIEWPORT.h) * 100}%` }}
+              />
+            )}
+            {watching && driving && latest && <span className="shot-caption">{latest}</span>}
+            {canUse && typing && <span className="shot-caption is-typing">typing into the page</span>}
+    </>
+  );
 
   /* `short` is what a phone has room for beside the address bar. */
   const state: { label: string; short: string; tone: string } | null =
@@ -582,6 +661,15 @@ export function ScreencastCell({
                   <button role="menuitem" onClick={() => setPanel("downloads")}><IconDownload size={13} /> Downloads</button>
                   <button role="menuitem" onClick={() => setPanel("devtools")}><IconMonitor size={13} /> Developer tools</button>
                   <button role="menuitem" onClick={() => setPanel("extensions")}><IconPlus size={13} /> Extensions</button>
+                  {/* The live copy is a preview: offered here, on request, until it is the default (docs/MODULES.md). */}
+                  <button role="menuitemcheckbox" aria-checked={view === "mirror"} onClick={() => setBrowserView(view === "mirror" ? "picture" : "mirror")}>
+                    <IconGlobe size={13} /> {view === "mirror" ? "Picture mode" : "Live copy (preview)"}
+                  </button>
+                  {view === "mirror" && (
+                    <button role="menuitemcheckbox" aria-checked={readout} onClick={() => setMirrorReadout(!readout)}>
+                      <IconMonitor size={13} /> {readout ? "Hide the copy's readout" : "Show the copy's readout"}
+                    </button>
+                  )}
                 </div>
               )}
             </span>
@@ -601,6 +689,11 @@ export function ScreencastCell({
             <span className="shot-state-short">{state.short}</span>
           </em>
         )}
+        {fellBack && (
+          <button className="cell-act shot-fellback" onClick={retryMirror} title={`Shown as pictures: ${mirror?.reason ?? "the copy could not carry this page"}`}>
+            Pictures · try the live copy
+          </button>
+        )}
         {source === "browser" && current && live && (agentDriving || mine) && (onPhone ? (
           <TakeControl sessionId={sessionId} surface="browser" mine={mine} phone thing="browser" variant="shot" />
         ) : (
@@ -617,7 +710,7 @@ export function ScreencastCell({
             back to live
           </button>
         )}
-        {stageSrc && canUse && (
+        {staged && canUse && !mirrorShown && (
           <button
             className={`shot-tool shot-drag ${dragMode ? "on" : ""}`}
             onClick={() => setDragMode((v) => !v)}
@@ -630,7 +723,7 @@ export function ScreencastCell({
             <IconMousePointer size={15} />
           </button>
         )}
-        {stageSrc && max && (onPhone ? (
+        {staged && max && (onPhone ? (
           /* A page is 1280 wide and a phone's screen 390: the whole page is a thumbnail. One button steps through the
              sizes a thumb reads (the page's width, then 2, 3 and 4 times), and the picture scrolls under a finger. */
           <button
@@ -669,7 +762,7 @@ export function ScreencastCell({
             </button>
           </span>
         ))}
-        {stageSrc && (
+        {staged && (
           <button
             className="shot-corner"
             onClick={() => {
@@ -741,7 +834,7 @@ export function ScreencastCell({
         </div>
       )}
 
-      {stageSrc && (
+      {staged && (
         <div
           ref={stageRef}
           className={`shot-stage ${big ? "is-big" : ""} ${watching ? "is-watching" : ""} ${
@@ -762,26 +855,29 @@ export function ScreencastCell({
             click(e.clientX, e.clientY, "right", false);
           }}
         >
+          {stageSrc && !mirrorShown && (
           <Frame
             src={stageSrc}
             alt={watching ? "the page, live" : source === "browser" ? "page the agent saw" : "desktop the agent saw"}
           >
-            {ripples.map((r) => (
-              <span
-                key={r.id}
-                className="click-ripple"
-                style={{ left: `${(r.x / VIEWPORT.w) * 100}%`, top: `${(r.y / VIEWPORT.h) * 100}%` }}
-              />
-            ))}
-            {!watching && shot?.mark && (
-              <span
-                className="marker"
-                style={{ left: `${(shot.mark.x / VIEWPORT.w) * 100}%`, top: `${(shot.mark.y / VIEWPORT.h) * 100}%` }}
-              />
-            )}
-            {watching && driving && latest && <span className="shot-caption">{latest}</span>}
-            {canUse && typing && <span className="shot-caption is-typing">typing into the page</span>}
+            {overlays}
           </Frame>
+          )}
+          {mirrorMounted && (
+            <MirrorView
+              sessionId={sessionId}
+              local={mirrorLocal}
+              usable={canUse}
+              driving={driving && watching}
+              readout={readout}
+              hidden={!mirrorShown}
+              send={send}
+              onReady={onMirrorReady}
+              onUnhealthy={onMirrorUnhealthy}
+            >
+              {mirrorShown && overlays}
+            </MirrorView>
+          )}
 
           {picker && (
             /* The page's dropdown, listed here: the popup the browser draws
@@ -869,7 +965,7 @@ export function ScreencastCell({
           hid the part of the page the agent was about to act on. The height
           is held while the page is live, so a line coming and going does not
           move the picture. */}
-      {stageSrc && watching && (
+      {staged && watching && (
         <div className={`shot-caption-bar${canUse && typing ? " is-typing" : ""}`} aria-live="polite">
           {canUse && typing ? "typing into the page" : driving && latest ? latest : "\u00a0"}
         </div>

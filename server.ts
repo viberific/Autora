@@ -836,7 +836,14 @@ const BACKLOG_CHUNK = 500;
 function sendEphemeral(sessionId: string, message: Record<string, unknown>) {
   const sockets = sessionSockets.get(sessionId);
   if (!sockets || sockets.size === 0) return;
-  const raw = JSON.stringify(message);
+  sendEphemeralRaw(sessionId, JSON.stringify(message));
+}
+
+/** A message already serialised. The mirror view's pages are redacted as text (a DOM is deeper than redactDeep
+    walks), which is safe on JSON because a redaction label has no quote in it. */
+function sendEphemeralRaw(sessionId: string, raw: string) {
+  const sockets = sessionSockets.get(sessionId);
+  if (!sockets || sockets.size === 0) return;
   for (const ws of sockets) {
     // Never queue video behind a slow reader: a phone that has gone to sleep
     // would come back to a minute of stale frames ahead of everything real.
@@ -944,6 +951,13 @@ function browserFor(session: Session): LiveBrowser {
         h: VIEWPORT.height,
         ts: Date.now(),
       }),
+    // The mirror view (server/mirror.ts): the page as DOM, not pictures. Ephemeral like a frame, never in the log.
+    onMirror: (message) => {
+      // Region pictures are pixels, not text: redacting them would only cost time.
+      const raw = JSON.stringify({ type: "mirror", session: session.id, ...message });
+      sendEphemeralRaw(session.id, message.op === "region" ? raw : redactForPerson(raw));
+    },
+    mirrorPrefix: `/api/sessions/${encodeURIComponent(session.id)}/browser/mirror/r/`,
     onKeyframe: (jpeg, url) => {
       const blob = putBlob(session.id, jpeg, "image/jpeg");
       emitEvent(session, "browser.frame", "agent", { url, w: VIEWPORT.width, h: VIEWPORT.height }, null, blob);
