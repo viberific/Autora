@@ -208,13 +208,7 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  A faster way to watch and use the browser, as a preview. In the
-  browser's menu, Live copy (preview) shows the page as a copy drawn by
-  your own browser instead of a stream of pictures: scrolling, text and
-  hover are local and smooth, your clicks, typing and scrolls go to the
-  real page, and the server stops encoding pictures while you use it.
-  Canvas, video and embedded frames appear as small live pictures in
-  place, and a page the copy cannot carry falls back to pictures with a
-  button to try again. Nothing the site wrote runs in your browser, and
-  passwords arrive as dots only. Picture mode in the same menu turns it
-  off; pictures stay the default for now.
+  Smoother browsing. The slider under browser and desktop cards that
+  stepped back through earlier pictures is gone, and so is the drag
+  track in the canvas history: each card now just shows the latest
+  picture, and the canvas keeps Undo and Redo.

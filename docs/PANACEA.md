@@ -128,7 +128,7 @@ as failures (`held` on a span, `lib/derive.ts`); a folded step reads as what it 
 - **Adapting** (`src/lib/panacea/profile.ts`, one profile per install): controls used three times come out from behind
   More; panels go on the side the person puts them; waved-away recipes go quiet; someone at home in the advanced settings
   gets denser panels (`data-density`). The turn note tells the agent what has been learned.
-- **Native history**: steps on native surfaces share the track along the bottom right: Undo, Redo and a scrubber.
+- **Native history**: steps on native surfaces share the track along the bottom right: Undo and Redo (no slider through time: it cost the browser too much).
   Hosted engines retain their own operation/undo logs, save/export and file-fidelity paths. A shared spatial camera is
   **not** a common cross-engine operation log.
 - **Visible work**: with it on, `panacea_place`, `panacea_set` and `panacea_arrange` are done in the window by the agent's
