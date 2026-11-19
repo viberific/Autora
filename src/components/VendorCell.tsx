@@ -19,7 +19,7 @@ import { Markdown } from "./Markdown";
  * conversation and work on the box.
  */
 export const VendorCell = memo(function VendorCell({
-  vendor, name, handoff, folder, text, doing, done, ok, reason, message, durationMs, files, working,
+  vendor, name, handoff, folder, text, doing, steps, done, ok, reason, message, durationMs, files, working,
 }: {
   vendor: string;
   name: string;
@@ -31,6 +31,8 @@ export const VendorCell = memo(function VendorCell({
   text: string;
   /** What it says it is doing now, while it works. */
   doing: string | null;
+  /** The tools it has called, in order: the work, not just the answer. */
+  steps: string[];
   done: boolean;
   ok: boolean;
   reason: string | null;
@@ -68,6 +70,14 @@ export const VendorCell = memo(function VendorCell({
                   : ""}
           </span>
         </div>
+
+        {steps.length > 0 && (
+          <ol className="vendor-steps" aria-label="What it did">
+            {steps.map((step, at) => (
+              <li key={`${at}-${step}`} className={live && at === steps.length - 1 ? "is-now" : ""}>{step}</li>
+            ))}
+          </ol>
+        )}
 
         {text ? (
           <div className="vendor-body">

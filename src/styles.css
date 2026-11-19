@@ -9182,6 +9182,21 @@ header.top .top-work .stage-follow.visible-work.is-compact { width: var(--top-pi
 .vendor-files {
   display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 8px 0 0; padding: 0; list-style: none;
 }
+/* What it did, step by step: the tool calls, in order, dimmed once past. The
+   last one is where it is now, so it stays lit while the turn is live. */
+.vendor-steps {
+  margin: 8px 0 0; padding: 0 0 0 14px; list-style: none;
+  display: flex; flex-direction: column; gap: 2px;
+  font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--fs-xs);
+  color: var(--text-3); max-height: 180px; overflow-y: auto;
+}
+.vendor-steps li { position: relative; line-height: 1.45; overflow-wrap: anywhere; }
+.vendor-steps li::before {
+  content: ""; position: absolute; left: -10px; top: 0.62em;
+  width: 4px; height: 4px; border-radius: 50%; background: currentColor; opacity: 0.5;
+}
+.vendor-steps li.is-now { color: var(--text-1); }
+.vendor-steps li.is-now::before { opacity: 1; background: var(--accent, currentColor); }
 .vendor-files li {
   font-size: var(--fs-xs); color: var(--text-2); background: var(--s3);
   padding: 1px 7px; border-radius: var(--r-pill); max-width: 100%;

@@ -125,6 +125,10 @@ export interface ChatCall {
   /** Stops the call mid-stream: the person pressed Stop, and every word
       after that would be spoken into a turn that is over. */
   signal?: AbortSignal;
+  /** What the model is doing besides talking: a tool it is calling, as one
+      short line. Only a vendor that runs its own tools (a subscription CLI)
+      has anything to say here; an API vendor's calls are already events. */
+  onStep?: (text: string) => void;
 }
 
 export interface ChatUsage {

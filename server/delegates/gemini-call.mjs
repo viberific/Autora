@@ -4,7 +4,9 @@
  *
  * `gemini -p ... -o stream-json` prints one JSON object a line: `message`s from the model (with `delta` pieces), the `tool_use`
  * it makes, and a `result`. A line that is not JSON is read as answer text, so an older CLI that only prints plain text still
- * works. Without --write nothing is approved for it to run; with it, edits are approved (`auto_edit`).
+ * works. Without --write nothing is approved for it to run; with it, edits are approved (`auto_edit`). The folder the wrapper is
+ * pointed at is trusted for the run (`--skip-trust`): otherwise the CLI quietly drops back to approving every edit by hand, and
+ * with nobody there to approve, a write turn stalls.
  */
 import { brief, emit, fail, onPath, readOptions, reasonOf, runCli } from "./common.mjs";
 
@@ -16,7 +18,7 @@ if (!bin) fail("not_installed", "The gemini CLI is not installed here (npm insta
 const long = opts.prompt.length > 60_000;
 const args = ["-p", long ? "Do what is asked above." : opts.prompt, "-o", "stream-json"];
 if (opts.model) args.push("-m", opts.model);
-if (opts.write) args.push("--approval-mode", "auto_edit");
+if (opts.write) args.push("--approval-mode", "auto_edit", "--skip-trust");
 
 let answer = "";
 let usage = null;
@@ -33,7 +35,9 @@ const line = (raw) => {
   else if (event.type === "tool_use") {
     const name = event.tool_name ?? event.name ?? "tool";
     const input = event.parameters ?? event.input ?? {};
+    /* Both: the status is the line the bubble keeps saying while it works, the tool line is the step in the chat. */
     emit({ type: "status", text: brief(name, input) });
+    emit({ type: "tool", name, detail: brief("", input) });
     const file = input?.file_path ?? input?.path;
     if (typeof file === "string" && /write|edit|replace/i.test(name)) edited.add(file);
   } else if (event.type === "result") {

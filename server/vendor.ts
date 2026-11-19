@@ -150,6 +150,7 @@ export function vendorReady(id: VendorId): { ok: boolean; path: string; detail: 
 type VendorLine =
   | { type: "delta"; text: string }
   | { type: "status"; text: string }
+  | { type: "tool"; name: string; detail: string }
   | { type: "result"; text: string; files: string[]; usage: Record<string, number> | null }
   | { type: "error"; message: string; reason: string };
 
@@ -188,6 +189,10 @@ export function parseLine(raw: string): VendorLine | null {
   if (type === "status") {
     const text = str(parsed.text) || str(parsed.message);
     return text ? { type: "status", text } : null;
+  }
+  if (type === "tool") {
+    const name = str(parsed.name);
+    return name ? { type: "tool", name, detail: str(parsed.detail) } : null;
   }
   if (type === "result") {
     const files = Array.isArray(parsed.files) ? parsed.files.filter((f: unknown) => typeof f === "string") : [];
@@ -278,6 +283,8 @@ interface VendorRunOptions {
   onDelta?: (text: string) => void;
   /** Called with what it says it is doing, already redacted. */
   onStatus?: (text: string) => void;
+  /** Called for each tool it calls, as it calls it (name, and what it acted on), already redacted. */
+  onTool?: (name: string, detail: string) => void;
 }
 
 interface VendorRunResult {
@@ -360,6 +367,10 @@ export function filesTouched(cwd: string, since: number, limit = 4000): string[]
 const KEEP = new Set([
   "PATH", "HOME", "USER", "LOGNAME", "SHELL", "TERM", "TMPDIR", "LANG",
   "NODE_OPTIONS", "NO_COLOR", "TZ", "PWD",
+  /* Where a sign-in is kept when it is not in HOME: the image sets these under
+     /data so a sign-in survives an update. Without them the CLI starts signed
+     out and answers "set an Auth method" instead of doing the job. */
+  "AUTORA_DELEGATE_HOME",
 ]);
 /** What a wrapper legitimately needs: its own vendor's variables, the XDG
     directories it keeps a sign-in in, and anything Autora set on purpose. */
@@ -381,6 +392,10 @@ export function vendorEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.Process
   }
   env.NO_COLOR = "1";
   env.TERM = "dumb";
+  /* This container runs as root, and Claude Code refuses its bypass mode as root
+     unless it is told it is a sandbox: every write turn would otherwise fail
+     with "--dangerously-skip-permissions cannot be used with root". */
+  if (process.getuid?.() === 0) env.IS_SANDBOX = "1";
   return env;
 }
 
@@ -557,6 +572,7 @@ async function runAttempt(opts: VendorRunOptions, form: PromptForm, jsonl = true
       if (!parsed) return;
       if (parsed.type === "delta") pushDelta(redact(parsed.text));
       else if (parsed.type === "status") opts.onStatus?.(redact(parsed.text));
+      else if (parsed.type === "tool") opts.onTool?.(redact(parsed.name), redact(parsed.detail));
       else if (parsed.type === "result") {
         /* The result carries the whole answer. When text already streamed,
            it is the same answer again and only its files and usage are news;

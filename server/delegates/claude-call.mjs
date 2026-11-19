@@ -5,7 +5,8 @@
  * `claude -p --output-format stream-json --verbose` prints one JSON object a line: `assistant` messages (text, and the tools it
  * is calling), then a `result` with the whole answer and what it cost. Text becomes deltas, tool calls become status lines, the
  * result is the result. Without --write it may only read (Read, Glob, Grep); with it, edits are accepted without asking, since
- * nobody is there to ask.
+ * nobody is there to ask. The folder it is pointed at is added to the workspace (`--add-dir`): outside it every read is refused,
+ * and a turn asked to look at a file elsewhere would answer that it could not.
  */
 import { brief, emit, fail, onPath, readOptions, reasonOf, runCli } from "./common.mjs";
 
@@ -15,8 +16,8 @@ if (!bin) fail("not_installed", "The claude CLI is not installed here (npm insta
 
 const args = ["-p", "--output-format", "stream-json", "--verbose"];
 if (opts.model) args.push("--model", opts.model);
-if (opts.write) args.push("--permission-mode", "acceptEdits");
-else args.push("--allowedTools", "Read", "Glob", "Grep");
+if (opts.write) args.push("--permission-mode", "acceptEdits", "--add-dir", opts.cwd);
+else args.push("--allowedTools", "Read", "Glob", "Grep", "--add-dir", opts.cwd);
 
 let answer = "";
 let final = null;
@@ -33,7 +34,9 @@ const line = (raw) => {
     for (const part of event.message?.content ?? []) {
       if (part?.type === "text" && typeof part.text === "string") { answer += part.text; emit({ type: "delta", text: part.text }); }
       else if (part?.type === "tool_use") {
+        /* Both: the status is the line the bubble keeps saying while it works, the tool line is the step in the chat. */
         emit({ type: "status", text: brief(part.name ?? "tool", part.input) });
+        emit({ type: "tool", name: part.name ?? "tool", detail: brief("", part.input) });
         const file = part.input?.file_path ?? part.input?.path;
         if (typeof file === "string" && /^(Edit|Write|MultiEdit|NotebookEdit)$/.test(part.name ?? "")) edited.add(file);
       }

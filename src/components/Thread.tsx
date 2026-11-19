@@ -1225,7 +1225,7 @@ const CellView = memo(function CellView({
     /* A vendor handed a job: a bubble of its own, in its own name and mark,
        never folded away with the tool calls around it. */
     case "vendor":
-      return <VendorCell vendor={cell.vendor} name={cell.name} handoff={cell.handoff} folder={cell.folder} text={cell.text} doing={cell.doing} done={cell.done} ok={cell.ok} reason={cell.reason} message={cell.message} durationMs={cell.durationMs} files={cell.files} working={live} />;
+      return <VendorCell vendor={cell.vendor} name={cell.name} handoff={cell.handoff} folder={cell.folder} text={cell.text} doing={cell.doing} steps={cell.steps} done={cell.done} ok={cell.ok} reason={cell.reason} message={cell.message} durationMs={cell.durationMs} files={cell.files} working={live} />;
     case "tool":
       return <ToolCell span={cell.span} />;
     case "todo": {

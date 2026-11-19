@@ -9,8 +9,9 @@
  *
  * - The history goes in as text (who said what), not as the vendor's own message objects. The CLI keeps no state between
  *   calls, so every turn is the whole conversation again.
- * - No tools. The CLI has its own, but their calls are not this app's tools, so a turn is text: reading, writing and running
- *   things stay with the delegate tools (claude_cli, gemini_cli) and with the agent.
+ * - The tools are the CLI's own, not this app's. It reads, writes and runs things on this host with the same hands a delegate
+ *   has, and each call is shown in the chat as it happens (the `tool` lines of the contract), so the person watches it work.
+ *   Autora's own tool set is not handed over: the CLI cannot drive the windows, the browser or the Organization.
  * - Nothing is billed. Usage is counted, with `estimated` set, so the ledger shows the tokens and prices none of them.
  *
  * The wrapper is the one the delegates use (server/delegates/, its stream contract in server/vendor.ts), so a failure arrives
@@ -65,14 +66,16 @@ export async function streamCli(call: ChatCall, onDelta: (text: string) => void)
     id: call.provider === "claude-cli" ? "claude" : "gemini",
     prompt: promptOf(call),
     cwd: process.env.AUTORA_CLI_CWD || "/data/work/agy-scratch",
-    write: false,
+    /* It works: a chat turn may read, write and run things, the same hands a delegate has. */
+    write: true,
     timeoutArg: `${seconds}s`,
     hardTimeoutMs: seconds * 1000 + 15_000,
     model: call.model || undefined,
     effort: call.effort || undefined,
     // The wrapper's own streaming contract is what makes the answer arrive as it is written.
     onDelta,
-    onStatus: () => undefined,
+    onStatus: (text) => call.onStep?.(text),
+    onTool: (name, detail) => call.onStep?.(`${name}${detail ? ` ${detail}` : ""}`),
     signal: call.signal,
   });
   if (!out.ok || !out.text.trim()) {

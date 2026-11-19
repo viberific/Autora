@@ -291,6 +291,8 @@ export type Cell =
       text: string;
       /** What it says it is doing now, while it works. */
       doing: string | null;
+      /** The tools it has called, in order, one short line each. */
+      steps: string[];
       done: boolean; ok: boolean;
       /** Set when it failed: rate_limit, auth, timeout, not_installed, other. */
       reason: string | null;
@@ -1188,7 +1190,7 @@ export function derive(events: AutoraEvent[]): Derived {
           name: String(e.payload.name ?? "Delegate"),
           handoff: typeof e.payload.text === "string" ? e.payload.text : "",
           folder: String(e.payload.cwd ?? ""),
-          text: "", doing: null, done: false, ok: true,
+          text: "", doing: null, steps: [], done: false, ok: true,
           reason: null, message: "", durationMs: null, files: [],
         }) as Extract<Cell, { kind: "vendor" }>;
         vendors.set(id, cell);
@@ -1202,6 +1204,30 @@ export function derive(events: AutoraEvent[]): Derived {
         if (cell && typeof e.payload.text === "string") {
           cell.text += e.payload.text;
           cell.doing = null;
+        }
+        break;
+      }
+
+      /* Each tool it calls: a real tool cell in the transcript, the same
+         quiet one-liner the agent's own calls get, so a subscription turn's
+         work reads and folds like any other -- and the bubble keeps it as
+         its last line, saying where it is now. */
+      case Kind.VendorTool: {
+        const said = typeof e.payload.text === "string" ? e.payload.text.trim() : "";
+        if (said) {
+          const name = said.split(/\s+/)[0] || "tool";
+          const rest = said.slice(name.length).trim();
+          const span: SpanState = {
+            id: e.span ?? `vt-${e.seq}`, name, args: rest ? { on: rest } : {},
+            status: "ok", output: "", preview: "", durationMs: null, exitCode: null, seq: e.seq,
+          };
+          spansById.set(span.id, span);
+          push({ kind: "tool", seq: e.seq, span });
+        }
+        const cell = vendors.get(String(e.payload.id ?? ""));
+        if (cell && said && !cell.done && cell.steps.length < 200) {
+          cell.steps.push(said);
+          cell.doing = said;
         }
         break;
       }

@@ -4521,6 +4521,13 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
               ...(opts.quick ? { thinking: "off" as const } : {}),
               signal: running.get(session.id)?.signal,
               tools: sentTools,
+              /* A subscription CLI runs its own tools: each call is shown in
+                 its bubble as it happens, the way an API vendor's tool cells
+                 are, so the person watches the work rather than the wait. */
+              onStep: (text: string) => {
+                if (running.get(session.id)?.stopped) return;
+                emitEvent(session, "vendor.tool", "agent", { id: `chat-${session.id}-${rounds}`, text });
+              },
             }, (piece) => {
               // The client coalesces these deltas into one reply (see
               // derive.ts), so a chunk per emit is a sentence appearing,

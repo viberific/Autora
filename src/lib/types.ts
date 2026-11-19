@@ -102,6 +102,9 @@ export const Kind = {
   VendorDelta: "vendor.delta",
   /** What the vendor says it is doing right now, while it works. */
   VendorStatus: "vendor.status",
+  /** A tool the vendor called, as one short line: "Read src/a.ts". Kept as a
+      list in its bubble, so the work is visible, not just the answer. */
+  VendorTool: "vendor.tool",
   /** It finished: how long it took, what it edited, or why it stopped. */
   VendorDone: "vendor.done",
   TodoUpdate: "todo.update",
