@@ -118,7 +118,8 @@ function Roll({ project, track, clip, bw, edit, hold, preview }: Props) {
     const start = snapped(beat);
     const id = "new";
     drag.current = { kind: "draw", id, pitch, start };
-    preview(track.id, pitch, 0.8);
+    // A finger may be about to scroll the grid: its note sounds when it lifts, not when it lands.
+    if (e.pointerType !== "touch") preview(track.id, pitch, 0.8);
     setDrawn({ id, pitch, start, length: Math.min(lastLength.current, clip.length - start), vel: 0.8 });
   };
 
@@ -168,6 +169,7 @@ function Roll({ project, track, clip, bw, edit, hold, preview }: Props) {
     hold(false);
     if (!d) return;
     if (d.kind === "draw" && made) {
+      if (e.pointerType === "touch") preview(track.id, made.pitch, made.vel);
       lastLength.current = made.length;
       edit((p) => {
         const c = p.tracks.find((t) => t.id === track.id)?.clips.find((x) => x.id === clip.id);
@@ -343,7 +345,8 @@ function DrumGrid({ project, track, clip, edit, hold, preview }: Omit<Props, "bw
   };
   useEffect(() => {
     window.addEventListener("pointerup", release);
-    return () => window.removeEventListener("pointerup", release);
+    window.addEventListener("pointercancel", release);
+    return () => { window.removeEventListener("pointerup", release); window.removeEventListener("pointercancel", release); };
   });
 
   const perBar = Math.round(project.beatsPerBar / snap);
@@ -373,7 +376,10 @@ function DrumGrid({ project, track, clip, edit, hold, preview }: Omit<Props, "bw
                       key={s}
                       className={`st-step${h ? " is-on" : ""}${s % perBar === 0 ? " is-bar" : s % Math.max(1, Math.round(1 / snap)) === 0 ? " is-beat" : ""}`}
                       style={{ width: cell, opacity: h ? 0.55 + h.vel * 0.45 : 1 }}
-                      onPointerDown={(e) => { e.preventDefault(); down(d.pitch, s); }}
+                      onPointerDown={(e) => { if (e.pointerType === "touch") return; e.preventDefault(); down(d.pitch, s); }}
+                      /* A finger on a square may be starting to scroll the grid, so a touch places its hit when it lifts (a
+                         tap), and cannot drag across squares: the pointer is captured by the square it landed on. */
+                      onClick={(e) => { if ((e.nativeEvent as PointerEvent).pointerType !== "touch") return; down(d.pitch, s); release(); }}
                       onPointerEnter={(e) => enter(d.pitch, s, e.buttons)}
                       aria-label={`${d.name}, step ${s + 1}`}
                       aria-pressed={!!h}

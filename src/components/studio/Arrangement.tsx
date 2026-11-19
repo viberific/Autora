@@ -156,6 +156,8 @@ export function Arrangement({
     const g = ghost;
     setGhost(null);
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* already released */ }
+    // A tap with a finger makes a bar: the lane scrolls under a finger, so a drag across it cannot draw a clip.
+    if (d && d.kind === "draw" && !g && e.pointerType === "touch" && e.type === "pointerup" && d.at !== undefined && Math.abs(e.clientX - d.x0) < 8) { makeClip(track.id, d.at, bpb); return; }
     if (!d || d.kind !== "draw" || !g || g.clipId !== "") return;
     makeClip(track.id, g.start, g.length);
   };
@@ -276,6 +278,7 @@ export function Arrangement({
                   onPointerDown={(e) => startDraw(e, t)}
                   onPointerMove={(e) => moveDraw(e, t)}
                   onPointerUp={(e) => endDraw(e, t)}
+                  onPointerCancel={(e) => endDraw(e, t)}
                   onDoubleClick={(e) => {
                     if (e.target !== e.currentTarget) return;
                     makeClip(t.id, Math.floor(beatAt(e, t.id) / bpb) * bpb, bpb);

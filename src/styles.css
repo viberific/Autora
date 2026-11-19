@@ -9438,4 +9438,35 @@ body::before {
   .learn-toggle { min-width: 40px; }
   .pw-jump-dock.is-phone button { width: 40px; height: 40px; }
   button.hint.voice-note { min-height: 36px; }
+
+  /* Music's grids scroll under a finger. They took every touch for a drawing gesture (touch-action: none), so a song wider
+     or taller than the window could not be moved at all. Empty space pans; a note, a clip and their edges still take the
+     gesture whole and are dragged. A tap places a note, a hit or a one-bar clip. A note or clip pans with the rest until it is selected (a tap), then it is dragged; the length is its edge. */
+  .st-grid, .st-lane, .st-steps { touch-action: pan-x pan-y; }
+  .st-note:not(.is-selected), .st-clip:not(.is-picked) { touch-action: pan-x pan-y; }
+  .st-note.is-selected, .st-clip.is-picked, .st-note.is-selected .st-note-edge, .st-clip.is-picked .st-clip-size { touch-action: none; }
+  /* A note is a row high, about 14px: its touch area reaches past it, up and down and a little to each side. */
+  .st-note::before { content: ""; position: absolute; inset: -6px -3px; }
+  .st-note-edge { width: min(24px, 45%); }
+  .st-clip-size { width: 24px; }
+  .st-step { min-width: 32px; }
+
+  /* Its tools are one row that slides sideways. Wrapped, they were three rows and took the whole window: on a phone the
+     piano roll beneath them had no height, so no note could be placed at all. */
+  .st-roll-tools { flex-wrap: nowrap; overflow-x: auto; flex: 0 0 auto; scrollbar-width: none; overscroll-behavior-x: contain; touch-action: pan-x; }
+  .st-roll-tools::-webkit-scrollbar { display: none; }
+  .st-roll-tools > * { flex: 0 0 auto; }
+  .st-roll-scroll { min-height: 140px; }
+
+  /* The editor dock gets most of a phone's window once a clip is picked (the song above it is a few rows), and its bar is
+     one line: the clip's name, not also a line of counts. */
+  .st-window.is-phone .st-dock.is-editor { height: clamp(250px, 55%, 380px); }
+  .st-window.is-phone .st-dock-bar { flex-wrap: nowrap; }
+  .st-window.is-phone .st-dock-bar .st-hint { display: none; }
+  .st-window.is-phone .st-arr { min-height: 96px; }
+
+  /* Cards are dragged by a finger (the board around them still scrolls), and the dot that pulls a link out of one is a
+     fingertip's size, not its drawn 10px. */
+  .pa-brd-card, .pa-brd-dot { touch-action: none; }
+  .pa-brd-dot::before { content: ""; position: absolute; inset: -16px; }
 }

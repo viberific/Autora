@@ -218,7 +218,10 @@ releaseNotes: >-
   a canvas now opens at a size you can read and press, instead of being
   shrunk to fit its whole width (its buttons were about 10px). Controls that
   only appeared when a mouse hovered over them, such as a surface's Maximise
-  and Close, are always shown on touch, so you can see them before you press
-  them. Small buttons in the tool windows (Music's transport and tools, window
-  titles, history, the header's pills, the browser's toolbar) have bigger
-  touch areas, 40 to 44px, without changing how they look.
+  and Close, are always shown on touch. Small buttons in the tool windows and
+  the header have bigger touch areas. In Music, the piano roll is usable on a
+  phone (its tools are one sliding row instead of three wrapped ones that left
+  the notes no room), and the piano roll, drum grid and arrangement scroll
+  under a finger: a tap places a note, a hit or a clip, and a selected note or
+  clip is dragged. In flowcharts, cards can be dragged by a finger, and a tap
+  on the selected card edits it.
