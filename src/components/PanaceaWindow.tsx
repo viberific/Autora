@@ -927,7 +927,7 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
                 )}
               </div>
             )}
-            <History past={doc.track.past} future={doc.track.future} onScrub={doc.scrub} onUndo={doc.undo} onRedo={doc.redo} />
+            <History past={doc.track.past} future={doc.track.future} onUndo={doc.undo} onRedo={doc.redo} />
           </div>
           {toast && <div className="pa-toast pa-chrome" role="status">{toast}</div>}
         </Board>

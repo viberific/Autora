@@ -62,7 +62,8 @@ export const FAMILIES: Family[] = [
     id: "cad",
     about: "Panacea 3D engine: model, edit, measure and export shapes (STL for printing, GLB for games)",
     match: (n) => n.startsWith("cad_"),
-    words: /\bautora 3d\b|\b3d[- ]?(?:model|print|design|shape|object|part|scene)|\bcad\b|\.(?:stl|glb)\b|\bstl\b|\bextrud|\bbevel|\bprintable\b/i,
+    // Also "3D" on its own ("make a horse in 3D"), sculpting, meshes and low-poly forms: the organic work the modeller does too.
+    words: /\bautora 3d\b|\b3d\b|\bcad\b|\.(?:stl|glb|obj)\b|\bstl\b|\bextrud|\bbevel|\bprintable\b|\bsculpt|\b(?:3d |triangle |polygon )?mesh(?:es)?\b|\blow[- ]?poly\b|\bfigurine\b/i,
   },
   {
     id: "game",

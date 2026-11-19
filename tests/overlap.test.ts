@@ -73,4 +73,14 @@ test("the same agent is not started twice at once", () => {
   assert.deepEqual(planTasks([{ agent: "Pella", task: "one" }, { agent: "pella", task: "two" }]).batches, [[0], [1]]);
 });
 
+test("sending a 3D model to the game waits for the 3D call that makes it", () => {
+  // Together they ran at once, and the send failed with "nothing visible to send" (usability trial, 2026-11-19, F15).
+  const make = { name: "cad_sculpt_blend", args: { name: "Ball", parts: [{ kind: "sphere", at: { x: 0, y: 0, z: 30 }, radius: 30 }] } };
+  const send = { name: "game_from_model", args: { shapes: ["Ball"], object: "Ball" } };
+  assert.deepEqual(planCalls([make, send]), [[0], [1]], "the send comes after the model is made");
+  assert.deepEqual(planCalls([send, make]), [[0], [1]], "and a model change after a send is not moved ahead of it");
+  // What was always fine stays fine: the game's other calls do not wait for the model.
+  assert.deepEqual(planCalls([make, { name: "game_look", args: { what: "scene" } }]), [[0, 1]]);
+});
+
 console.log(`${passed} passed`);

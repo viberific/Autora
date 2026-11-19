@@ -329,6 +329,28 @@ async function main() {
   } finally {
     await tabbed.close();
   }
+  let watching = 0;
+  let frames = 0;
+  const watched = new LiveBrowser({
+    onFrame: () => { frames++; }, onKeyframe: () => {}, onNav: () => {}, onAction: () => {},
+    onFields: () => {}, watchers: () => watching,
+  });
+  try {
+    await test("the picture stream runs only while someone is watching", async () => {
+      const streaming = () => (watched as unknown as { screencasting: boolean }).screencasting;
+      await watched.goto(`file://${path.resolve("tests/fixtures/form.html")}`);
+      assert.equal(streaming(), false, "nobody is watching, so Chrome encodes no pictures");
+      watching = 1;
+      await watched.watchersChanged();
+      assert.equal(streaming(), true, "a viewer arrived");
+      assert.ok(frames > 0, "the viewer gets a picture at once, not at the page's next change");
+      watching = 0;
+      await watched.watchersChanged();
+      assert.equal(streaming(), false, "the last viewer left");
+    });
+  } finally {
+    await watched.close();
+  }
   const second = new LiveBrowser({
     onFrame: () => {}, onKeyframe: () => {}, onNav: () => {}, onAction: () => {},
     onFields: () => {}, watchers: () => 0,

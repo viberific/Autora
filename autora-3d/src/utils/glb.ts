@@ -98,7 +98,8 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
         uv[i * 2 + 1] = 1 - (u * sn + w * c);
       }
     }
-    const part: Part = { body, pos, nrm, idx, min, max, uv, baseRepeat: baseSlot ? textureRepeat(body, baseSlot) : 1 };
+    const colAttr = g.getAttribute('color');
+    const part: Part = { body, pos, nrm, idx, min, max, uv, baseRepeat: baseSlot ? textureRepeat(body, baseSlot) : 1, ...(colAttr ? { col: new Float32Array(colAttr.array as Float32Array) } : {}) };
     const bound = usableBind(options.rig, body.id, p.count);
     if (bound) {
       part.joints = Uint16Array.from(bound.joints);
@@ -278,6 +279,8 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
     accessors.push({ bufferView: addView(new Uint8Array(q.idx.buffer), 34963), componentType: 5125, count: q.idx.length, type: 'SCALAR' });
 
     const material = q.hair ? hairMaterial(q.body) : surfaceMaterial(q.body, !!q.uv, q.baseRepeat);
+    // A painted form: the colour is in its vertices (COLOR_0 multiplies the base colour), so the base colour is white.
+    if (!q.hair && q.col) material.pbrMetallicRoughness.baseColorFactor = [1, 1, 1, material.pbrMetallicRoughness.baseColorFactor[3]];
     materials.push(material);
     const attributes: Record<string, number> = { POSITION: aPos, NORMAL: aPos + 1 };
     if (q.uv) {

@@ -159,7 +159,8 @@ await test("the Video manual says which edits are done in the window by hand wit
 
 await test("the 3D manual teaches organic forms: blend, loft, smooth, and that the person decides the form", () => {
   const cad = manualText("cad");
-  for (const needle of ["cad_sculpt_blend", "cad_sculpt_loft", "cad_sculpt_smooth", "tapered capsules", "mirror", "Work big to small", "they decide the character of the form"]) {
+  for (const needle of ["cad_sculpt_blend", "cad_sculpt_loft", "cad_sculpt_smooth", "tapered capsules", "mirror", "Work big to small", "they decide the character of the form",
+    "rounded boxes", "carve:true", "parts apply in order", "color paints the surface", "cad_mesh_build", "inside out", "not built from parts", "combine closed mesh shapes"]) {
     assert.ok(cad.includes(needle), `the 3D manual lacks "${needle}"`);
   }
 });
@@ -221,7 +222,7 @@ await test("the Office manual says what the person has picked reaches the briefi
 
 await test("the windows overview says the navigation dock and Tidy appear only when the work needs them, and a blank canvas shows nothing", () => {
   const text = windowsOverview();
-  for (const needle of ["The dock is not there on a blank canvas", "Tidy joins it only once there is more than one piece of work", "A blank canvas shows nothing at all, no instructions", "the canvas name, Load and Save arrive in the app's one top header", "the undo and redo slider once there is something to take back"]) {
+  for (const needle of ["The dock is not there on a blank canvas", "Tidy joins it only once there is more than one piece of work", "A blank canvas shows nothing at all, no instructions", "the canvas name, Load and Save arrive in the app's one top header", "Undo and Redo once there is something to take back"]) {
     assert.ok(text.includes(needle), needle);
   }
 });
@@ -379,6 +380,21 @@ await test("the Panacea manual teaches laying out the windows: the person's gest
   for (const needle of ["Layout. The apps' windows", "Tidy in the board's", "panacea_arrange: `windows`", "`tidy`", "front first", "same gesture"]) {
     assert.ok(p.includes(needle), `the Panacea manual lacks "${needle}"`);
   }
+});
+
+await test("the Games manual carries what the usability trial found: quoted keys, internal slots, lights, the camera every frame, placeholder shapes", () => {
+  const g = manualText("game");
+  for (const needle of ["QUOTED", "never fires", "slot 0 is internal", "camera-3d", "EVERY frame", "ambient light and a sun", "ball that is shaded", "100000", "ChangeSprite", "second layer set to 2d"]) {
+    assert.ok(g.includes(needle), `the Games manual lacks "${needle}"`);
+  }
+});
+
+await test("the 3D manual says there is a Sphere, what Visible work costs, and not to guess ids", () => {
+  const c = manualText("cad");
+  for (const needle of ["Sphere (a true ball", "takes many minutes", "never guess the next one", "cannot use an id made earlier in the same batch"]) {
+    assert.ok(c.includes(needle), `the 3D manual lacks "${needle}"`);
+  }
+  assert.ok(manualText("game").includes("runs after the 3D calls that change the model"));
 });
 
 await test("the Panacea manual teaches the canvas as it is: no toolbar, the library and atoms, ghosts, fading, the history", () => {

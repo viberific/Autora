@@ -197,6 +197,14 @@ RUN apk add --no-cache \
       # driver like this one is actually installed.
       vulkan-loader \
       mesa-vulkan-swrast \
+      # The graphics chip, when the container is given one (/dev/dri in the compose file): Mesa's OpenGL and EGL with the
+      # Intel/AMD drivers (iris, radeonsi) and Intel's Vulkan. Without a device they sit unused and the line above still draws
+      # on the CPU. Without them a 3D page or a game in the server's browser runs at a frame a second on a machine whose own
+      # Chrome runs it perfectly. server/browsergpu.ts tries the chip, checks what the browser really got, and falls back.
+      mesa-dri-gallium \
+      mesa-egl \
+      mesa-gbm \
+      mesa-gles \
       nss \
       freetype \
       harfbuzz \
@@ -206,6 +214,10 @@ RUN apk add --no-cache \
       font-liberation \
       font-noto \
       font-cantarell
+
+# Intel's Vulkan driver, for the graphics chip route that uses Vulkan (server/browsergpu.ts): x86 only, so it is installed where the
+# package exists and skipped where it does not (an ARM image has none), and a failure to install never fails the build.
+RUN (apk add --no-cache mesa-vulkan-intel) || echo "mesa-vulkan-intel is not available here; the browser will use the OpenGL routes to the chip"
 
 # The two subscription CLIs Autora can hand a job to (server/vendor.ts, server/delegates/): Claude Code and the Gemini CLI. Optional,
 # like the other engines: if they cannot be installed the image still builds, and the agent is simply not offered them. libgcc,

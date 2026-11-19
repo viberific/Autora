@@ -20,6 +20,8 @@ export interface RawMesh {
   color?: string;
   /** Where each vertex sits on the file's picture (u, v pairs), when every part of it had a layout. */
   uvs?: number[];
+  /** A colour for each vertex (r, g, b, 0..1), or -1 for the shape's own colour there. */
+  colors?: number[];
   /** The file's base colour picture, as a data URL (glTF `baseColorTexture`, PNG or JPEG inside the file). */
   image?: string;
 }
@@ -379,8 +381,19 @@ export function simplify(mesh: RawMesh, max = MAX_TRIANGLES): RawMesh {
     if (indices.length / 3 <= max || cells < 8) {
       const positions = counts.flatMap((c, n) => [sums[n * 3] / c, sums[n * 3 + 1] / c, sums[n * 3 + 2] / c]);
       // Clustering merges vertices from all over a picture: its layout no longer fits, so it goes (and the picture with it).
-      const { uvs: _u, image: _i, ...rest } = mesh;
-      return { ...rest, positions, indices };
+      const { uvs: _u, image: _i, colors: given, ...rest } = mesh;
+      if (!given || given.length !== mesh.positions.length) return { ...rest, positions, indices };
+      // Paint is local, so it survives: each merged point takes its points' paint, or the shape's colour where most had that.
+      const paint = new Array<number>(counts.length * 3).fill(0);
+      const painted = new Array<number>(counts.length).fill(0);
+      for (let i = 0; i < remap.length; i++) {
+        if (given[i * 3] < 0) continue;
+        const n = remap[i];
+        painted[n]++;
+        for (let c = 0; c < 3; c++) paint[n * 3 + c] += given[i * 3 + c];
+      }
+      const colors = counts.flatMap((c, n) => (painted[n] * 2 >= c ? [0, 1, 2].map((k) => paint[n * 3 + k] / painted[n]) : [-1, -1, -1]));
+      return { ...rest, positions, indices, colors };
     }
     cells = Math.floor(cells * 0.85);
   }
@@ -467,7 +480,7 @@ export function placeMesh(raw: RawMesh, format: MeshFormat, at: MeshPlacement = 
     positions[i * 3 + 2] = r3((z[i] - lo[2]) * scale);
   }
   return {
-    mesh: { positions, indices: mesh.indices, ...(mesh.uvs && mesh.uvs.length / 2 === n ? { uvs: mesh.uvs } : {}) },
+    mesh: { positions, indices: mesh.indices, ...(mesh.uvs && mesh.uvs.length / 2 === n ? { uvs: mesh.uvs } : {}), ...(mesh.colors && mesh.colors.length / 3 === n ? { colors: mesh.colors } : {}) },
     points: [
       { x: r3(cx - half.x), y: r3(cy - half.y) },
       { x: r3(cx + half.x), y: r3(cy - half.y) },
@@ -498,6 +511,19 @@ export function meshGeometry(body: Body3D): THREE.BufferGeometry | null {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   if (m.uvs && m.uvs.length === n * 2) geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(m.uvs), 2));
+  if (m.colors && m.colors.length === n * 3) {
+    // Painted parts keep their colour; the rest is the shape's own, so recolouring the shape still recolours them.
+    // Stored as written (sRGB, like a hex colour); a vertex colour is drawn in linear light, as the shape's colour is.
+    const own = new THREE.Color(body.color);
+    const c = new THREE.Color();
+    const col = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      if (m.colors[i * 3] < 0) c.copy(own);
+      else c.setRGB(m.colors[i * 3], m.colors[i * 3 + 1], m.colors[i * 3 + 2], THREE.SRGBColorSpace);
+      col.set([c.r, c.g, c.b], i * 3);
+    }
+    geometry.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  }
   geometry.setIndex(new THREE.BufferAttribute(n > 65535 ? new Uint32Array(m.indices) : new Uint16Array(m.indices), 1));
   return geometry;
 }

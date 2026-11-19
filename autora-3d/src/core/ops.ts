@@ -9,9 +9,11 @@ import { DEFAULT_HAIR, FUR_START, HAIR_NUMBERS, HAIR_RANGES, MAX_STROKES, mirror
 import { BodyTransform, resizeBody, scaleMeshHeight, selectionBounds, transformBody } from '../utils/transform';
 import { MeshError, meshFormatOf, placeMesh, readMesh, type MeshFormat, type RawMesh } from '../utils/meshImport';
 import { boundsOf } from '../utils/sculpt';
-import { BlendPart, OrganicError, Section, Vec, blendMesh, loftMesh, mirrored, smoothMesh, subdivide } from '../utils/organic';
+import { BlendPart, MAX_DETAIL, OrganicError, Section, Vec, blendMesh, facingOut, loftMesh, mirrored, smoothMesh, subdivide } from '../utils/organic';
 import { cutShape, getPolygonSignedArea } from '../utils/geometry';
 import { joinBodies } from '../utils/join';
+import { buildBodyGeometry } from '../utils/bodyGeometry';
+import { CombineError, combineSolids } from '../utils/manifoldBoolean';
 import { SHAPE_LABELS, ShapeKind, primitiveOutline } from '../utils/primitives';
 import { getBase, outwardNormal, wallEnds, withOutline } from '../utils/outline';
 import { MAX_HEIGHT, MIN_HEIGHT, extrudeFace, faceMeasure, setFaceMeasure } from '../utils/faces';
@@ -162,6 +164,19 @@ export function addShape(doc: Doc, ids: IdGen, a: AddShapeArgs): OpResult<{ id: 
   if (a.x !== undefined) cx = num(a.x, 'x');
   if (a.y !== undefined) cy = num(a.y, 'y');
   if (elevation < 0) return fail('elevation cannot be below the ground (0).');
+
+  if (a.kind === 'sphere') {
+    // A ball is a smooth mesh, not an outline pushed up: width is its diameter, and it stands on its elevation like the rest.
+    const diameter = a.width !== undefined ? num(a.width, 'width') : BASE_SIZE;
+    if (!(diameter >= 1)) return fail('width (a sphere\'s diameter) must be at least 1 mm.');
+    const r = diameter / 2;
+    try {
+      return addSurface(doc, ids, blendMesh([{ kind: 'sphere', a: { x: cx, y: cy, z: elevation + r }, radius: r }], { smooth: 0, detail: 48 }), { name: a.name, color: a.color, material: a.material }, 'Sphere');
+    } catch (e) {
+      if (e instanceof OrganicError) return fail(e.message);
+      throw e;
+    }
+  }
 
   const width = a.width !== undefined ? num(a.width, 'width') : BASE_SIZE;
   const depth = a.depth !== undefined ? num(a.depth, 'depth') : a.width !== undefined && ['cylinder', 'box', 'roundedBox', 'octagon', 'hexagon', 'pentagon', 'star'].includes(a.kind) && a.depth === undefined ? width : BASE_SIZE;
@@ -655,14 +670,121 @@ export function ungroupShapes(doc: Doc, ids: IdGen, a: { group: string }): OpRes
 
 function noWall(bodies: Body3D[]) {
   if (bodies.some((b) => b.frame)) fail('Shapes drawn on a wall cannot be joined or cut yet.');
-  const mesh = bodies.find((b) => b.mesh);
-  if (mesh) fail(`"${mesh.id}" is a mesh brought in from a file: joining and cutting work on outlines, which it does not have.`, 'Group it with the other shapes instead (group_create).');
+}
+
+const hexToRgb = (hex: string): [number, number, number] => {
+  const h = hex.length === 4 ? hex.slice(1).split('').map((x) => x + x).join('') : hex.slice(1);
+  const v = parseInt(h, 16);
+  return [((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255];
+};
+
+/**
+ * Shapes as solids for the solid engine, in the model's own space (mm, z up): a mesh as it is, an outline pushed up with its
+ * bevels. Each point carries the colour it shows (its paint, else its shape's colour), so a combined shape keeps them.
+ */
+function solidsOf(bodies: Body3D[]) {
+  return bodies.map((b) => {
+    const g = buildBodyGeometry(b);
+    if (!g) return fail(`"${b.name}" has no solid to join or cut.`);
+    const pos = g.getAttribute('position');
+    const col = g.getAttribute('color');
+    const own = hexToRgb(b.color);
+    const positions: number[] = [];
+    const colors: number[] = [];
+    for (let i = 0; i < pos.count; i++) {
+      // The viewer's Y-up back to the model's z-up (meshGeometry's turn, undone).
+      positions.push(pos.getX(i), -pos.getZ(i), pos.getY(i));
+      if (b.mesh?.colors && b.mesh.colors.length === b.mesh.positions.length) {
+        // The geometry's colours are in linear light; the stored paint is as written.
+        const lin = [col.getX(i), col.getY(i), col.getZ(i)];
+        colors.push(...lin.map((c) => (c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055)));
+      } else colors.push(...own);
+    }
+    const index = g.getIndex();
+    g.dispose();
+    return { name: b.name, positions, colors, ...(index ? { indices: Array.from(index.array as ArrayLike<number>) } : {}) };
+  });
+}
+
+/** Each point of a combined surface takes the colour of the nearest point of the shapes it came from. */
+function carryColours(out: { positions: number[] }, from: { positions: number[]; colors: number[] }[], cell: number): number[] {
+  const grid = new Map<string, number[]>();
+  const all = from.flatMap((f) => f.positions.map((_, i) => i).filter((i) => i % 3 === 0).map((i) => ({ p: [f.positions[i], f.positions[i + 1], f.positions[i + 2]], c: f.colors.slice(i, i + 3) })));
+  const key = (x: number, y: number, z: number) => `${Math.floor(x / cell)},${Math.floor(y / cell)},${Math.floor(z / cell)}`;
+  all.forEach((v, n) => {
+    const k = key(v.p[0], v.p[1], v.p[2]);
+    const list = grid.get(k);
+    if (list) list.push(n);
+    else grid.set(k, [n]);
+  });
+  const colors: number[] = [];
+  for (let i = 0; i < out.positions.length; i += 3) {
+    const [x, y, z] = [out.positions[i], out.positions[i + 1], out.positions[i + 2]];
+    let best = -1;
+    let near = Infinity;
+    for (let r = 1; best < 0 && r < 64; r *= 2) {
+      const [cx, cy, cz] = [Math.floor(x / cell), Math.floor(y / cell), Math.floor(z / cell)];
+      for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) for (let dz = -r; dz <= r; dz++) {
+        for (const n of grid.get(`${cx + dx},${cy + dy},${cz + dz}`) ?? []) {
+          const d = (all[n].p[0] - x) ** 2 + (all[n].p[1] - y) ** 2 + (all[n].p[2] - z) ** 2;
+          if (d < near) {
+            near = d;
+            best = n;
+          }
+        }
+      }
+    }
+    colors.push(...(best >= 0 ? all[best].c : [-1, -1, -1]));
+  }
+  return colors;
+}
+
+/** Shapes where a mesh is involved, combined by the solid engine into one mesh shape (joined, or the first with the rest cut out). */
+function combineMeshes(doc: Doc, ids: IdGen, bodies: Body3D[], mode: 'union' | 'subtract', label: string): { doc: Doc; body: Body3D } {
+  const solids = solidsOf(bodies);
+  let out;
+  try {
+    out = combineSolids(solids, mode);
+  } catch (e) {
+    if (e instanceof CombineError) return fail(e.message, 'Group them instead (group_create), or rebuild the open one as a closed form (sculpt_blend).');
+    throw e;
+  }
+  if (out.indices.length < 3) return fail(mode === 'union' ? 'Nothing came out of that join.' : 'Nothing is left once the cutters are taken out.');
+  const keep = bodies[0];
+  // One colour for all and no paint: the result is plain. Otherwise the colours each part showed go with it as paint.
+  const plain = bodies.every((b) => b.color === keep.color && !b.mesh?.colors);
+  // The size of the whole (a loop: spreading hundreds of thousands of numbers into Math.max overflows the stack).
+  const lo = [Infinity, Infinity, Infinity];
+  const hi = [-Infinity, -Infinity, -Infinity];
+  for (const sol of solids) for (let i = 0; i < sol.positions.length; i++) {
+    lo[i % 3] = Math.min(lo[i % 3], sol.positions[i]);
+    hi[i % 3] = Math.max(hi[i % 3], sol.positions[i]);
+  }
+  const span = Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
+  const raw: RawMesh = { positions: out.positions, indices: out.indices, ...(plain ? {} : { colors: carryColours(out, solids, Math.max(span / 64, 0.5)) }) };
+  const made = addSurface(doc, ids, raw, { name: label, color: keep.color, material: keep.materialType }, label);
+  const id = made.result.id;
+  const body = { ...(made.doc.bodies.find((b) => b.id === id) as Body3D), ...(keep.surface ? { surface: keep.surface } : {}) };
+  return { doc: made.doc, body };
 }
 
 export function joinShapes(doc: Doc, ids: IdGen, a: { ids: string[] }): OpResult<{ created: string[] }> {
   const targets = idList(doc, a.ids);
   if (targets.length < 2) return fail('Joining needs at least two shapes.');
   noWall(targets);
+  if (targets.some((b) => b.mesh)) {
+    // A mesh has no outline to merge: the solids are joined instead, into one mesh shape (seams where they met can be smoothed).
+    const { doc: made, body } = combineMeshes(doc, ids, targets, 'union', targets[0].name);
+    const gone = new Set(targets.map((b) => b.id));
+    return {
+      doc: {
+        ...made,
+        bodies: [...made.bodies.filter((b) => !gone.has(b.id) && b.id !== body.id), body],
+        groups: made.groups.map((g) => ({ ...g, bodyIds: g.bodyIds.filter((x) => !gone.has(x)) })).filter((g) => g.bodyIds.length > 1),
+      },
+      result: { created: [body.id] },
+    };
+  }
   const stamp = ids('join');
   const merged = joinBodies(targets, stamp);
   if (!merged.length) return fail('Nothing came out of that join.');
@@ -692,6 +814,23 @@ export function subtractShapes(doc: Doc, ids: IdGen, a: { from: string[]; cutter
   const targets = targets0.filter((t) => !cutterIds.has(t.id));
   if (!targets.length) return fail('Nothing to cut from: "from" and "cutters" are the same shapes.');
   noWall([...targets, ...cutters0]);
+  if ([...targets, ...cutters0].some((b) => b.mesh)) {
+    // With a mesh involved each target is cut as a solid: it becomes a mesh shape in its place, and the cutters are used up.
+    let next = doc;
+    const created: string[] = [];
+    for (const t of targets) {
+      const { doc: made, body } = combineMeshes(next, ids, [t, ...cutters0], 'subtract', t.name);
+      next = { ...made, bodies: made.bodies.filter((b) => b.id !== body.id).map((b) => (b.id === t.id ? { ...body, id: t.id, groupId: t.groupId } : b)) };
+      created.push(t.id);
+    }
+    const used = new Set(cutters0.map((c) => c.id));
+    next = {
+      ...next,
+      bodies: next.bodies.filter((b) => !used.has(b.id)),
+      groups: next.groups.map((g) => ({ ...g, bodyIds: g.bodyIds.filter((x) => !used.has(x)) })).filter((g) => g.bodyIds.length > 1),
+    };
+    return { doc: next, result: { created, changed: true } };
+  }
 
   const area = (r: { points: Point2D[]; holes?: Point2D[][] }) =>
     Math.abs(getPolygonSignedArea(r.points)) - (r.holes ?? []).reduce((sum, h) => sum + Math.abs(getPolygonSignedArea(h)), 0);
@@ -1105,7 +1244,7 @@ function addSurface(doc: Doc, ids: IdGen, raw: RawMesh, a: { name?: string; colo
 }
 
 export interface BlendArgs {
-  parts: { kind: 'sphere' | 'capsule' | 'ellipsoid'; at: Vec; to?: Vec; radius?: number; radius2?: number; radii?: Vec }[];
+  parts: { kind: 'sphere' | 'capsule' | 'ellipsoid' | 'box'; at: Vec; to?: Vec; radius?: number; radius2?: number; radii?: Vec; round?: number; turn?: Partial<Vec>; carve?: boolean; color?: string; smooth?: number }[];
   /** How wide the soft joins between parts are, mm. */
   smooth?: number;
   /** Grid cells along the longest side. */
@@ -1116,23 +1255,43 @@ export interface BlendArgs {
   material?: MaterialType;
 }
 
-/** One soft surface from spheres, tapered capsules and ellipsoids (an animal's body, neck, head and legs). */
-export function sculptBlend(doc: Doc, ids: IdGen, a: BlendArgs) {
-  if (!Array.isArray(a.parts) || !a.parts.length) return fail('parts is required: a list of {kind, at, ...}.', 'kind is sphere (radius), capsule (at, to, radius, radius2) or ellipsoid (radii).');
-  const parts: BlendPart[] = a.parts.map((p, i) => {
+/** The parts of a blend, checked: what sculpt_blend and the body-part shapes both build from. */
+export function blendParts(given: BlendArgs['parts']): BlendPart[] {
+  return given.map((p, i) => {
     const w = `parts[${i}]`;
-    if (p.kind === 'sphere') return { kind: 'sphere', a: vec(p.at, `${w}.at`), radius: positive(p.radius, `${w}.radius`) };
+    const extra: Partial<BlendPart> = {};
+    if (p.carve !== undefined) extra.carve = !!p.carve;
+    if (p.color !== undefined) extra.color = colorOf(p.color, '#000000');
+    if (p.smooth !== undefined) {
+      extra.smooth = num(p.smooth, `${w}.smooth`);
+      if (extra.smooth < 0) return fail(`${w}.smooth cannot be negative.`);
+    }
+    if (p.kind === 'sphere') return { kind: 'sphere', a: vec(p.at, `${w}.at`), radius: positive(p.radius, `${w}.radius`), ...extra };
     if (p.kind === 'capsule') {
       const radius = positive(p.radius, `${w}.radius`);
-      return { kind: 'capsule', a: vec(p.at, `${w}.at`), b: vec(p.to, `${w}.to`), radius, radius2: p.radius2 === undefined ? radius : positive(p.radius2, `${w}.radius2`) };
+      return { kind: 'capsule', a: vec(p.at, `${w}.at`), b: vec(p.to, `${w}.to`), radius, radius2: p.radius2 === undefined ? radius : positive(p.radius2, `${w}.radius2`), ...extra };
     }
-    if (p.kind === 'ellipsoid') {
+    if (p.kind === 'ellipsoid' || p.kind === 'box') {
       const r = vec(p.radii, `${w}.radii`);
       if (!(r.x > 0 && r.y > 0 && r.z > 0)) return fail(`${w}.radii must all be above 0.`);
-      return { kind: 'ellipsoid', a: vec(p.at, `${w}.at`), radii: r };
+      if (p.turn !== undefined) {
+        if (typeof p.turn !== 'object' || p.turn === null) return fail(`${w}.turn must be {x, y, z} in degrees.`);
+        extra.turn = { x: num(p.turn.x ?? 0, `${w}.turn.x`), y: num(p.turn.y ?? 0, `${w}.turn.y`), z: num(p.turn.z ?? 0, `${w}.turn.z`) };
+      }
+      if (p.kind === 'box' && p.round !== undefined) {
+        extra.round = num(p.round, `${w}.round`);
+        if (extra.round < 0) return fail(`${w}.round cannot be negative.`);
+      }
+      return { kind: p.kind, a: vec(p.at, `${w}.at`), radii: r, ...extra };
     }
-    return fail(`${w}.kind must be sphere, capsule or ellipsoid.`);
+    return fail(`${w}.kind must be sphere, capsule, ellipsoid or box.`);
   });
+}
+
+/** One soft surface from spheres, tapered capsules, ellipsoids and rounded boxes, less any carved parts (an animal, a face, a hand). */
+export function sculptBlend(doc: Doc, ids: IdGen, a: BlendArgs) {
+  if (!Array.isArray(a.parts) || !a.parts.length) return fail('parts is required: a list of {kind, at, ...}.', 'kind is sphere (radius), capsule (at, to, radius, radius2), ellipsoid (radii) or box (radii, round).');
+  const parts = blendParts(a.parts);
   let all = parts;
   if (a.mirror) {
     if (!['x', 'y', 'z'].includes(a.mirror.axis)) return fail('mirror.axis must be x, y or z.');
@@ -1140,11 +1299,20 @@ export function sculptBlend(doc: Doc, ids: IdGen, a: BlendArgs) {
     const centre = a.mirror.at !== undefined ? num(a.mirror.at, 'mirror.at') : (Math.min(...parts.map((p) => p.a[axis])) + Math.max(...parts.map((p) => p.a[axis]))) / 2;
     all = mirrored(parts, axis, centre);
   }
-  const smallest = Math.min(...parts.map((p) => (p.kind === 'ellipsoid' ? Math.min((p.radii as Vec).x, (p.radii as Vec).y, (p.radii as Vec).z) : (p.radius as number))));
+  const added = parts.filter((p) => !p.carve);
+  if (!added.length) return fail('Every part is carved: give at least one that adds.');
+  const smallest = Math.min(...added.map((p) => (p.radii ? Math.min(p.radii.x, p.radii.y, p.radii.z) : (p.radius as number))));
   const smooth = a.smooth === undefined ? smallest * 0.6 : num(a.smooth, 'smooth');
   if (smooth < 0) return fail('smooth cannot be negative.');
   try {
-    return addSurface(doc, ids, blendMesh(all, { smooth, detail: a.detail === undefined ? 72 : num(a.detail, 'detail') }), a, 'Form');
+    const asked = a.detail === undefined ? 96 : num(a.detail, 'detail');
+    const form = blendMesh(all, { smooth, detail: asked });
+    const made = addSurface(doc, ids, form, a, 'Form');
+    // A grid too big to work out in good time is made coarser: say so, so a finer part is made as its own shape instead.
+    if (form.detail < Math.min(asked, MAX_DETAIL) && 'result' in made && made.result) {
+      made.result.note = [made.result.note, `detail ${asked} would take too long for ${all.length} parts this size; it was made at ${form.detail}. For fine features (fingers, a face) make that part as its own blend and join them.`].filter(Boolean).join(' ');
+    }
+    return made;
   } catch (e) {
     if (e instanceof OrganicError) return fail(e.message);
     throw e;
@@ -1176,6 +1344,84 @@ export function sculptLoft(doc: Doc, ids: IdGen, a: LoftArgs) {
   }
 }
 
+export interface BuildMeshArgs {
+  vertices: number[][];
+  triangles: number[][];
+  uvs?: number[][];
+  colors?: (string | null)[];
+  name?: string;
+  color?: string;
+  material?: MaterialType;
+}
+
+/** The most points and triangles a mesh written out in one call may have (a bigger form is sculpt_blend's or a file's). */
+export const BUILD_LIMITS = { vertices: 20000, triangles: 40000 };
+
+/** A mesh written out point by point and triangle by triangle: a low-poly form, a gem, a terrain, anything the parts cannot make. */
+export function buildMesh(doc: Doc, ids: IdGen, a: BuildMeshArgs) {
+  if (!Array.isArray(a.vertices) || a.vertices.length < 3) return fail('vertices is required: at least three [x, y, z] points in mm (z up).');
+  if (!Array.isArray(a.triangles) || !a.triangles.length) return fail('triangles is required: [a, b, c] triples of vertex numbers (from 0), counter-clockwise seen from outside.');
+  if (a.vertices.length > BUILD_LIMITS.vertices) return fail(`At most ${BUILD_LIMITS.vertices} vertices in one call.`, 'For a big organic form use sculpt_blend; for a ready model, mesh_import.');
+  if (a.triangles.length > BUILD_LIMITS.triangles) return fail(`At most ${BUILD_LIMITS.triangles} triangles in one call.`, 'Make it in pieces and join them (shapes_join), or use sculpt_blend.');
+  const n = a.vertices.length;
+  const positions: number[] = [];
+  a.vertices.forEach((v, i) => {
+    if (!Array.isArray(v) || v.length !== 3 || !v.every((c) => typeof c === 'number' && Number.isFinite(c))) fail(`vertices[${i}] must be [x, y, z], three numbers.`);
+    positions.push(v[0], v[1], v[2]);
+  });
+  const indices: number[] = [];
+  let flat = 0;
+  a.triangles.forEach((t, i) => {
+    if (!Array.isArray(t) || t.length !== 3 || !t.every((c) => Number.isInteger(c) && c >= 0 && c < n)) fail(`triangles[${i}] must be three vertex numbers from 0 to ${n - 1}.`);
+    if (t[0] === t[1] || t[1] === t[2] || t[2] === t[0]) {
+      flat++;
+      return;
+    }
+    indices.push(t[0], t[1], t[2]);
+  });
+  if (!indices.length) return fail('Every triangle uses the same vertex twice: there is no surface.');
+  const raw: RawMesh = { positions, indices };
+  if (a.uvs !== undefined) {
+    if (!Array.isArray(a.uvs) || a.uvs.length !== n) return fail(`uvs needs one [u, v] for each of the ${n} vertices.`);
+    raw.uvs = a.uvs.flatMap((uv, i) => (Array.isArray(uv) && uv.length === 2 && uv.every((c) => typeof c === 'number' && Number.isFinite(c)) ? uv : fail(`uvs[${i}] must be [u, v].`)));
+  }
+  if (a.colors !== undefined) {
+    if (!Array.isArray(a.colors) || a.colors.length !== n) return fail(`colors needs one entry for each of the ${n} vertices: a hex colour, or null for the shape's colour.`);
+    raw.colors = a.colors.flatMap((c, i) => {
+      if (c === null) return [-1, -1, -1];
+      const hex = colorOf(c, '#000000');
+      const h = hex.length === 4 ? hex.slice(1).split('').map((x) => x + x).join('') : hex.slice(1);
+      const v = parseInt(h, 16);
+      if (Number.isNaN(v)) return fail(`colors[${i}] must be a hex colour or null.`);
+      return [((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255];
+    });
+  }
+  // How many edges have only one triangle: a closed solid has none (it prints, joins and cuts); an open sheet is still shown.
+  const edges = new Map<string, number>();
+  for (let t = 0; t < indices.length; t += 3) {
+    for (let e = 0; e < 3; e++) {
+      const [p, q] = [indices[t + e], indices[t + (e + 1) % 3]];
+      const key = p < q ? `${p},${q}` : `${q},${p}`;
+      edges.set(key, (edges.get(key) ?? 0) + 1);
+    }
+  }
+  const open = [...edges.values()].filter((c) => c === 1).length;
+  // Inside-out (clockwise) winding is the common slip: turned round, so it is lit and printed the right way.
+  const turned = facingOut(raw);
+  const flipped = turned !== raw;
+  const made = addSurface(doc, ids, turned, a, 'Mesh');
+  if ('result' in made && made.result) {
+    const notes = [
+      made.result.note,
+      flipped ? 'Its triangles were wound inside out (clockwise seen from outside); they were turned round.' : '',
+      flat ? `${flat} triangle${flat === 1 ? '' : 's'} used a vertex twice and were left out.` : '',
+      open ? `It is open: ${open} edge${open === 1 ? ' has' : 's have'} a triangle on one side only, so it is a surface, not a solid (fine to look at; to print it or join it, close it).` : '',
+    ].filter(Boolean);
+    if (notes.length) made.result.note = notes.join(' ');
+  }
+  return made;
+}
+
 export interface SmoothArgs {
   id: string;
   /** Rounds of smoothing (default 2). */
@@ -1196,28 +1442,29 @@ export function smoothShape(doc: Doc, a: SmoothArgs) {
   if (passes < 0 || passes > 20) return fail('passes must be 0 to 20.');
   if (strength < 0 || strength > 1) return fail('strength must be 0 to 1.');
   if (split < 0 || split > 2) return fail('subdivide must be 0, 1 or 2.');
-  let mesh: RawMesh = { positions: b.mesh.positions, indices: b.mesh.indices };
+  let mesh: RawMesh = { positions: b.mesh.positions, indices: b.mesh.indices, ...(b.mesh.colors ? { colors: b.mesh.colors } : {}) };
   for (let i = 0; i < split; i++) {
     if (mesh.indices.length / 3 * 4 > 200000) return fail('That would make more than 200000 triangles.', 'Use a lower subdivide.');
     mesh = subdivide(mesh);
   }
   mesh = smoothMesh(mesh, passes, strength);
   const p = mesh.positions;
-  const xs: number[] = [];
-  const ys: number[] = [];
+  // A loop, not Math.min(...all): a subdivided form has more points than a spread call can take.
+  const lo = { x: Infinity, y: Infinity };
+  const hi = { x: -Infinity, y: -Infinity };
   let top = 0;
   for (let i = 0; i < p.length; i += 3) {
-    xs.push(p[i]);
-    ys.push(p[i + 1]);
+    lo.x = Math.min(lo.x, p[i]);
+    hi.x = Math.max(hi.x, p[i]);
+    lo.y = Math.min(lo.y, p[i + 1]);
+    hi.y = Math.max(hi.y, p[i + 1]);
     top = Math.max(top, p[i + 2]);
   }
-  const lo = { x: Math.min(...xs), y: Math.min(...ys) };
-  const hi = { x: Math.max(...xs), y: Math.max(...ys) };
   const points = [{ x: lo.x, y: lo.y }, { x: hi.x, y: lo.y }, { x: hi.x, y: hi.y }, { x: lo.x, y: hi.y }].map((q) => ({ x: round2(q.x), y: round2(q.y) }));
   const positions = p.map((n) => Math.round(n * 1000) / 1000);
   return {
     // Smoothing alone keeps every vertex, so a picture's layout still fits; splitting triangles makes new ones, and it goes.
-    doc: replace(doc, b.id, { mesh: { positions, indices: mesh.indices, ...(split === 0 && b.mesh.uvs ? { uvs: b.mesh.uvs } : {}) }, points, basePoints: points, extrusionHeight: Math.max(1, round2(top)) }),
+    doc: replace(doc, b.id, { mesh: { positions, indices: mesh.indices, ...(split === 0 && b.mesh.uvs ? { uvs: b.mesh.uvs } : {}), ...(mesh.colors ? { colors: mesh.colors } : {}) }, points, basePoints: points, extrusionHeight: Math.max(1, round2(top)) }),
     result: { id: b.id, triangles: mesh.indices.length / 3 },
   };
 }

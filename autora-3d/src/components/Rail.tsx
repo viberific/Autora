@@ -8,6 +8,7 @@ import {
   BookmarkPlus,
   Boxes,
   Circle,
+  CircleDot,
   Combine,
   Eye,
   EyeOff,
@@ -65,6 +66,7 @@ const hasTexture = (b?: { surface?: Surface }) => !!(b?.surface?.pattern || b?.s
 const SHAPE_ICONS: Record<ShapeKind, LucideIcon> = {
   box: Square,
   roundedBox: SquareRoundCorner,
+  sphere: CircleDot,
   cylinder: Circle,
   triangle: Triangle,
   wedge: TriangleRight,

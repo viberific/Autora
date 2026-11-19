@@ -203,13 +203,17 @@ await test("a mesh has no outline to edit, and says so", async () => {
   assert.ok(!none.ok);
 });
 
-await test("a mesh exports with the rest of the model, but is not joined or cut as an outline", async () => {
+await test("a mesh exports with the rest of the model, groups, and joins as a solid (a mesh has no outline to merge)", async () => {
   const e = new core.Engine(core.emptyDoc());
   const id = ((await e.execute("mesh_import", { data: b64(stlBinary(10)), name: "a.stl", size: 50 })).result as { id: string }).id;
   const other = ((await e.execute("shape_add", { kind: "box", width: 20, depth: 20, height: 20 })).result as { id: string }).id;
-  const joined = await e.execute("shapes_join", { ids: [id, other] });
-  assert.ok(!joined.ok && /mesh brought in from a file/.test(joined.error ?? ""), joined.error);
   assert.ok((await e.execute("group_create", { ids: [id, other], name: "Pair" })).ok);
+  // Joined, the closed mesh and the box become ONE mesh shape (the solids are united, not their outlines).
+  const joined = await e.execute("shapes_join", { ids: [id, other] });
+  assert.ok(joined.ok, joined.error);
+  const bodies = e.getDoc().bodies;
+  assert.equal(bodies.length, 1);
+  assert.ok(bodies[0].mesh, "the result is a mesh shape");
   const out = await e.execute("export", { format: "glb" });
   assert.ok(out.ok && (out.result as { bytes: number }).bytes > 200);
   const stl = await e.execute("export", { format: "stl" });

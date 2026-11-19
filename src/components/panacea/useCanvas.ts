@@ -25,7 +25,7 @@ const HISTORY = 120;
  *   - `edit` changes a copy, remembers the old one as a named step, and saves after a pause;
  *   - when the agent changes the canvas the server says so and the new one is loaded, as a step of its own, so the
  *     person can take any of the agent's changes back;
- *   - the history is one track of every step, the person's and the agent's: `scrub` moves along it;
+ *   - the history is one track of every step, the person's and the agent's, walked with `undo` and `redo`;
  *   - while something is being dragged (`hold`), an agent's change waits for the pointer to come up.
  */
 export function useCanvas(sessionId: string, enabled = true) {
@@ -226,29 +226,6 @@ export function useCanvas(sessionId: string, enabled = true) {
     schedule();
   }, [put, schedule]);
 
-  /** Move to the point in the history after `n` steps (0 is before the first one). */
-  const scrub = useCallback((n: number) => {
-    const target = Math.max(0, Math.min(n, past.current.length + future.current.length));
-    let moved = false;
-    while (past.current.length > target) {
-      const back = past.current.pop()!;
-      future.current.push({ ...back, canvas: live.current });
-      live.current = back.canvas;
-      moved = true;
-    }
-    while (past.current.length < target && future.current.length) {
-      const next = future.current.pop()!;
-      past.current.push({ ...next, canvas: live.current });
-      live.current = next.canvas;
-      moved = true;
-    }
-    if (!moved) return;
-    lastKey.current = null;
-    put(live.current);
-    sync();
-    schedule();
-  }, [put, schedule]);
-
   const hold = useCallback((on: boolean) => {
     holding.current = Math.max(0, holding.current + (on ? 1 : -1));
     if (holding.current === 0 && waiting.current) {
@@ -267,8 +244,8 @@ export function useCanvas(sessionId: string, enabled = true) {
   const refresh = useCallback(() => load(false, true), [load]);
 
   return useMemo(
-    () => ({ canvas, live, ready, save, notice, fresh, track, edit, quietly, undo, redo, scrub, hold, dismiss, saveNow, refresh, canUndo: track.past.length > 0, canRedo: track.future.length > 0 }),
-    [canvas, ready, save, notice, fresh, track, edit, quietly, undo, redo, scrub, hold, dismiss, saveNow, refresh],
+    () => ({ canvas, live, ready, save, notice, fresh, track, edit, quietly, undo, redo, hold, dismiss, saveNow, refresh, canUndo: track.past.length > 0, canRedo: track.future.length > 0 }),
+    [canvas, ready, save, notice, fresh, track, edit, quietly, undo, redo, hold, dismiss, saveNow, refresh],
   );
 }
 

@@ -527,7 +527,7 @@ input[type="checkbox"]:disabled { opacity: 0.5; cursor: default; }
 
 /* Anything that counts up gets fixed-width figures, or it jitters as it ticks.
    Inter's proportional numerals are the default and the wrong default here. */
-.badge.tokens, .stats, .shot-count, .cell-at {
+.badge.tokens, .stats, .cell-at {
   font-variant-numeric: tabular-nums;
 }
 
@@ -1075,6 +1075,12 @@ input[type="checkbox"]:disabled { opacity: 0.5; cursor: default; }
   font-family: inherit; font-size: var(--fs-md); line-height: 1.55;
 }
 .composer textarea:focus { outline: none; }
+.composer-connect {
+  display: block; margin: 0 0 4px; padding: 2px 0; border: 0; background: none; cursor: pointer;
+  color: var(--accent-light, var(--accent)); font: inherit; font-size: var(--fs-sm); font-weight: 600; text-align: left;
+}
+.composer-connect:hover { text-decoration: underline; }
+.composer-connect:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-sm); }
 .composer textarea::placeholder { color: var(--text-3); }
 .composer-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 /* The row wraps for one thing: a note that has something to say -- a file
@@ -2254,28 +2260,6 @@ label + .jf-hint { margin-top: -5px; }
   animation: rise var(--dur-2) var(--ease) both; pointer-events: none;
 }
 
-.shot-strip {
-  display: flex; align-items: center; gap: 10px; padding: 6px 11px;
-  border-top: 1px solid var(--border); background: var(--s2);
-}
-.shot-strip input {
-  appearance: none; -webkit-appearance: none;
-  flex: 1; height: 18px; margin: 0; background: transparent; cursor: pointer;
-}
-.shot-strip input::-webkit-slider-runnable-track {
-  height: 3px; border-radius: var(--r-pill); background: var(--s4);
-}
-.shot-strip input::-webkit-slider-thumb {
-  appearance: none; -webkit-appearance: none;
-  width: 13px; height: 13px; margin-top: -5px; border-radius: 50%;
-  background: #fff; border: 3px solid var(--accent);
-}
-.shot-strip input::-moz-range-track { height: 3px; border-radius: var(--r-pill); background: var(--s4); }
-.shot-strip input::-moz-range-thumb {
-  width: 13px; height: 13px; border-radius: 50%; background: #fff; border: 3px solid var(--accent);
-}
-.shot-count { font-family: var(--mono); font-size: var(--fs-2xs); color: var(--text-3); flex: 0 0 auto; }
-
 .shot-acts { border-top: 1px solid var(--border); background: var(--s1); }
 .shot-acts-toggle {
   display: flex; align-items: center; gap: 6px; width: 100%;
@@ -3051,19 +3035,6 @@ label + .jf-hint { margin-top: -5px; }
 
 /* --- moods of the one presence (see AutoraMark.tsx) --- */
 
-/* Idle: a breath slower than any other motion in the app, and every so often
-   the mark catches the light. Switched on, not busy. */
-.amark.is-rest.is-idle .amark-wash { animation: amarkIdle 6.5s ease-in-out infinite; }
-.amark.is-rest.is-idle .amark-shape { animation: amarkTwinkle 13s ease-in-out infinite; }
-@keyframes amarkIdle {
-  0%, 100% { transform: scale(0.5); opacity: 0.2; }
-  50%      { transform: scale(0.66); opacity: 0.34; }
-}
-@keyframes amarkTwinkle {
-  0%, 88%, 100% { filter: drop-shadow(0 0 2px rgba(var(--accent-rgb), 0.45)); transform: scale(1); }
-  93%           { filter: drop-shadow(0 0 8px rgba(var(--glow-light-rgb), 0.95)) brightness(1.35); transform: scale(1.08); }
-}
-
 /* Waiting on you: warm, and reaching -- out and back, with a pause, like a
    hand raised rather than an alarm. */
 .amark.is-waiting .amark-wash { fill: var(--warn); animation: amarkBeckon 2.8s var(--ease) infinite; }
@@ -3545,9 +3516,6 @@ select.set-select {
   .ses-row { padding: 13px 12px; }
   .mp-row { padding: 13px 12px; }
   .ses-act { min-width: 40px; height: 40px; }
-  .shot-strip input { height: 32px; }
-  .shot-strip input::-webkit-slider-thumb { width: 20px; height: 20px; margin-top: -9px; }
-  .shot-strip input::-moz-range-thumb { width: 20px; height: 20px; }
 }
 
 /* Dictate and Talk: labelled, side by side in the composer's tool row. */
@@ -4278,8 +4246,7 @@ input.shot-where[readonly] { cursor: default; }
 
 /* Drawn here rather than left to the browser, which paints the unfilled part
    of an accent-coloured track near-white whatever the page's scheme. Filled
-   up to --fill, set from the value by the page. Same thumb as the frame
-   scrubber in a browser card. */
+   up to --fill, set from the value by the page. */
 .set-card input[type="range"] {
   appearance: none; -webkit-appearance: none;
   height: 18px; margin: 2px 0 0; padding: 0; border: 0; background: none; cursor: pointer;
@@ -8458,12 +8425,6 @@ body.is-resizing iframe { pointer-events: none; }
 .pa-hbtn { display: grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 50%; background: transparent; color: var(--text-2); cursor: pointer; }
 .pa-hbtn:hover:not(:disabled) { background: var(--s3); color: var(--text); }
 .pa-hbtn:disabled { color: var(--text-3); opacity: 0.5; cursor: default; }
-.pa-htrack { position: relative; width: 120px; height: 22px; cursor: pointer; touch-action: none; }
-.pa-htrack::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 2px; margin-top: -1px; background: var(--s3); border-radius: var(--r-pill); }
-.pa-htick { position: absolute; top: 50%; width: 2px; height: 8px; margin: -4px 0 0 -1px; border-radius: var(--r-pill); background: var(--text-3); }
-.pa-htick.is-agent { background: var(--accent); }
-.pa-htick.is-ahead { opacity: 0.3; }
-.pa-hmark { position: absolute; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: var(--text); box-shadow: 0 0 0 2px var(--s1); transition: left var(--dur-1) var(--ease); }
 .pa-selbar { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 4px 4px 4px 12px; background: var(--s1); border: 1px solid var(--border-strong); border-radius: var(--r-pill); box-shadow: var(--shadow); font-size: var(--fs-xs); color: var(--text-2); animation: paArrive var(--dur-2) var(--ease) both; }
 .pa-selbar button { border: 0; background: var(--s3); color: var(--text); font: 500 var(--fs-xs) var(--sans); padding: 5px 10px; border-radius: var(--r-pill); cursor: pointer; }
 .pa-selbar button:hover { background: var(--s4); }

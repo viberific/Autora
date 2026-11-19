@@ -57,10 +57,9 @@ import {
  * assembling itself is doing. Callers that know only that the agent is busy
  * can keep passing "working", which is what the two of them replaced.
  *
- * The app's one presence (the mark in the sidebar) also takes `idle`: at rest
- * it breathes very slowly and now and then catches the light, so something
- * that is switched on never looks switched off. Only that one mark does it --
- * a thread full of breathing avatars would be wallpaper, not life.
+ * At rest every mark holds still. It used to breathe and twinkle there, but
+ * an animation inside an SVG is redrawn on the main thread every frame, so a
+ * mark that was always on screen kept the page busy forever.
  *
  * `settle` is the one worth explaining: a morph that simply stops is a
  * flinch, and the moment a reply finishes is exactly the moment worth
@@ -280,7 +279,6 @@ export function AutoraMark({
   state = "rest",
   size = 16,
   className = "",
-  idle = false,
   attention = 0,
   pulse = 0,
   voice = null,
@@ -289,8 +287,6 @@ export function AutoraMark({
   state?: MarkState;
   size?: number;
   className?: string;
-  /** The app's presence: breathe slowly at rest instead of holding still. */
-  idle?: boolean;
   /** 0..1 -- how closely it is attending to you right now (typing). */
   attention?: number;
   /** Change it to play the settle bloom once. */
@@ -345,7 +341,7 @@ export function AutoraMark({
 
   return (
     <span
-      className={`amark is-${shown} ${close !== null ? "is-closing" : ""} ${idle ? "is-idle" : ""} ${className}`.replace(/\s+/g, " ").trim()}
+      className={`amark is-${shown} ${close !== null ? "is-closing" : ""} ${className}`.replace(/\s+/g, " ").trim()}
       style={{
         width: size,
         height: size,

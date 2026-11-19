@@ -5,7 +5,7 @@
  *   npx tsx tests/panacea-rest.test.ts
  */
 import assert from "node:assert/strict";
-import { describeArgs, heldWords, stepWords } from "../src/components/ToolCell";
+import { describeArgs, heldTitle, heldWords, stepWords } from "../src/components/ToolCell";
 import { derive } from "../src/lib/derive";
 import type { AutoraEvent } from "../src/lib/types";
 
@@ -58,6 +58,15 @@ test("a step the app held back is not a failure: planning, the person's words, s
   assert.deepEqual([spans.get("d")!.status, spans.get("d")!.held], ["denied", undefined]);
   assert.deepEqual([spans.get("e")!.status, spans.get("e")!.held], ["error", undefined]);
   assert.deepEqual(["planning", "theirs", "busy", undefined].map((h) => heldWords(h as never)), ["planning first", "yours to write", "waited for you", "declined"]);
+});
+
+test("a step the app held back reads as not run, so \"Making 35 changes\" never looks like work that was done", () => {
+  // Usability trial 2026-11-19 (F16): a follow-up turn starts in planning, its 35 edits came back "Not run", and the thread
+  // said "Making 35 changes" with only a small chip to tell them apart.
+  assert.equal(heldTitle("Making 35 changes", 1, 1), "Not run: making 35 changes");
+  assert.equal(heldTitle("3 steps", 3, 3), "Not run: 3 steps");
+  assert.equal(heldTitle("3 steps", 1, 3), "3 steps", "some of them ran: the title is as it was");
+  assert.equal(heldTitle("Opening the game", 0, 1), "Opening the game");
 });
 
 console.log(`\n${passed} panacea-rest tests passed`);

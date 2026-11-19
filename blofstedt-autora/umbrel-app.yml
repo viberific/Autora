@@ -208,15 +208,18 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  A subscription turn's tool calls show under that vendor's own mark, so a
-  Gemini step reads as Gemini's and a Claude step as Claude's, not the
-  agent's. The tool lines now name the tool and what it acted on instead of
-  repeating a bare "tool". The CLI is found on the PATH after a restart,
-  which it was not before.
-  Gemini and Claude can be picked as the model, on your own subscription
-  instead of a key. Choose "Gemini (subscription)" or "Claude (subscription)"
-  in Settings: each turn runs the signed-in command-line tool and streams the
-  answer into the chat, and everything it reads, writes or runs appears as a
-  step you can watch, the same as the agent's own calls. Nothing is billed
-  per token. The two can also be called as tools while another model answers.
-  Gemini's sign-in had lapsed and is signed in again.
+  Making a first game is easier. A 3D model you send to a game is lit
+  and the camera guidance is spelled out, so it no longer comes out
+  black; a model and the call that sends it can be asked for together.
+  Controls the agent writes for keys and buttons are checked properly
+  (they used to look fine and do nothing), placeholder pictures now
+  include a shaded ball, a button and arrows, and Autora 3D has a
+  Sphere. A step Autora held back says "Not run" instead of looking
+  done, typing on the canvas goes to the message box instead of
+  jumping pages (Mind is now Alt+K), and with no model connected there
+  is a button to connect one. Also new in 3D: triangles, carving and
+  paint for the agent's models, and meshes that can be joined and cut.
+  The browser Autora drives now uses the machine's graphics chip when it
+  can, so 3D pages and games stop crawling at a frame a second. Autora
+  uses less of your computer when idle, and the sliders under
+  browser cards and in the canvas history are gone.

@@ -543,6 +543,18 @@ Spectra's fetched renderer is most of what is on disk.
   route does not take one yet; `docs/autora-3d-mesh.patch` is to be applied to the 3D-Modeling repository, or the next
   `sync-autora-3d.mjs` loses it. Test: `tests/mesh-import.test.ts`.
   **Organic forms** (`autora-3d/src/utils/organic.ts`, `docs/autora-3d-organic.patch`): `sculpt_blend` (spheres, tapered capsules, ellipsoids melted by a smooth union and meshed with surface nets, optional mirror), `sculpt_loft` (a tube through sections on a Catmull-Rom path) and `sculpt_smooth` (optional 4-way subdivision, then Taubin smoothing) each make or change a mesh shape (`ops.ts` `addSurface` goes through `placeMesh`, so a form is an ordinary mesh). No window controls yet, so they are "Not by hand" (`NO_CONTROL`). Test: `tests/sculpt.test.ts`. `docs/autora-3d-organic.patch` is to be applied to the 3D-Modeling repository, or the next sync loses it.
+  **Mesh tools** (`docs/autora-3d-meshtools.patch`, applied after the surfaces patch): `sculpt_blend` parts can also be rounded
+  `box`es, an ellipsoid or box can be `turn`ed, a part with `carve` is taken out (parts apply in order, so a part after a carve
+  fills back in), a part's `color` paints the surface where it is the nearest part, and a part's own `smooth` overrides the
+  blend's. Detail goes to 256, lowered to keep a call to a few seconds (`BUDGET` in `organic.ts`; the reply says so). Paint is
+  `MeshData.colors` (sRGB, `-1` = the shape's own colour, so recolouring still works): `meshGeometry` turns it into a vertex
+  colour attribute, `surfaceMaterial` draws it white-based, `bodySignature` rebuilds on a recolour, `glb.ts` writes `COLOR_0`,
+  and subdivide/simplify carry it. `mesh_build` makes a shape from written-out vertices and triangles (optional uvs and
+  colors; inside-out winding is turned round; open edges are reported). `shapes_join` / `shapes_subtract` with a mesh among
+  the shapes combine them as solids in Manifold (`combineSolids` in `manifoldBoolean.ts`) into one mesh shape, each input's
+  colour carried as paint; a shape that is not closed is refused naming it. Tests: `tests/sculpt.test.ts`. The patch is to be
+  applied to the 3D-Modeling repository, or the next sync loses it.
+  **Sphere** (`docs/autora-3d-sphere.patch`, after the mesh tools patch): `ShapeKind` has `sphere`; `addShape` makes it as a one-part blend (`width` is the diameter; it stands on `elevation` or `onTopOf` like any shape), the Shapes menu has it (`CircleDot`), and `shape_add`'s enum lists it. Test: `tests/sculpt.test.ts`.
   **Sculpting by hand** (`autora-3d/src/utils/sculpt.ts`, `docs/autora-3d-sculpt.patch`, applied after the organic patch): the Sculpt tool (`SculptPanel` in `TopBar.tsx`, `sculpt` prop of `ModelViewer3D`) is the *person's* brush on a mesh shape: Grab, Build/Carve, Smooth, Flatten, size, strength, mirror, Finer surface. `SculptMesh` welds vertices that share a place, so seams do not tear; a stroke edits a plain preview geometry live and the viewer hands back ONE `onUpdateBody` on release (one undo step, via `onDragStateChange`). `bodySignature` includes the mesh object so the shape is rebuilt. The agent deliberately has no brush tool (the shaping is the person's; see the Core principle in CLAUDE.md). The person's stroke is a command (`sculpt_apply`, authority `person`: `ToolSpec.authority`, refused to the agent in `execute` and not in `cadSPECS`). **The command layer** (`autora-3d/src/core/commands.ts`, `engine.ts`, `docs/autora-3d-commands.patch`): `Engine.execute` logs every non-read call as a `CommandRecord` (name, who, ok, changed, revision, a short summary, and the model before and after, which is its inverse); a change the window sends (`setDoc(doc, "person")`) is logged as `person_edit`, described from the difference (`describeEdit`); `revertTo(n)` puts the model back as a new change; `onCommand` feeds `server/caddesk.ts`, which emits each as a `cad.command` event through `emitEvent()`, serves `GET /api/cad/:session/commands` and `POST /api/cad/:session/revert`, and the agent reads it with `cad_history_log`. Tests: `tests/commands-3d.test.ts` and the e2e case in `tests/e2e-cad.test.ts`. Test: `tests/sculpt-brush.test.ts`; verified in a real browser by a scratch Playwright run (stroke changes the mesh, one undo restores it).
   **Surfaces, hair and light** (`autora-3d/src/utils/surface.ts`, `utils/hair.ts`, `components/surfaceLook.ts`, `components/SurfacePanels.tsx`,
   `docs/autora-3d-surfaces.patch`, applied after the sculpt patch): a shape's `surface` overrides its preset's numbers (`resolveSurface`: roughness,
@@ -1172,3 +1184,19 @@ browser, pictures by default until R7 is measured on an Umbrel box and a phone).
   fallback, a `__pwned` probe in the sandboxed frame, no request from the viewer to the site); `ui-browser-mirror.test.ts` (the
   built app: the copy is drawn, scrolling asks for no pictures and moves the real page, a click and typing reach the real page,
   a canvas is a live picture, Picture mode brings pictures back).
+
+- **Usability-trial fixes (2026-11-19, `docs/TRY-IT-2026-11-19-GAME.md`)**: `server/overlap.ts` gives `game_from_model` a footprint that reads `window:cad_` (it exports the 3D model), so it never
+  runs beside the `cad_*` call that makes the model; `heldTitle` (`ToolCell.tsx`) says "Not run: ..." for steps the app held back; `lightScene` (`src/lib/gamephysics.ts`) gives the base layer an
+  ambient light and a sun when a model is placed and the layer has none (unlit 3D is black); `checkInstruction` (`server/gamedesk.ts`) also flags an unquoted `keyboardKey` / `mouseButton`
+  and a value in an internal slot (a parameter list that starts at 1 has `""` at 0); `game_template camera-3d` is the every-frame camera event; `placeholderPng` makes rounded, triangle, ring,
+  arrow, shaded ball and button pictures; in `App.tsx` the shortcuts for Mind and voice are Alt+K and Alt+V and a bare letter with nothing focused goes to the message box
+  (`tests/ui-typing.test.ts`), and with no model connected the composer shows a "Connect a model" button.
+
+- **The browser on the graphics chip** (`server/browsergpu.ts`, `launch` in `server/browser.ts`, `tests/gpu.test.ts`): a headless Chromium in a container draws WebGL on the CPU (SwiftShader /
+  llvmpipe) unless given the chip, so a 3D page or game ran at about a frame a second on a machine whose own Chrome ran it perfectly. Three parts: the compose file passes `/dev/dri`, the
+  Dockerfile installs Mesa (`mesa-dri-gallium`, `mesa-egl`, `mesa-gbm`, `mesa-gles`, and `mesa-vulkan-intel` where it exists), and `gpuCandidates` lists routes (ANGLE over EGL, over Vulkan
+  pointed at the chip's own ICD, over GLES) that `pickGpu` tries in turn. Each is **verified**: the browser is asked for its WebGL `UNMASKED_RENDERER` (`webglRenderer`), and one that is
+  SwiftShader / llvmpipe is closed and the next tried; if none gets the chip the browser starts as it always did. With no render node nothing is tried. The outcome is remembered for the life of
+  the server (`gpuChoice`) and logged (`[browser] graphics chip in use (OpenGL (EGL)): ANGLE (Intel, ...)`, or `drawing on the CPU`). `AUTORA_BROWSER_GPU=off` turns it off; `AUTORA_BROWSER_GPU_ARGS`
+  replaces the routes with the person's own flags. The picture stream to the window is unchanged (JPEG from the screencast); only the drawing moved. **Not verified on a real chip in the
+  sandbox it was written in**: the selection and fallback are tested, a faked render node proved the fallback end to end, but which route an N95 accepts is learned from its log line.

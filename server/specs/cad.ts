@@ -90,7 +90,7 @@ export const cadSPECS: ToolSpec[] = [
   {
     "name": "cad_shape_add",
     "group": "files",
-    "description": "Add a stock shape: box, roundedBox, cylinder, triangle, wedge, pentagon, hexagon, octagon or star. It is centred at x,y (default: beside the existing shapes), stands on elevation (default 0, the ground) and rises height mm. With onTopOf it sits on top of that shape.",
+    "description": "Add a stock shape: box, roundedBox, sphere (a true ball: width is its diameter), cylinder, triangle, wedge, pentagon, hexagon, octagon or star. It is centred at x,y (default: beside the existing shapes), stands on elevation (default 0, the ground) and rises height mm. With onTopOf it sits on top of that shape.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -99,6 +99,7 @@ export const cadSPECS: ToolSpec[] = [
           "enum": [
             "box",
             "roundedBox",
+            "sphere",
             "cylinder",
             "triangle",
             "wedge",
@@ -724,7 +725,7 @@ export const cadSPECS: ToolSpec[] = [
   {
     "name": "cad_mesh_import",
     "group": "files",
-    "description": "Bring in a triangle mesh from a file as ONE shape: .glb/.gltf, .obj or .stl (a free CC0 model from Poly Pizza, Quaternius or Sketchfab, or one made in Blender). It arrives as the real surface, so organic forms (an animal, a face, a scan) are possible, which stock shapes and extruded outlines cannot give. It stands on the ground; size sets its longest side in mm (without it a GLB is read in metres, STL and OBJ in mm, and a result that is a speck or a building is fitted to 100 mm). Very large meshes are simplified to 60000 triangles. Move, turn, resize (cad_shape_resize scales it whole), recolour, group and export work on it; it has no outline, faces, bevels or holes, and cannot be joined or cut with the outline tools. A GLB's base colour picture (texture) comes with it when it is inside the file and every part has a layout (UVs); otherwise colour it with color, material or cad_surface_set.",
+    "description": "Bring in a triangle mesh from a file as ONE shape: .glb/.gltf, .obj or .stl (a free CC0 model from Poly Pizza, Quaternius or Sketchfab, or one made in Blender). It arrives as the real surface, so organic forms (an animal, a face, a scan) are possible, which stock shapes and extruded outlines cannot give. It stands on the ground; size sets its longest side in mm (without it a GLB is read in metres, STL and OBJ in mm, and a result that is a speck or a building is fitted to 100 mm). Very large meshes are simplified to 60000 triangles. Move, turn, resize (cad_shape_resize scales it whole), recolour, group and export work on it; it has no outline, faces, bevels or holes; cad_shapes_join and cad_shapes_subtract work on it as a solid when it is closed. A GLB's base colour picture (texture) comes with it when it is inside the file and every part has a layout (UVs); otherwise colour it with color, material or cad_surface_set.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -792,13 +793,13 @@ export const cadSPECS: ToolSpec[] = [
   {
     "name": "cad_sculpt_blend",
     "group": "files",
-    "description": "Make ONE smooth, organic shape by blending simple parts into a soft surface: the way to model an animal, a creature, a hand, a bottle, a cloud. Give parts: spheres, tapered capsules (a limb or neck: at, to, radius at each end) and ellipsoids (a body or head: radii along x, y, z). Where parts overlap they melt together over `smooth` mm. Positions are in mm on the ground (x, y) and up (z); parts may overlap and may sit anywhere. Give half of a symmetric creature and set mirror ({axis, at}) to reflect it. Build the big masses first (body, chest, hips, head), then limbs overlapping into them; look with cad_scene_get / a view and adjust the numbers, or use cad_sculpt_smooth. The result is a mesh shape: move, turn, resize, recolour and export work; it has no outline, faces or holes. A person can refine it by hand in the window.",
+    "description": "Make ONE smooth, organic shape by blending simple parts into a soft surface: the way to model a person, an animal, a creature, a hand, a bottle, a cloud. Give parts: spheres, tapered capsules (a limb, neck or finger: at, to, radius at each end), ellipsoids (a body or head: radii along x, y, z) and boxes (a palm, a foot, a chest: radii, round for soft corners). An ellipsoid or box can be turned ({x, y, z} degrees). A part with carve:true is taken OUT of the form instead (an eye socket, a mouth, nostrils, the gap under a jaw); parts apply in order, so a carve removes what came before it and a part listed after it fills back in (the eyeball in its socket). A part with a color paints the surface where it is the nearest part (a black mane, white socks, red lips); the rest is the shape's colour. Where parts overlap they melt together over `smooth` mm. Positions are in mm on the ground (x, y) and up (z); parts may overlap and may sit anywhere. Give half of a symmetric creature and set mirror ({axis, at}) to reflect it. Build the big masses first (body, chest, hips, head), then limbs overlapping into them; look with cad_scene_get / a view and adjust the numbers, or use cad_sculpt_smooth. Fine features need fine detail: detail is spread over the whole form, so make hands or a face as their own blend at high detail and join them to the body (cad_shapes_join). The result is a mesh shape: move, turn, resize, recolour and export work; it has no outline, faces or holes. A person can refine it by hand in the window.",
     "parameters": {
       "type": "object",
       "properties": {
         "parts": {
           "type": "array",
-          "description": "The parts to blend (1 to 64; mirroring doubles them).",
+          "description": "The parts to blend (1 to 96 counting the mirrored copies).",
           "items": {
             "type": "object",
             "properties": {
@@ -807,7 +808,8 @@ export const cadSPECS: ToolSpec[] = [
                 "enum": [
                   "sphere",
                   "capsule",
-                  "ellipsoid"
+                  "ellipsoid",
+                  "box"
                 ]
               },
               "at": {
@@ -828,7 +830,7 @@ export const cadSPECS: ToolSpec[] = [
                   "x",
                   "y"
                 ],
-                "description": "Sphere or ellipsoid centre, or a capsule's first end, mm."
+                "description": "Sphere, ellipsoid or box centre, or a capsule's first end, mm."
               },
               "to": {
                 "type": "object",
@@ -876,7 +878,43 @@ export const cadSPECS: ToolSpec[] = [
                   "x",
                   "y"
                 ],
-                "description": "An ellipsoid's half-sizes along x, y and z."
+                "description": "An ellipsoid's or box's half-sizes along x, y and z."
+              },
+              "round": {
+                "type": "number",
+                "description": "A box's corner rounding, mm (default 0, sharp)."
+              },
+              "turn": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  },
+                  "z": {
+                    "type": "number",
+                    "description": "Height above the ground (default 0)."
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "description": "An ellipsoid or box turned about x, then y, then z, in degrees (a tilted head, a foot pointing out)."
+              },
+              "carve": {
+                "type": "boolean",
+                "description": "Take this part out of the form instead of adding it, its edge softened by smooth."
+              },
+              "color": {
+                "type": "string",
+                "description": "Paint the surface where this part is nearest (hex, e.g. \"#1a1a1a\" for a mane). Others take the shape's colour."
+              },
+              "smooth": {
+                "type": "number",
+                "description": "How softly THIS part joins (or carves) what came before it, mm, instead of the blend's smooth: small (1 to 3) for eyelids, lips and creases, large for cheeks and muscle."
               }
             },
             "required": [
@@ -891,7 +929,7 @@ export const cadSPECS: ToolSpec[] = [
         },
         "detail": {
           "type": "number",
-          "description": "Fineness: grid cells along the longest side (8 to 120, default 72). Higher is smoother and slower."
+          "description": "Fineness: grid cells along the longest side (8 to 256, default 96). Higher is smoother and slower; with many parts it is lowered to keep the call quick, and the reply says so."
         },
         "mirror": {
           "type": "object",
@@ -1020,6 +1058,92 @@ export const cadSPECS: ToolSpec[] = [
       },
       "required": [
         "sections"
+      ]
+    }
+  },
+  {
+    "name": "cad_mesh_build",
+    "group": "files",
+    "description": "Make ONE shape from triangles you write out: vertices ([x, y, z] in mm, z up, where it goes in the model) and triangles ([a, b, c] vertex numbers from 0, counter-clockwise seen from outside; clockwise ones are turned round for you). For a low-poly character or animal, a gem, a rock, a terrain or any surface the stock shapes and blends cannot make. Optional uvs ([u, v] per vertex) lay a cad_surface_set picture on by your own layout; optional colors (a hex colour or null per vertex) paint it. Up to 20000 vertices and 40000 triangles; a closed surface is a solid (it can be printed, joined and cut), an open one is shown as a sheet and the reply says how many edges are open. For a smooth organic form cad_sculpt_blend is usually easier; this is for exact control.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "vertices": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "description": "[x, y, z] for each point, mm."
+        },
+        "triangles": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "description": "[a, b, c] vertex numbers for each triangle."
+        },
+        "uvs": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "description": "Optional [u, v] (0 to 1 across a picture) for each vertex."
+        },
+        "colors": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": "Optional colour for each vertex: hex, or null for the shape's colour."
+        },
+        "name": {
+          "type": "string"
+        },
+        "color": {
+          "type": "string",
+          "description": "Hex colour such as \"#3b82f6\"."
+        },
+        "material": {
+          "type": "string",
+          "enum": [
+            "matte",
+            "metal",
+            "glossy",
+            "glass",
+            "neon",
+            "frosted",
+            "velvet",
+            "skin",
+            "rubber"
+          ],
+          "description": "A finish to start from: matte, metal, glossy, glass, neon, frosted (frosted glass), velvet (cloth with a soft sheen), skin (soft, light glows through) or rubber. cad_surface_set fine-tunes it."
+        }
+      },
+      "required": [
+        "vertices",
+        "triangles"
       ]
     }
   },
@@ -1948,7 +2072,7 @@ export const cadSPECS: ToolSpec[] = [
   {
     "name": "cad_shapes_join",
     "group": "files",
-    "description": "Join shapes into one solid: outlines are united wherever they overlap or touch, each keeping its own height and elevation. Bevels on the inputs are not kept.",
+    "description": "Join shapes into one solid: outlines are united wherever they overlap or touch, each keeping its own height and elevation. Bevels on the inputs are not kept. With a mesh among them (a blend, a built or imported mesh) they are joined as solids into ONE mesh shape, each part keeping the colour it showed as paint (cad_sculpt_smooth then softens the seams); every one must be closed.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -1969,7 +2093,7 @@ export const cadSPECS: ToolSpec[] = [
   {
     "name": "cad_shapes_subtract",
     "group": "files",
-    "description": "Cut the cutters out of the \"from\" shapes where they overlap in height (the cutters are used up). A short cutter leaves a slab above and below.",
+    "description": "Cut the cutters out of the \"from\" shapes where they overlap in height (the cutters are used up). A short cutter leaves a slab above and below. With a mesh among them each \"from\" shape is cut as a solid and becomes a mesh shape in its place (the exact shape of the cutter is taken out, at any height or angle).",
     "parameters": {
       "type": "object",
       "properties": {

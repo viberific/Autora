@@ -163,7 +163,7 @@ export function Rail({
       )}
       <div className="rail-top">
         <span className="rail-brand presence">
-          <AutoraMark size={30} state={mood} idle attention={attention} pulse={pulse} />
+          <AutoraMark size={30} state={mood} attention={attention} pulse={pulse} />
         </span>
         <span className="brand-word">Autora</span>
         <div className="spacer" />

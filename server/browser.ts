@@ -36,6 +36,7 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import { launchArgs } from "./extensions";
+import { gpuCandidates, noteBrowserGpu, pickGpu, type GpuCandidate } from "./browsergpu";
 import os from "node:os";
 import path from "node:path";
 
@@ -568,6 +569,29 @@ export function webglArgs(
     }
   });
   return somewhere ? ["--use-angle=vulkan", "--ignore-gpu-blocklist"] : [];
+}
+
+/** The route to the graphics chip that worked for this server (undefined: not tried yet; null: none did, so none is tried again). */
+let gpuChoice: GpuCandidate | null | undefined;
+
+/** Which renderer a launched browser's WebGL really got (the chip's name, or SwiftShader / llvmpipe for the CPU); null when it gave no context. */
+async function webglRenderer(context: BrowserContext): Promise<string | null> {
+  const page = await context.newPage();
+  try {
+    return await Promise.race([
+      page.evaluate(`(() => {
+        const gl = document.createElement("canvas").getContext("webgl2") || document.createElement("canvas").getContext("webgl");
+        if (!gl) return null;
+        const info = gl.getExtension("WEBGL_debug_renderer_info");
+        return String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+      })()`) as Promise<string | null>,
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 10_000)),
+    ]);
+  } catch {
+    return null;
+  } finally {
+    await page.close().catch(() => undefined);
+  }
 }
 
 export function systemBrowser(): string | null {
@@ -1801,8 +1825,10 @@ async function launchShared(): Promise<BrowserContext> {
   const geo = await browserGeo();
   const agent = browserUserAgent();
   const extensionArgs = launchArgs();
-  const launch = () =>
+  const launch = (gpu?: GpuCandidate) =>
     chromium.launchPersistentContext(dir, {
+      // A route to the graphics chip may need its own environment (which Vulkan driver); see server/browsergpu.ts.
+      ...(gpu?.env ? { env: { ...process.env, ...gpu.env } as Record<string, string> } : {}),
       // Extensions need Chrome's new headless mode, which is the whole
       // browser without a window; it is asked for by flag (see extensions.ts).
       headless: process.env.AUTORA_BROWSER_HEADED !== "1" && !extensionArgs.length,
@@ -1824,8 +1850,8 @@ async function launchShared(): Promise<BrowserContext> {
         "--disable-features=IsolateOrigins,site-per-process",
         "--disable-infobars",
         "--force-color-profile=srgb",
-        // A canvas the page draws needs a GL context: see webglArgs.
-        ...webglArgs(),
+        // A canvas the page draws needs a GL context: the chip when there is one (gpu), else the CPU's: see webglArgs.
+        ...(gpu ? gpu.args : webglArgs()),
         `--window-size=${VIEWPORT.width},${VIEWPORT.height}`,
       ],
     });
@@ -1833,17 +1859,50 @@ async function launchShared(): Promise<BrowserContext> {
   /* Whatever chromium this launch started, successful or not: a launch that
      throws halfway through can still leave a browser behind, and that one
      holds the profile lock and every one of its children is an orphan. */
-  const launchTracked = async () => {
+  const launchTracked = async (gpu?: GpuCandidate) => {
     const before = new Set(browserRoots());
     try {
-      return await launch();
+      return await launch(gpu);
     } finally {
       const born = browserRoots().filter((pid) => !before.has(pid));
       if (born.length) browserTree = born;
     }
   };
-  let context: BrowserContext;
-  try {
+  let context: BrowserContext | undefined;
+  /* The graphics chip first, when the container can see one: without it a 3D page or a game draws on the CPU, a frame a second.
+     Each route is tried and the browser asked what it really got; one that lands on software is closed and the next tried
+     (server/browsergpu.ts). With no chip, or none that works, this does nothing and the browser starts as it always did. */
+  const routes = gpuChoice === null ? [] : gpuChoice ? [gpuChoice] : gpuCandidates();
+  if (routes.length) {
+    const open = new Map<string, BrowserContext>();
+    const got = await pickGpu(routes, async (route) => {
+      clearStaleLock(dir);
+      const ctx = await launchTracked(route);
+      open.set(route.name, ctx);
+      const renderer = await webglRenderer(ctx);
+      return {
+        renderer,
+        close: async () => {
+          open.delete(route.name);
+          await ctx.close().catch(() => undefined);
+          retireTree();
+        },
+      };
+    });
+    gpuChoice = got?.candidate ?? null; // remembered: a route that worked is the only one tried next time, and none is not tried again
+    if (got) {
+      context = open.get(got.candidate.name);
+      noteBrowserGpu(got.candidate.name, got.renderer);
+      console.log(`[browser] graphics chip in use (${got.candidate.name}): ${got.renderer}`);
+    } else {
+      noteBrowserGpu("software", null);
+      console.log("[browser] a render device is here but no route to it gave WebGL on the chip; drawing on the CPU. AUTORA_BROWSER_GPU_ARGS names your own flags.");
+      clearStaleLock(dir);
+    }
+  } else {
+    noteBrowserGpu("software", null);
+  }
+  if (!context) try {
     context = await launchTracked();
   } catch (err) {
     // Once more after clearing again: a browser that was still shutting down
@@ -1857,6 +1916,7 @@ async function launchShared(): Promise<BrowserContext> {
       throw new Error(`The browser would not start: ${firstLine(err)}`);
     }
   }
+  if (!context) throw new Error("The browser would not start.");
   await restoreCookies(context);
   await context.addInitScript(STEALTH_SCRIPT);
   await context.addInitScript(CURSOR_SCRIPT);
@@ -2575,6 +2635,8 @@ export class LiveBrowser {
    * the whole of the server's saving.
    */
   private pictureWanted(): boolean {
+    /* Nobody connected: Chrome would encode a JPEG for every change of the page only for each one to be dropped. */
+    if (this.hooks.watchers() === 0) return false;
     const now = Date.now();
     let mirrors = 0;
     for (const [id, v] of this.views) {
@@ -2598,6 +2660,11 @@ export class LiveBrowser {
       this.screencasting = false;
       await cdp.send("Page.stopScreencast").catch(() => undefined);
     }
+  }
+
+  /** Someone opened or closed this chat: the picture stream follows whether anyone is left to see it. */
+  async watchersChanged(): Promise<void> {
+    await this.syncPictures();
   }
 
   /** A viewer's choice of view, said when its window opens and every so often after. */

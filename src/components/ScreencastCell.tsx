@@ -83,8 +83,6 @@ export function ScreencastCell({
   const logRef = useRef<HTMLDivElement>(null);
   const logFollows = useRef(true);
   const logCount = Children.count(children);
-  const [at, setAt] = useState(shots.length - 1);
-  const [held, setHeld] = useState(false);
   const [showActions, setShowActions] = useState(false);
   /** Big while the agent is driving the page right now, inline otherwise;
       either way the corner button overrides it. */
@@ -122,8 +120,6 @@ export function ScreencastCell({
   useEffect(() => {
     if (!editingAddress) setAddress(url ?? "");
   }, [url, editingAddress]);
-  const holdRef = useRef(held);
-  holdRef.current = held;
   const stageRef = useRef<HTMLDivElement>(null);
   const sinkRef = useRef<HTMLTextAreaElement>(null);
   /** Every input goes out in order, one after another: a click that lands
@@ -139,10 +135,6 @@ export function ScreencastCell({
     lastX?: number; lastT?: number; vx?: number; vy?: number;
   } | null>(null);
   const scrollAccum = useRef({ dx: 0, dy: 0, timer: 0 });
-
-  useEffect(() => {
-    if (!holdRef.current) setAt(shots.length - 1);
-  }, [shots.length]);
 
   useEffect(() => {
     if (!nudge) return;
@@ -168,7 +160,7 @@ export function ScreencastCell({
 
   /* The copy is built under the picture and swapped in once it is drawn; when it falls back, it stays until a
      picture newer than the fall-back has arrived (Frame.tsx's rule: never a moment with nothing to show). */
-  const mirrorLive = wantsMirror && !held && mirror?.status === "live";
+  const mirrorLive = wantsMirror && mirror?.status === "live";
   const [bridgeFrom, setBridgeFrom] = useState<number | null>(null);
   const wasShown = useRef(false);
   useEffect(() => {
@@ -182,7 +174,7 @@ export function ScreencastCell({
   const mirrorMounted = mirrorLive || bridgeFrom !== null;
   const mirrorShown = mirrorMounted && (mirrorReady || bridgeFrom !== null);
 
-  const watching = (!!feed || mirrorShown) && !held;
+  const watching = !!feed || mirrorShown;
   const canUse = source === "browser" && current && watching && !driving;
 
   // Losing the page (the agent took it back, or it closed) drops the keyboard;
@@ -504,7 +496,7 @@ export function ScreencastCell({
 
   if (shots.length === 0 && actions.length === 0 && !feed && !mirrorMounted) return null;
 
-  const shot = shots[Math.min(Math.max(at, 0), shots.length - 1)];
+  const shot = shots.at(-1);
   const Icon = source === "browser" ? IconGlobe : IconMonitor;
   const stageSrc = watching && feed
     ? `data:${feed.mime};base64,${feed.data}`
@@ -705,11 +697,6 @@ export function ScreencastCell({
             {mine ? "Hand back to agent" : "Take control"}
           </button>
         ))}
-        {held && feed && (
-          <button className="cell-act" onClick={() => { setHeld(false); setAt(shots.length - 1); }}>
-            back to live
-          </button>
-        )}
         {staged && canUse && !mirrorShown && (
           <button
             className={`shot-tool shot-drag ${dragMode ? "on" : ""}`}
@@ -982,22 +969,6 @@ export function ScreencastCell({
           }}
         >
           {children}
-        </div>
-      )}
-
-      {shots.length > 1 && !max && (
-        <div className="shot-strip">
-          <input
-            type="range"
-            min={0}
-            max={shots.length - 1}
-            value={Math.min(at, shots.length - 1)}
-            aria-label={`Frame ${at + 1} of ${shots.length}`}
-            onChange={(e) => { setHeld(true); setAt(Number(e.target.value)); }}
-          />
-          <span className="shot-count">
-            {Math.min(at, shots.length - 1) + 1} / {shots.length}
-          </span>
         </div>
       )}
 

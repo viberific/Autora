@@ -39,6 +39,28 @@ test("words become numbers, numbers win over words, and what cannot work is refu
   for (const w of FEEL_WORDS) assert.ok(!("error" in physicsOf({ feel: [w] }, base)), w);
 });
 
+test("a scene with 3D objects and no light gets lights, once, and says so: unlit 3D is black", () => {
+  // Usability trial 2026-11-19 (F17): everything made from a model is a lit material, so with no light the screen was black.
+  const project = starter();
+  const layout = project.layouts[0];
+  const p = physicsOf({ body: "dynamic" }, base);
+  if ("error" in p) throw new Error(p.error);
+  const first = placeModel(project, layout, { modelName: "Ball", resource: "Ball_model", size: { x: 40, y: 40, z: 40 }, scale: 1, physics: p.physics, place: true, ground: false }, t);
+  const effects = layout.layers.find((l: any) => l.name === "").effects;
+  assert.deepEqual(effects.map((e: any) => e.effectType), ["Scene3D::AmbientLight", "Scene3D::DirectionalLight"]);
+  assert.ok(first.did.some((d) => /light/i.test(d)), first.did.join(" | "));
+  assert.equal(typeof effects[0].doubleParameters.intensity, "number");
+  assert.equal(effects[1].stringParameters.top, "Z+");
+  const again = placeModel(project, layout, { modelName: "Box", resource: "Box_model", size: { x: 40, y: 40, z: 40 }, scale: 1, place: true, ground: false }, t);
+  assert.equal(layout.layers.find((l: any) => l.name === "").effects.length, 2, "not added twice");
+  assert.ok(!again.did.some((d) => /light/i.test(d)));
+  // A person's own light is left alone: nothing is added beside it.
+  const own = starter();
+  own.layouts[0].layers.find((l: any) => l.name === "").effects = [{ effectType: "Scene3D::HemisphereLight", name: "Sky", doubleParameters: { intensity: 1 }, stringParameters: {}, booleanParameters: {} }];
+  placeModel(own, own.layouts[0], { modelName: "Ball", resource: "Ball_model", size: { x: 40, y: 40, z: 40 }, scale: 1, place: true, ground: false }, t);
+  assert.deepEqual(own.layouts[0].layers.find((l: any) => l.name === "").effects.map((e: any) => e.name), ["Sky"]);
+});
+
 test("a model becomes a 3D object as GDevelop saves it: its size in pixels, standing on its origin, centred for physics", () => {
   const project = starter();
   const layout = project.layouts[0];

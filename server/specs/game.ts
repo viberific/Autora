@@ -147,7 +147,7 @@ export const gameSPECS: ToolSpec[] = [
     description:
       "The shape of a new thing as the editor saves it, to copy and fill in: kind is scene, layer, instance, object (with `type`, " +
       "like Sprite or TextObject::Text), animation (a Sprite's frames: pass images, resource names), behavior (with `type`), resource (with `type`: image, audio, font...), event, comment, group, " +
-      "repeat, while, foreach, condition, action, variable, variable-structure or object-group. Put it into the game with game_edit insert.",
+      "repeat, while, foreach, condition, action, camera-3d (a 3D camera that is placed and aimed every frame), variable, variable-structure or object-group. Put it into the game with game_edit insert.",
     parameters: {
       type: "object",
       properties: {
@@ -214,13 +214,13 @@ export const gameSPECS: ToolSpec[] = [
     description:
       "Add a file to the game's resources: a picture, sound, font, video, 3D model or json, from an artifact id (file_...) or a path on " +
       "this host. It is kept with the game and added to resources.resources under `resource` (default: the file's name); then use that " +
-      "name in objects and instructions. With no art yet, pass placeholder instead of file to make a solid picture here (a Sprite with " +
+      "name in objects and instructions. With no art yet, pass placeholder instead of file to make a plain picture here (a ball, a button, an arrow, a rounded box: a game can start before there is art; a Sprite with " +
       "no picture is invisible): the person's own art replaces it later.",
     parameters: {
       type: "object",
       properties: {
         file: { type: "string", description: "An artifact id (file_...) or a path. Not needed with placeholder." },
-        placeholder: { type: "object", description: "Make a picture instead of reading a file: { width, height (1 to 1024), color: \"#rrggbb\", shape: \"rect\" or \"circle\" }. Name it with resource.", properties: { width: { type: "number" }, height: { type: "number" }, color: { type: "string" }, shape: { type: "string" } } },
+        placeholder: { type: "object", description: "Make a picture instead of reading a file: { width, height (1 to 1024), color: \"#rrggbb\", shape: rect, circle, rounded, triangle, ring, ball (shaded, with a shine), button (rounded, shaded) or arrow, direction: right, left, up or down for a triangle or an arrow }. Name it with resource.", properties: { width: { type: "number" }, height: { type: "number" }, color: { type: "string" }, shape: { type: "string", enum: ["rect", "circle", "rounded", "triangle", "ring", "ball", "button", "arrow"] }, direction: { type: "string", enum: ["right", "left", "up", "down"] } } },
         name: { type: "string", description: "The file's name, with its extension, if it has none worth keeping." },
         resource: { type: "string", description: "The name objects will use for it. Default: the file's name." },
       },

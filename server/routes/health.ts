@@ -8,6 +8,7 @@
 import type { Express, Request, Response } from "express";
 import { deleteCustomTool, listCustomTools } from "../customtools";
 import { hostVitals } from "../host";
+import { browserGpuInfo } from "../browsergpu";
 import { storageReport } from "../retention";
 import { mergeRetention, state } from "../state";
 import { toolHealth } from "../toolhealth";
@@ -28,7 +29,8 @@ export function healthRoutes(app: Express, deps: {
      disk back was deleting threads one at a time. */
   /** CPU, memory and disk of the machine, for the sidebar's bars. */
   app.get("/api/host", (_req: Request, res: Response) => {
-    res.json(hostVitals());
+    // The browser's renderer rides along: "software" means 3D pages draw on the CPU (server/browsergpu.ts).
+    res.json({ ...hostVitals(), browserGpu: browserGpuInfo() });
   });
 
   app.get("/api/storage", (_req: Request, res: Response) => {

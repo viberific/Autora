@@ -20,11 +20,11 @@ export interface Vec {
   z: number;
 }
 
-export type PartKind = 'sphere' | 'capsule' | 'ellipsoid';
+export type PartKind = 'sphere' | 'capsule' | 'ellipsoid' | 'box';
 
 export interface BlendPart {
   kind: PartKind;
-  /** Centre (sphere, ellipsoid) or one end (capsule). */
+  /** Centre (sphere, ellipsoid, box) or one end (capsule). */
   a: Vec;
   /** The other end of a capsule. */
   b?: Vec;
@@ -32,12 +32,26 @@ export interface BlendPart {
   radius?: number;
   /** A capsule's radius at `b` (it tapers from `radius` to this). */
   radius2?: number;
-  /** An ellipsoid's half-sizes along x, y and z. */
+  /** An ellipsoid's or a box's half-sizes along x, y and z (before `turn`). */
   radii?: Vec;
+  /** A box's corner rounding, mm (at most its smallest half-size). */
+  round?: number;
+  /** An ellipsoid or box turned about x, then y, then z, in degrees. */
+  turn?: Vec;
+  /** Carved out of the form instead of added to it (an eye socket, a mouth, the gap between fingers). */
+  carve?: boolean;
+  /** The colour the surface takes where this part is the nearest, as #rrggbb; without it the shape's own colour. */
+  color?: string;
+  /** How softly this part joins what came before it, mm, instead of the blend's own: small for an eyelid or a lip, large for a cheek. */
+  smooth?: number;
 }
 
-export const MAX_PARTS = 64;
-export const MAX_DETAIL = 120;
+export const MAX_PARTS = 96;
+export const MAX_DETAIL = 256;
+/** Grid points times parts looked at: past this the grid is made coarser, so a call stays a second or two. */
+const BUDGET = 160_000_000;
+/** In a mesh's colours, a vertex that takes the shape's own colour. */
+export const SHAPE_COLOUR = -1;
 
 const sub = (p: Vec, q: Vec): Vec => ({ x: p.x - q.x, y: p.y - q.y, z: p.z - q.z });
 const dot = (p: Vec, q: Vec) => p.x * q.x + p.y * q.y + p.z * q.z;
@@ -48,8 +62,21 @@ const unit = (p: Vec): Vec => {
   return { x: p.x / l, y: p.y / l, z: p.z / l };
 };
 
+/** The rotation that undoes `turn` (x, then y, then z, degrees), as a row-major 3x3. */
+function unturn(turn: Vec): number[] {
+  const [ax, ay, az] = [turn.x, turn.y, turn.z].map((d) => (d * Math.PI) / 180);
+  const [cx, sx, cy, sy, cz, sz] = [Math.cos(ax), Math.sin(ax), Math.cos(ay), Math.sin(ay), Math.cos(az), Math.sin(az)];
+  // R = Rz * Ry * Rx; its inverse is its transpose.
+  const r = [
+    cz * cy, cz * sy * sx - sz * cx, cz * sy * cx + sz * sx,
+    sz * cy, sz * sy * sx + cz * cx, sz * sy * cx - cz * sx,
+    -sy, cy * sx, cy * cx,
+  ];
+  return [r[0], r[3], r[6], r[1], r[4], r[7], r[2], r[5], r[8]];
+}
+
 /** Signed distance to one part (negative inside). Capsule and ellipsoid distances are approximate, which a blend does not mind. */
-function distance(part: BlendPart, p: Vec): number {
+function distance(part: BlendPart, p: Vec, inv: number[] | null): number {
   if (part.kind === 'sphere') return len(sub(p, part.a)) - (part.radius as number);
   if (part.kind === 'capsule') {
     const b = part.b as Vec;
@@ -59,7 +86,15 @@ function distance(part: BlendPart, p: Vec): number {
     return len({ x: p.x - part.a.x - ab.x * t, y: p.y - part.a.y - ab.y * t, z: p.z - part.a.z - ab.z * t }) - r;
   }
   const r = part.radii as Vec;
-  const q = sub(p, part.a);
+  let q = sub(p, part.a);
+  if (inv) q = { x: inv[0] * q.x + inv[1] * q.y + inv[2] * q.z, y: inv[3] * q.x + inv[4] * q.y + inv[5] * q.z, z: inv[6] * q.x + inv[7] * q.y + inv[8] * q.z };
+  if (part.kind === 'box') {
+    const round = Math.min(part.round ?? 0, r.x, r.y, r.z);
+    const dx = Math.abs(q.x) - (r.x - round);
+    const dy = Math.abs(q.y) - (r.y - round);
+    const dz = Math.abs(q.z) - (r.z - round);
+    return Math.hypot(Math.max(dx, 0), Math.max(dy, 0), Math.max(dz, 0)) + Math.min(Math.max(dx, dy, dz), 0) - round;
+  }
   const k0 = Math.hypot(q.x / r.x, q.y / r.y, q.z / r.z);
   const k1 = Math.hypot(q.x / (r.x * r.x), q.y / (r.y * r.y), q.z / (r.z * r.z));
   return k1 === 0 ? -Math.min(r.x, r.y, r.z) : (k0 * (k0 - 1)) / k1;
@@ -71,11 +106,16 @@ const smin = (a: number, b: number, k: number): number => {
   const h = Math.max(k - Math.abs(a - b), 0) / k;
   return Math.min(a, b) - (h * h * k) / 4;
 };
+/** Its partner: `a` with `b` taken out of it, the cut's edge softened over `k`. */
+const smax = (a: number, b: number, k: number): number => -smin(-a, -b, k);
 
 function reach(part: BlendPart): { lo: Vec; hi: Vec } {
-  if (part.kind === 'ellipsoid') {
+  if (part.kind === 'ellipsoid' || part.kind === 'box') {
     const r = part.radii as Vec;
-    return { lo: { x: part.a.x - r.x, y: part.a.y - r.y, z: part.a.z - r.z }, hi: { x: part.a.x + r.x, y: part.a.y + r.y, z: part.a.z + r.z } };
+    // Turned, it reaches at most its longest half-size in any direction (corners of a box: the half-diagonal).
+    const e = part.turn ? (part.kind === 'box' ? len(r) : Math.max(r.x, r.y, r.z)) : 0;
+    const h = part.turn ? { x: e, y: e, z: e } : r;
+    return { lo: { x: part.a.x - h.x, y: part.a.y - h.y, z: part.a.z - h.z }, hi: { x: part.a.x + h.x, y: part.a.y + h.y, z: part.a.z + h.z } };
   }
   const ends = part.kind === 'capsule' ? [part.a, part.b as Vec] : [part.a];
   const r = Math.max(part.radius as number, part.kind === 'capsule' ? (part.radius2 as number) : 0);
@@ -85,46 +125,112 @@ function reach(part: BlendPart): { lo: Vec; hi: Vec } {
   };
 }
 
-/** The parts reflected across the plane where `axis` equals `at`, added to the originals. */
+/** The parts reflected across the plane where `axis` equals `at`, added to the originals. A turn is reflected with them. */
 export function mirrored(parts: BlendPart[], axis: 'x' | 'y' | 'z', at: number): BlendPart[] {
   const flip = (v: Vec): Vec => ({ ...v, [axis]: 2 * at - v[axis] });
-  return [...parts, ...parts.map((p) => ({ ...p, a: flip(p.a), ...(p.b ? { b: flip(p.b) } : {}) }))];
+  // Reflecting across a plane keeps the turn about that axis and reverses the other two.
+  const turn = (t: Vec): Vec => ({ x: axis === 'x' ? t.x : -t.x, y: axis === 'y' ? t.y : -t.y, z: axis === 'z' ? t.z : -t.z });
+  // Each copy right after its original: parts apply in order (a carve, then what goes in the hole), on both sides alike.
+  return parts.flatMap((p) => [p, { ...p, a: flip(p.a), ...(p.b ? { b: flip(p.b) } : {}), ...(p.turn ? { turn: turn(p.turn) } : {}) }]);
 }
 
+const hexRgb = (hex: string): [number, number, number] => {
+  const h = hex.length === 4 ? hex.slice(1).split('').map((c) => c + c).join('') : hex.slice(1);
+  const n = parseInt(h, 16);
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+};
+
 /**
- * The soft union of the parts as a triangle mesh (surface nets on a grid of `detail` cells along the longest side). `smooth` is
- * how wide the soft joins are, in mm: 0 leaves creases where parts meet.
+ * The soft union of the parts, less the carved ones, taken in order (a carve removes what came before it; a part after it can
+ * fill back in), as a triangle mesh (surface nets on a grid of `detail` cells along the
+ * longest side). `smooth` is how wide the soft joins are, in mm: 0 leaves creases where parts meet. When any part has a colour
+ * the mesh has `colors`: r, g, b (0..1) per vertex from the nearest part, SHAPE_COLOUR where that part has none.
  */
-export function blendMesh(parts: BlendPart[], opts: { smooth: number; detail: number }): RawMesh {
+export function blendMesh(parts: BlendPart[], opts: { smooth: number; detail: number }): RawMesh & { detail: number } {
   if (!parts.length) bad('Give at least one part.');
   if (parts.length > MAX_PARTS) bad(`At most ${MAX_PARTS} parts (mirroring doubles them).`);
-  const boxes = parts.map(reach);
-  const pad = Math.max(opts.smooth, 0) + 1;
+  const adds = parts.filter((p) => !p.carve);
+  if (!adds.length) bad('Every part is carved: give at least one that adds.');
+  const k = Math.max(opts.smooth, 0);
+  // Only what is added sets the grid: a carve outside the form takes nothing away.
+  const boxes = adds.map(reach);
+  const pad = Math.max(k, ...parts.map((p) => p.smooth ?? 0)) + 1;
   const lo = { x: Math.min(...boxes.map((b) => b.lo.x)) - pad, y: Math.min(...boxes.map((b) => b.lo.y)) - pad, z: Math.min(...boxes.map((b) => b.lo.z)) - pad };
   const hi = { x: Math.max(...boxes.map((b) => b.hi.x)) + pad, y: Math.max(...boxes.map((b) => b.hi.y)) + pad, z: Math.max(...boxes.map((b) => b.hi.z)) + pad };
   const longest = Math.max(hi.x - lo.x, hi.y - lo.y, hi.z - lo.z);
   if (!(longest > 0) || !Number.isFinite(longest)) bad('The parts have no size.');
-  const cell = longest / Math.max(8, Math.min(MAX_DETAIL, Math.round(opts.detail)));
+  let detail = Math.max(8, Math.min(MAX_DETAIL, Math.round(opts.detail)));
+  const points = (d: number) => {
+    const c = longest / d;
+    return (Math.ceil((hi.x - lo.x) / c) + 1) * (Math.ceil((hi.y - lo.y) / c) + 1) * (Math.ceil((hi.z - lo.z) / c) + 1);
+  };
+  while (detail > 8 && points(detail) * parts.length > BUDGET) detail = Math.floor(detail * 0.9);
+  const cell = longest / detail;
   const nx = Math.ceil((hi.x - lo.x) / cell) + 1;
   const ny = Math.ceil((hi.y - lo.y) / cell) + 1;
   const nz = Math.ceil((hi.z - lo.z) / cell) + 1;
 
+  const prepared = parts.map((part) => {
+    const box = reach(part);
+    return { part, inv: part.turn && (part.kind === 'ellipsoid' || part.kind === 'box') ? unturn(part.turn) : null, lo: box.lo, hi: box.hi };
+  });
+  /** How far `p` is from a part's box at least: a part that far off cannot change a soft min or max, so it is not worked out. */
+  const atLeast = (q: (typeof prepared)[number], p: Vec) =>
+    Math.hypot(Math.max(q.lo.x - p.x, 0, p.x - q.hi.x), Math.max(q.lo.y - p.y, 0, p.y - q.hi.y), Math.max(q.lo.z - p.z, 0, p.z - q.hi.z));
+  // In order: a part added after a carve fills back into it (an eyeball in its socket), and a carve takes from all before it.
+  const fieldAt = (p: Vec): number => {
+    let d = Infinity;
+    for (const q of prepared) {
+      const kk = q.part.smooth ?? k;
+      if (q.part.carve) {
+        if (d === Infinity || atLeast(q, p) >= kk - d) continue;
+        d = smax(d, -distance(q.part, p, q.inv), kk);
+      } else {
+        if (d !== Infinity && atLeast(q, p) >= d + kk) continue;
+        d = smin(d, distance(q.part, p, q.inv), kk);
+      }
+    }
+    return d;
+  };
+
   const field = new Float32Array(nx * ny * nz);
-  const at = (i: number, j: number, k: number) => (k * ny + j) * nx + i;
+  const at = (i: number, j: number, k2: number) => (k2 * ny + j) * nx + i;
   const point: Vec = { x: 0, y: 0, z: 0 };
-  for (let k = 0; k < nz; k++) {
-    point.z = lo.z + k * cell;
+  for (let kz = 0; kz < nz; kz++) {
+    point.z = lo.z + kz * cell;
     for (let j = 0; j < ny; j++) {
       point.y = lo.y + j * cell;
       for (let i = 0; i < nx; i++) {
         point.x = lo.x + i * cell;
-        let d = Infinity;
-        for (const part of parts) d = smin(d, distance(part, point), opts.smooth);
-        field[at(i, j, k)] = d;
+        field[at(i, j, kz)] = fieldAt(point);
       }
     }
   }
-  return surfaceNets(field, nx, ny, nz, lo, cell);
+  const mesh = surfaceNets(field, nx, ny, nz, lo, cell);
+  if (!parts.some((p) => p.color)) return { ...mesh, detail };
+  // Each point of the surface takes the colour of the part it lies on (the nearest surface of any part, added or carved).
+  const colors: number[] = [];
+  const v: Vec = { x: 0, y: 0, z: 0 };
+  const rgb = prepared.map((q) => (q.part.color ? hexRgb(q.part.color) : null));
+  for (let i = 0; i < mesh.positions.length; i += 3) {
+    v.x = mesh.positions[i];
+    v.y = mesh.positions[i + 1];
+    v.z = mesh.positions[i + 2];
+    let best = -1;
+    let near = Infinity;
+    prepared.forEach((q, n) => {
+      if (atLeast(q, v) >= near) return;
+      const d = Math.abs(distance(q.part, v, q.inv));
+      if (d < near) {
+        near = d;
+        best = n;
+      }
+    });
+    const c = best >= 0 ? rgb[best] : null;
+    if (c) colors.push(c[0], c[1], c[2]);
+    else colors.push(SHAPE_COLOUR, SHAPE_COLOUR, SHAPE_COLOUR);
+  }
+  return { ...mesh, colors, detail };
 }
 
 /** Naive surface nets: one vertex in each grid cell the surface passes through, a quad across each edge that crosses it. */
@@ -178,7 +284,7 @@ function surfaceNets(field: Float32Array, nx: number, ny: number, nz: number, lo
 }
 
 /** Turns every triangle round if the mesh came out inside-out (negative volume), so the faces look outward. */
-function facingOut(mesh: RawMesh): RawMesh {
+export function facingOut(mesh: RawMesh): RawMesh {
   const p = mesh.positions;
   let volume = 0;
   for (let t = 0; t < mesh.indices.length; t += 3) {
@@ -275,6 +381,7 @@ export function loftMesh(sections: Section[], opts: { sides: number; steps: numb
 /** Splits every triangle in four at its edge midpoints (the shape stays the same; it only gives smoothing more to work with). */
 export function subdivide(mesh: RawMesh): RawMesh {
   const positions = mesh.positions.slice();
+  const colors = mesh.colors ? mesh.colors.slice() : null;
   const mid = new Map<number, number>();
   const n = mesh.positions.length / 3;
   const between = (a: number, b: number): number => {
@@ -283,6 +390,8 @@ export function subdivide(mesh: RawMesh): RawMesh {
     if (m === undefined) {
       m = positions.length / 3;
       positions.push((positions[a * 3] + positions[b * 3]) / 2, (positions[a * 3 + 1] + positions[b * 3 + 1]) / 2, (positions[a * 3 + 2] + positions[b * 3 + 2]) / 2);
+      // A midpoint between a painted point and one in the shape's colour takes the painted one, so paint does not go muddy.
+      if (colors) colors.push(...[0, 1, 2].map((c) => (colors[a * 3 + c] === SHAPE_COLOUR ? colors[b * 3 + c] : colors[b * 3 + c] === SHAPE_COLOUR ? colors[a * 3 + c] : (colors[a * 3 + c] + colors[b * 3 + c]) / 2)));
       mid.set(key, m);
     }
     return m;
@@ -295,7 +404,7 @@ export function subdivide(mesh: RawMesh): RawMesh {
     const ca = between(c, a);
     indices.push(a, ab, ca, ab, b, bc, ca, bc, c, ab, bc, ca);
   }
-  return { ...mesh, positions, indices };
+  return { ...mesh, positions, indices, ...(colors ? { colors } : {}) };
 }
 
 /**

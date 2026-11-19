@@ -41,7 +41,7 @@ place (a view in the window, an adapter on the server) that still has to learn a
 Everything made on a surface is a tree of typed **entities** (document → section → block; workspace → file → symbol;
 canvas → layer; later timeline → track → clip). Each entity type declares its properties with the same `ParamSpec`
 panels already bind to. Every change is an **operation** on that tree, made by the person, the agent or a rule through the
-same path. That gives undo, redo, the history scrubber, replay and (later) collaboration for free, and matches "the event
+same path. That gives undo, redo, replay and (later) collaboration for free, and matches "the event
 log is the product" (`README.md`).
 
 It is designed with the document surface, not before it: a tree model drawn without a second real case is guessing.

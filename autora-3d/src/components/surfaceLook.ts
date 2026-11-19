@@ -86,6 +86,11 @@ export function surfaceMaterial(body: Body3D, loaded: () => void): THREE.Materia
     polygonOffsetFactor: 1,
     polygonOffsetUnits: 1,
   };
+  if (body.mesh?.colors) {
+    // A painted form carries its colours in its vertices, the shape's own included (meshGeometry): white here, so they show true.
+    params.vertexColors = true;
+    params.color = '#ffffff';
+  }
   if (s.pattern) {
     const tex = patternTextures(s.pattern.kind, s.color, s.pattern.color2);
     const repeat = textureRepeat(body, 'pattern');
@@ -161,7 +166,7 @@ export function surfaceMaterial(body: Body3D, loaded: () => void): THREE.Materia
 }
 
 /** What about a shape's look rebuilds its material (not its geometry). */
-export const lookSignature = (b: Body3D) => JSON.stringify([b.materialType, b.color, b.surface]);
+export const lookSignature = (b: Body3D) => JSON.stringify([b.materialType, b.color, b.surface, !!b.mesh?.colors]);
 /** What about a shape's hair grows it again. */
 export const hairSignature = (b: Body3D) => (b.hair ? JSON.stringify(b.hair) : '');
 

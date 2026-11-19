@@ -200,15 +200,14 @@ async function main() {
       assert.equal(await page.evaluate(() => document.querySelector(".pa-board")!.scrollTop), 0, "the canvas never scrolls out from under its chrome");
     });
 
-    await test("the history undoes a step and the track scrubs", async () => {
+    await test("the history undoes a step and redoes it", async () => {
       const exp = async () => Number((await doc()).surfaces.find((x: { id: string }) => x.id === photoId).params.exposure);
       const was = await exp();
       for (let i = 0; i < 10 && (await exp()) === was; i++) { await page.click('.pa-history [aria-label="Undo"]'); await sleep(450); }
       await until("exposure undone", async () => (await exp()) !== was);
-      // The end of the track is now: back to it, and the exposure is back.
-      const t = (await page.locator(".pa-htrack").boundingBox())!;
-      await page.mouse.click(t.x + t.width - 1, t.y + t.height / 2);
-      await until("redone by the track", async () => (await exp()) === was);
+      for (let i = 0; i < 10 && (await exp()) !== was; i++) { await page.click('.pa-history [aria-label="Redo"]'); await sleep(450); }
+      await until("redone", async () => (await exp()) === was);
+      assert.equal(await page.locator('.pa-history [role="slider"]').count(), 0, "no slider through time");
     });
 
     await test("the agent's panels arrive live; a tree outside the rulebook is refused with the reason", async () => {

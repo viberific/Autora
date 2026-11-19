@@ -121,7 +121,7 @@ await test("an instance and an event, written from the catalog, check out", asyn
   inst.name = "Cat"; inst.x = 100; inst.y = 200;
   const event = {
     type: "BuiltinCommonInstructions::Standard",
-    conditions: [{ type: { inverted: false, value: "KeyFromTextPressed" }, parameters: ["", "Right"], subInstructions: [] }],
+    conditions: [{ type: { inverted: false, value: "KeyFromTextPressed" }, parameters: ["", "\"Right\""], subInstructions: [] }],
     actions: [{ type: { value: "SetX" }, parameters: ["Cat", "+", "5"], subInstructions: [] }],
     events: [],
   };
@@ -132,7 +132,7 @@ await test("an instance and an event, written from the catalog, check out", asyn
   assert.equal(r.ok, true, r.summary);
   assert.ok(!/Check these/.test(r.summary), `no warnings expected: ${r.summary}`);
   const events = await run("game_look", { what: "events", scene: "Scene" });
-  assert.match(events.summary, /layouts\[Scene\]\.events\[0\] IF KeyFromTextPressed\('', Right\) DO SetX\(Cat, \+, 5\)/);
+  assert.match(events.summary, /layouts\[Scene\]\.events\[0\] IF KeyFromTextPressed\('', "Right"\) DO SetX\(Cat, \+, 5\)/);
   assert.equal((await run("game_check")).ok, true);
   assert.match((await run("game_check")).summary, /Nothing looks wrong/);
 });
@@ -156,12 +156,79 @@ await test("the catalog finds an entry by how a person says it", async () => {
   assert.match((await run("game_catalog", { query: "set text", limit: 3 })).summary, /TextContainerBehavior::SetValue/);
 });
 
-await test("a scene name written without quotes is flagged, and a key written bare is not; a wrong count shows the shape asked for", async () => {
-  const bad = { type: "BuiltinCommonInstructions::Standard", conditions: [{ type: { inverted: false, value: "KeyFromTextPressed" }, parameters: ["", "R"], subInstructions: [] }], actions: [{ type: { value: "Scene" }, parameters: ["", "Scene", "true"], subInstructions: [] }, { type: { value: "SetX" }, parameters: ["Cat", "+"], subInstructions: [] }], events: [] };
+await test("a scene name, a key and a mouse button written without quotes are flagged; a wrong count shows the shape asked for", async () => {
+  // A key is an expression: a bare Left is read as a variable, is empty, and the event never fires (usability trial 2026-11-19, F8).
+  const bad = { type: "BuiltinCommonInstructions::Standard", conditions: [{ type: { inverted: false, value: "KeyFromTextPressed" }, parameters: ["", "R"], subInstructions: [] }, { type: { inverted: false, value: "MouseButtonFromTextPressed" }, parameters: ["", "Left"], subInstructions: [] }], actions: [{ type: { value: "Scene" }, parameters: ["", "Scene", "true"], subInstructions: [] }, { type: { value: "SetX" }, parameters: ["Cat", "+"], subInstructions: [] }], events: [] };
   const r = await run("game_edit", { ops: [{ op: "insert", path: "layouts[Scene].events", value: bad }] });
-  assert.match(r.summary, /write it quoted/);
-  assert.doesNotMatch(r.summary, /KeyFromTextPressed.*quoted/, "a key is a plain choice");
+  assert.match(r.summary, /sceneName, an expression: write it quoted, "Scene"/);
+  assert.match(r.summary, /conditions\[0\]: .*keyboardKey.*write it quoted, "R"/, "a key needs its quotes");
+  assert.match(r.summary, /conditions\[1\]: .*mouseButton.*write it quoted, "Left"/, "so does a mouse button");
   assert.match(r.summary, /SetX takes 3 parameters, this has 2\. Every slot is written.*\[/);
+  const good = { type: "BuiltinCommonInstructions::Standard", conditions: [{ type: { inverted: false, value: "KeyFromTextPressed" }, parameters: ["", "\"R\""], subInstructions: [] }], actions: [], events: [] };
+  const ok = (await run("game_edit", { ops: [{ op: "insert", path: "layouts[Scene].events", value: good }] })).summary;
+  assert.match(ok, /inserted into layouts\[Scene\]\.events at (\d+)/);
+  const at = /events at (\d+)/.exec(ok)![1];
+  assert.doesNotMatch(ok, new RegExp(`events\\[${at}\\]`), "a quoted key is fine");
+});
+
+await test("a value in an internal slot is flagged: parameters numbered from 1 start with an empty slot 0", async () => {
+  // The operator put where the internal slot is shifts every value up one place, and the count still matches (F19).
+  const shifted = { type: "BuiltinCommonInstructions::Standard", conditions: [], actions: [{ type: { value: "SetCameraCenterX" }, parameters: ["=", "0", "", "0", ""], subInstructions: [] }], events: [] };
+  const r = await run("game_edit", { ops: [{ op: "insert", path: "layouts[Scene].events", value: shifted }] });
+  assert.match(r.summary, /SetCameraCenterX: slot 0 is internal and must be ""/, r.summary);
+  const right = { type: "BuiltinCommonInstructions::Standard", conditions: [], actions: [{ type: { value: "SetCameraCenterX" }, parameters: ["", "=", "0", "", "0"], subInstructions: [] }], events: [] };
+  const fine = (await run("game_edit", { ops: [{ op: "insert", path: "layouts[Scene].events", value: right }] })).summary;
+  const n = /events at (\d+)/.exec(fine)![1];
+  assert.doesNotMatch(fine, new RegExp(`events\\[${n}\\]`), "the right slots are fine");
+});
+
+await test("the camera template is an every-frame event the checker accepts, and the animation template says how to hold a frame", async () => {
+  const t = await run("game_template", { kind: "camera-3d" });
+  assert.match(t.summary, /every frame/);
+  const event = JSON.parse(t.summary.slice(t.summary.indexOf("{")));
+  assert.deepEqual(event.conditions, [], "no condition: it runs every frame");
+  assert.deepEqual(event.actions.map((a: any) => a.type.value), ["SetCameraCenterX", "SetCameraCenterY", "Scene3D::SetCameraZ", "Scene3D::TurnCameraTowardPosition"], "placed, then aimed");
+  const r = await run("game_edit", { ops: [{ op: "insert", path: "layouts[Scene].events", value: event }] });
+  const at = /events at (\d+)/.exec(r.summary)![1];
+  assert.doesNotMatch(r.summary, new RegExp(`events\\[${at}\\]`), r.summary);
+  assert.match((await run("game_template", { kind: "animation" })).summary, /100000/, "hold a frame");
+  assert.match((await run("game_template", { kind: "condition" })).summary, /write it quoted/);
+});
+
+await test("placeholder pictures: a ball is shaded and round, a button is rounded, an arrow points where it is told, and a bad shape is refused", async () => {
+  const { placeholderPng, PLACEHOLDER_SHAPES } = await import("../server/gamedesk");
+  const zlib = await import("node:zlib");
+  /** The pixels of a PNG made here (8-bit RGBA, no filter): [r, g, b, a] at x, y. */
+  const decode = (png: Buffer) => {
+    const width = png.readUInt32BE(16), height = png.readUInt32BE(20);
+    const idat: Buffer[] = [];
+    for (let at = 8; at < png.length;) { const len = png.readUInt32BE(at); if (png.toString("ascii", at + 4, at + 8) === "IDAT") idat.push(png.subarray(at + 8, at + 8 + len)); at += 12 + len; }
+    const raw = zlib.inflateSync(Buffer.concat(idat));
+    return { width, height, at: (x: number, y: number) => [...raw.subarray(y * (1 + width * 4) + 1 + x * 4, y * (1 + width * 4) + 5 + x * 4)] };
+  };
+  for (const shape of PLACEHOLDER_SHAPES) {
+    const png = placeholderPng({ width: 40, height: 40, color: "#e8691c", shape });
+    assert.ok(png && decode(png).width === 40, `${shape} makes a 40 x 40 picture`);
+  }
+  const ball = decode(placeholderPng({ width: 60, height: 60, color: "#e8691c", shape: "ball" })!);
+  assert.equal(ball.at(0, 0)[3], 0, "round: the corner is clear");
+  assert.ok(ball.at(30, 30)[3] === 255, "and the middle is solid");
+  assert.notDeepEqual(ball.at(20, 18).slice(0, 3), ball.at(46, 46).slice(0, 3), "shaded: the shine and the shadow differ");
+  const button = decode(placeholderPng({ width: 120, height: 50, color: "#3a7bd5", shape: "button" })!);
+  assert.equal(button.at(0, 0)[3], 0, "rounded corners");
+  assert.notDeepEqual(button.at(60, 8).slice(0, 3), button.at(60, 42).slice(0, 3), "lighter at the top than the bottom");
+  const point = (d: string) => decode(placeholderPng({ width: 50, height: 50, color: "#ffffff", shape: "arrow", direction: d })!);
+  assert.ok(point("right").at(46, 25)[3] > 200 && point("right").at(46, 2)[3] === 0, "right: the tip is on the right");
+  assert.ok(point("left").at(3, 25)[3] > 200 && point("left").at(3, 2)[3] === 0, "left: the tip is on the left");
+  assert.ok(point("up").at(25, 3)[3] > 200 && point("up").at(2, 3)[3] === 0, "up: the tip is at the top");
+  assert.ok(point("down").at(25, 46)[3] > 200 && point("down").at(2, 46)[3] === 0, "down: the tip is at the bottom");
+  const ring = decode(placeholderPng({ width: 60, height: 60, color: "#ffffff", shape: "ring" })!);
+  assert.equal(ring.at(30, 30)[3], 0, "a ring is hollow");
+  assert.ok(ring.at(30, 3)[3] > 200);
+  assert.equal(placeholderPng({ width: 10, height: 10, shape: "star" }), null, "an unknown shape is refused");
+  assert.equal(placeholderPng({ width: 10, height: 10, shape: "arrow", direction: "sideways" }), null);
+  const refused = await run("game_import", { placeholder: { width: 10, height: 10, shape: "star" }, resource: "x" });
+  assert.ok(!refused.ok && /ball, button/.test(refused.summary), refused.summary);
 });
 
 await test("an instance of an object that does not exist, and a picture that is not in the resources, are flagged", async () => {
