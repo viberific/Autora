@@ -208,25 +208,13 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  A tidy-up from a full tour of the app. The chat window now opens at about
-  half the screen's height instead of 600 pixels, and grows on a big screen;
-  fitted work is shown larger on wide screens instead of small in empty
-  grid. An app the agent opens is brought into view even if you had moved
-  the canvas, rather than waiting off-screen. The left menu starts as a
-  strip of icons on narrower screens, and the CPU, memory and disk bars show
-  only when one is running hot. The Tools page says when an editor is not
-  installed on this server, and opening Video without its editor says so at
-  once instead of stalling for a minute and a half. Slack is no longer suggested or listed, and integration suggestions
-  match whole words only. A refusal because something is the person's to
-  write is no longer reported to the agent as a failure. The agent's game
-  play-test now actually shows the game instead of a black screen, and the
-  agent can make placeholder pictures, get a Sprite's animation to fill in,
-  find the right game instruction by how you would say it, and is told when a
-  scene name or text is missing its quotes. Held keys now work in the app
-  window, a typo in a music, 3D, video or game control is caught, and keys
-  printed in encoded forms are hidden from logs.
-  Claude Code and the Gemini CLI now come with Autora: sign in to each once
-  (docs/DELEGATES.md) and the agent can hand a job to either, on your own
-  subscription; until then it is not offered a tool that would fail. The
-  phone's Back button now brings the conversation back after a full-screen
-  window, and the agent's hand takes a window by its title bar.
+  A faster way to watch and use the browser, as a preview. In the
+  browser's menu, Live copy (preview) shows the page as a copy drawn by
+  your own browser instead of a stream of pictures: scrolling, text and
+  hover are local and smooth, your clicks, typing and scrolls go to the
+  real page, and the server stops encoding pictures while you use it.
+  Canvas, video and embedded frames appear as small live pictures in
+  place, and a page the copy cannot carry falls back to pictures with a
+  button to try again. Nothing the site wrote runs in your browser, and
+  passwords arrive as dots only. Picture mode in the same menu turns it
+  off; pictures stay the default for now.

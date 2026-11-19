@@ -78,6 +78,12 @@ const BROWSER = [
     "a browser_handoff, when the browser closes, or after a few minutes with nobody touching the page; you are told when it does. " +
     "If you need it back sooner, ask them to press Hand back to agent: never call the browser locked or broken, and never ask " +
     "them to restart Autora for it.",
+  "  How they see it: pictures of the page by default. In the browser's menu (the three lines on its bar) they can turn on Live copy " +
+    "(preview): their own browser then draws a copy of the page's DOM, so scrolling, text and hover are local and smooth, and their " +
+    "clicks, keys and scrolls go to the real page. Canvas, video and frames in it are small live pictures, and a page the copy cannot " +
+    "carry falls back to pictures, with a Pictures · try the live copy button on the bar. Picture mode in the same menu turns it off, " +
+    "and Show the copy's readout shows its speed. It is only a view: your browser_* tools, the page, its sign-ins and what " +
+    "browser_screenshot shows are the same whichever they use, so never tell them to switch views to fix a page.",
 ].join("\n");
 
 const CREATOR = [

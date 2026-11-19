@@ -43,6 +43,12 @@ export function useLiveFrame(following: boolean, owns = false): LiveFrame | null
   return useSyncExternalStore(subscribe, () => (following && (!paneOwnsTheFeed || owns) ? current : null));
 }
 
+/** Whether this card is the one the live page belongs to (the same rule as useLiveFrame), for the mirror view,
+    which has no frame to hand out. */
+export function useOwnsLive(following: boolean, owns = false): boolean {
+  return useSyncExternalStore(subscribe, () => following && (!paneOwnsTheFeed || owns));
+}
+
 /** The browser's tabs, kept the same way: they change with the page. */
 type LiveTab = { id: number; url: string; title: string; active: boolean };
 let tabs: LiveTab[] = [];

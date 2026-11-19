@@ -30,6 +30,7 @@
  */
 
 import { refLine, scrollLine } from "./pagedescribe";
+import { MirrorRecorder, ResourceCache, rewriteCss, servedType, type MirrorStatus } from "./mirror";
 import type { DomItem } from "./domdiff";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
@@ -483,7 +484,14 @@ interface BrowserHooks {
   /** Bytes queued to the slowest viewer. A phone on a bad link backs up
       first; the stream then thins and softens itself rather than lag. */
   backlog?: () => number;
+  /** A message for the mirror view (server/mirror.ts): ephemeral, never logged. Missing, there is no mirror. */
+  onMirror?: (message: Record<string, unknown>) => void;
+  /** Where the mirror's resource tokens point: `/api/sessions/<id>/browser/mirror/r/`. */
+  mirrorPrefix?: string;
 }
+
+/** How long a viewer's choice of view (mirror or picture) holds without being said again. */
+const VIEW_LEASE_MS = 40_000;
 
 /** The capture size. Frame pixels map 1:1 to page pixels so a click at
     640,400 really is the middle of the picture -- the transcript's marker and
@@ -2019,7 +2027,15 @@ export class LiveBrowser {
   private page: Page | null = null;
   private cdp: CDPSession | null = null;
   private streaming = false;
+  /** Whether Chrome is encoding pictures right now. Off while every viewer is on a live mirror. */
+  private screencasting = false;
   private lastFrameAt = 0;
+  /** The mirror view's recorder (server/mirror.ts), made when a viewer first asks for it. */
+  private mirror: MirrorRecorder | null = null;
+  private mirrorCache = new ResourceCache();
+  /** Each viewer's view, by the id its window made up, and when it last said so. */
+  private views = new Map<string, { mode: "mirror" | "picture"; at: number }>();
+  private viewTimer: NodeJS.Timeout | null = null;
   /** Which of TIERS the screencast runs at, and when it last changed. */
   private tier = 0;
   private tierAt = 0;
@@ -2460,6 +2476,7 @@ export class LiveBrowser {
       }
       this.page = null;
       this.streaming = false;
+      this.screencasting = false;
       // The tab went on its own (Chrome crashed, or the page closed itself):
       // let go of the browser so it is not held open for nobody.
       const held = this.context;
@@ -2480,6 +2497,7 @@ export class LiveBrowser {
     const cdp = this.cdp;
     this.cdp = null;
     this.streaming = false;
+    this.screencasting = false;
     this.page = next;
     this.refs = [];
     this.wire(next);
@@ -2526,9 +2544,18 @@ export class LiveBrowser {
       // Acknowledged on the session it came from: after a switch to a
       // sign-in window, a late frame of the old page is not the new one's.
       cdp.send("Page.screencastFrameAck", { sessionId: frame.sessionId }).catch(() => undefined);
-      if (this.hooks.watchers() === 0 || this.cdp !== cdp) return;
+      if (this.hooks.watchers() === 0 || this.cdp !== cdp || !this.screencasting) return;
       this.forward(frame.data);
     });
+    this.streaming = true;
+    this.screencasting = false;
+    if (this.mirror) await this.mirror.attach(cdp).catch(() => undefined);
+    if (this.pictureWanted()) await this.startScreencast(cdp);
+  }
+
+  private async startScreencast(cdp: CDPSession) {
+    if (this.screencasting || this.cdp !== cdp) return;
+    this.screencasting = true;
     await cdp.send("Page.startScreencast", {
       format: "jpeg",
       quality: this.opts.quality ?? TIERS[this.tier].quality,
@@ -2537,8 +2564,149 @@ export class LiveBrowser {
         ? Math.max(Math.round((LIVE_WIDTH / this.vp.width) * this.vp.height), this.vp.height)
         : Math.round((TIERS[this.tier].width / this.vp.width) * this.vp.height),
       everyNthFrame: 1,
+    }).catch(() => { this.screencasting = false; });
+  }
+
+  // ------------------------------------------------------------- the mirror view --
+
+  /**
+   * Whether anyone needs pictures: a viewer on Picture, a viewer that said nothing (an older window, the app
+   * window), or a mirror that is not live. While every viewer is on a live mirror Chrome encodes nothing, which is
+   * the whole of the server's saving.
+   */
+  private pictureWanted(): boolean {
+    const now = Date.now();
+    let mirrors = 0;
+    for (const [id, v] of this.views) {
+      if (now - v.at > VIEW_LEASE_MS) { this.views.delete(id); continue; }
+      if (v.mode === "picture") return true;
+      mirrors += 1;
+    }
+    return mirrors === 0 || this.mirror?.status().status !== "live";
+  }
+
+  /** Start or stop the picture stream to match what the viewers need. */
+  private async syncPictures() {
+    const cdp = this.cdp;
+    if (!cdp || !this.streaming) return;
+    const want = this.pictureWanted();
+    if (want && !this.screencasting) {
+      await this.startScreencast(cdp);
+      // Chrome's screencast only sends when the page changes: the switch back to pictures has one at once.
+      await this.nudge();
+    } else if (!want && this.screencasting) {
+      this.screencasting = false;
+      await cdp.send("Page.stopScreencast").catch(() => undefined);
+    }
+  }
+
+  /** A viewer's choice of view, said when its window opens and every so often after. */
+  async setView(viewer: string, mode: "mirror" | "picture", retry = false): Promise<MirrorStatus> {
+    const id = viewer.slice(0, 64) || "anon";
+    // A window saying again what it already said needs nothing sent; one that has just arrived needs the page.
+    const fresh = this.views.get(id)?.mode !== mode;
+    this.views.set(id, { mode, at: Date.now() });
+    // A viewer that went without saying so (a closed laptop) lapses, and the pictures come back for the rest.
+    if (!this.viewTimer) {
+      this.viewTimer = setInterval(() => void this.syncPictures(), 10_000);
+      this.viewTimer.unref?.();
+    }
+    if (mode === "mirror" && !this.mirror && this.hooks.onMirror) {
+      const send = this.hooks.onMirror;
+      this.mirror = new MirrorRecorder({
+        prefix: this.hooks.mirrorPrefix ?? "/",
+        send,
+        active: () => this.hooks.watchers() > 0 && [...this.views.values()].some((v) => v.mode === "mirror"),
+        onStatus: () => { void this.syncPictures(); },
+      });
+      if (this.cdp && this.streaming) await this.mirror.attach(this.cdp).catch(() => undefined);
+    } else if (mode === "mirror" && this.mirror && retry) {
+      await this.mirror.retry();
+    } else if (mode === "mirror" && this.mirror && fresh) {
+      for (const message of this.mirror.catchUp()) this.hooks.onMirror?.(message);
+    }
+    await this.syncPictures();
+    return this.mirror?.status() ?? { status: "off", reason: null };
+  }
+
+  /** A viewer let go of the view (its window closed). */
+  async dropView(viewer: string) {
+    this.views.delete(viewer.slice(0, 64));
+    await this.syncPictures();
+  }
+
+  /** The mirror gave up on this page and pictures take over (a viewer saw its layout come out wrong). */
+  async mirrorFallBack(reason: string) {
+    this.mirror?.fallBack(reason);
+    await this.syncPictures();
+  }
+
+  mirrorStatus(): MirrorStatus {
+    return this.mirror?.status() ?? { status: "off", reason: null };
+  }
+
+  mirrorResnapshot(): Promise<unknown> {
+    return this.mirror?.resnapshot() ?? Promise.resolve(null);
+  }
+
+  /**
+   * Where a click aimed at a mirrored node lands on the real page: the same place within the element (`fx`, `fy`,
+   * fractions of its box), or the point itself when the element has gone or moved off the page.
+   */
+  async mirrorPoint(node: number, fx: number, fy: number, x: number, y: number): Promise<{ x: number; y: number }> {
+    const r = this.mirror ? await this.mirror.rect(node) : null;
+    if (!r || r.w <= 0 || r.h <= 0) return { x, y };
+    const px = r.x + Math.max(0, Math.min(1, fx)) * r.w;
+    const py = r.y + Math.max(0, Math.min(1, fy)) * r.h;
+    if (px < 0 || py < 0 || px > this.vp.width || py > this.vp.height) return { x, y };
+    return { x: px, y: py };
+  }
+
+  /** The person scrolled the mirror: the real page (or the element) is scrolled to the same place. */
+  mirrorScroll(node: number, x: number, y: number): Promise<boolean> {
+    return this.run(async () => {
+      await this.personHand();
+      this.touched();
+      return this.mirror ? this.mirror.scroll(node, x, y) : false;
     });
-    this.streaming = true;
+  }
+
+  /** The person's pointer rested on something in the mirror: the real mouse goes there, so a menu that opens on
+      hover opens. The mirror's own :hover styles are its own and need none of this. */
+  userHover(x: number, y: number): Promise<void> {
+    return this.run(async () => {
+      const page = this.page;
+      if (!page) return;
+      const cx = Math.max(0, Math.min(this.vp.width, Math.round(x)));
+      const cy = Math.max(0, Math.min(this.vp.height, Math.round(y)));
+      this.pointer = { x: cx, y: cy };
+      await page.mouse.move(cx, cy).catch(() => undefined);
+    });
+  }
+
+  /**
+   * A sub-resource of the mirrored page, fetched through this browser's own network session (its cookies, its
+   * sign-ins) and kept in memory. Only an address the page itself referred to has a token.
+   */
+  async mirrorResource(token: string): Promise<{ type: string; body: Buffer } | null> {
+    const entry = this.mirror?.tokens.get(token);
+    const context = this.context;
+    if (!entry || !context) return null;
+    const hit = this.mirrorCache.get(token);
+    if (hit) return hit;
+    const res = await context.request.get(entry.url, {
+      headers: { referer: entry.referer, accept: entry.kind === "css" ? "text/css,*/*;q=0.1" : "image/*,font/*,*/*;q=0.5" },
+      timeout: 20_000, maxRedirects: 5, failOnStatusCode: false,
+    }).catch(() => null);
+    if (!res || res.status() >= 400) return null;
+    let body: Buffer = await res.body().catch(() => Buffer.alloc(0));
+    const type = servedType(entry.kind, res.headers()["content-type"] ?? "");
+    if (type.startsWith("text/css") && this.mirror) {
+      body = Buffer.from(rewriteCss(body.toString("utf8"), res.url(), this.mirror.tokens, entry.referer));
+    }
+    const out = { type, body };
+    this.mirrorCache.set(token, out);
+    return out;
   }
 
   /** Someone is working the page: raise the frame rate for a moment. */
@@ -2562,6 +2730,7 @@ export class LiveBrowser {
     const cdp = this.cdp;
     this.cdp = null;
     this.streaming = false;
+    this.screencasting = false;
     void (async () => {
       await cdp?.send("Page.stopScreencast").catch(() => undefined);
       await cdp?.detach().catch(() => undefined);
@@ -2582,7 +2751,7 @@ export class LiveBrowser {
   }
 
   private async sharpFrame() {
-    if (!this.page || this.sharpBusy || this.hooks.watchers() === 0) return;
+    if (!this.page || this.sharpBusy || !this.screencasting) return;
     if (Date.now() - this.lastFrameAt < SHARP_AFTER_MS - 50) return;
     if ((this.hooks.backlog?.() ?? 0) > 32 * 1024) return;
     this.sharpBusy = true;
@@ -2634,7 +2803,7 @@ export class LiveBrowser {
    * happen to move.
    */
   async nudge() {
-    if (!this.page || this.hooks.watchers() === 0) return;
+    if (!this.page || this.hooks.watchers() === 0 || !this.pictureWanted()) return;
     try {
       const shot: Buffer = await this.page.screenshot({
         type: "jpeg",
@@ -2700,6 +2869,7 @@ export class LiveBrowser {
         const cdp = this.cdp;
         this.cdp = null;
         this.streaming = false;
+        this.screencasting = false;
         await cdp?.send("Page.stopScreencast").catch(() => undefined);
         await cdp?.detach().catch(() => undefined);
         await this.startStream().catch(() => undefined);
@@ -2832,6 +3002,11 @@ export class LiveBrowser {
 
   async close() {
     this.closing = true;
+    this.mirror?.detach();
+    this.mirror = null;
+    this.views.clear();
+    if (this.viewTimer) clearInterval(this.viewTimer);
+    this.viewTimer = null;
     // This session's tab, and its hold on the shared browser. The browser
     // itself stops when the last session lets go.
     const context = this.context;
@@ -2841,6 +3016,7 @@ export class LiveBrowser {
     this.context = null;
     this.cdp = null;
     this.streaming = false;
+    this.screencasting = false;
     if (this.flushTimer) clearTimeout(this.flushTimer);
     this.flushTimer = null;
     this.pendingFrame = null;
