@@ -87,7 +87,7 @@ function bundledWrapper(id: VendorId): string | null {
 }
 
 /** Whether an executable of that name is on PATH. */
-function onPath(bin: string): boolean {
+export function onPath(bin: string): boolean {
   for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
     if (!dir) continue;
     try {
@@ -107,15 +107,25 @@ function vendorPath(id: VendorId): string {
   const set = (process.env[VENDORS[id].env] ?? "").trim();
   if (set) return set;
   if (fs.existsSync(VENDORS[id].file)) return VENDORS[id].file;
-  return bundledWrapper(id) ?? VENDORS[id].file;
+  return bundledWrapper(id) ?? "";
 }
 
 /** Can this vendor be called at all, right now? Cheap: one stat. */
 export function vendorReady(id: VendorId): { ok: boolean; path: string; detail: string } {
   const file = vendorPath(id);
+  if (!file) {
+    return {
+      ok: false,
+      path: "",
+      detail:
+        `No wrapper for ${VENDORS[id].name} in this build (dist/delegates/), so it cannot be called from here. ` +
+        `To fix it, ${VENDORS[id].install}.`,
+    };
+  }
   try {
     fs.accessSync(file, fs.constants.X_OK);
-    // The bundled wrapper is only a way to call the CLI: with no CLI behind it every call would fail, so it is not ready.
+    /* The bundled wrapper is only a way to call the CLI: with no CLI behind it every call would fail, so it is not ready.
+       A wrapper the person pointed at themselves (AUTORA_CLAUDE_CLI) may be anything, so it is trusted as it is. */
     if (file === bundledWrapper(id) && !onPath(CLI_OF[id].bin)) {
       return {
         ok: false,

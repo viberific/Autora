@@ -16,6 +16,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { type Effort, effectiveProfile, isOpenAiReasoningModel, learnRefusal, learnResponsesApi, usesResponsesApi } from "./modelprofile";
 import { type ModelSpec, providerSpec } from "./providers";
+import { streamCli } from "./llm-cli";
 
 /** A tool the model may call, in the one shape all three vendors accept once
     it has been wrapped in their own envelope. */
@@ -1217,6 +1218,8 @@ export function streamChat(call: ChatCall, onDelta: (text: string) => void): Pro
   // response, so unwrapping happens here rather than at the fetch.
   if (kind === "gemini") return streamGemini(call, onDelta).catch((err) => { throw fromSdk(err); });
   if (kind === "anthropic") return streamAnthropic(call, onDelta);
+  // A subscription CLI on this host: no key, no bill (./llm-cli).
+  if (kind === "cli") return streamCli(call, onDelta);
   return streamOpenAi(call, onDelta);
 }
 
