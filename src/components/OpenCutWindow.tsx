@@ -5,7 +5,7 @@ import { useCollab } from "../lib/collab";
 import { TakeControl } from "./TakeControl";
 import { SaveButton } from "./SaveButton";
 import { LoadButton } from "./LoadButton";
-import { useWindowFull } from "../lib/fullscreen";
+import { useFullscreen } from "../lib/fullscreen";
 import { along, humanRoute, restMs, routeMs, typingDelays, type Point } from "../lib/humanPath";
 import { clearCursor } from "../lib/cursorPos";
 import { beginHandRun, handPause, handsHalted, handsStopped } from "../lib/handHalt";
@@ -121,7 +121,7 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
      after that: it moves between projects itself, and a new address would reload it in the middle of the agent's work. */
   const [opening] = useState(desk.projectId ?? null);
   const mine = useCollab().held.includes("video");
-  const [full, setFull] = useWindowFull();
+  const [full, setFull] = useFullscreen();
   const [trouble, setTrouble] = useState<string | null>(null);
 
   // The agent's cursor, over the editor.

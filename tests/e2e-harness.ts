@@ -57,7 +57,8 @@ export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * element named has been the same twice, 150 ms apart. For tests that measure the menu or any text-sized box.
  */
 export async function settled(page: { evaluate: (fn: any, arg?: any) => Promise<any>; waitForTimeout: (ms: number) => Promise<void> }, selector = ".rail-slot"): Promise<void> {
-  await page.evaluate(() => (document as any).fonts.ready).catch(() => undefined);
+  // Asked for by name: `fonts.ready` alone can resolve before the page has even begun to load the face it is about to use.
+  await page.evaluate(() => Promise.all(["400 1em Inter", "600 1em Inter"].map((f) => (document as any).fonts.load(f))).then(() => (document as any).fonts.ready)).catch(() => undefined);
   let last = -1;
   for (let i = 0; i < 40; i += 1) {
     const now = await page.evaluate((q: string) => document.querySelector(q)?.getBoundingClientRect().width ?? 0, selector);
