@@ -71,7 +71,7 @@ export default tseslint.config(
     languageOptions: { globals: { ...globals.browser, FontFace: "readonly" }, sourceType: "script" },
   },
   {
-    files: ["office/vite/**/*.mjs"],
+    files: ["office/vite/**/*.mjs", "server/delegates/**/*.mjs"],
     languageOptions: { globals: globals.node },
   },
   {

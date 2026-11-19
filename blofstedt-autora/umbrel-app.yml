@@ -225,3 +225,8 @@ releaseNotes: >-
   scene name or text is missing its quotes. Held keys now work in the app
   window, a typo in a music, 3D, video or game control is caught, and keys
   printed in encoded forms are hidden from logs.
+  Claude Code and the Gemini CLI now come with Autora: sign in to each once
+  (docs/DELEGATES.md) and the agent can hand a job to either, on your own
+  subscription; until then it is not offered a tool that would fail. The
+  phone's Back button now brings the conversation back after a full-screen
+  window, and the agent's hand takes a window by its title bar.

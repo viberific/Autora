@@ -10,6 +10,10 @@
  *
  *   npx tsx tests/toolbudget.test.ts
  */
+// A machine with the Claude or Gemini CLI installed is offered those delegates (server/vendor.ts); the budget is measured without them,
+// as on CI, so what it reads does not depend on what happens to be installed.
+process.env.AUTORA_CLAUDE_CLI = "/nonexistent/claude-call";
+process.env.AUTORA_GEMINI_CLI = "/nonexistent/gemini-call";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";

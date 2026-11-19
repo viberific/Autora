@@ -205,7 +205,23 @@ RUN apk add --no-cache \
       font-noto \
       font-cantarell
 
+# The two subscription CLIs Autora can hand a job to (server/vendor.ts, server/delegates/): Claude Code and the Gemini CLI. Optional,
+# like the other engines: if they cannot be installed the image still builds, and the agent is simply not offered them. libgcc,
+# libstdc++ and ripgrep are what Claude Code needs on musl. Versions are pinned so an image is the same image twice. Signing in
+# is done once, by the person, in the running container (docs/DELEGATES.md); the sign-in lives under /data/home, the one
+# folder that outlives an update.
+ARG CLAUDE_CODE_VERSION=2.1.328
+ARG GEMINI_CLI_VERSION=0.68.0
+RUN (apk add --no-cache libgcc libstdc++ ripgrep \
+ && npm install -g --no-audit --no-fund "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" "@google/gemini-cli@${GEMINI_CLI_VERSION}" \
+ && npm cache clean --force) \
+ || echo "the Claude Code and Gemini CLIs could not be installed; the image will build without them"
+
 ENV NODE_ENV=production \
+    # Where the delegates keep their sign-in (HOME for the CLIs only), so it survives an update.
+    AUTORA_DELEGATE_HOME=/data/home \
+    # Claude Code uses the system ripgrep on musl.
+    USE_BUILTIN_RIPGREP=0 \
     # Umbrel's compose file publishes 8817 and app_proxy points at it.
     AUTORA_PORT=8817 \
     AUTORA_HOST=0.0.0.0 \
