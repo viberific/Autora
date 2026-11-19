@@ -30,11 +30,19 @@ export function workRectVisible(
 }
 
 export function isWorkVisible(element: Element, opts: { whole?: boolean } = {}): boolean {
+  return rectWorkVisible(element.getBoundingClientRect(), element.closest(".pa-board"), opts.whole ?? element instanceof HTMLIFrameElement);
+}
+
+/** Whether the point a hand grabs a control by (a title bar's end, a window's corner) is in view and not under the rail or the
+    conversation. The control as a whole may run under them (a wide window's bar does), and the person can still take it there. */
+export function isWorkPointVisible(point: { x: number; y: number }): boolean {
+  const spot = new DOMRect(point.x - 1, point.y - 1, 2, 2);
+  return rectWorkVisible(spot, document.querySelector(".pa-board"), false);
+}
+
+function rectWorkVisible(rect: DOMRect, board: Element | null, whole: boolean): boolean {
   if (document.visibilityState !== "visible") return false;
-  const rect = element.getBoundingClientRect();
-  const board = element.closest(".pa-board");
   /* A whole window (an editor's frame, or an in-page window such as Music's) is judged as a window, not as a control. */
-  const whole = opts.whole ?? element instanceof HTMLIFrameElement;
   if (!whole && !workRectVisible(rect, { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight })) return false;
   if (!board) return true;
   /* Inside the board above the entry, and not under the work navigation. That navigation is a small box in a corner,

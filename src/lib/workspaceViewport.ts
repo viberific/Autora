@@ -9,7 +9,10 @@ export function fitWorkView(boxes: readonly WorkBox[], viewport: WorkViewport, o
   if (viewport.width <= 64 || viewport.height <= 140) return null;
   const bounds = unionBounds(boxes.map((box) => ({ x: box.x, y: box.y, width: box.w, height: box.h })));
   // `foot`: room kept at the bottom for the entry strip; a viewport already measured above it (a phone's) keeps none.
-  const camera = fitAll(bounds ? [bounds] : [], { width: viewport.width, height: viewport.height - (opts.foot ?? 76) }, opts.padding ?? 32);
+  /* Fitted work is shown at its real size at most, as on a laptop; a wide screen has room to show it larger, in step with its
+     width (1.33 at 1920 px, 1.6 from 2300), so a table and a chart do not sit small in a sea of dotted grid. */
+  const maxZoom = Math.min(1.6, Math.max(1, viewport.width / 1440));
+  const camera = fitAll(bounds ? [bounds] : [], { width: viewport.width, height: viewport.height - (opts.foot ?? 76) }, opts.padding ?? 32, maxZoom);
   return { x: -camera.x / camera.zoom, y: -camera.y / camera.zoom, zoom: camera.zoom };
 }
 

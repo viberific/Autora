@@ -1104,7 +1104,7 @@ async function previewLook(run: PreviewRun, done: string): Promise<{ ok: boolean
  */
 async function previewAct(
   session: Session,
-  args: { action: string; target?: string; text?: string; key?: string; dy?: number; submit?: boolean },
+  args: { action: string; target?: string; text?: string; key?: string; dy?: number; submit?: boolean; hold_ms?: number },
 ): Promise<{ ok: boolean; summary: string; png?: Buffer }> {
   const run = previews.get(session.id);
   if (!run?.opened) return { ok: false, summary: "There is no preview open. Start one with app_preview start." };
@@ -1162,9 +1162,12 @@ async function previewAct(
       case "press": {
         const key = String(args.key ?? "").trim();
         if (!key) return { ok: false, summary: "press needs a key, e.g. Enter, Tab, Escape, ArrowDown." };
-        await live.keyboardPress(key);
+        // hold_ms: a key held down that long, for a game that reads the keys down each frame (a tap is under a frame's reading).
+        const held = Number.isFinite(args.hold_ms) ? Math.max(0, Math.min(5000, Math.round(Number(args.hold_ms)))) : 0;
+        if (held > 0 && !key.includes("+")) await live.keyboardHold(key, held);
+        else await live.keyboardPress(key);
         await settle();
-        done = `Pressed ${key}.`;
+        done = held > 0 && !key.includes("+") ? `Held ${key} for ${held} ms.` : `Pressed ${key}.`;
         break;
       }
       case "scroll": {
@@ -1259,6 +1262,9 @@ async function lookForChange(session: Session, run: PreviewRun, attempt: number)
    Its objects are the agent's and the person's own marks on their file, so
    they are not run through the secret table -- like the app window's state,
    this is sent as it is. */
+/** A tool's refusal because what it would write is the person's own words. */
+const THEIRS_REFUSAL = /the person's words|is theirs to write|are the person's to write/;
+
 /* What the person does to the PDF is theirs for a moment: the agent leaves that
    object alone and goes on to others. */
 onDeskTouch((sessionId, subject, kind, detail, opts) => touchPresence(sessionId, "pdf", subject, kind, detail, opts));
@@ -5945,7 +5951,9 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
             if (near) outcome.summary += `\n[Autora:${near}]`;
           }
           // Learned on the first failure: the same call will not be made again unchanged (server/failedcalls.ts).
-          if (!outcome.ok && !outcome.held && holdsBack(spec.name)) outcome.summary += `\n${FAILED_NOTE}`;
+          /* Not for a refusal that is the person's own words being theirs: that is the rule working, and the agent is told what to do
+             instead, not that its call "failed" and will be barred. */
+          if (!outcome.ok && !outcome.held && holdsBack(spec.name) && !THEIRS_REFUSAL.test(outcome.summary)) outcome.summary += `\n${FAILED_NOTE}`;
           const durationMs = Date.now() - started;
           const wrote = willWrite;
           if (spec.name === "edit_file" && outcome.ok) changedFiles.push(path.resolve(terminalDir(), String(use.args?.path ?? "")));
@@ -5988,7 +5996,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
             } else {
               /* The agent held back from the person's own words (a story's cards, a document that is theirs to write): the
                  rule working, not a tool that broke. The thread says so plainly instead of showing a failure. */
-              const theirs = /the person's words|is theirs to write|are the person's to write/.test(outcome.summary);
+              const theirs = THEIRS_REFUSAL.test(outcome.summary);
               emitEvent(session, "tool.error", "agent", {
                 // Playwright colours its call log; the thread is not a terminal.
                 error: stripAnsi(outcome.summary),

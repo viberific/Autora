@@ -58,7 +58,7 @@ async function onCanvas(frame: Frame, at: { fx?: number; fy?: number; dx?: numbe
       if (!best || r.width * r.height > best.width * best.height) best = r;
     }
     const zoom = [...document.querySelectorAll("span, b, i, div, button")].filter((e) => e.children.length === 0).map((e) => /^(\d{2,3})\s*%$/.exec((e.textContent ?? "").trim())).find(Boolean);
-    return best ? { x: best.left, y: best.top, w: best.width, h: best.height, zoom: zoom ? Number(zoom[1]) / 100 : null } : null;
+    return best ? { x: best.left, y: best.top, w: best.width, h: best.height, innerWidth: window.innerWidth, zoom: zoom ? Number(zoom[1]) / 100 : null } : null;
   });
   assert.ok(owner && found, "the editor has a canvas on screen");
   let { x, y, w, h } = found;
@@ -67,7 +67,10 @@ async function onCanvas(frame: Frame, at: { fx?: number; fy?: number; dx?: numbe
     const sh = (at.slide[1] * 96 / 72) * found.zoom;
     x += (w - sw) / 2; y += (h - sh) / 2; w = sw; h = sh;
   }
-  return { x: owner.x + x + (at.dx ?? (at.fx ?? 0) * w), y: owner.y + y + (at.dy ?? (at.fy ?? 0) * h) };
+  // The editor's pixels are the page's own; the board draws the page scaled (its camera's zoom), so what is on screen is those
+  // pixels times the frame's width on screen over its width in its own pixels.
+  const k = found.innerWidth > 0 ? owner.width / found.innerWidth : 1;
+  return { x: owner.x + (x + (at.dx ?? (at.fx ?? 0) * w)) * k, y: owner.y + (y + (at.dy ?? (at.fy ?? 0) * h)) * k };
 }
 
 async function main() {
@@ -82,7 +85,8 @@ async function main() {
   const browser = await chromium.launch({ executablePath: exe });
   try {
     const s = await app.newSession("Quarter", "build");
-    const state = async () => (await app.api("GET", `/api/officedesk/${s}`)).body;
+    // The desk now answers with one entry per open document (`windows`); "the state" here is the newest one's, with `windows` kept.
+    const state = async () => { const body = (await app.api("GET", `/api/officedesk/${s}`)).body; const all = (body.windows ?? []) as any[]; return { ...body, ...(all[all.length - 1] ?? {}) }; };
     /** A new document is typed into as the person watches; they take their turn when the agent has finished. */
     const stageOver = (kind: string) => until("the agent to finish typing", async () => !(((await state()).windows as any[]).find((w) => w.kind === kind) ?? {}).stage, 90_000);
     const fileOf = async () => {
@@ -206,13 +210,18 @@ async function main() {
       await app.turn(s, "make a small budget workbook", 120_000);
       assert.equal((await state()).kind, "xlsx");
       frame = await editorIn(page, "sheets");
-      await until("the editor", async () => /Formulas/.test(await bodyText(frame)), 120_000);
+      // A second document opens off to the side while the person is typing in the first (their camera and focus are theirs), and an
+      // editor that is out of view does not start: they jump to it, as a person does, and it opens. The ribbon is not shown (the bar
+      // is the tools), so "loaded" is the editor's own word for it.
+      await page.locator('[aria-label="Jump to work"] button[title*="budget" i]').first().click();
+      await until("the editor", async () => /Workbook fully loaded|Formulas/.test(await bodyText(frame)), 120_000);
       await until("the formula's value", async () => /13\.5/.test(await bodyText(frame)), 90_000).catch(() => undefined);
       const text = await bodyText(frame);
       assert.doesNotMatch(text, /Genspark/);
       assert.doesNotMatch(text, /[\u3400-\u9fff]/, "no Chinese anywhere in the editor");
       assert.doesNotMatch(text, /Autora/, "the ribbon has no Autora button");
-      assert.equal(await page.locator(".pdf-bar-name").innerText(), "budget.xlsx");
+      // Every window on the board has its own name strip: this one is the workbook's.
+      assert.equal(await page.locator(".pdf-bar-name", { hasText: "budget.xlsx" }).count(), 1);
       if (process.env.OFFICE_SHOT) { await sleep(1500); await page.screenshot({ path: `${process.env.OFFICE_SHOT}-book.png` }); }
     });
 
@@ -262,7 +271,9 @@ async function main() {
     });
 
     await test("with control taken, the agent's edit to the workbook is held", async () => {
-      await page.getByRole("button", { name: "Take control" }).click();
+      // Every window on the board has its own Take control: this is the workbook's.
+      const book = page.locator(".pw-engine", { has: page.locator(".pdf-bar-name", { hasText: "budget.xlsx" }) });
+      await book.getByRole("button", { name: "Take control" }).click();
       await sleep(500);
       let n = 0;
       app.decide = (req) => {
@@ -278,7 +289,7 @@ async function main() {
       assert.match(told, /taken control of the document in the Office window/);
       const cells = xlsxCells((await fileOf())!)!;
       assert.ok(![...cells.values()].includes("SHOULD NOT APPEAR"));
-      await page.getByRole("button", { name: "Hand back" }).click();
+      await page.locator(".pw-engine", { has: page.locator(".pdf-bar-name", { hasText: "budget.xlsx" }) }).getByRole("button", { name: "Hand back" }).click();
     });
 
     await test("the printed pages of a workbook say which cell a value is, when it is only in one", async () => {

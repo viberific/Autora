@@ -67,21 +67,6 @@ export const CATALOG: CatalogEntry[] = [
     }],
   },
   {
-    id: "slack",
-    name: "slack",
-    title: "Slack",
-    summary: "Read channels and threads, post messages and reactions in a Slack workspace.",
-    better: "Talks to Slack's API directly; the web app is heavy, slow to scroll and hard to read reliably.",
-    keywords: ["slack", "channel", "workspace", "dm", "message my team"],
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-slack"],
-    env: { SLACK_BOT_TOKEN: "${secret:SLACK_BOT_TOKEN}", SLACK_TEAM_ID: "${secret:SLACK_TEAM_ID}" },
-    needs: [
-      { env: "SLACK_BOT_TOKEN", label: "Slack bot token", url: "https://api.slack.com/apps", hint: "xoxb-…" },
-      { env: "SLACK_TEAM_ID", label: "Slack workspace (team) ID", hint: "T01234567" },
-    ],
-  },
-  {
     id: "notion",
     name: "notion",
     title: "Notion",
@@ -306,6 +291,12 @@ export function secretRefs(values: (string | undefined)[]): string[] {
  * words are nowhere: an empty "suggested" list is honest, and a list padded
  * to look helpful is not.
  */
+/** Whether `text` holds `word` as a whole word or phrase, not inside a longer one ("pr" is not in "improve"). */
+function hasWord(text: string, word: string): boolean {
+  const esc = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^a-z0-9])${esc}([^a-z0-9]|$)`).test(text);
+}
+
 export function suggested(
   options: {
     /** Server names already set up on this install. */
@@ -327,7 +318,7 @@ export function suggested(
     if (installed.has(entry.name.toLowerCase())) continue;
     const needs = entry.needs ?? [];
     const haveKey = needs.filter((n) => secrets.has(n.env.toUpperCase()));
-    const words = entry.keywords.filter((k) => k.length > 2 && text.includes(k.toLowerCase()));
+    const words = entry.keywords.filter((k) => k.length > 2 && hasWord(text, k.toLowerCase()));
     if (haveKey.length === 0 && words.length === 0) continue;
 
     /* A key they already hold outranks a word they said: one is a fact about

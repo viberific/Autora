@@ -7,7 +7,10 @@ export const FLOAT_SNAP = 56;
 export const FLOAT_MIN_W = 340;
 const FLOAT_MIN_H = 280;
 const FLOAT_DEFAULT_W = 360;
-const FLOAT_DEFAULT_H = 600;
+/** The most it opens tall: a share of the room, so a long thread leaves the work its half of a short screen
+    (600 px was 83% of a 720 p window), and more on a tall one. The person can still size it taller. */
+const FLOAT_DEFAULT_H_SHARE = 0.55;
+const FLOAT_DEFAULT_H_MAX = 720;
 /** How far an arrow key moves or resizes the window (four times this with Shift). */
 export const FLOAT_STEP = 16;
 
@@ -51,8 +54,13 @@ const between = (value: number, low: number, high: number) => Math.min(Math.max(
 
 /** Where the window opens: held to the left, at the foot of the world area, as tall as it allows up to the default. */
 export function defaultFloat(room: Room): FloatBox {
-  const w = Math.min(FLOAT_DEFAULT_W, Math.max(FLOAT_MIN_W, room.w - FLOAT_GAP * 2));
-  const h = Math.min(FLOAT_DEFAULT_H, Math.max(FLOAT_MIN_H, room.h - FLOAT_GAP * 2));
+  // On a big screen the window grows with it (a fifth of the width, up to 480), so its words stay as readable as the work's.
+  const wide = Math.min(480, Math.max(FLOAT_DEFAULT_W, Math.round(room.w * 0.2)));
+  const w = Math.min(wide, Math.max(FLOAT_MIN_W, room.w - FLOAT_GAP * 2));
+  // A portrait screen (a tablet held upright) has height to spare and little width for the work beside it: shorter there.
+  const share = room.h > room.w * 1.2 ? 0.4 : FLOAT_DEFAULT_H_SHARE;
+  const tall = Math.min(FLOAT_DEFAULT_H_MAX, Math.round(room.h * share));
+  const h = Math.min(tall, Math.max(FLOAT_MIN_H, room.h - FLOAT_GAP * 2));
   return clampFloat({ x: FLOAT_GAP, y: room.h - h - FLOAT_GAP, w, h, snap: "left" }, room);
 }
 

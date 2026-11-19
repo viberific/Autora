@@ -117,15 +117,20 @@ test("desktop gets a move grip and resize handles on every edge; a phone gets th
 test("the window opens at the bottom left, is held inside the world, and the magnet pulls it onto a side", () => {
   const room = { w: 1400, h: 900 };
   const start = defaultFloat(room);
-  assert.deepEqual(start, { x: FLOAT_GAP, y: 900 - 600 - FLOAT_GAP, w: 360, h: 600, snap: "left" });
-  // A short world: as tall as it allows, still a gap from the top and the foot.
-  assert.deepEqual(defaultFloat({ w: 1000, h: 500 }), { x: FLOAT_GAP, y: FLOAT_GAP, w: 360, h: 500 - FLOAT_GAP * 2, snap: "left" });
+  // 55% of the room's height, not a fixed 600: a long thread must leave the work its share of a short screen.
+  assert.deepEqual(start, { x: FLOAT_GAP, y: 900 - 495 - FLOAT_GAP, w: 360, h: 495, snap: "left" });
+  // A portrait tablet: 40% of the height, so the work keeps most of a tall, narrow screen.
+  assert.equal(defaultFloat({ w: 800, h: 1100 }).h, 440);
+  // A big screen: the window grows with it, to a ceiling.
+  assert.deepEqual(defaultFloat({ w: 2400, h: 1300 }), { x: FLOAT_GAP, y: 1300 - 715 - FLOAT_GAP, w: 480, h: 715, snap: "left" });
+  // A short world: never below the window's smallest height, still a gap from the foot.
+  assert.deepEqual(defaultFloat({ w: 1000, h: 500 }), { x: FLOAT_GAP, y: 500 - 280 - FLOAT_GAP, w: 360, h: 280, snap: "left" });
   // Free in the middle; near a side, pulled onto it; past an edge, kept a gap inside.
   assert.equal(magnet({ ...start, x: 500, snap: null }, room).snap, null);
   assert.deepEqual(magnet({ ...start, x: FLOAT_GAP + FLOAT_SNAP - 4, snap: null }, room), { ...start, x: FLOAT_GAP, snap: "left" });
   const right = magnet({ ...start, x: 1400 - 360 - FLOAT_GAP - 20, snap: null }, room);
   assert.deepEqual(right, { ...start, x: 1400 - 360 - FLOAT_GAP, snap: "right" });
-  assert.deepEqual(clampFloat({ ...start, x: -300, y: 5000, snap: null }, room), { ...start, x: FLOAT_GAP, y: 900 - 600 - FLOAT_GAP, snap: null });
+  assert.deepEqual(clampFloat({ ...start, x: -300, y: 5000, snap: null }, room), { ...start, x: FLOAT_GAP, y: 900 - 495 - FLOAT_GAP, snap: null });
   // By keyboard a step is shorter than the magnet's reach: one step off a side frees it, a step back against it holds it.
   const stepped = nudgeFloat(start, 16, 0, room);
   assert.deepEqual(stepped, { ...start, x: FLOAT_GAP + 16, snap: null });

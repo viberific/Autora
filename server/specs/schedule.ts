@@ -337,7 +337,7 @@ export const scheduleSPECS: ToolSpec[] = [
       "stop closes it. To test what you built, use it as a person would, in the same window the person is " +
       "watching, with a visible cursor: click and hover take a target (the words on a button or link, a " +
       "field's label or placeholder, or a CSS selector); type puts text into a target (or into the field " +
-      "already focused) and submit presses Enter after; press sends a key (Enter, Tab, Escape, ArrowDown); " +
+      "already focused) and submit presses Enter after; press sends a key (Enter, Tab, Escape, ArrowDown), or with hold_ms holds it down for that long (to drive a game); " +
       "scroll moves the page by dy pixels (negative is up). Each returns a picture of the page afterwards, " +
       "so you see what happened. The person's comments come back as one message beginning [Autora: the person " +
       "reviewed the app preview; make those changes in the source.",
@@ -348,6 +348,7 @@ export const scheduleSPECS: ToolSpec[] = [
         target: { type: "string", description: "click, hover, type: what to act on -- words on it, a label, a placeholder, or a CSS selector." },
         text: { type: "string", description: "type: the text to type." },
         key: { type: "string", description: "press: a key, e.g. Enter, Tab, Escape, ArrowDown, Control+A." },
+        hold_ms: { type: "number", description: "press: hold the key down this many milliseconds (up to 5000) instead of tapping it: a game that reads the keys down each frame, like moving right while ArrowRight is held, needs this." },
         dy: { type: "number", description: "scroll: pixels down (negative for up). Default 500." },
         submit: { type: "boolean", description: "type: press Enter afterwards." },
         command: { type: "string", description: "start: the dev server command, e.g. npm run dev." },

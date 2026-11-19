@@ -206,7 +206,16 @@ async function main() {
       assert.match(await phone.locator("iframe[title='Panacea · Images']").getAttribute("src") ?? "", /phone=1/);
       /* The desktop's chrome is away: the strip above the bar, where Photoshop's toolbox and options would be, is the picture's
          own black, with no menu bar's grey. Then the bar's Layers opens a sheet there. */
-      const box = (await phone.locator("iframe[title='Panacea · Images']").boundingBox())!;
+      // Full screen glides the window to its place: measured once it has stopped, not on the way.
+      const frameBox = async () => (await phone.locator("iframe[title='Panacea · Images']").boundingBox())!;
+      let box = await frameBox();
+      for (let i = 0; i < 30; i += 1) {
+        await sleep(200);
+        const next = await frameBox();
+        const still = Math.abs(next.x - box.x) < 1 && Math.abs(next.y - box.y) < 1 && Math.abs(next.width - box.width) < 1 && Math.abs(next.height - box.height) < 1;
+        box = next;
+        if (still) break;
+      }
       const lit = async (y0: number, y1: number) => {
         const png = (await phone.screenshot({ clip: { x: 8, y: box.y + y0, width: 374, height: y1 - y0 } })).toString("base64");
         return phone.evaluate(async (data) => {

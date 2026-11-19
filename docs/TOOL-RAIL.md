@@ -62,7 +62,7 @@ elsewhere, a wheel or a resize, and the keys work it (up and down, right into a 
 - **Pins** (Sheets, done): above the groups, a row of round icons the person has pinned, those that apply to the pick (Bold,
   Italic, Cell colour, AutoSum to start). Each entry in a group has a pin at the end of its row (P on the keys); kept in the
   page's storage (`autora-menu-pins-<app>`). On a desktop Sheets has no card on a click: this menu is its tools.
-- **Sheets** (done): `office/shim/rail.js` (`MENU`, `openMenu`), with the grid's own menu off (`office/patches/0004`).
+- **Sheets** (done): `office/shim/rail.js` (`MENU`, `openMenu`), with the grid's own menu off (`office/patches/0004-sheets-autora-context-menu.patch`).
   Formatting: Bold, Italic, Underline, Text colour, Cell colour. Data: Sort & filter, Conditional formatting, Format as
   table (a block picked), Insert / Delete row and column. Formula: AutoSum, Insert function. Autora: Ask Autora, All tools.
   Test: `tests/ui-office-menu.test.ts`.

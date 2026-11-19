@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useFullscreen } from "../lib/fullscreen";
+import { useWindowFull } from "../lib/fullscreen";
 import { onPhotoHand, onPhotoState, photoStateNow, usePhotoState, type PhotoHand } from "../lib/photodesk";
 import { clearCursor } from "../lib/cursorPos";
 import { pointerFollow } from "../lib/pointer";
@@ -45,7 +45,7 @@ export function PhotoWindow({ sessionId, phone }: { sessionId: string; phone: bo
   /** The newest revision the frame is known to have: loaded into it, or made in it. */
   const known = useRef(-1);
   const [trouble, setTrouble] = useState<string | null>(null);
-  const [full, setFull] = useFullscreen();
+  const [full, setFull] = useWindowFull();
   /* No cursor is played over a picture the server changed: that would be a recording of work already done. With Visible
      work on, the agent's edits are done here, live, by its hand in the editor (`byHand` below); what the server changes
      (Visible work off, or a file opened) simply appears. */

@@ -178,6 +178,8 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
   const hostedRef = useRef(hosted);
   /** The piece that arrived last: what Autora's own framing shows when everything at once would be too small to read. */
   const latest = useRef<string | null>(null);
+  /** A window that has just been opened and not yet brought into view (see the effect that does). */
+  const arrived = useRef<string | null>(null);
   const pendingJump = useRef<string | null>(null);
   const previousFollow = useRef<WorkspaceMode | null>(null);
   const hostedKey = hosted.map((work) => work.id).join("|");
@@ -216,6 +218,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
         const height = phone ? Math.max(560, (room?.height ?? 600) - 16) : 740;
         next[id] = { x: -(count % 3 + 1) * 1200, y: Math.floor(count / 3) * 920, w: width, h: height };
         latest.current = id;
+        arrived.current = id;
         count += 1;
       }
       return ids.some((id) => !before[id]) ? next : before;
@@ -569,6 +572,29 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     previousFollow.current = followTarget ?? null;
     if (followTarget && ready) handle.current?.jump(followTarget === "panacea" ? null : `engine:${followTarget}`, true);
   }, [followTarget, ready, engineBoxes, handle, canvas.focus]);
+  /* A window that has just opened and is nowhere in view is brought into view even when the camera has been held: a held
+     view keeps the person's own framing from being pulled about, but an app opened by the agent that appears nowhere
+     leaves them with nothing to look at but a small icon. Not while they type, drag or hold a pin; a window already on
+     screen is left as it is. */
+  useEffect(() => {
+    const id = arrived.current;
+    const box = id ? engineBoxes[id] : null;
+    const el = root.current;
+    if (!id || !box || !el || !ready || phone) return;
+    arrived.current = null;
+    // The camera is automatic until the person takes it: then it already fits everything (autoFit), this window with the rest.
+    if (!interacted.current) return;
+    if (handsBusy() || enginePins.size > 0 || canvasRef.current.panels.some((panel) => panel.pinned)) return;
+    const room = workViewport(el);
+    if (room.width <= 0 || room.height <= 0) return;
+    const v = viewRef.current;
+    const left = v.x + insetOf(el, room) / v.zoom;
+    const x0 = Math.max(box.x, left), x1 = Math.min(box.x + box.w, left + room.width / v.zoom);
+    const y0 = Math.max(box.y, v.y), y1 = Math.min(box.y + box.h, v.y + room.height / v.zoom);
+    if (Math.max(0, x1 - x0) * Math.max(0, y1 - y0) >= 0.2 * box.w * box.h) return;
+    const next = shifted(fitWorkView([box], { width: room.width, height: room.height }, fitOpts), insetOf(el, room));
+    if (next) setView(next, true);
+  }, [engineBoxes, ready, phone, enginePins.size, handsBusy, setView, fitOpts]);
   useEffect(() => {
     const id = pendingJump.current;
     if (id && engineBoxes[id] && !handsBusy()) { pendingJump.current = null; handle.current?.jump(id); }

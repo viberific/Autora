@@ -221,7 +221,7 @@ export function OfficeWindow({ sessionId, kind, phone }: { sessionId: string; ki
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [api, fetchDocument, post]);
+  }, [api, fetchDocument, post, kind, sessionId]);
 
   // What the engine sends its editor page (webContents.send), passed on to the frame.
   useEffect(() => onOfficePush((msg) => {

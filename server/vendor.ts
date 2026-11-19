@@ -71,9 +71,43 @@ export const VENDORS: Record<VendorId, Vendor> = {
   },
 };
 
+/** The CLI each wrapper hands its job to. */
+const CLI_OF: Record<VendorId, { bin: string; install: string }> = {
+  claude: { bin: "claude", install: "npm install -g @anthropic-ai/claude-code" },
+  gemini: { bin: "gemini", install: "npm install -g @google/gemini-cli" },
+};
+
+/** The wrapper this server carries (server/delegates/, copied to dist/delegates/ by the build), or null outside a checkout. */
+function bundledWrapper(id: VendorId): string | null {
+  for (const dir of [path.join(process.cwd(), "dist", "delegates"), path.join(process.cwd(), "server", "delegates")]) {
+    const file = path.join(dir, `${id}-call.mjs`);
+    if (fs.existsSync(file)) return file;
+  }
+  return null;
+}
+
+/** Whether an executable of that name is on PATH. */
+function onPath(bin: string): boolean {
+  for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
+    if (!dir) continue;
+    try {
+      const file = path.join(dir, bin);
+      fs.accessSync(file, fs.constants.X_OK);
+      if (fs.statSync(file).isFile()) return true;
+    } catch { /* not in this one */ }
+  }
+  return false;
+}
+
+/**
+ * Which wrapper to run: the one the environment names, else one the person wrote (/data/bin/claude-call.sh, which keeps its
+ * place so an existing set-up is not taken over), else the one this server carries.
+ */
 function vendorPath(id: VendorId): string {
   const set = (process.env[VENDORS[id].env] ?? "").trim();
-  return set || VENDORS[id].file;
+  if (set) return set;
+  if (fs.existsSync(VENDORS[id].file)) return VENDORS[id].file;
+  return bundledWrapper(id) ?? VENDORS[id].file;
 }
 
 /** Can this vendor be called at all, right now? Cheap: one stat. */
@@ -81,6 +115,14 @@ export function vendorReady(id: VendorId): { ok: boolean; path: string; detail: 
   const file = vendorPath(id);
   try {
     fs.accessSync(file, fs.constants.X_OK);
+    // The bundled wrapper is only a way to call the CLI: with no CLI behind it every call would fail, so it is not ready.
+    if (file === bundledWrapper(id) && !onPath(CLI_OF[id].bin)) {
+      return {
+        ok: false,
+        path: file,
+        detail: `The ${CLI_OF[id].bin} CLI is not installed here, so ${VENDORS[id].name} cannot be called. To fix it, ${CLI_OF[id].install}, then sign in once (docs/DELEGATES.md).`,
+      };
+    }
     return { ok: true, path: file, detail: `${VENDORS[id].what} (${file})` };
   } catch {
     return {
@@ -339,7 +381,7 @@ function sentenceFor(reason: FailureReason, said = ""): string {
   const also = said ? ` It said: ${clip(said)}` : "";
   switch (reason) {
     case "rate_limit": return `It hit its rate limit or quota.${also}`;
-    case "auth": return `It is not signed in any more, or its sign-in expired.${also}`;
+    case "auth": return `It is not signed in any more, or its sign-in expired: sign in once in the Autora container (docs/DELEGATES.md).${also}`;
     case "timeout": return "It ran out of time and was stopped. A shorter or narrower ask is the way in.";
     case "not_installed": return `The CLI is not installed at that path.${also}`;
     default: return said ? clip(said) : "It stopped without saying why.";

@@ -862,7 +862,11 @@ export async function runVideoTool(name: string, args: Record<string, any>, ctx:
 
     switch (name) {
       case "video_open": {
+        // A server that never built the editor cannot start it: say so at once, not after a minute and a half of waiting.
+        const unbuilt = (): VideoOutcome | null => !isReady(win(ctx.session)) && !fs.existsSync(path.join(process.cwd(), "dist", "opencut-editor", "index.html"))
+          ? { ok: false, summary: "Autora Video is not installed on this server (its editor was not built), so there is nothing to open. Say so to the person." } : null;
         if (typeof args.new === "string" && args.new.trim()) {
+          const none = unbuilt(); if (none) return none;
           await command(ctx.session, "new_project", { name: args.new.trim() });
         } else if (typeof args.project === "string" && args.project.trim()) {
           const found = findProject(args.project.trim());
@@ -870,8 +874,10 @@ export async function runVideoTool(name: string, args: Record<string, any>, ctx:
             const have = listProjects();
             return { ok: false, summary: `There is no video project "${args.project}".${have.length ? ` There are: ${have.slice(0, 12).map((p) => `${p.name} (${p.id})`).join("; ")}.` : " There are none yet; pass new to make one."}` };
           }
+          const none = unbuilt(); if (none) return none;
           await command(ctx.session, "open_project", { projectId: found.id });
         } else {
+          const none = unbuilt(); if (none) return none;
           await command(ctx.session, "state"); // Just open the window on whatever it last had.
         }
         await sleep(400); // The editor swaps projects after the command answers.

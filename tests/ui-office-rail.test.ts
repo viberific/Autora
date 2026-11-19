@@ -48,22 +48,36 @@ async function main() {
       await page.waitForSelector(".office-window");
       await until("the editor's frame", async () => !!editorOf(page), 40_000);
       const frame = editorOf(page)!;
-      await frame.waitForSelector("#autora-rail", { timeout: 40_000 });
+      // The bar is a card that comes to the pick (Pages) or the right-click menu (Sheets), so it is not always drawn: its buttons are
+      // pressed in the page, as ui-office-needs does, which is what the agent's hand and a shortcut reach too.
+      const press = (selector: string) => frame.evaluate((sel) => document.querySelector<HTMLElement>(sel)!.click(), selector);
+      await frame.waitForSelector("#autora-rail", { state: "attached", timeout: 40_000 });
 
-      await test(`${app_}: the ribbon is not shown, and the bar is on the right with the common tools`, async () => {
+      await test(`${app_}: the ribbon is not shown, and the bar holds the common tools`, async () => {
         await until("the ribbon to be closed", async () => ((await frame.evaluate(() => document.querySelector(".ribbon, header.excel-header")?.getBoundingClientRect().height ?? 0)) < 2));
-        const bar = await frame.evaluate(() => { const r = document.querySelector("#autora-rail")!.getBoundingClientRect(); return { right: window.innerWidth - r.right, buttons: document.querySelectorAll("#autora-rail button").length, mid: Math.abs((r.top + r.bottom) / 2 - window.innerHeight / 2) }; });
-        assert.ok(bar.right < 20 && bar.mid < 10, "down the right, centred");
+        // The contextual design (0.9.3xx): the bar is a card that comes to the words (Pages) or is the right-click menu (Sheets), not a
+        // rail fixed down the right. It holds the common tools and the grid button; when it is drawn it lies inside the editor.
+        const bar = await frame.evaluate(() => {
+          const el = document.querySelector("#autora-rail")!;
+          const r = el.getBoundingClientRect();
+          const drawn = r.width > 0 && getComputedStyle(el).visibility !== "hidden";
+          return { drawn, inside: r.left >= -1 && r.right <= window.innerWidth + 1 && r.top >= -1 && r.bottom <= window.innerHeight + 1, buttons: el.querySelectorAll("button").length };
+        });
+        assert.ok(!bar.drawn || bar.inside, "drawn inside the editor, never off it");
         assert.ok(bar.buttons >= 10, "as many tools as fit, and the grid button");
       });
 
       await test(`${app_}: All tools holds every command of the ribbon, grouped by tab, and each tile can be pinned`, async () => {
-        await until("the ribbon to be read", async () => { await frame.click('#autora-rail [aria-label="All tools"]'); const groups = (await frame.locator("#autora-grid h4").allTextContents()).map((g) => g.trim()); await frame.click('#autora-grid [aria-label="Close"]'); return groups.includes("Insert") && groups.includes("View"); }, 40_000);
-        await frame.click('#autora-rail [aria-label="All tools"]');
+        // The rail reads every ribbon command, tab by tab, once the editor is up; the grid is what it read.
+        await frame.waitForSelector("html[data-rail-scanned]", { state: "attached", timeout: 60_000 });
+        await press('#autora-rail [aria-label="All tools"]');
+        await frame.waitForSelector("#autora-grid h4", { timeout: 20_000 });
+        const groups = (await frame.locator("#autora-grid h4").allTextContents()).map((g) => g.trim());
+        assert.ok(groups.includes("Insert") && groups.includes("View"), `groups: ${groups.join(", ")}`);
         assert.ok((await frame.locator("#autora-grid .ar-tile").count()) > 60, "dozens of commands, not a handful");
         assert.ok((await frame.locator("#autora-grid .ar-pin").count()) > 60, "each with a pin");
-        await frame.click('#autora-grid [aria-label="Close"]');
-        assert.equal(await frame.locator("#autora-grid").count(), 0);
+        await press('#autora-grid [aria-label="Close"]');
+        await frame.waitForSelector("#autora-grid", { state: "detached", timeout: 10_000 });
       });
 
       await test(`${app_}: the editor's keyboard shortcuts still work, and the bar's tools follow them`, async () => {
@@ -79,9 +93,9 @@ async function main() {
       await test(`${app_}: a tool on the bar does what its ribbon button does`, async () => {
         if (bold) await frame.locator(bold).first().click(); else await page.mouse.click(1000, 400);
         await page.keyboard.press("Control+A");
-        await frame.click('#autora-rail [aria-label="Italic"]');
+        await press('#autora-rail [aria-label="Italic"]');
         await until("Italic to be on", async () => (await frame.locator('#autora-rail [aria-label="Italic"].on').count()) === 1);
-        await frame.click('#autora-rail [aria-label="Italic"]');
+        await press('#autora-rail [aria-label="Italic"]');
       });
       await page.close();
     }

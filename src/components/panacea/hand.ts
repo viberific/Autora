@@ -22,7 +22,7 @@ import { applyParam, blockRange } from "../../lib/panacea/document";
 import { docViews } from "./docViews";
 import { centreOf, pointerGo, pointerPlace, pointerRest, pointerTyping } from "../../lib/pointer";
 import { typingDelays, type Point } from "../../lib/humanPath";
-import { isWorkVisible } from "../../lib/frameCoordinates";
+import { isWorkPointVisible, isWorkVisible } from "../../lib/frameCoordinates";
 import { beginHandRun, endHandRun, handPause, handsHalted, handsStopped } from "../../lib/handHalt";
 import type { BoardHandle } from "./Board";
 
@@ -86,6 +86,19 @@ async function into(el: Element): Promise<Point> {
   return p;
 }
 
+/** A spot to take a long title bar by: along its length, clear of the conversation and the work buttons and not on one of its own
+    buttons. A wide window's middle is often under the floating conversation, which a person simply does not take it by. */
+function grabPoint(head: Element): Point | null {
+  const r = head.getBoundingClientRect();
+  for (const f of [0.2, 0.35, 0.5, 0.65, 0.8]) {
+    const p = { x: r.left + Math.max(24, r.width * f), y: r.top + r.height / 2 };
+    if (!isWorkPointVisible(p)) continue;
+    const hit = document.elementFromPoint(p.x, p.y);
+    if (hit && (hit === head || head.contains(hit)) && !hit.closest("button, input, select, a")) return p;
+  }
+  return null;
+}
+
 async function click(el: Element | null): Promise<void> {
   if (!el) throw new Skip("not on screen");
   if ((el as HTMLButtonElement).disabled) throw new Skip("not available");
@@ -125,8 +138,9 @@ async function press(key: string, el?: Element | null, mods: KeyboardEventInit =
 }
 
 /** Press on `el` at `from`, move to `to` a frame at a time, let go. */
-async function drag(el: Element, from: Point, to: Point, area: Element = el): Promise<void> {
-  if (!isWorkVisible(area) && !pressable(area)) throw new Skip("the control is outside the workspace view");
+async function drag(el: Element, from: Point, to: Point, area: Element = el, byPoint = false): Promise<void> {
+  // By its grab point when the control is long (a window's title bar), which can run under the rail while its end is clear.
+  if (!(byPoint ? isWorkPointVisible(from) : isWorkVisible(area)) && !pressable(area)) throw new Skip("the control is outside the workspace view");
   await pointerGo(from, false);
   await sleep(rand(80, 150));
   el.dispatchEvent(ptr("pointerdown", from));
@@ -746,7 +760,9 @@ async function layoutStep(s: Extract<HandStep, { op: "win-move" | "win-size" | "
   const tile = "kind" in s && s.kind === "surface" ? `[data-surface="${CSS.escape(s.id)}"]` : `[data-work="${CSS.escape(s.id)}"]`;
   const root = env.root.querySelector(tile);
   if (!root) throw new Skip("not on screen");
-  const head = root.querySelector(":scope > .pw-engine-head, :scope > .pa-surface-head");
+  /* The window's title bar is the app's own bar (one strip: the board's buttons sit at its right end, in `.pw-engine-head`, which
+     is only those buttons); a surface's is its own head. It is what a person takes a window by. */
+  const head = root.querySelector(":scope > .pw-engine-body .pdf-bar") ?? root.querySelector(":scope > .pw-engine-head, :scope > .pa-surface-head");
   if (!head) throw new Skip("it has no title bar on screen");
   if (s.op === "win-max") {
     const label = root.classList.contains("is-max") ? `Restore ${s.title}` : `Maximise ${s.title}`;
@@ -754,7 +770,7 @@ async function layoutStep(s: Extract<HandStep, { op: "win-move" | "win-size" | "
     return;
   }
   if (s.op === "win-front") {
-    const p = await into(head);
+    const p = grabPoint(head) ?? await into(head);
     await pointerGo(p, true, head);
     root.dispatchEvent(ptr("pointerdown", p));
     root.dispatchEvent(ptr("pointerup", p));
@@ -762,10 +778,10 @@ async function layoutStep(s: Extract<HandStep, { op: "win-move" | "win-size" | "
     return;
   }
   if (s.op === "win-move") {
-    const from = await into(head);
+    const from = grabPoint(head) ?? await into(head);
     const r = head.getBoundingClientRect();
     const dest = env.board.toScreen(s.x, s.y);
-    await drag(head, from, { x: dest.x + (from.x - r.left), y: dest.y + (from.y - r.top) });
+    await drag(head, from, { x: dest.x + (from.x - r.left), y: dest.y + (from.y - r.top) }, head, true);
     return;
   }
   const handle = root.querySelector(":scope > .pa-resize");

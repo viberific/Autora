@@ -52,15 +52,19 @@ async function main() {
       const installed = ((await app.api("GET", "/api/settings")).body.tools.installed ?? {}) as Record<string, boolean>;
       assert.equal(typeof installed.pdf, "boolean");
       const tiles = await page.locator(".tool-tile").evaluateAll((els) => els.map((e) => ({ name: e.querySelector("b")?.textContent ?? "", text: (e as HTMLElement).innerText, off: (e as HTMLButtonElement).disabled })));
-      assert.ok(tiles.length >= 12);
+      // With every editor built there is a tile for each; an editor that is not built has none (the chooser offers only what works here).
+      assert.ok(tiles.length >= (Object.values(installed).every(Boolean) ? 12 : 6), `${tiles.length} tiles`);
       const body = page.locator(".tools-body");
       const fits = await body.evaluate((e) => e.scrollHeight <= e.clientHeight + 40);
       assert.ok(fits, "the list does not hide capabilities below a scroll");
-      const sheets = tiles.find((t) => t.name === "Spreadsheets")!;
+      const sheets = tiles.find((t) => t.name === "Spreadsheets");
       if (installed.sheets === false) {
-        assert.ok(sheets.off);
-        assert.match(sheets.text, /Not installed on this server/);
-      } else assert.ok(!sheets.off);
+        // Not installed: no tile, or one that says so and cannot be pressed.
+        if (sheets) {
+          assert.ok(sheets.off);
+          assert.match(sheets.text, /Not installed on this server/);
+        }
+      } else assert.ok(sheets && !sheets.off, "Spreadsheets is offered when its editor is built");
       await page.keyboard.press("Escape");
       await sleep(200);
     });

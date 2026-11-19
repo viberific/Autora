@@ -32,11 +32,11 @@ import { addFlow, type Flow } from "../src/lib/panacea/flows";
 import type { Join } from "../src/lib/panacea/joins";
 import { WORKSPACE_MODES, type WorkspaceMode } from "../src/lib/workspace";
 import { treeLive } from "../src/lib/panacea/wiring";
-import { MUSIC_TRACK, isMusicBind, readMusic } from "../src/lib/panacea/apps/music";
+import { MUSIC_BINDS, MUSIC_TRACK, isMusicBind, readMusic } from "../src/lib/panacea/apps/music";
 import { placeWindow, maximise as maximiseWindow, tidy as tidyBoxes, windowNamed, windowTitle, type WinBox } from "../src/lib/panacea/windows";
-import { MODEL_PART, isModelBind, readModel } from "../src/lib/panacea/apps/model";
-import { VIDEO_CLIP, isVideoBind, readVideo } from "../src/lib/panacea/apps/video";
-import { GAME_OBJECT, isGameBind, readGame } from "../src/lib/panacea/apps/game";
+import { MODEL_BINDS, MODEL_PART, isModelBind, readModel } from "../src/lib/panacea/apps/model";
+import { VIDEO_BINDS, VIDEO_CLIP, isVideoBind, readVideo } from "../src/lib/panacea/apps/video";
+import { GAME_BINDS, GAME_OBJECT, isGameBind, readGame } from "../src/lib/panacea/apps/game";
 import { cadModel, cadPanel } from "./caddesk";
 import { gamePanel, gameProject } from "./gamedesk";
 import { videoPanel, videoSnapshot } from "./opencut";
@@ -533,9 +533,31 @@ function agentProblem(c: Canvas, key: string, v: unknown): string | null {
  * where the Music window shows it (src/lib/panacea/apps/music.ts). Returns the problem, if any. The track a track's
  * controls act on is the canvas's own, so it is set first.
  */
+/** A key one or two letters off a control of an app (`music.bpmm`, `game.jumpp`): a typo, which would be accepted and read by nothing.
+    Says which control was probably meant. Other keys in an app's family are the person's own marks (a level sketch's `game.level`)
+    and are the canvas's to keep, so only a near miss is refused. Null otherwise. */
+function unknownAppKey(key: string): string | null {
+  const binds = [...MUSIC_BINDS, ...MODEL_BINDS, ...VIDEO_BINDS, ...GAME_BINDS] as readonly string[];
+  if (!key.includes(".") || binds.includes(key)) return null;
+  const family = key.split(".")[0];
+  const distance = (x: string, y: string): number => {
+    let row = Array.from({ length: y.length + 1 }, (_, j) => j);
+    for (let i = 1; i <= x.length; i += 1) {
+      const next = [i];
+      for (let j = 1; j <= y.length; j += 1) next[j] = Math.min(row[j]! + 1, next[j - 1]! + 1, row[j - 1]! + (x[i - 1] === y[j - 1] ? 0 : 1));
+      row = next;
+    }
+    return row[y.length]!;
+  };
+  const near = binds.filter((b) => b.split(".")[0] === family && distance(key, b) <= 2);
+  return near.length ? `"${key}" is not a control, so nothing would read it. Did you mean ${near.join(" or ")}?` : null;
+}
+
 function setChecked(session: string, c: Canvas, key: string, v: unknown, hooks: PanaceaHooks): string | null {
   const bad = agentProblem(c, key, v);
   if (bad) return bad;
+  const unknown = unknownAppKey(key);
+  if (unknown) return unknown;
   if (isMusicBind(key) && key !== MUSIC_TRACK) {
     if (hooks.windowOff?.(APP_SWITCH.music)) return offWords("music");
     const done = studioPanel(session, key, v, c.values[MUSIC_TRACK], "agent");

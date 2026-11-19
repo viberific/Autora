@@ -388,8 +388,9 @@ test("a delegate is not handed the server's own secrets", () => {
 });
 
 test("the default wrapper for each vendor is where it is documented to be", () => {
+  // docs/DELEGATES.md: the person's own wrapper at /data/bin when there is one, else the one this server carries.
   const ready = vendorReady("gemini");
-  assert.ok(ready.path.endsWith("gemini-call.sh"), ready.path);
+  assert.ok(ready.path.endsWith("/data/bin/gemini-call.sh") || /delegates[\\/]gemini-call\.mjs$/.test(ready.path), ready.path);
 });
 
 /* ------------------------------------------------------------- the thread -- */

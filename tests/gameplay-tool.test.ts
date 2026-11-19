@@ -84,7 +84,7 @@ addEventListener("keydown", (e) => down.add(e.key)); addEventListener("keyup", (
       const out = await run({ fresh: false });
       assert.equal(out.ok, false);
       assert.match(out.summary, /no preview of the game to play/);
-      assert.match(out.summary, /game window open beside the chat/);
+      assert.match(out.summary, /window is not open beside the chat/);
     });
 
     await test("a bad script is refused before anything runs", async () => {
@@ -118,7 +118,7 @@ addEventListener("keydown", (e) => down.add(e.key)); addEventListener("keyup", (
       game.previewWait.fresh = 1_200;
       const out = await run({});
       assert.ok(out.ok, out.summary);
-      assert.match(out.summary, /did not make a new preview in time/);
+      assert.match(out.summary, /made no new preview in/);
       assert.match(out.summary, /changed after this preview was made/, "and that it is of an earlier game");
     });
 
@@ -135,7 +135,7 @@ addEventListener("keydown", (e) => down.add(e.key)); addEventListener("keyup", (
       assert.ok(out.ok, out.summary);
       assert.match(out.summary, /this is the fresh one/, "the new instance was played");
       assert.doesNotMatch(out.summary, /changed after this preview was made/, "and it is of the current game");
-      assert.doesNotMatch(out.summary, /did not make a new preview/);
+      assert.doesNotMatch(out.summary, /made no new preview/);
     });
 
     await test("the game's own errors come back as findings", async () => {

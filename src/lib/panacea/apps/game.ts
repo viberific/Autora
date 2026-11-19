@@ -17,7 +17,7 @@ export const GAME_OBJECT = "game.object";
 
 /** The 3D physics a body has (src/lib/gamephysics.ts), in the words its panel uses. */
 const BODY_BINDS = ["game.body", "game.weight", "game.bounce", "game.grip", "game.fall", "game.upright"] as const;
-const GAME_BINDS = [GAME_OBJECT, "game.speed", "game.jump", "game.gravity", "game.friction", ...BODY_BINDS] as const;
+export const GAME_BINDS = [GAME_OBJECT, "game.speed", "game.jump", "game.gravity", "game.friction", ...BODY_BINDS] as const;
 const isBodyBind = (bind: string) => (BODY_BINDS as readonly string[]).includes(bind);
 
 /** Every `game.*` value something acts on: the adapter's, and what the panels that hold the person's choices keep. */

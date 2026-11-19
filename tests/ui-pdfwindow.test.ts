@@ -68,6 +68,10 @@ async function waitDrawn(frame: Frame): Promise<boolean> {
   return false;
 }
 
+/** A press on one of the editor's own controls, made in its page. Playwright's hit test through the board's scaled frame reports a
+    control "intercepted" that a person can press (ui-office-needs does the same), so the press is delivered to the control itself. */
+const tap = (frame: Frame, selector: string) => frame.locator(selector).first().dispatchEvent("click");
+
 async function main() {
   const exe = CHROME;
   if (!fs.existsSync(exe)) { console.log("  skip  no browser here"); return; }
@@ -389,7 +393,7 @@ async function main() {
       await sleep(300);
 
       // Draw: one 46px row of three colours, a wheel and a thickness slider; the choices reach the mark.
-      await frame.click('[data-phone="draw"]');
+      await tap(frame, '[data-phone="draw"]');
       await frame.waitForSelector('[data-testid="phone-tray"][data-mode="ink"]', { timeout: 10_000 });
       assert.equal(await frame.locator('[data-testid="secondary-toolbar"]:visible').count(), 0, "Spectra's own strip steps aside");
       const tray = await frame.evaluate(() => {
@@ -403,7 +407,7 @@ async function main() {
         await phone.mouse.move(box.x + 160, box.y + dy + 40, { steps: 6 }); await phone.mouse.move(box.x + 240, box.y + dy, { steps: 6 }); await phone.mouse.up();
         await sleep(300);
       };
-      await frame.click('.autora-tray .autora-swatch >> nth=0');
+      await tap(frame, '.autora-tray .autora-swatch >> nth=0');
       await frame.$eval('[data-testid="phone-width"]', (el) => { const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!; set.call(el, "9"); el.dispatchEvent(new Event("input", { bubbles: true })); });
       // On the page, above the tray and the bar along the frame's foot, whatever the frame's height.
       await stroke(Math.round(box.height * 0.35));
@@ -412,29 +416,29 @@ async function main() {
       assert.ok(first.some(([c, w]) => c === "#e0393e" && (w as number) > 5), `the red, thick stroke: ${JSON.stringify(first)}`);
 
       // Shapes: the left button steps through the figures, and the wheel colours what is drawn.
-      await frame.click('[data-phone="shape"]');
+      await tap(frame, '[data-phone="shape"]');
       await frame.waitForSelector('[data-testid="phone-shape"]', { timeout: 10_000 });
       const figure = () => frame.evaluate(() => document.querySelector('[data-testid="phone-shape"]')!.getAttribute("aria-label"));
       assert.match((await figure())!, /Box/);
-      await frame.click('[data-testid="phone-shape"]');
+      await tap(frame, '[data-testid="phone-shape"]');
       assert.match((await figure())!, /Circle/);
-      await frame.click('[data-testid="phone-shape"]');
-      await frame.click('[data-testid="phone-shape"]');
-      await frame.click('[data-testid="phone-shape"]');
-      await frame.click('[data-testid="phone-shape"]');
-      await frame.click('[data-testid="phone-shape"]');
-      await frame.click('[data-testid="phone-shape"]');
+      await tap(frame, '[data-testid="phone-shape"]');
+      await tap(frame, '[data-testid="phone-shape"]');
+      await tap(frame, '[data-testid="phone-shape"]');
+      await tap(frame, '[data-testid="phone-shape"]');
+      await tap(frame, '[data-testid="phone-shape"]');
+      await tap(frame, '[data-testid="phone-shape"]');
       assert.match((await figure())!, /Box/, "seven figures, then round to the first");
       await frame.$eval('[data-testid="phone-wheel"]', (el) => { const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!; set.call(el, "#10b981"); el.dispatchEvent(new Event("input", { bubbles: true })); });
       await sleep(200);
       await phone.mouse.move(box.x + 80, box.y + box.height * 0.45); await phone.mouse.down(); await phone.mouse.move(box.x + 220, box.y + box.height * 0.6, { steps: 6 }); await phone.mouse.up();
       await sleep(500);
       assert.ok(await frame.evaluate(() => [...document.querySelectorAll("rect,ellipse")].some((e) => e.getAttribute("stroke") === "#10b981")), "a green box was drawn");
-      await frame.click('.autora-tray-x');
+      await tap(frame, '.autora-tray-x');
       await frame.waitForSelector('[data-testid="phone-tray"]', { state: "detached", timeout: 10_000 });
 
       // Redact: a tap on a word marks that word, with handles to change it.
-      await frame.click('[data-phone="redact"]');
+      await tap(frame, '[data-phone="redact"]');
       await frame.waitForSelector('[data-testid="phone-tray"][data-mode="redact"]', { timeout: 10_000 });
       const word = await frame.evaluate(() => {
         const span = [...document.querySelectorAll(".textLayer span")].find((x) => x.textContent?.includes("Lease"));
@@ -448,10 +452,10 @@ async function main() {
       const mark = await frame.evaluate(() => { const m = document.querySelector(".page-redact")!.getBoundingClientRect(); return { w: m.width, handles: document.querySelectorAll(".autora-redact-handle").length }; });
       assert.equal(mark.handles, 4, "a handle on each side");
       assert.ok(mark.w > word.w * 0.8 && mark.w < word.w * 1.6, `the mark is about the word (${mark.w} vs ${word.w})`);
-      await frame.click('.autora-tray-x');
+      await tap(frame, '.autora-tray-x');
 
       // Sign: Draw or Type, never an image.
-      await frame.click('[data-phone="sign"]');
+      await tap(frame, '[data-phone="sign"]');
       await frame.waitForSelector('[data-testid="signature-door-draw"]', { timeout: 10_000 });
       assert.equal(await frame.locator('[data-testid="signature-door-type"]:visible').count(), 1);
       assert.equal(await frame.locator('[data-testid="signature-door-import"]:visible').count(), 0, "no image door on a phone");
@@ -461,7 +465,7 @@ async function main() {
       await frame.waitForSelector('[role="dialog"]', { state: "detached", timeout: 10_000 });
 
       // The grid: every tool, in the middle of the screen, with a close button.
-      await frame.click('[data-phone="grid"]');
+      await tap(frame, '[data-phone="grid"]');
       await frame.waitForSelector('[data-testid="phone-grid"]', { timeout: 10_000 });
       const grid = await frame.evaluate(() => {
         const g = document.querySelector('[data-testid="phone-grid"]')!.getBoundingClientRect();
@@ -472,16 +476,16 @@ async function main() {
       assert.ok(grid.closeAtRight, "a close button at the top right");
       assert.ok(grid.tiles >= 40, `every tool is in it (${grid.tiles})`);
       for (const id of ["note", "stamp", "callout", "organize", "protect", "measure"]) assert.equal(await frame.locator(`[data-tile="${id}"]`).count(), 1, id);
-      await frame.click('[data-testid="phone-grid-close"]');
+      await tap(frame, '[data-testid="phone-grid-close"]');
       await frame.waitForSelector('[data-testid="phone-grid"]', { state: "detached", timeout: 10_000 });
       // A tile from the grid arms the tool: Note brings its own tray.
-      await frame.click('[data-phone="grid"]');
-      await frame.click('[data-tile="note"]');
+      await tap(frame, '[data-phone="grid"]');
+      await tap(frame, '[data-tile="note"]');
       await frame.waitForSelector('[data-testid="phone-tray"][data-mode="note"]', { timeout: 10_000 });
-      await frame.click('.autora-tray-x');
+      await tap(frame, '.autora-tray-x');
 
       // Find is Spectra's own find bar, one row.
-      await frame.click('[data-phone="find"]');
+      await tap(frame, '[data-phone="find"]');
       await frame.waitForSelector('[data-testid="find-bar"]', { timeout: 10_000 });
       assert.equal(await frame.evaluate(() => [...document.querySelectorAll('[data-testid="find-bar"] button')].filter((b) => b.getClientRects().length > 0).length), 1, "only the close button");
       await phone.close();
@@ -550,7 +554,7 @@ async function main() {
       await sleep(800);
 
       // The open tool's settings are a card beside the bar, with labels (there is room for them).
-      await frame.click('[data-phone="draw"]');
+      await tap(frame, '[data-phone="draw"]');
       await frame.waitForSelector('[data-testid="phone-tray"][data-mode="ink"]', { timeout: 10_000 });
       await sleep(450); // it slides in
       const card = await frame.evaluate(() => {
@@ -558,18 +562,18 @@ async function main() {
         return { besideBar: r.right < b.left, labels: t.innerText.includes("Colour") && t.innerText.includes("Thickness"), swatches: t.querySelectorAll(".autora-swatch").length };
       });
       assert.ok(card.besideBar && card.labels && card.swatches === 3, JSON.stringify(card));
-      await frame.click('.autora-tray-x');
+      await tap(frame, '.autora-tray-x');
 
       // Shapes: every figure is a button on a desktop.
-      await frame.click('[data-phone="shape"]');
+      await tap(frame, '[data-phone="shape"]');
       await frame.waitForSelector(".autora-shapes", { timeout: 10_000 });
       assert.equal(await frame.locator(".autora-shapes button").count(), 7);
-      await frame.click('.autora-shapes [data-shape="arrow"]');
+      await tap(frame, '.autora-shapes [data-shape="arrow"]');
       assert.equal(await frame.getAttribute('[data-testid="shape-type-arrow"]', "aria-pressed"), "true");
-      await frame.click('.autora-tray-x');
+      await tap(frame, '.autora-tray-x');
 
       // Redact: a click on a word marks it, as a tap does on a phone.
-      await frame.click('[data-phone="redact"]');
+      await tap(frame, '[data-phone="redact"]');
       await frame.waitForSelector('[data-testid="phone-tray"][data-mode="redact"]', { timeout: 10_000 });
       const at = await frame.evaluate(() => {
         const span = [...document.querySelectorAll(".textLayer span")].find((x) => x.textContent?.includes("Lease"))!;
@@ -581,39 +585,39 @@ async function main() {
       await wide.mouse.click(wbox.x + at.x, wbox.y + at.y);
       await frame.waitForSelector(".page-redact", { timeout: 10_000 });
       assert.equal(await frame.locator(".autora-redact-handle").count(), 4);
-      await frame.click('.autora-tray-x');
+      await tap(frame, '.autora-tray-x');
 
       // The grid: every tool, with a pin on each; pinning and unpinning changes the bar, and Reset puts it back.
       const barBefore = await frame.evaluate(() => [...document.querySelectorAll('[data-testid="phone-bar"] button')].map((b) => b.getAttribute("data-phone")));
-      await frame.click('[data-phone="grid"]');
+      await tap(frame, '[data-phone="grid"]');
       await frame.waitForSelector('[data-testid="phone-grid"]', { timeout: 10_000 });
       assert.ok((await frame.locator("[data-tile]").count()) >= 40);
       assert.ok((await frame.locator("[data-pin]").count()) >= 40, "a pin on every tile");
-      await frame.click('[data-pin="stamp"]');
-      await frame.click('[data-pin="compare"]');
-      await frame.click('[data-testid="phone-grid-close"]');
+      await tap(frame, '[data-pin="stamp"]');
+      await tap(frame, '[data-pin="compare"]');
+      await tap(frame, '[data-testid="phone-grid-close"]');
       const barIds = () => frame.evaluate(() => [...document.querySelectorAll('[data-testid="phone-bar"] button')].map((b) => b.getAttribute("data-phone")));
       let ids = await barIds();
       assert.ok(!ids.includes("stamp") && ids.includes("compare"), `unpinned Stamps, pinned Compare: ${ids.join(",")}`);
-      await frame.click('[data-phone="grid"]');
-      await frame.click('[data-testid="phone-grid-reset"]');
-      await frame.click('[data-testid="phone-grid-close"]');
+      await tap(frame, '[data-phone="grid"]');
+      await tap(frame, '[data-testid="phone-grid-reset"]');
+      await tap(frame, '[data-testid="phone-grid-close"]');
       await sleep(400); // a tool leaving fades out
       ids = await barIds();
       assert.deepEqual(ids, barBefore, "Reset puts the bar back as it was");
 
       // A tool with a pane (Protect) opens it as a window in the middle; a tool with no tray keeps Spectra's own options, as a card.
-      await frame.click('[data-phone="grid"]');
-      await frame.click('[data-tile="protect"]');
+      await tap(frame, '[data-phone="grid"]');
+      await tap(frame, '[data-tile="protect"]');
       await frame.waitForSelector(".tool-dock", { timeout: 10_000 });
       const dock = await frame.evaluate(() => { const d = document.querySelector(".tool-dock")!.getBoundingClientRect(); return Math.abs(d.left + d.width / 2 - innerWidth / 2) < 4 && Math.abs(d.top + d.height / 2 - innerHeight / 2) < 4; });
       assert.ok(dock, "the pane is a window in the middle");
-      await frame.click('[data-testid="tool-dock-close"]');
-      await frame.click('[data-phone="grid"]');
-      await frame.click('[data-tile="measure"]');
+      await tap(frame, '[data-testid="tool-dock-close"]');
+      await tap(frame, '[data-phone="grid"]');
+      await tap(frame, '[data-tile="measure"]');
       await frame.waitForSelector('[data-testid="secondary-toolbar"]', { timeout: 10_000 });
       assert.ok(await frame.evaluate(() => { const c = document.querySelector('[data-testid="secondary-toolbar"]')!.getBoundingClientRect(); const b = document.querySelector('[data-testid="phone-bar"]')!.getBoundingClientRect(); return c.right < b.left; }), "Spectra's own strip is a card beside the bar");
-      await frame.click('[data-testid="secondary-action-tools.close"]');
+      await tap(frame, '[data-testid="secondary-action-tools.close"]');
 
       // The left side: the file basics, a switcher for Spectra's panels, and the pages (not Spectra's icon strip).
       await frame.waitForSelector('.autora-left [data-file="merge"]', { timeout: 10_000 });
@@ -629,25 +633,26 @@ async function main() {
       assert.equal(left.panels.length, 8);
       assert.match(left.title ?? "", /pages/i, "the pages are what it shows");
       assert.ok(left.mergeEnabled && left.above);
-      await frame.click('.autora-left [data-panel="bookmarks"]');
+      await tap(frame, '.autora-left [data-panel="bookmarks"]');
       await frame.waitForFunction(() => /bookmarks/i.test(document.querySelector('[data-testid="nav-panel-title"]')?.textContent ?? ""), null, { timeout: 10_000 });
-      await frame.click('.autora-left [data-panel="pages"]');
+      await tap(frame, '.autora-left [data-panel="pages"]');
       await frame.waitForFunction(() => /pages/i.test(document.querySelector('[data-testid="nav-panel-title"]')?.textContent ?? ""), null, { timeout: 10_000 });
-      await frame.click('.autora-left [data-file="compress"]');
+      await tap(frame, '.autora-left [data-file="compress"]');
       await frame.waitForSelector(".tool-dock", { timeout: 10_000 });
-      await frame.click('[data-testid="tool-dock-close"]');
-      await frame.click('[data-testid="phone-pane-button"]');
+      await tap(frame, '[data-testid="tool-dock-close"]');
+      await tap(frame, '[data-testid="phone-pane-button"]');
       await frame.waitForSelector(".autora-left", { state: "detached", timeout: 10_000 });
-      await frame.click('[data-testid="phone-pane-button"]');
+      await tap(frame, '[data-testid="phone-pane-button"]');
       await frame.waitForSelector(".autora-left", { timeout: 10_000 });
 
       // The menu holds what the menu bar did.
-      await frame.click('[data-testid="phone-menu-button"]');
+      await tap(frame, '[data-testid="phone-menu-button"]');
       await frame.waitForSelector('[data-testid="phone-menu"]', { timeout: 10_000 });
       const heads = await frame.evaluate(() => [...document.querySelectorAll(".autora-menu-head")].map((h) => h.textContent?.trim()));
       for (const name of ["File", "Edit", "View", "Document", "Tools", "Window", "Help"]) assert.ok(heads.includes(name), `the menu has ${name}`);
       assert.ok((await frame.locator(".autora-menu-item").count()) > 3, "File's items are shown");
-      await wide.keyboard.press("Escape");
+      // Escape, to the editor's own window (its menu listens there); a synthetic press leaves the focus where it was.
+      await frame.evaluate(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
       await frame.waitForSelector('[data-testid="phone-menu"]', { state: "detached", timeout: 10_000 });
       await wide.close();
     });

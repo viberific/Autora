@@ -160,9 +160,9 @@ await test("code that does not parse is refused before anything is offered", asy
 });
 
 await test("the overview names what is set up and what can be offered", async () => {
-  const out = await runTool(findTool("mcp_servers")!, { topic: "slack channel" }, {} as any);
+  const out = await runTool(findTool("mcp_servers")!, { topic: "notion wiki" }, {} as any);
   assert.match(out.summary, /greeter/);
-  assert.match(out.summary, /slack/);
+  assert.match(out.summary, /notion/);
 });
 
 console.log(`\nmcp offers: ${passed} passed`);

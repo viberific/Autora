@@ -51,6 +51,23 @@ const free = () => new Promise<number>((resolve) => {
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Wait until a page's layout stands still: its web fonts are in (the app shows Inter with `font-display: swap`, so for a
+ * moment it is laid out in the system's wider font, and anything measured then is the wrong size) and the width of the
+ * element named has been the same twice, 150 ms apart. For tests that measure the menu or any text-sized box.
+ */
+export async function settled(page: { evaluate: (fn: any, arg?: any) => Promise<any>; waitForTimeout: (ms: number) => Promise<void> }, selector = ".rail-slot"): Promise<void> {
+  // Asked for by name: `fonts.ready` alone can resolve before the page has even begun to load the face it is about to use.
+  await page.evaluate(() => Promise.all(["400 1em Inter", "600 1em Inter"].map((f) => (document as any).fonts.load(f))).then(() => (document as any).fonts.ready)).catch(() => undefined);
+  let last = -1;
+  for (let i = 0; i < 40; i += 1) {
+    const now = await page.evaluate((q: string) => document.querySelector(q)?.getBoundingClientRect().width ?? 0, selector);
+    if (now === last && now > 0) return;
+    last = now;
+    await page.waitForTimeout(150);
+  }
+}
+
 /** Whether a request is the first of its turn: it ends on the person's message, not on tool results. Not "the history
     has no tool messages": a chat may carry an earlier turn's tool work on (ContextEngine.canCarry). */
 export const turnStart = (req: Seen): boolean => req.messages[req.messages.length - 1]?.role !== "tool";

@@ -953,7 +953,6 @@ export function allSecrets(): Record<string, string> {
     "ANTHROPIC_API_KEY",
     "AWS_ACCESS_KEY_ID",
     "AWS_SECRET_ACCESS_KEY",
-    "SLACK_BOT_TOKEN",
   ]) {
     if (process.env[k]?.trim()) result[k] = process.env[k]!.trim();
   }
@@ -1006,11 +1005,6 @@ export const SECRET_PRESETS: Record<string, { label: string; description: string
     label: "Deepgram API Key",
     description: "Reads replies aloud through Deepgram's hosted Aura voices, the same ones on every device.",
     placeholder: "a Deepgram API key",
-  },
-  SLACK_BOT_TOKEN: {
-    label: "Slack Bot Token",
-    description: "Bot user OAuth token for Slack notifications and integrations.",
-    placeholder: "xoxb-...",
   },
   AWS_ACCESS_KEY_ID: {
     label: "AWS Access Key ID",
@@ -1115,13 +1109,24 @@ function currentRedactor() {
   const table = secretTable();
   const signature = table.map((t) => `${t.label}\u0000${t.value}`).join("\u0001");
   if (redactor?.signature === signature) return redactor;
+  /* The secret as it is, and as a command that is not trying to hide it would print it: base64 (padded or not, and the URL form), hex and
+     backwards. A key piped through `base64` or `rev` used to reach the log and the model whole. Best effort: a person or a model set on
+     leaking a key can always find another way, and this is not a defence against one; it stops the accidental forms. */
+  const variants = (value: string): string[] => {
+    if (value.length < 12) return [value];
+    const b64 = Buffer.from(value).toString("base64");
+    return [value, b64, b64.replace(/=+$/, ""), b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""),
+      Buffer.from(value).toString("hex"), [...value].reverse().join("")];
+  };
+  const labels = new Map<string, string>();
+  for (const t of table) for (const v of variants(t.value)) if (!labels.has(v)) labels.set(v, t.label);
   // Longest first, so a secret that contains another is blanked whole.
-  const values = table.map((t) => t.value).sort((a, b) => b.length - a.length);
+  const values = [...labels.keys()].sort((a, b) => b.length - a.length);
   const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   redactor = {
     signature,
     pattern: values.length ? new RegExp(values.map(escape).join("|"), "g") : null,
-    labels: new Map(table.map((t) => [t.value, t.label])),
+    labels,
   };
   return redactor;
 }

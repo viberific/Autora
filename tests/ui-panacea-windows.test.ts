@@ -76,6 +76,9 @@ async function main() {
       const z = async (id: string) => (await wins(s)).find((w) => w.id === id)!.z;
       const cadFront = (await z("engine:cad")) > (await z("engine:studio"));
       const target = cadFront ? "engine:studio" : "engine:cad";
+      // Which windows a page frames depends on where they were left: the person brings this one into view (its jump button) to click it.
+      await page.locator(`[aria-label="Jump to work"] button[aria-label="Jump to ${target === "engine:cad" ? "3D" : "Music"}"]`).click();
+      await sleep(900);
       await page.locator(`.pw-engine[data-work="${target}"] .pw-engine-body .pdf-bar`).click({ position: { x: 150, y: 10 } });
       await until("the clicked window is in front in the canvas", async () => (await z(target)) > (await z(target === "engine:cad" ? "engine:studio" : "engine:cad")));
       const r = await rects(page);

@@ -417,8 +417,11 @@ export async function availableTools(): Promise<ToolSpec[]> {
   const groups = await groupStates();
   const usable = new Set(groups.filter((g) => g.available).map((g) => g.group));
   const settings = toolSettings();
+  /* A delegate to a vendor's CLI is offered only when that CLI is installed and signed in here: otherwise every call fails (they
+     were the tools that failed every time in the logs), and the briefing already tells the agent not to call them. */
+  const delegateMissing = (name: string) => (name === "claude_cli" && !vendorReady("claude").ok) || (name === "gemini_cli" && !vendorReady("gemini").ok);
   return [
-    ...TOOLS.filter((t) => !windowOff(t.name, settings) && (
+    ...TOOLS.filter((t) => !windowOff(t.name, settings) && !delegateMissing(t.name) && (
       t.group === "person" || t.group === "files" || t.group === "schedule" ||
       /* Muting the voice is the one thing that survives having muted it: a
          tool that takes itself away with the thing it turns off would leave
@@ -738,7 +741,7 @@ export interface ToolContext {
     reload: () => Promise<{ ok: boolean; summary: string }>;
     look: () => Promise<{ ok: boolean; summary: string; png?: Buffer }>;
     /** Use the page as a person would: click, hover, type, press a key, scroll. */
-    act: (args: { action: string; target?: string; text?: string; key?: string; dy?: number; submit?: boolean }) => Promise<{ ok: boolean; summary: string; png?: Buffer }>;
+    act: (args: { action: string; target?: string; text?: string; key?: string; dy?: number; submit?: boolean; hold_ms?: number }) => Promise<{ ok: boolean; summary: string; png?: Buffer }>;
   };
   /** Agent mode's switch between planning and building. Absent where there is
       no session to switch. */
@@ -2736,7 +2739,7 @@ async function runToolUnredacted(
         if (["click", "hover", "type", "press", "scroll"].includes(action)) {
           const r = await ctx.preview.act({
             action, target: args.target === undefined ? undefined : String(args.target), text: args.text === undefined ? undefined : String(args.text),
-            key: args.key === undefined ? undefined : String(args.key), dy: args.dy === undefined ? undefined : Number(args.dy), submit: args.submit === true,
+            key: args.key === undefined ? undefined : String(args.key), hold_ms: args.hold_ms === undefined ? undefined : Number(args.hold_ms), dy: args.dy === undefined ? undefined : Number(args.dy), submit: args.submit === true,
           });
           const picture = r.png ? pictureFor(r.png, "image/png") : null;
           return { ok: r.ok, summary: r.summary, preview: r.ok ? `${action} in the app` : undefined, ...(picture ? { images: [picture] } : {}) };
@@ -4075,7 +4078,7 @@ export async function capabilityBriefing(): Promise<string> {
   }
   lines.push(
     "- Setting up MCP servers: always available. Tools: mcp_servers, mcp_offer. When the person asks about MCP servers or " +
-      "integrations, answer from mcp_servers. When a task lives on a service with an API (GitHub, Slack, Notion, a database, " +
+      "integrations, answer from mcp_servers. When a task lives on a service with an API (GitHub, Notion, a database, " +
       "maps, library docs) and no connected server covers it, offer one with mcp_offer before reaching for the browser -- " +
       "once, with the reason in a line -- and use its tools if they say yes. Failing a ready-made one, write a small " +
       "one (mcp_offer tools=...). Do not offer for one-off lookups a page read answers faster, and never ask for keys in chat.",

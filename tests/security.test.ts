@@ -259,6 +259,16 @@ await test("provider keys from the environment are blanked, not only three of th
   assert.match(out, /\[REDACTED_OPENAI_KEY\]/);
 });
 
+await test("a key printed in the forms a command makes of it (base64, hex, backwards) is blanked too", () => {
+  const key = "sk-deepseek-env-0123456789";
+  const forms = [Buffer.from(key).toString("base64"), Buffer.from(key).toString("hex"), [...key].reverse().join(""), Buffer.from(key).toString("base64").replace(/=+$/, "")];
+  for (const form of forms) {
+    const out = stateMod.redactSecrets(`output: ${form}\n`);
+    assert.ok(!out.includes(form), `${form} was left in: ${out}`);
+    assert.match(out, /REDACTED_DEEPSEEK_API_KEY/);
+  }
+});
+
 await test("a secret containing another is blanked whole, and changes apply at once", () => {
   stateMod.setSecret("SHORT_TOKEN", "abcd1234");
   stateMod.setSecret("LONG_TOKEN", "abcd1234-and-more");

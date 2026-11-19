@@ -460,6 +460,11 @@ await test("panacea_set checks each value; panacea_arrange moves, puts away (not
   const set = await run("panacea_set", { values: { [`@${dat}.filter.Region`]: ["EU"], budget: "lots" } });
   assert.ok(set.ok);
   assert.match(set.summary, /Not set: budget: budget is shown by a control that holds number/);
+  // A typo of a control is refused with the control it was probably meant for; a key of the same family that is no control's near miss is kept.
+  const typo = await run("panacea_set", { values: { "music.bpmm": 100 } });
+  assert.equal(typo.ok, false);
+  assert.match(typo.summary, /Did you mean music\.bpm\?/);
+  assert.ok((await run("panacea_set", { values: { "game.level": "a long hall" } })).ok, "a mark of the person's own in an app's family is the canvas's");
   const ids: string[] = c.panels.filter((p: { state: string }) => p.state === "live").map((p: { id: string }) => p.id);
   const moved = await run("panacea_arrange", { move: [{ id: ids[0], x: 1000, y: 1000 }], group: ids.slice(0, 2), remove: [ids[1]] });
   assert.ok(moved.ok, moved.summary);

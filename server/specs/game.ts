@@ -146,13 +146,14 @@ export const gameSPECS: ToolSpec[] = [
     group: "files",
     description:
       "The shape of a new thing as the editor saves it, to copy and fill in: kind is scene, layer, instance, object (with `type`, " +
-      "like Sprite or TextObject::Text), behavior (with `type`), resource (with `type`: image, audio, font...), event, comment, group, " +
+      "like Sprite or TextObject::Text), animation (a Sprite's frames: pass images, resource names), behavior (with `type`), resource (with `type`: image, audio, font...), event, comment, group, " +
       "repeat, while, foreach, condition, action, variable, variable-structure or object-group. Put it into the game with game_edit insert.",
     parameters: {
       type: "object",
       properties: {
         kind: { type: "string" },
         type: { type: "string", description: "For object, behavior and resource: which one." },
+        images: { type: "array", items: { type: "string" }, description: "For animation: the image resource names, one per frame." },
       },
       required: ["kind"],
     },
@@ -213,15 +214,17 @@ export const gameSPECS: ToolSpec[] = [
     description:
       "Add a file to the game's resources: a picture, sound, font, video, 3D model or json, from an artifact id (file_...) or a path on " +
       "this host. It is kept with the game and added to resources.resources under `resource` (default: the file's name); then use that " +
-      "name in objects and instructions.",
+      "name in objects and instructions. With no art yet, pass placeholder instead of file to make a solid picture here (a Sprite with " +
+      "no picture is invisible): the person's own art replaces it later.",
     parameters: {
       type: "object",
       properties: {
-        file: { type: "string", description: "An artifact id (file_...) or a path." },
+        file: { type: "string", description: "An artifact id (file_...) or a path. Not needed with placeholder." },
+        placeholder: { type: "object", description: "Make a picture instead of reading a file: { width, height (1 to 1024), color: \"#rrggbb\", shape: \"rect\" or \"circle\" }. Name it with resource.", properties: { width: { type: "number" }, height: { type: "number" }, color: { type: "string" }, shape: { type: "string" } } },
         name: { type: "string", description: "The file's name, with its extension, if it has none worth keeping." },
         resource: { type: "string", description: "The name objects will use for it. Default: the file's name." },
       },
-      required: ["file"],
+      required: [],
     },
   },
 ];

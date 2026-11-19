@@ -18,6 +18,11 @@ async function main() {
   try {
     console.log("Autora 3D");
     const s = await app.newSession("modelling", "build");
+    // A server built without this editor answers 503: nothing here can run, which is not a failure of the code (like e2e-photo).
+    if ((await app.api("GET", `/api/cad/${s}`)).status === 503) {
+      console.log("  skip  Autora 3D is not built (npm --prefix autora-3d run build)");
+      return;
+    }
     const told: any[] = [];
     const ws = new WebSocket(`${app.base.replace(/^http/, "ws")}/ws/${s}`);
     ws.on("message", (raw) => { const m = JSON.parse(String(raw)); if (m.type === "caddesk") told.push(m.state); });

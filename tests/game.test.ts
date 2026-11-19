@@ -7,6 +7,7 @@
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import zlib from "node:zlib";
 import os from "node:os";
 import path from "node:path";
 
@@ -145,6 +146,24 @@ await test("an instruction the engine does not have is saved but flagged, with t
   assert.match(r.summary, /layouts\[Scene\]\.events\[1\]\.actions\[0\]/);
 });
 
+await test("the catalog finds an entry by how a person says it", async () => {
+  const restart = (await run("game_catalog", { query: "restart scene", kind: "action", limit: 3 })).summary;
+  assert.match(restart, /"Scene"/, "restarting a scene is the action Scene");
+  // "scene variable" is the engine's "Change variable value": the everyday entries are in the first dozen, not buried under long ones.
+  const v = (await run("game_catalog", { query: "scene variable" })).summary;
+  assert.match(v, /"SetNumberVariable"/);
+  assert.match(v, /"NumberVariable"/);
+  assert.match((await run("game_catalog", { query: "set text", limit: 3 })).summary, /TextContainerBehavior::SetValue/);
+});
+
+await test("a scene name written without quotes is flagged, and a key written bare is not; a wrong count shows the shape asked for", async () => {
+  const bad = { type: "BuiltinCommonInstructions::Standard", conditions: [{ type: { inverted: false, value: "KeyFromTextPressed" }, parameters: ["", "R"], subInstructions: [] }], actions: [{ type: { value: "Scene" }, parameters: ["", "Scene", "true"], subInstructions: [] }, { type: { value: "SetX" }, parameters: ["Cat", "+"], subInstructions: [] }], events: [] };
+  const r = await run("game_edit", { ops: [{ op: "insert", path: "layouts[Scene].events", value: bad }] });
+  assert.match(r.summary, /write it quoted/);
+  assert.doesNotMatch(r.summary, /KeyFromTextPressed.*quoted/, "a key is a plain choice");
+  assert.match(r.summary, /SetX takes 3 parameters, this has 2\. Every slot is written.*\[/);
+});
+
 await test("an instance of an object that does not exist, and a picture that is not in the resources, are flagged", async () => {
   const r = await run("game_edit", { ops: [{ op: "insert", path: "layouts[Scene].instances", value: { name: "Ghost", x: 0, y: 0, layer: "", zOrder: 0, angle: 0, customSize: false, width: 0, height: 0 } }] });
   assert.match(r.summary, /instance in scene "Scene" is of "Ghost"/);
@@ -203,6 +222,27 @@ await test("a file the agent has is added to the game's resources, by name, once
   assert.equal((await run("game_look", { what: "resources" })).summary.split("\n").length, 2);
   const bad = saveArtifact({ origin: "agent", name: "run.exe", data: Buffer.from("MZ"), mime: "application/octet-stream", session: S, note: "test" });
   assert.equal((await run("game_import", { file: bad.id })).ok, false);
+});
+
+await test("game_template gives a Sprite animation to fill in, so it need not be written from memory", async () => {
+  const r = await run("game_template", { kind: "animation", images: ["player.png", "player2.png"] });
+  assert.equal(r.ok, true, r.summary);
+  assert.match(r.summary, /"image": "player2\.png"/);
+  assert.match(r.summary, /"originPoint"/);
+});
+
+await test("a placeholder picture is made when there is no art yet: a real PNG of the size and colour asked for", async () => {
+  const r = await run("game_import", { placeholder: { width: 40, height: 24, color: "#ff8800", shape: "circle" }, resource: "player.png" });
+  assert.equal(r.ok, true, r.summary);
+  const bytes = fs.readFileSync(path.join(dir, "game-assets", S, "player.png"));
+  assert.equal(bytes.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
+  assert.deepEqual([bytes.readUInt32BE(16), bytes.readUInt32BE(20)], [40, 24]);
+  // The pixel data inflates to exactly its rows: a filter byte and four bytes a pixel.
+  const idat = bytes.subarray(bytes.indexOf("IDAT") + 4, bytes.indexOf("IEND") - 8);
+  assert.equal(zlib.inflateSync(idat).length, 24 * (1 + 40 * 4));
+  assert.equal(zlib.crc32(bytes.subarray(12, 29)), bytes.readUInt32BE(29), "the header's checksum");
+  assert.equal((await run("game_import", { placeholder: { width: 0, height: 5 } })).ok, false);
+  assert.equal((await run("game_import", { placeholder: { width: 8, height: 8, color: "red" } })).ok, false);
 });
 
 await test("the game is kept on disk and comes back", async () => {

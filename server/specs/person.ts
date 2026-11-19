@@ -109,7 +109,7 @@ export const personSPECS: ToolSpec[] = [
     parameters: {
       type: "object",
       properties: {
-        topic: { type: "string", description: "Optional: what the person wants to do, or a service (github, slack...)." },
+        topic: { type: "string", description: "Optional: what the person wants to do, or a service (github, notion...)." },
       },
     },
   },
@@ -120,7 +120,7 @@ export const personSPECS: ToolSpec[] = [
       "Offer to set up an MCP server, shown to the person as a card with Set it up / Not now; " +
       "it installs and connects only if they agree, and its tools (mcp__<name>__<tool>) are " +
       "yours from your next step. Offer one when a task lives on a service that has an API -- " +
-      "GitHub, Slack, Notion, a database, maps, library docs -- and a server would do it more " +
+      "GitHub, Notion, a database, maps, library docs -- and a server would do it more " +
       "reliably than the browser, or when they ask for an integration. Say `why` in one line, " +
       "about their task. Give exactly one of: `server` (a catalog id from mcp_servers), " +
       "`package` (an MCP server on npm, with `name`), `url` (a remote MCP server, with `name`), " +

@@ -542,6 +542,9 @@ function Vitals({ onOpen }: { onOpen: () => void }) {
       detail: `${gb(v.disk.total - v.disk.used)} GB free`,
     }] : []),
   ];
+  /* Nothing to say while the machine is comfortable: the bars cost ~190 px of a short screen's rail. They appear when a
+     measure is near its limit (System has them always). */
+  if (!rows.some((r) => r.share >= 0.8)) return null;
   return (
     <button className="rail-vitals" onClick={onOpen} title="Open System" aria-label="This machine">
       {rows.map((r) => (
