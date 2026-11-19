@@ -1785,7 +1785,9 @@ export function App() {
      on the strip brings it back). The sheet covered half of a small screen while the person was trying to use what was
      under it, and only its handle put it away. */
   useEffect(() => {
-    if (!phoneLayout || chatCollapsed) return;
+    // A window that is full screen has already taken the screen (the sheet is its strip): its own buttons, Back to the
+    // conversation among them, are on the board, and a touch on one must not fold the conversation it is bringing back.
+    if (!phoneLayout || chatCollapsed || windowFull) return;
     const reach = (event: PointerEvent) => {
       const target = event.target as HTMLElement | null;
       if (!event.isTrusted || !target?.closest?.(".pa-board") || target.closest(".conversation-flow, .pw-jump-dock")) return;
@@ -1793,7 +1795,13 @@ export function App() {
     };
     document.addEventListener("pointerdown", reach, true);
     return () => document.removeEventListener("pointerdown", reach, true);
-  }, [phoneLayout, chatCollapsed]);
+  }, [phoneLayout, chatCollapsed, windowFull]);
+  // Back from a full-screen window gives the conversation back: reaching for the window (the Full screen button is on the board)
+  // folded it, and leaving full screen is the way the person asks for it again.
+  useEffect(() => {
+    if (!phoneLayout || !windowFull) return;
+    return () => setChatCollapsed(false);
+  }, [phoneLayout, windowFull]);
   const openPanaceaChooser = useCallback(async () => {
     if (workspaceOpening) return;
     if (toolsOpen) { setToolsOpen(false); return; }
