@@ -57,6 +57,32 @@ function toManifold(g: THREE.BufferGeometry) {
   }
 }
 
+/** Why a combine did not happen, said to the person or agent. */
+export class CombineError extends Error {}
+
+/**
+ * Solids combined: `union` of all of `solids`, or the first with the rest taken out of it (`subtract`). Plain triangle soup in,
+ * the same out ([x, y, z] runs and triangle indices). Throws CombineError when the engine is not started or a shape is not a
+ * closed solid, naming which.
+ */
+export function combineSolids(solids: { positions: ArrayLike<number>; indices?: ArrayLike<number>; name: string }[], mode: 'union' | 'subtract'): { positions: number[]; indices: number[] } {
+  if (!wasm) throw new CombineError('The solid engine is not started, so meshes cannot be joined or cut here.');
+  const made = solids.map((s) => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(s.positions), 3));
+    if (s.indices) g.setIndex(new THREE.BufferAttribute(Uint32Array.from(s.indices), 1));
+    const m = toManifold(g);
+    g.dispose();
+    if (!m) throw new CombineError(`"${s.name}" is not a closed solid (its surface has holes or folds), so it cannot be joined or cut.`);
+    return m;
+  });
+  const result = mode === 'union' ? wasm.Manifold.union(made) : made.slice(1).reduce((acc, c) => acc.subtract(c), made[0]);
+  const out = result.simplify(1e-4).getMesh();
+  const positions: number[] = [];
+  for (let v = 0; v < out.vertProperties.length / out.numProp; v++) positions.push(out.vertProperties[v * out.numProp], out.vertProperties[v * out.numProp + 1], out.vertProperties[v * out.numProp + 2]);
+  return { positions, indices: Array.from(out.triVerts) };
+}
+
 /** `body` with every cutter taken out of it, as an indexed geometry; null when the engine is not started or an input is not a solid. */
 export function subtractAll(body: THREE.BufferGeometry, cutters: THREE.BufferGeometry[]): THREE.BufferGeometry | null {
   if (!wasm) return null;

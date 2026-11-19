@@ -334,6 +334,8 @@ const meshId = (m?: object) => {
 const bodySignature = (b: Body3D) =>
   JSON.stringify([
     meshId(b.mesh),
+    // A painted form bakes the shape's own colour into its unpainted vertices, so a recolour rebuilds it.
+    b.mesh?.colors ? b.color : null,
     b.points,
     b.basePoints,
     b.cornerRadii,

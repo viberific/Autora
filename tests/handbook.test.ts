@@ -159,7 +159,8 @@ await test("the Video manual says which edits are done in the window by hand wit
 
 await test("the 3D manual teaches organic forms: blend, loft, smooth, and that the person decides the form", () => {
   const cad = manualText("cad");
-  for (const needle of ["cad_sculpt_blend", "cad_sculpt_loft", "cad_sculpt_smooth", "tapered capsules", "mirror", "Work big to small", "they decide the character of the form"]) {
+  for (const needle of ["cad_sculpt_blend", "cad_sculpt_loft", "cad_sculpt_smooth", "tapered capsules", "mirror", "Work big to small", "they decide the character of the form",
+    "rounded boxes", "carve:true", "parts apply in order", "color paints the surface", "cad_mesh_build", "inside out", "not built from parts", "combine closed mesh shapes"]) {
     assert.ok(cad.includes(needle), `the 3D manual lacks "${needle}"`);
   }
 });

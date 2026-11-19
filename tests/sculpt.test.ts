@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { blendMesh, loftMesh, smoothMesh, subdivide } from "../autora-3d/src/utils/organic";
+import { blendMesh, loftMesh, mirrored, smoothMesh, subdivide } from "../autora-3d/src/utils/organic";
 
 process.env.AUTORA_STATE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "autora-sculpt-"));
 
@@ -85,6 +85,87 @@ if (!fs.existsSync(new URL("../dist/autora-3d-engine/engine.mjs", import.meta.ur
   console.log("  skip  the 3D engine is not built (npm --prefix autora-3d run build:engine)");
   process.exit(0);
 }
+await test("a carved part takes its shape out of the form", () => {
+  const whole = blendMesh([{ kind: "sphere", a: { x: 0, y: 0, z: 0 }, radius: 30 }], { smooth: 0, detail: 48 });
+  const bitten = blendMesh([
+    { kind: "sphere", a: { x: 0, y: 0, z: 0 }, radius: 30 },
+    { kind: "sphere", a: { x: 30, y: 0, z: 0 }, radius: 15, carve: true },
+  ], { smooth: 0, detail: 48 });
+  // The bite is the part of the small ball inside the big one: a lens of about 0.42 x (4/3)pi 15^3.
+  const lost = volume(whole) - volume(bitten);
+  const lens = 0.42 * (4 / 3) * Math.PI * 15 ** 3;
+  assert.ok(Math.abs(lost - lens) / lens < 0.25, `lost ${lost} vs ${lens}`);
+  // Nothing of the surface is left inside the bite (bar the cut face itself, which lies on its edge).
+  for (let i = 0; i < bitten.positions.length; i += 3) {
+    const d = Math.hypot(bitten.positions[i] - 30, bitten.positions[i + 1], bitten.positions[i + 2]);
+    assert.ok(d > 13.5, `a point ${d.toFixed(1)} mm from the bite's centre`);
+  }
+  assert.throws(() => blendMesh([{ kind: "sphere", a: { x: 0, y: 0, z: 0 }, radius: 5, carve: true }], { smooth: 0, detail: 16 }), /at least one that adds/);
+  // Parts apply in order: a ball added after the carve sits in the hole (an eyeball in its socket).
+  const eye = blendMesh([
+    { kind: "sphere", a: { x: 0, y: 0, z: 0 }, radius: 30 },
+    { kind: "sphere", a: { x: 30, y: 0, z: 0 }, radius: 15, carve: true },
+    { kind: "sphere", a: { x: 24, y: 0, z: 0 }, radius: 6 },
+  ], { smooth: 0, detail: 64 });
+  let inSocket = 0;
+  for (let i = 0; i < eye.positions.length; i += 3) if (Math.hypot(eye.positions[i] - 24, eye.positions[i + 1], eye.positions[i + 2]) < 7) inSocket++;
+  assert.ok(inSocket > 10, `the eyeball is there: ${inSocket} points on it`);
+});
+
+await test("a box part has its size, rounds its corners, and turns", () => {
+  const box = blendMesh([{ kind: "box", a: { x: 0, y: 0, z: 0 }, radii: { x: 20, y: 10, z: 5 } }], { smooth: 0, detail: 80 });
+  const exact = 40 * 20 * 10;
+  assert.ok(Math.abs(volume(box) - exact) / exact < 0.08, `volume ${volume(box)} vs ${exact}`);
+  const round = blendMesh([{ kind: "box", a: { x: 0, y: 0, z: 0 }, radii: { x: 20, y: 10, z: 5 }, round: 4 }], { smooth: 0, detail: 80 });
+  assert.ok(volume(round) < volume(box) * 0.97, "rounded corners take some away");
+  const turned = blendMesh([{ kind: "box", a: { x: 0, y: 0, z: 0 }, radii: { x: 20, y: 5, z: 5 }, turn: { x: 0, y: 0, z: 90 } }], { smooth: 0, detail: 80 });
+  const [xlo, xhi] = range(turned, 0);
+  const [ylo, yhi] = range(turned, 1);
+  assert.ok(xhi - xlo < 12 && yhi - ylo > 36, `turned a quarter about z: x ${xlo}..${xhi}, y ${ylo}..${yhi}`);
+});
+
+await test("a part's own smooth sets how softly it joins: a crisp lid beside soft cheeks", () => {
+  const two = (smooth?: number) => blendMesh([
+    { kind: "sphere", a: { x: 0, y: 0, z: 0 }, radius: 20 },
+    { kind: "sphere", a: { x: 26, y: 0, z: 0 }, radius: 10, ...(smooth === undefined ? {} : { smooth }) },
+  ], { smooth: 10, detail: 64 });
+  // A soft join fills the waist between the two with more than a crisp one does.
+  assert.ok(volume(two()) > volume(two(0)) * 1.02, `${volume(two())} vs ${volume(two(0))}`);
+});
+
+await test("a mirror reflects a turned part's turn, so a tilted pair stays a pair", () => {
+  const [, right] = mirrored([{ kind: "ellipsoid", a: { x: 10, y: 0, z: 0 }, radii: { x: 5, y: 2, z: 2 }, turn: { x: 10, y: 20, z: 30 } }], "x", 0);
+  assert.deepEqual(right.turn, { x: 10, y: -20, z: -30 });
+  assert.equal(right.a.x, -10);
+});
+
+await test("parts with a colour paint the surface where they are; the rest takes the shape's colour", () => {
+  const m = blendMesh([
+    { kind: "sphere", a: { x: 0, y: 0, z: 0 }, radius: 20 },
+    { kind: "sphere", a: { x: 30, y: 0, z: 0 }, radius: 12, color: "#ff0000" },
+  ], { smooth: 6, detail: 48 });
+  assert.ok(m.colors && m.colors.length === m.positions.length, "one colour per point");
+  let red = 0;
+  let own = 0;
+  for (let i = 0; i < m.positions.length; i += 3) {
+    const x = m.positions[i];
+    if (x > 32) { assert.deepEqual(m.colors.slice(i, i + 3), [1, 0, 0], `point at x ${x} is on the red part`); red++; }
+    if (x < -5) { assert.equal(m.colors[i], -1, `point at x ${x} is the shape's own colour`); own++; }
+  }
+  assert.ok(red > 5 && own > 5);
+  assert.equal(blendMesh([{ kind: "sphere", a: { x: 0, y: 0, z: 0 }, radius: 5 }], { smooth: 0, detail: 16 }).colors, undefined, "no paint, no colours");
+  const finer = subdivide(m);
+  assert.equal(finer.colors!.length, finer.positions.length, "subdividing carries the paint");
+});
+
+await test("a grid too big for the parts is made coarser and says so, rather than taking minutes", () => {
+  const many = Array.from({ length: 90 }, (_, i) => ({ kind: "sphere" as const, a: { x: (i % 10) * 30, y: Math.floor(i / 10) * 30, z: 0 }, radius: 14 }));
+  const t = Date.now();
+  const m = blendMesh(many, { smooth: 4, detail: 256 });
+  assert.ok(m.detail < 256, `made at ${m.detail}`);
+  assert.ok(Date.now() - t < 20_000, `${Date.now() - t} ms`);
+});
+
 const core = await import(new URL("../dist/autora-3d-engine/engine.mjs", import.meta.url).href);
 await core.initManifold();
 
@@ -124,6 +205,84 @@ await test("sculpt_smooth edits a mesh shape; other shapes and bad numbers are r
   assert.ok(!(await e.execute("sculpt_blend", { parts: [] })).ok);
   assert.ok(!(await e.execute("sculpt_blend", { parts: [{ kind: "sphere", at: { x: 0, y: 0 }, radius: -1 }] })).ok);
   assert.ok(!(await e.execute("sculpt_loft", { sections: [{ at: { x: 0, y: 0 }, radius: 1 }] })).ok);
+});
+
+await test("mesh_build makes a shape from written-out triangles, turns inside-out ones round, and says when it is open", async () => {
+  const e = new core.Engine(core.emptyDoc());
+  // A tetrahedron, its triangles wound clockwise (inside out) on purpose.
+  const vertices = [[0, 0, 0], [40, 0, 0], [0, 40, 0], [0, 0, 40]];
+  const inside = [[0, 1, 2], [0, 3, 1], [0, 2, 3], [1, 3, 2]];
+  const r = await e.execute("mesh_build", { name: "Gem", vertices, triangles: inside, colors: ["#ff0000", null, null, null] });
+  assert.ok(r.ok, JSON.stringify(r));
+  const res = r.result as { id: string; triangles: number; note?: string };
+  assert.equal(res.triangles, 4);
+  assert.match(res.note ?? "", /turned round/);
+  assert.doesNotMatch(res.note ?? "", /open/);
+  const body = e.getDoc().bodies.find((b: { id: string }) => b.id === res.id);
+  assert.equal(body.name, "Gem");
+  assert.equal(body.mesh.colors.length, 12, "one colour per point");
+  const sheet = await e.execute("mesh_build", { vertices: [[0, 0, 0], [10, 0, 0], [0, 10, 0]], triangles: [[0, 1, 2]] });
+  assert.ok(sheet.ok);
+  assert.match((sheet.result as { note: string }).note, /open: 3 edges/);
+  const bad = await e.execute("mesh_build", { vertices, triangles: [[0, 1, 9]] });
+  assert.ok(!bad.ok && /0 to 3/.test(JSON.stringify(bad)), JSON.stringify(bad));
+  assert.ok(!(await e.execute("mesh_build", { vertices, triangles: inside, colors: ["#f00"] })).ok, "one colour per vertex");
+});
+
+await test("a painted blend keeps its paint through sculpt_blend and a smoothing that subdivides", async () => {
+  const e = new core.Engine(core.emptyDoc());
+  const r = await e.execute("sculpt_blend", {
+    parts: [
+      { kind: "ellipsoid", at: { x: 0, y: 0, z: 40 }, radii: { x: 40, y: 25, z: 25 } },
+      { kind: "box", at: { x: 40, y: 0, z: 40 }, radii: { x: 12, y: 12, z: 12 }, round: 4, turn: { z: 45 }, color: "#111111" },
+      { kind: "sphere", at: { x: -38, y: 0, z: 45 }, radius: 8, carve: true },
+    ],
+    detail: 64,
+  });
+  assert.ok(r.ok, JSON.stringify(r));
+  const id = (r.result as { id: string }).id;
+  const body = () => e.getDoc().bodies.find((b: { id: string }) => b.id === id);
+  assert.equal(body().mesh.colors.length, body().mesh.positions.length);
+  assert.ok((await e.execute("sculpt_smooth", { id, subdivide: 1 })).ok);
+  assert.equal(body().mesh.colors.length, body().mesh.positions.length, "still one colour per point");
+});
+
+await test("mesh shapes join and cut as solids: one mesh shape comes out, each part keeping the colour it showed", async () => {
+  const e = new core.Engine(core.emptyDoc());
+  const ball = (x: number, color: string) => e.execute("sculpt_blend", { parts: [{ kind: "sphere", at: { x, y: 0, z: 30 }, radius: 25 }], detail: 40, color });
+  const a = ((await ball(0, "#ff0000")).result as { id: string }).id;
+  const b = ((await ball(30, "#0000ff")).result as { id: string }).id;
+  const box = ((await e.execute("shape_add", { kind: "box", x: -30, y: 0, width: 20, depth: 20, height: 20, color: "#00ff00" })).result as { id: string }).id;
+  const j = await e.execute("shapes_join", { ids: [a, b, box] });
+  assert.ok(j.ok, JSON.stringify(j));
+  const bodies = e.getDoc().bodies;
+  assert.equal(bodies.length, 1, "three shapes became one");
+  const joined = bodies[0];
+  assert.ok(joined.mesh && joined.mesh.colors.length === joined.mesh.positions.length, "the colours go with it as paint");
+  const p = joined.mesh.positions;
+  const colourAt = (want: (x: number) => boolean) => {
+    for (let i = 0; i < p.length; i += 3) if (want(p[i])) return joined.mesh.colors.slice(i, i + 3).map((c: number) => Math.round(c * 10) / 10);
+    return null;
+  };
+  assert.deepEqual(colourAt((x) => x > 50), [0, 0, 1], "the right ball is still blue");
+  assert.deepEqual(colourAt((x) => x < -35), [0, 1, 0], "the box is still green");
+
+  // Cut a hole: the cutter is used up and the shape keeps its id and name.
+  const name = joined.name;
+  const hole = ((await e.execute("sculpt_blend", { parts: [{ kind: "sphere", at: { x: 0, y: 0, z: 30 }, radius: 12 }], detail: 30 })).result as { id: string }).id;
+  const before = volume(e.getDoc().bodies[0].mesh);
+  const cut = await e.execute("shapes_subtract", { from: [joined.id], cutters: [hole] });
+  assert.ok(cut.ok, JSON.stringify(cut));
+  const after = e.getDoc().bodies;
+  assert.equal(after.length, 1, "the cutter is used up");
+  assert.equal(after[0].id, joined.id);
+  assert.equal(after[0].name, name);
+  assert.ok(volume(after[0].mesh) < before * 0.97, `${volume(after[0].mesh)} < ${before}`);
+
+  // An open sheet is not a solid: refused, with the reason.
+  const sheet = ((await e.execute("mesh_build", { vertices: [[0, 0, 0], [10, 0, 0], [0, 10, 0]], triangles: [[0, 1, 2]] })).result as { id: string }).id;
+  const no = await e.execute("shapes_join", { ids: [joined.id, sheet] });
+  assert.ok(!no.ok && /not a closed solid/.test(JSON.stringify(no)), JSON.stringify(no));
 });
 
 console.log("sculpt tests passed");

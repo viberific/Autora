@@ -1,0 +1,917 @@
+diff --git a/autora-3d/src/components/ModelViewer3D.tsx b/autora-3d/src/components/ModelViewer3D.tsx
+index 60959da..836e96c 100644
+--- a/autora-3d/src/components/ModelViewer3D.tsx
++++ b/autora-3d/src/components/ModelViewer3D.tsx
+@@ -334,6 +334,8 @@ const meshId = (m?: object) => {
+ const bodySignature = (b: Body3D) =>
+   JSON.stringify([
+     meshId(b.mesh),
++    // A painted form bakes the shape's own colour into its unpainted vertices, so a recolour rebuilds it.
++    b.mesh?.colors ? b.color : null,
+     b.points,
+     b.basePoints,
+     b.cornerRadii,
+diff --git a/autora-3d/src/components/surfaceLook.ts b/autora-3d/src/components/surfaceLook.ts
+index 5c8ebb2..d359c65 100644
+--- a/autora-3d/src/components/surfaceLook.ts
++++ b/autora-3d/src/components/surfaceLook.ts
+@@ -86,6 +86,11 @@ export function surfaceMaterial(body: Body3D, loaded: () => void): THREE.Materia
+     polygonOffsetFactor: 1,
+     polygonOffsetUnits: 1,
+   };
++  if (body.mesh?.colors) {
++    // A painted form carries its colours in its vertices, the shape's own included (meshGeometry): white here, so they show true.
++    params.vertexColors = true;
++    params.color = '#ffffff';
++  }
+   if (s.pattern) {
+     const tex = patternTextures(s.pattern.kind, s.color, s.pattern.color2);
+     const repeat = textureRepeat(body, 'pattern');
+@@ -161,7 +166,7 @@ export function surfaceMaterial(body: Body3D, loaded: () => void): THREE.Materia
+ }
+ 
+ /** What about a shape's look rebuilds its material (not its geometry). */
+-export const lookSignature = (b: Body3D) => JSON.stringify([b.materialType, b.color, b.surface]);
++export const lookSignature = (b: Body3D) => JSON.stringify([b.materialType, b.color, b.surface, !!b.mesh?.colors]);
+ /** What about a shape's hair grows it again. */
+ export const hairSignature = (b: Body3D) => (b.hair ? JSON.stringify(b.hair) : '');
+ 
+diff --git a/autora-3d/src/core/ops.ts b/autora-3d/src/core/ops.ts
+index ade5eaf..8fbbe0b 100644
+--- a/autora-3d/src/core/ops.ts
++++ b/autora-3d/src/core/ops.ts
+@@ -9,9 +9,11 @@ import { DEFAULT_HAIR, FUR_START, HAIR_NUMBERS, HAIR_RANGES, MAX_STROKES, mirror
+ import { BodyTransform, resizeBody, scaleMeshHeight, selectionBounds, transformBody } from '../utils/transform';
+ import { MeshError, meshFormatOf, placeMesh, readMesh, type MeshFormat, type RawMesh } from '../utils/meshImport';
+ import { boundsOf } from '../utils/sculpt';
+-import { BlendPart, OrganicError, Section, Vec, blendMesh, loftMesh, mirrored, smoothMesh, subdivide } from '../utils/organic';
++import { BlendPart, MAX_DETAIL, OrganicError, Section, Vec, blendMesh, facingOut, loftMesh, mirrored, smoothMesh, subdivide } from '../utils/organic';
+ import { cutShape, getPolygonSignedArea } from '../utils/geometry';
+ import { joinBodies } from '../utils/join';
++import { buildBodyGeometry } from '../utils/bodyGeometry';
++import { CombineError, combineSolids } from '../utils/manifoldBoolean';
+ import { SHAPE_LABELS, ShapeKind, primitiveOutline } from '../utils/primitives';
+ import { getBase, outwardNormal, wallEnds, withOutline } from '../utils/outline';
+ import { MAX_HEIGHT, MIN_HEIGHT, extrudeFace, faceMeasure, setFaceMeasure } from '../utils/faces';
+@@ -655,14 +657,121 @@ export function ungroupShapes(doc: Doc, ids: IdGen, a: { group: string }): OpRes
+ 
+ function noWall(bodies: Body3D[]) {
+   if (bodies.some((b) => b.frame)) fail('Shapes drawn on a wall cannot be joined or cut yet.');
+-  const mesh = bodies.find((b) => b.mesh);
+-  if (mesh) fail(`"${mesh.id}" is a mesh brought in from a file: joining and cutting work on outlines, which it does not have.`, 'Group it with the other shapes instead (group_create).');
++}
++
++const hexToRgb = (hex: string): [number, number, number] => {
++  const h = hex.length === 4 ? hex.slice(1).split('').map((x) => x + x).join('') : hex.slice(1);
++  const v = parseInt(h, 16);
++  return [((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255];
++};
++
++/**
++ * Shapes as solids for the solid engine, in the model's own space (mm, z up): a mesh as it is, an outline pushed up with its
++ * bevels. Each point carries the colour it shows (its paint, else its shape's colour), so a combined shape keeps them.
++ */
++function solidsOf(bodies: Body3D[]) {
++  return bodies.map((b) => {
++    const g = buildBodyGeometry(b);
++    if (!g) return fail(`"${b.name}" has no solid to join or cut.`);
++    const pos = g.getAttribute('position');
++    const col = g.getAttribute('color');
++    const own = hexToRgb(b.color);
++    const positions: number[] = [];
++    const colors: number[] = [];
++    for (let i = 0; i < pos.count; i++) {
++      // The viewer's Y-up back to the model's z-up (meshGeometry's turn, undone).
++      positions.push(pos.getX(i), -pos.getZ(i), pos.getY(i));
++      if (b.mesh?.colors && b.mesh.colors.length === b.mesh.positions.length) {
++        // The geometry's colours are in linear light; the stored paint is as written.
++        const lin = [col.getX(i), col.getY(i), col.getZ(i)];
++        colors.push(...lin.map((c) => (c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055)));
++      } else colors.push(...own);
++    }
++    const index = g.getIndex();
++    g.dispose();
++    return { name: b.name, positions, colors, ...(index ? { indices: Array.from(index.array as ArrayLike<number>) } : {}) };
++  });
++}
++
++/** Each point of a combined surface takes the colour of the nearest point of the shapes it came from. */
++function carryColours(out: { positions: number[] }, from: { positions: number[]; colors: number[] }[], cell: number): number[] {
++  const grid = new Map<string, number[]>();
++  const all = from.flatMap((f) => f.positions.map((_, i) => i).filter((i) => i % 3 === 0).map((i) => ({ p: [f.positions[i], f.positions[i + 1], f.positions[i + 2]], c: f.colors.slice(i, i + 3) })));
++  const key = (x: number, y: number, z: number) => `${Math.floor(x / cell)},${Math.floor(y / cell)},${Math.floor(z / cell)}`;
++  all.forEach((v, n) => {
++    const k = key(v.p[0], v.p[1], v.p[2]);
++    const list = grid.get(k);
++    if (list) list.push(n);
++    else grid.set(k, [n]);
++  });
++  const colors: number[] = [];
++  for (let i = 0; i < out.positions.length; i += 3) {
++    const [x, y, z] = [out.positions[i], out.positions[i + 1], out.positions[i + 2]];
++    let best = -1;
++    let near = Infinity;
++    for (let r = 1; best < 0 && r < 64; r *= 2) {
++      const [cx, cy, cz] = [Math.floor(x / cell), Math.floor(y / cell), Math.floor(z / cell)];
++      for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) for (let dz = -r; dz <= r; dz++) {
++        for (const n of grid.get(`${cx + dx},${cy + dy},${cz + dz}`) ?? []) {
++          const d = (all[n].p[0] - x) ** 2 + (all[n].p[1] - y) ** 2 + (all[n].p[2] - z) ** 2;
++          if (d < near) {
++            near = d;
++            best = n;
++          }
++        }
++      }
++    }
++    colors.push(...(best >= 0 ? all[best].c : [-1, -1, -1]));
++  }
++  return colors;
++}
++
++/** Shapes where a mesh is involved, combined by the solid engine into one mesh shape (joined, or the first with the rest cut out). */
++function combineMeshes(doc: Doc, ids: IdGen, bodies: Body3D[], mode: 'union' | 'subtract', label: string): { doc: Doc; body: Body3D } {
++  const solids = solidsOf(bodies);
++  let out;
++  try {
++    out = combineSolids(solids, mode);
++  } catch (e) {
++    if (e instanceof CombineError) return fail(e.message, 'Group them instead (group_create), or rebuild the open one as a closed form (sculpt_blend).');
++    throw e;
++  }
++  if (out.indices.length < 3) return fail(mode === 'union' ? 'Nothing came out of that join.' : 'Nothing is left once the cutters are taken out.');
++  const keep = bodies[0];
++  // One colour for all and no paint: the result is plain. Otherwise the colours each part showed go with it as paint.
++  const plain = bodies.every((b) => b.color === keep.color && !b.mesh?.colors);
++  // The size of the whole (a loop: spreading hundreds of thousands of numbers into Math.max overflows the stack).
++  const lo = [Infinity, Infinity, Infinity];
++  const hi = [-Infinity, -Infinity, -Infinity];
++  for (const sol of solids) for (let i = 0; i < sol.positions.length; i++) {
++    lo[i % 3] = Math.min(lo[i % 3], sol.positions[i]);
++    hi[i % 3] = Math.max(hi[i % 3], sol.positions[i]);
++  }
++  const span = Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
++  const raw: RawMesh = { positions: out.positions, indices: out.indices, ...(plain ? {} : { colors: carryColours(out, solids, Math.max(span / 64, 0.5)) }) };
++  const made = addSurface(doc, ids, raw, { name: label, color: keep.color, material: keep.materialType }, label);
++  const id = made.result.id;
++  const body = { ...(made.doc.bodies.find((b) => b.id === id) as Body3D), ...(keep.surface ? { surface: keep.surface } : {}) };
++  return { doc: made.doc, body };
+ }
+ 
+ export function joinShapes(doc: Doc, ids: IdGen, a: { ids: string[] }): OpResult<{ created: string[] }> {
+   const targets = idList(doc, a.ids);
+   if (targets.length < 2) return fail('Joining needs at least two shapes.');
+   noWall(targets);
++  if (targets.some((b) => b.mesh)) {
++    // A mesh has no outline to merge: the solids are joined instead, into one mesh shape (seams where they met can be smoothed).
++    const { doc: made, body } = combineMeshes(doc, ids, targets, 'union', targets[0].name);
++    const gone = new Set(targets.map((b) => b.id));
++    return {
++      doc: {
++        ...made,
++        bodies: [...made.bodies.filter((b) => !gone.has(b.id) && b.id !== body.id), body],
++        groups: made.groups.map((g) => ({ ...g, bodyIds: g.bodyIds.filter((x) => !gone.has(x)) })).filter((g) => g.bodyIds.length > 1),
++      },
++      result: { created: [body.id] },
++    };
++  }
+   const stamp = ids('join');
+   const merged = joinBodies(targets, stamp);
+   if (!merged.length) return fail('Nothing came out of that join.');
+@@ -692,6 +801,23 @@ export function subtractShapes(doc: Doc, ids: IdGen, a: { from: string[]; cutter
+   const targets = targets0.filter((t) => !cutterIds.has(t.id));
+   if (!targets.length) return fail('Nothing to cut from: "from" and "cutters" are the same shapes.');
+   noWall([...targets, ...cutters0]);
++  if ([...targets, ...cutters0].some((b) => b.mesh)) {
++    // With a mesh involved each target is cut as a solid: it becomes a mesh shape in its place, and the cutters are used up.
++    let next = doc;
++    const created: string[] = [];
++    for (const t of targets) {
++      const { doc: made, body } = combineMeshes(next, ids, [t, ...cutters0], 'subtract', t.name);
++      next = { ...made, bodies: made.bodies.filter((b) => b.id !== body.id).map((b) => (b.id === t.id ? { ...body, id: t.id, groupId: t.groupId } : b)) };
++      created.push(t.id);
++    }
++    const used = new Set(cutters0.map((c) => c.id));
++    next = {
++      ...next,
++      bodies: next.bodies.filter((b) => !used.has(b.id)),
++      groups: next.groups.map((g) => ({ ...g, bodyIds: g.bodyIds.filter((x) => !used.has(x)) })).filter((g) => g.bodyIds.length > 1),
++    };
++    return { doc: next, result: { created, changed: true } };
++  }
+ 
+   const area = (r: { points: Point2D[]; holes?: Point2D[][] }) =>
+     Math.abs(getPolygonSignedArea(r.points)) - (r.holes ?? []).reduce((sum, h) => sum + Math.abs(getPolygonSignedArea(h)), 0);
+@@ -1105,7 +1231,7 @@ function addSurface(doc: Doc, ids: IdGen, raw: RawMesh, a: { name?: string; colo
+ }
+ 
+ export interface BlendArgs {
+-  parts: { kind: 'sphere' | 'capsule' | 'ellipsoid'; at: Vec; to?: Vec; radius?: number; radius2?: number; radii?: Vec }[];
++  parts: { kind: 'sphere' | 'capsule' | 'ellipsoid' | 'box'; at: Vec; to?: Vec; radius?: number; radius2?: number; radii?: Vec; round?: number; turn?: Partial<Vec>; carve?: boolean; color?: string; smooth?: number }[];
+   /** How wide the soft joins between parts are, mm. */
+   smooth?: number;
+   /** Grid cells along the longest side. */
+@@ -1116,23 +1242,43 @@ export interface BlendArgs {
+   material?: MaterialType;
+ }
+ 
+-/** One soft surface from spheres, tapered capsules and ellipsoids (an animal's body, neck, head and legs). */
+-export function sculptBlend(doc: Doc, ids: IdGen, a: BlendArgs) {
+-  if (!Array.isArray(a.parts) || !a.parts.length) return fail('parts is required: a list of {kind, at, ...}.', 'kind is sphere (radius), capsule (at, to, radius, radius2) or ellipsoid (radii).');
+-  const parts: BlendPart[] = a.parts.map((p, i) => {
++/** The parts of a blend, checked: what sculpt_blend and the body-part shapes both build from. */
++export function blendParts(given: BlendArgs['parts']): BlendPart[] {
++  return given.map((p, i) => {
+     const w = `parts[${i}]`;
+-    if (p.kind === 'sphere') return { kind: 'sphere', a: vec(p.at, `${w}.at`), radius: positive(p.radius, `${w}.radius`) };
++    const extra: Partial<BlendPart> = {};
++    if (p.carve !== undefined) extra.carve = !!p.carve;
++    if (p.color !== undefined) extra.color = colorOf(p.color, '#000000');
++    if (p.smooth !== undefined) {
++      extra.smooth = num(p.smooth, `${w}.smooth`);
++      if (extra.smooth < 0) return fail(`${w}.smooth cannot be negative.`);
++    }
++    if (p.kind === 'sphere') return { kind: 'sphere', a: vec(p.at, `${w}.at`), radius: positive(p.radius, `${w}.radius`), ...extra };
+     if (p.kind === 'capsule') {
+       const radius = positive(p.radius, `${w}.radius`);
+-      return { kind: 'capsule', a: vec(p.at, `${w}.at`), b: vec(p.to, `${w}.to`), radius, radius2: p.radius2 === undefined ? radius : positive(p.radius2, `${w}.radius2`) };
++      return { kind: 'capsule', a: vec(p.at, `${w}.at`), b: vec(p.to, `${w}.to`), radius, radius2: p.radius2 === undefined ? radius : positive(p.radius2, `${w}.radius2`), ...extra };
+     }
+-    if (p.kind === 'ellipsoid') {
++    if (p.kind === 'ellipsoid' || p.kind === 'box') {
+       const r = vec(p.radii, `${w}.radii`);
+       if (!(r.x > 0 && r.y > 0 && r.z > 0)) return fail(`${w}.radii must all be above 0.`);
+-      return { kind: 'ellipsoid', a: vec(p.at, `${w}.at`), radii: r };
++      if (p.turn !== undefined) {
++        if (typeof p.turn !== 'object' || p.turn === null) return fail(`${w}.turn must be {x, y, z} in degrees.`);
++        extra.turn = { x: num(p.turn.x ?? 0, `${w}.turn.x`), y: num(p.turn.y ?? 0, `${w}.turn.y`), z: num(p.turn.z ?? 0, `${w}.turn.z`) };
++      }
++      if (p.kind === 'box' && p.round !== undefined) {
++        extra.round = num(p.round, `${w}.round`);
++        if (extra.round < 0) return fail(`${w}.round cannot be negative.`);
++      }
++      return { kind: p.kind, a: vec(p.at, `${w}.at`), radii: r, ...extra };
+     }
+-    return fail(`${w}.kind must be sphere, capsule or ellipsoid.`);
++    return fail(`${w}.kind must be sphere, capsule, ellipsoid or box.`);
+   });
++}
++
++/** One soft surface from spheres, tapered capsules, ellipsoids and rounded boxes, less any carved parts (an animal, a face, a hand). */
++export function sculptBlend(doc: Doc, ids: IdGen, a: BlendArgs) {
++  if (!Array.isArray(a.parts) || !a.parts.length) return fail('parts is required: a list of {kind, at, ...}.', 'kind is sphere (radius), capsule (at, to, radius, radius2), ellipsoid (radii) or box (radii, round).');
++  const parts = blendParts(a.parts);
+   let all = parts;
+   if (a.mirror) {
+     if (!['x', 'y', 'z'].includes(a.mirror.axis)) return fail('mirror.axis must be x, y or z.');
+@@ -1140,11 +1286,20 @@ export function sculptBlend(doc: Doc, ids: IdGen, a: BlendArgs) {
+     const centre = a.mirror.at !== undefined ? num(a.mirror.at, 'mirror.at') : (Math.min(...parts.map((p) => p.a[axis])) + Math.max(...parts.map((p) => p.a[axis]))) / 2;
+     all = mirrored(parts, axis, centre);
+   }
+-  const smallest = Math.min(...parts.map((p) => (p.kind === 'ellipsoid' ? Math.min((p.radii as Vec).x, (p.radii as Vec).y, (p.radii as Vec).z) : (p.radius as number))));
++  const added = parts.filter((p) => !p.carve);
++  if (!added.length) return fail('Every part is carved: give at least one that adds.');
++  const smallest = Math.min(...added.map((p) => (p.radii ? Math.min(p.radii.x, p.radii.y, p.radii.z) : (p.radius as number))));
+   const smooth = a.smooth === undefined ? smallest * 0.6 : num(a.smooth, 'smooth');
+   if (smooth < 0) return fail('smooth cannot be negative.');
+   try {
+-    return addSurface(doc, ids, blendMesh(all, { smooth, detail: a.detail === undefined ? 72 : num(a.detail, 'detail') }), a, 'Form');
++    const asked = a.detail === undefined ? 96 : num(a.detail, 'detail');
++    const form = blendMesh(all, { smooth, detail: asked });
++    const made = addSurface(doc, ids, form, a, 'Form');
++    // A grid too big to work out in good time is made coarser: say so, so a finer part is made as its own shape instead.
++    if (form.detail < Math.min(asked, MAX_DETAIL) && 'result' in made && made.result) {
++      made.result.note = [made.result.note, `detail ${asked} would take too long for ${all.length} parts this size; it was made at ${form.detail}. For fine features (fingers, a face) make that part as its own blend and join them.`].filter(Boolean).join(' ');
++    }
++    return made;
+   } catch (e) {
+     if (e instanceof OrganicError) return fail(e.message);
+     throw e;
+@@ -1176,6 +1331,84 @@ export function sculptLoft(doc: Doc, ids: IdGen, a: LoftArgs) {
+   }
+ }
+ 
++export interface BuildMeshArgs {
++  vertices: number[][];
++  triangles: number[][];
++  uvs?: number[][];
++  colors?: (string | null)[];
++  name?: string;
++  color?: string;
++  material?: MaterialType;
++}
++
++/** The most points and triangles a mesh written out in one call may have (a bigger form is sculpt_blend's or a file's). */
++export const BUILD_LIMITS = { vertices: 20000, triangles: 40000 };
++
++/** A mesh written out point by point and triangle by triangle: a low-poly form, a gem, a terrain, anything the parts cannot make. */
++export function buildMesh(doc: Doc, ids: IdGen, a: BuildMeshArgs) {
++  if (!Array.isArray(a.vertices) || a.vertices.length < 3) return fail('vertices is required: at least three [x, y, z] points in mm (z up).');
++  if (!Array.isArray(a.triangles) || !a.triangles.length) return fail('triangles is required: [a, b, c] triples of vertex numbers (from 0), counter-clockwise seen from outside.');
++  if (a.vertices.length > BUILD_LIMITS.vertices) return fail(`At most ${BUILD_LIMITS.vertices} vertices in one call.`, 'For a big organic form use sculpt_blend; for a ready model, mesh_import.');
++  if (a.triangles.length > BUILD_LIMITS.triangles) return fail(`At most ${BUILD_LIMITS.triangles} triangles in one call.`, 'Make it in pieces and join them (shapes_join), or use sculpt_blend.');
++  const n = a.vertices.length;
++  const positions: number[] = [];
++  a.vertices.forEach((v, i) => {
++    if (!Array.isArray(v) || v.length !== 3 || !v.every((c) => typeof c === 'number' && Number.isFinite(c))) fail(`vertices[${i}] must be [x, y, z], three numbers.`);
++    positions.push(v[0], v[1], v[2]);
++  });
++  const indices: number[] = [];
++  let flat = 0;
++  a.triangles.forEach((t, i) => {
++    if (!Array.isArray(t) || t.length !== 3 || !t.every((c) => Number.isInteger(c) && c >= 0 && c < n)) fail(`triangles[${i}] must be three vertex numbers from 0 to ${n - 1}.`);
++    if (t[0] === t[1] || t[1] === t[2] || t[2] === t[0]) {
++      flat++;
++      return;
++    }
++    indices.push(t[0], t[1], t[2]);
++  });
++  if (!indices.length) return fail('Every triangle uses the same vertex twice: there is no surface.');
++  const raw: RawMesh = { positions, indices };
++  if (a.uvs !== undefined) {
++    if (!Array.isArray(a.uvs) || a.uvs.length !== n) return fail(`uvs needs one [u, v] for each of the ${n} vertices.`);
++    raw.uvs = a.uvs.flatMap((uv, i) => (Array.isArray(uv) && uv.length === 2 && uv.every((c) => typeof c === 'number' && Number.isFinite(c)) ? uv : fail(`uvs[${i}] must be [u, v].`)));
++  }
++  if (a.colors !== undefined) {
++    if (!Array.isArray(a.colors) || a.colors.length !== n) return fail(`colors needs one entry for each of the ${n} vertices: a hex colour, or null for the shape's colour.`);
++    raw.colors = a.colors.flatMap((c, i) => {
++      if (c === null) return [-1, -1, -1];
++      const hex = colorOf(c, '#000000');
++      const h = hex.length === 4 ? hex.slice(1).split('').map((x) => x + x).join('') : hex.slice(1);
++      const v = parseInt(h, 16);
++      if (Number.isNaN(v)) return fail(`colors[${i}] must be a hex colour or null.`);
++      return [((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255];
++    });
++  }
++  // How many edges have only one triangle: a closed solid has none (it prints, joins and cuts); an open sheet is still shown.
++  const edges = new Map<string, number>();
++  for (let t = 0; t < indices.length; t += 3) {
++    for (let e = 0; e < 3; e++) {
++      const [p, q] = [indices[t + e], indices[t + (e + 1) % 3]];
++      const key = p < q ? `${p},${q}` : `${q},${p}`;
++      edges.set(key, (edges.get(key) ?? 0) + 1);
++    }
++  }
++  const open = [...edges.values()].filter((c) => c === 1).length;
++  // Inside-out (clockwise) winding is the common slip: turned round, so it is lit and printed the right way.
++  const turned = facingOut(raw);
++  const flipped = turned !== raw;
++  const made = addSurface(doc, ids, turned, a, 'Mesh');
++  if ('result' in made && made.result) {
++    const notes = [
++      made.result.note,
++      flipped ? 'Its triangles were wound inside out (clockwise seen from outside); they were turned round.' : '',
++      flat ? `${flat} triangle${flat === 1 ? '' : 's'} used a vertex twice and were left out.` : '',
++      open ? `It is open: ${open} edge${open === 1 ? ' has' : 's have'} a triangle on one side only, so it is a surface, not a solid (fine to look at; to print it or join it, close it).` : '',
++    ].filter(Boolean);
++    if (notes.length) made.result.note = notes.join(' ');
++  }
++  return made;
++}
++
+ export interface SmoothArgs {
+   id: string;
+   /** Rounds of smoothing (default 2). */
+@@ -1196,28 +1429,29 @@ export function smoothShape(doc: Doc, a: SmoothArgs) {
+   if (passes < 0 || passes > 20) return fail('passes must be 0 to 20.');
+   if (strength < 0 || strength > 1) return fail('strength must be 0 to 1.');
+   if (split < 0 || split > 2) return fail('subdivide must be 0, 1 or 2.');
+-  let mesh: RawMesh = { positions: b.mesh.positions, indices: b.mesh.indices };
++  let mesh: RawMesh = { positions: b.mesh.positions, indices: b.mesh.indices, ...(b.mesh.colors ? { colors: b.mesh.colors } : {}) };
+   for (let i = 0; i < split; i++) {
+     if (mesh.indices.length / 3 * 4 > 200000) return fail('That would make more than 200000 triangles.', 'Use a lower subdivide.');
+     mesh = subdivide(mesh);
+   }
+   mesh = smoothMesh(mesh, passes, strength);
+   const p = mesh.positions;
+-  const xs: number[] = [];
+-  const ys: number[] = [];
++  // A loop, not Math.min(...all): a subdivided form has more points than a spread call can take.
++  const lo = { x: Infinity, y: Infinity };
++  const hi = { x: -Infinity, y: -Infinity };
+   let top = 0;
+   for (let i = 0; i < p.length; i += 3) {
+-    xs.push(p[i]);
+-    ys.push(p[i + 1]);
++    lo.x = Math.min(lo.x, p[i]);
++    hi.x = Math.max(hi.x, p[i]);
++    lo.y = Math.min(lo.y, p[i + 1]);
++    hi.y = Math.max(hi.y, p[i + 1]);
+     top = Math.max(top, p[i + 2]);
+   }
+-  const lo = { x: Math.min(...xs), y: Math.min(...ys) };
+-  const hi = { x: Math.max(...xs), y: Math.max(...ys) };
+   const points = [{ x: lo.x, y: lo.y }, { x: hi.x, y: lo.y }, { x: hi.x, y: hi.y }, { x: lo.x, y: hi.y }].map((q) => ({ x: round2(q.x), y: round2(q.y) }));
+   const positions = p.map((n) => Math.round(n * 1000) / 1000);
+   return {
+     // Smoothing alone keeps every vertex, so a picture's layout still fits; splitting triangles makes new ones, and it goes.
+-    doc: replace(doc, b.id, { mesh: { positions, indices: mesh.indices, ...(split === 0 && b.mesh.uvs ? { uvs: b.mesh.uvs } : {}) }, points, basePoints: points, extrusionHeight: Math.max(1, round2(top)) }),
++    doc: replace(doc, b.id, { mesh: { positions, indices: mesh.indices, ...(split === 0 && b.mesh.uvs ? { uvs: b.mesh.uvs } : {}), ...(mesh.colors ? { colors: mesh.colors } : {}) }, points, basePoints: points, extrusionHeight: Math.max(1, round2(top)) }),
+     result: { id: b.id, triangles: mesh.indices.length / 3 },
+   };
+ }
+diff --git a/autora-3d/src/core/tools.ts b/autora-3d/src/core/tools.ts
+index c1dc4cc..e741669 100644
+--- a/autora-3d/src/core/tools.ts
++++ b/autora-3d/src/core/tools.ts
+@@ -147,7 +147,7 @@ export const TOOL_SPECS: ToolSpec[] = [
+   {
+     name: 'mesh_import',
+     description:
+-      'Bring in a triangle mesh from a file as ONE shape: .glb/.gltf, .obj or .stl (a free CC0 model from Poly Pizza, Quaternius or Sketchfab, or one made in Blender). It arrives as the real surface, so organic forms (an animal, a face, a scan) are possible, which stock shapes and extruded outlines cannot give. It stands on the ground; size sets its longest side in mm (without it a GLB is read in metres, STL and OBJ in mm, and a result that is a speck or a building is fitted to 100 mm). Very large meshes are simplified to 60000 triangles. Move, turn, resize (shape_resize scales it whole), recolour, group and export work on it; it has no outline, faces, bevels or holes, and cannot be joined or cut with the outline tools. A GLB\'s base colour picture (texture) comes with it when it is inside the file and every part has a layout (UVs); otherwise colour it with color, material or surface_set.',
++      'Bring in a triangle mesh from a file as ONE shape: .glb/.gltf, .obj or .stl (a free CC0 model from Poly Pizza, Quaternius or Sketchfab, or one made in Blender). It arrives as the real surface, so organic forms (an animal, a face, a scan) are possible, which stock shapes and extruded outlines cannot give. It stands on the ground; size sets its longest side in mm (without it a GLB is read in metres, STL and OBJ in mm, and a result that is a speck or a building is fitted to 100 mm). Very large meshes are simplified to 60000 triangles. Move, turn, resize (shape_resize scales it whole), recolour, group and export work on it; it has no outline, faces, bevels or holes; shapes_join and shapes_subtract work on it as a solid when it is closed. A GLB\'s base colour picture (texture) comes with it when it is inside the file and every part has a layout (UVs); otherwise colour it with color, material or surface_set.',
+     inputSchema: obj({
+       file: { type: 'string', description: 'The mesh file: an artifact id (file_...) or a path on the host. The host reads it.' },
+       format: { type: 'string', enum: ['glb', 'obj', 'stl'], description: 'Only if the file name does not say (glTF counts as glb).' },
+@@ -164,26 +164,31 @@ export const TOOL_SPECS: ToolSpec[] = [
+   {
+     name: 'sculpt_blend',
+     description:
+-      'Make ONE smooth, organic shape by blending simple parts into a soft surface: the way to model an animal, a creature, a hand, a bottle, a cloud. Give parts: spheres, tapered capsules (a limb or neck: at, to, radius at each end) and ellipsoids (a body or head: radii along x, y, z). Where parts overlap they melt together over `smooth` mm. Positions are in mm on the ground (x, y) and up (z); parts may overlap and may sit anywhere. Give half of a symmetric creature and set mirror ({axis, at}) to reflect it. Build the big masses first (body, chest, hips, head), then limbs overlapping into them; look with scene_get / a view and adjust the numbers, or use sculpt_smooth. The result is a mesh shape: move, turn, resize, recolour and export work; it has no outline, faces or holes. A person can refine it by hand in the window.',
++      'Make ONE smooth, organic shape by blending simple parts into a soft surface: the way to model a person, an animal, a creature, a hand, a bottle, a cloud. Give parts: spheres, tapered capsules (a limb, neck or finger: at, to, radius at each end), ellipsoids (a body or head: radii along x, y, z) and boxes (a palm, a foot, a chest: radii, round for soft corners). An ellipsoid or box can be turned ({x, y, z} degrees). A part with carve:true is taken OUT of the form instead (an eye socket, a mouth, nostrils, the gap under a jaw); parts apply in order, so a carve removes what came before it and a part listed after it fills back in (the eyeball in its socket). A part with a color paints the surface where it is the nearest part (a black mane, white socks, red lips); the rest is the shape\'s colour. Where parts overlap they melt together over `smooth` mm. Positions are in mm on the ground (x, y) and up (z); parts may overlap and may sit anywhere. Give half of a symmetric creature and set mirror ({axis, at}) to reflect it. Build the big masses first (body, chest, hips, head), then limbs overlapping into them; look with scene_get / a view and adjust the numbers, or use sculpt_smooth. Fine features need fine detail: detail is spread over the whole form, so make hands or a face as their own blend at high detail and join them to the body (shapes_join). The result is a mesh shape: move, turn, resize, recolour and export work; it has no outline, faces or holes. A person can refine it by hand in the window.',
+     inputSchema: obj(
+       {
+         parts: {
+           type: 'array',
+-          description: 'The parts to blend (1 to 64; mirroring doubles them).',
++          description: 'The parts to blend (1 to 96 counting the mirrored copies).',
+           items: obj(
+             {
+-              kind: { type: 'string', enum: ['sphere', 'capsule', 'ellipsoid'] },
+-              at: { ...point3, description: 'Sphere or ellipsoid centre, or a capsule\'s first end, mm.' },
++              kind: { type: 'string', enum: ['sphere', 'capsule', 'ellipsoid', 'box'] },
++              at: { ...point3, description: 'Sphere, ellipsoid or box centre, or a capsule\'s first end, mm.' },
+               to: { ...point3, description: 'A capsule\'s other end.' },
+               radius: { type: 'number', description: 'Sphere radius, or a capsule\'s radius at `at`.' },
+               radius2: { type: 'number', description: 'A capsule\'s radius at `to` (default: the same).' },
+-              radii: { ...point3, description: 'An ellipsoid\'s half-sizes along x, y and z.' },
++              radii: { ...point3, description: 'An ellipsoid\'s or box\'s half-sizes along x, y and z.' },
++              round: { type: 'number', description: 'A box\'s corner rounding, mm (default 0, sharp).' },
++              turn: { ...point3, description: 'An ellipsoid or box turned about x, then y, then z, in degrees (a tilted head, a foot pointing out).' },
++              carve: { type: 'boolean', description: 'Take this part out of the form instead of adding it, its edge softened by smooth.' },
++              color: { ...color, description: 'Paint the surface where this part is nearest (hex, e.g. "#1a1a1a" for a mane). Others take the shape\'s colour.' },
++              smooth: { type: 'number', description: 'How softly THIS part joins (or carves) what came before it, mm, instead of the blend\'s smooth: small (1 to 3) for eyelids, lips and creases, large for cheeks and muscle.' },
+             },
+             ['kind', 'at']
+           ),
+         },
+         smooth: { type: 'number', description: 'How wide the soft joins are, mm. Default: 0.6 x the smallest part radius. 0 leaves creases.' },
+-        detail: { type: 'number', description: 'Fineness: grid cells along the longest side (8 to 120, default 72). Higher is smoother and slower.' },
++        detail: { type: 'number', description: 'Fineness: grid cells along the longest side (8 to 256, default 96). Higher is smoother and slower; with many parts it is lowered to keep the call quick, and the reply says so.' },
+         mirror: obj({ axis: { type: 'string', enum: ['x', 'y', 'z'] }, at: { type: 'number', description: 'Where the mirror plane is on that axis. Default: the middle of the parts.' } }, ['axis']),
+         name: { type: 'string' },
+         color: color,
+@@ -212,6 +217,23 @@ export const TOOL_SPECS: ToolSpec[] = [
+       ['sections']
+     ),
+   },
++  {
++    name: 'mesh_build',
++    description:
++      'Make ONE shape from triangles you write out: vertices ([x, y, z] in mm, z up, where it goes in the model) and triangles ([a, b, c] vertex numbers from 0, counter-clockwise seen from outside; clockwise ones are turned round for you). For a low-poly character or animal, a gem, a rock, a terrain or any surface the stock shapes and blends cannot make. Optional uvs ([u, v] per vertex) lay a surface_set picture on by your own layout; optional colors (a hex colour or null per vertex) paint it. Up to 20000 vertices and 40000 triangles; a closed surface is a solid (it can be printed, joined and cut), an open one is shown as a sheet and the reply says how many edges are open. For a smooth organic form sculpt_blend is usually easier; this is for exact control.',
++    inputSchema: obj(
++      {
++        vertices: { type: 'array', items: { type: 'array', items: { type: 'number' }, minItems: 3, maxItems: 3 }, description: '[x, y, z] for each point, mm.' },
++        triangles: { type: 'array', items: { type: 'array', items: { type: 'integer' }, minItems: 3, maxItems: 3 }, description: '[a, b, c] vertex numbers for each triangle.' },
++        uvs: { type: 'array', items: { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2 }, description: 'Optional [u, v] (0 to 1 across a picture) for each vertex.' },
++        colors: { type: 'array', items: { oneOf: [{ type: 'string' }, { type: 'null' }] }, description: 'Optional colour for each vertex: hex, or null for the shape\'s colour.' },
++        name: { type: 'string' },
++        color: color,
++        material,
++      },
++      ['vertices', 'triangles']
++    ),
++  },
+   {
+     name: 'sculpt_smooth',
+     description:
+@@ -374,12 +396,12 @@ export const TOOL_SPECS: ToolSpec[] = [
+   { name: 'group_remove', description: 'Dissolve one group (its shapes and inner groups stay, moving up into the group around it).', inputSchema: obj({ group: { type: 'string' } }, ['group']) },
+   {
+     name: 'shapes_join',
+-    description: 'Join shapes into one solid: outlines are united wherever they overlap or touch, each keeping its own height and elevation. Bevels on the inputs are not kept.',
++    description: 'Join shapes into one solid: outlines are united wherever they overlap or touch, each keeping its own height and elevation. Bevels on the inputs are not kept. With a mesh among them (a blend, a built or imported mesh) they are joined as solids into ONE mesh shape, each part keeping the colour it showed as paint (sculpt_smooth then softens the seams); every one must be closed.',
+     inputSchema: obj({ ids }, ['ids']),
+   },
+   {
+     name: 'shapes_subtract',
+-    description: 'Cut the cutters out of the "from" shapes where they overlap in height (the cutters are used up). A short cutter leaves a slab above and below.',
++    description: 'Cut the cutters out of the "from" shapes where they overlap in height (the cutters are used up). A short cutter leaves a slab above and below. With a mesh among them each "from" shape is cut as a solid and becomes a mesh shape in its place (the exact shape of the cutter is taken out, at any height or angle).',
+     inputSchema: obj({ from: ids, cutters: ids }, ['from', 'cutters']),
+   },
+   {
+@@ -513,6 +535,8 @@ export function runDocTool(ctx: ToolContext, name: string, rawArgs: unknown): To
+       return done(ops.sculptBlend(doc, ids, a as unknown as ops.BlendArgs));
+     case 'sculpt_loft':
+       return done(ops.sculptLoft(doc, ids, a as unknown as ops.LoftArgs));
++    case 'mesh_build':
++      return done(ops.buildMesh(doc, ids, a as unknown as ops.BuildMeshArgs));
+     case 'sculpt_smooth':
+       return done(ops.smoothShape(doc, a as unknown as ops.SmoothArgs));
+     case 'surface_set':
+diff --git a/autora-3d/src/types.ts b/autora-3d/src/types.ts
+index ad36799..65f6623 100644
+--- a/autora-3d/src/types.ts
++++ b/autora-3d/src/types.ts
+@@ -176,6 +176,8 @@ export interface MeshData {
+   indices: number[];
+   /** Where each vertex sits on the surface's image (u, v pairs), when the file had a layout. Ignored once its count no longer matches. */
+   uvs?: number[];
++  /** A colour for each vertex (r, g, b, 0..1; -1 where it takes the shape's own colour): a form painted part by part. Ignored once its count no longer matches. */
++  colors?: number[];
+ }
+ 
+ export interface Body3D {
+diff --git a/autora-3d/src/utils/glb.ts b/autora-3d/src/utils/glb.ts
+index 37dae62..d0f2c8f 100644
+--- a/autora-3d/src/utils/glb.ts
++++ b/autora-3d/src/utils/glb.ts
+@@ -98,7 +98,8 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
+         uv[i * 2 + 1] = 1 - (u * sn + w * c);
+       }
+     }
+-    const part: Part = { body, pos, nrm, idx, min, max, uv, baseRepeat: baseSlot ? textureRepeat(body, baseSlot) : 1 };
++    const colAttr = g.getAttribute('color');
++    const part: Part = { body, pos, nrm, idx, min, max, uv, baseRepeat: baseSlot ? textureRepeat(body, baseSlot) : 1, ...(colAttr ? { col: new Float32Array(colAttr.array as Float32Array) } : {}) };
+     const bound = usableBind(options.rig, body.id, p.count);
+     if (bound) {
+       part.joints = Uint16Array.from(bound.joints);
+@@ -278,6 +279,8 @@ export function glbBytes(bodies: Body3D[], options: GlbOptions = {}): Uint8Array
+     accessors.push({ bufferView: addView(new Uint8Array(q.idx.buffer), 34963), componentType: 5125, count: q.idx.length, type: 'SCALAR' });
+ 
+     const material = q.hair ? hairMaterial(q.body) : surfaceMaterial(q.body, !!q.uv, q.baseRepeat);
++    // A painted form: the colour is in its vertices (COLOR_0 multiplies the base colour), so the base colour is white.
++    if (!q.hair && q.col) material.pbrMetallicRoughness.baseColorFactor = [1, 1, 1, material.pbrMetallicRoughness.baseColorFactor[3]];
+     materials.push(material);
+     const attributes: Record<string, number> = { POSITION: aPos, NORMAL: aPos + 1 };
+     if (q.uv) {
+diff --git a/autora-3d/src/utils/manifoldBoolean.ts b/autora-3d/src/utils/manifoldBoolean.ts
+index 4af22a1..a2876a9 100644
+--- a/autora-3d/src/utils/manifoldBoolean.ts
++++ b/autora-3d/src/utils/manifoldBoolean.ts
+@@ -57,6 +57,32 @@ function toManifold(g: THREE.BufferGeometry) {
+   }
+ }
+ 
++/** Why a combine did not happen, said to the person or agent. */
++export class CombineError extends Error {}
++
++/**
++ * Solids combined: `union` of all of `solids`, or the first with the rest taken out of it (`subtract`). Plain triangle soup in,
++ * the same out ([x, y, z] runs and triangle indices). Throws CombineError when the engine is not started or a shape is not a
++ * closed solid, naming which.
++ */
++export function combineSolids(solids: { positions: ArrayLike<number>; indices?: ArrayLike<number>; name: string }[], mode: 'union' | 'subtract'): { positions: number[]; indices: number[] } {
++  if (!wasm) throw new CombineError('The solid engine is not started, so meshes cannot be joined or cut here.');
++  const made = solids.map((s) => {
++    const g = new THREE.BufferGeometry();
++    g.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(s.positions), 3));
++    if (s.indices) g.setIndex(new THREE.BufferAttribute(Uint32Array.from(s.indices), 1));
++    const m = toManifold(g);
++    g.dispose();
++    if (!m) throw new CombineError(`"${s.name}" is not a closed solid (its surface has holes or folds), so it cannot be joined or cut.`);
++    return m;
++  });
++  const result = mode === 'union' ? wasm.Manifold.union(made) : made.slice(1).reduce((acc, c) => acc.subtract(c), made[0]);
++  const out = result.simplify(1e-4).getMesh();
++  const positions: number[] = [];
++  for (let v = 0; v < out.vertProperties.length / out.numProp; v++) positions.push(out.vertProperties[v * out.numProp], out.vertProperties[v * out.numProp + 1], out.vertProperties[v * out.numProp + 2]);
++  return { positions, indices: Array.from(out.triVerts) };
++}
++
+ /** `body` with every cutter taken out of it, as an indexed geometry; null when the engine is not started or an input is not a solid. */
+ export function subtractAll(body: THREE.BufferGeometry, cutters: THREE.BufferGeometry[]): THREE.BufferGeometry | null {
+   if (!wasm) return null;
+diff --git a/autora-3d/src/utils/meshImport.ts b/autora-3d/src/utils/meshImport.ts
+index ec73781..f943459 100644
+--- a/autora-3d/src/utils/meshImport.ts
++++ b/autora-3d/src/utils/meshImport.ts
+@@ -20,6 +20,8 @@ export interface RawMesh {
+   color?: string;
+   /** Where each vertex sits on the file's picture (u, v pairs), when every part of it had a layout. */
+   uvs?: number[];
++  /** A colour for each vertex (r, g, b, 0..1), or -1 for the shape's own colour there. */
++  colors?: number[];
+   /** The file's base colour picture, as a data URL (glTF `baseColorTexture`, PNG or JPEG inside the file). */
+   image?: string;
+ }
+@@ -379,8 +381,19 @@ export function simplify(mesh: RawMesh, max = MAX_TRIANGLES): RawMesh {
+     if (indices.length / 3 <= max || cells < 8) {
+       const positions = counts.flatMap((c, n) => [sums[n * 3] / c, sums[n * 3 + 1] / c, sums[n * 3 + 2] / c]);
+       // Clustering merges vertices from all over a picture: its layout no longer fits, so it goes (and the picture with it).
+-      const { uvs: _u, image: _i, ...rest } = mesh;
+-      return { ...rest, positions, indices };
++      const { uvs: _u, image: _i, colors: given, ...rest } = mesh;
++      if (!given || given.length !== mesh.positions.length) return { ...rest, positions, indices };
++      // Paint is local, so it survives: each merged point takes its points' paint, or the shape's colour where most had that.
++      const paint = new Array<number>(counts.length * 3).fill(0);
++      const painted = new Array<number>(counts.length).fill(0);
++      for (let i = 0; i < remap.length; i++) {
++        if (given[i * 3] < 0) continue;
++        const n = remap[i];
++        painted[n]++;
++        for (let c = 0; c < 3; c++) paint[n * 3 + c] += given[i * 3 + c];
++      }
++      const colors = counts.flatMap((c, n) => (painted[n] * 2 >= c ? [0, 1, 2].map((k) => paint[n * 3 + k] / painted[n]) : [-1, -1, -1]));
++      return { ...rest, positions, indices, colors };
+     }
+     cells = Math.floor(cells * 0.85);
+   }
+@@ -467,7 +480,7 @@ export function placeMesh(raw: RawMesh, format: MeshFormat, at: MeshPlacement =
+     positions[i * 3 + 2] = r3((z[i] - lo[2]) * scale);
+   }
+   return {
+-    mesh: { positions, indices: mesh.indices, ...(mesh.uvs && mesh.uvs.length / 2 === n ? { uvs: mesh.uvs } : {}) },
++    mesh: { positions, indices: mesh.indices, ...(mesh.uvs && mesh.uvs.length / 2 === n ? { uvs: mesh.uvs } : {}), ...(mesh.colors && mesh.colors.length / 3 === n ? { colors: mesh.colors } : {}) },
+     points: [
+       { x: r3(cx - half.x), y: r3(cy - half.y) },
+       { x: r3(cx + half.x), y: r3(cy - half.y) },
+@@ -498,6 +511,19 @@ export function meshGeometry(body: Body3D): THREE.BufferGeometry | null {
+   const geometry = new THREE.BufferGeometry();
+   geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+   if (m.uvs && m.uvs.length === n * 2) geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(m.uvs), 2));
++  if (m.colors && m.colors.length === n * 3) {
++    // Painted parts keep their colour; the rest is the shape's own, so recolouring the shape still recolours them.
++    // Stored as written (sRGB, like a hex colour); a vertex colour is drawn in linear light, as the shape's colour is.
++    const own = new THREE.Color(body.color);
++    const c = new THREE.Color();
++    const col = new Float32Array(n * 3);
++    for (let i = 0; i < n; i++) {
++      if (m.colors[i * 3] < 0) c.copy(own);
++      else c.setRGB(m.colors[i * 3], m.colors[i * 3 + 1], m.colors[i * 3 + 2], THREE.SRGBColorSpace);
++      col.set([c.r, c.g, c.b], i * 3);
++    }
++    geometry.setAttribute('color', new THREE.BufferAttribute(col, 3));
++  }
+   geometry.setIndex(new THREE.BufferAttribute(n > 65535 ? new Uint32Array(m.indices) : new Uint16Array(m.indices), 1));
+   return geometry;
+ }
+diff --git a/autora-3d/src/utils/organic.ts b/autora-3d/src/utils/organic.ts
+index e14890a..4513566 100644
+--- a/autora-3d/src/utils/organic.ts
++++ b/autora-3d/src/utils/organic.ts
+@@ -20,11 +20,11 @@ export interface Vec {
+   z: number;
+ }
+ 
+-export type PartKind = 'sphere' | 'capsule' | 'ellipsoid';
++export type PartKind = 'sphere' | 'capsule' | 'ellipsoid' | 'box';
+ 
+ export interface BlendPart {
+   kind: PartKind;
+-  /** Centre (sphere, ellipsoid) or one end (capsule). */
++  /** Centre (sphere, ellipsoid, box) or one end (capsule). */
+   a: Vec;
+   /** The other end of a capsule. */
+   b?: Vec;
+@@ -32,12 +32,26 @@ export interface BlendPart {
+   radius?: number;
+   /** A capsule's radius at `b` (it tapers from `radius` to this). */
+   radius2?: number;
+-  /** An ellipsoid's half-sizes along x, y and z. */
++  /** An ellipsoid's or a box's half-sizes along x, y and z (before `turn`). */
+   radii?: Vec;
++  /** A box's corner rounding, mm (at most its smallest half-size). */
++  round?: number;
++  /** An ellipsoid or box turned about x, then y, then z, in degrees. */
++  turn?: Vec;
++  /** Carved out of the form instead of added to it (an eye socket, a mouth, the gap between fingers). */
++  carve?: boolean;
++  /** The colour the surface takes where this part is the nearest, as #rrggbb; without it the shape's own colour. */
++  color?: string;
++  /** How softly this part joins what came before it, mm, instead of the blend's own: small for an eyelid or a lip, large for a cheek. */
++  smooth?: number;
+ }
+ 
+-export const MAX_PARTS = 64;
+-export const MAX_DETAIL = 120;
++export const MAX_PARTS = 96;
++export const MAX_DETAIL = 256;
++/** Grid points times parts looked at: past this the grid is made coarser, so a call stays a second or two. */
++const BUDGET = 160_000_000;
++/** In a mesh's colours, a vertex that takes the shape's own colour. */
++export const SHAPE_COLOUR = -1;
+ 
+ const sub = (p: Vec, q: Vec): Vec => ({ x: p.x - q.x, y: p.y - q.y, z: p.z - q.z });
+ const dot = (p: Vec, q: Vec) => p.x * q.x + p.y * q.y + p.z * q.z;
+@@ -48,8 +62,21 @@ const unit = (p: Vec): Vec => {
+   return { x: p.x / l, y: p.y / l, z: p.z / l };
+ };
+ 
++/** The rotation that undoes `turn` (x, then y, then z, degrees), as a row-major 3x3. */
++function unturn(turn: Vec): number[] {
++  const [ax, ay, az] = [turn.x, turn.y, turn.z].map((d) => (d * Math.PI) / 180);
++  const [cx, sx, cy, sy, cz, sz] = [Math.cos(ax), Math.sin(ax), Math.cos(ay), Math.sin(ay), Math.cos(az), Math.sin(az)];
++  // R = Rz * Ry * Rx; its inverse is its transpose.
++  const r = [
++    cz * cy, cz * sy * sx - sz * cx, cz * sy * cx + sz * sx,
++    sz * cy, sz * sy * sx + cz * cx, sz * sy * cx - cz * sx,
++    -sy, cy * sx, cy * cx,
++  ];
++  return [r[0], r[3], r[6], r[1], r[4], r[7], r[2], r[5], r[8]];
++}
++
+ /** Signed distance to one part (negative inside). Capsule and ellipsoid distances are approximate, which a blend does not mind. */
+-function distance(part: BlendPart, p: Vec): number {
++function distance(part: BlendPart, p: Vec, inv: number[] | null): number {
+   if (part.kind === 'sphere') return len(sub(p, part.a)) - (part.radius as number);
+   if (part.kind === 'capsule') {
+     const b = part.b as Vec;
+@@ -59,7 +86,15 @@ function distance(part: BlendPart, p: Vec): number {
+     return len({ x: p.x - part.a.x - ab.x * t, y: p.y - part.a.y - ab.y * t, z: p.z - part.a.z - ab.z * t }) - r;
+   }
+   const r = part.radii as Vec;
+-  const q = sub(p, part.a);
++  let q = sub(p, part.a);
++  if (inv) q = { x: inv[0] * q.x + inv[1] * q.y + inv[2] * q.z, y: inv[3] * q.x + inv[4] * q.y + inv[5] * q.z, z: inv[6] * q.x + inv[7] * q.y + inv[8] * q.z };
++  if (part.kind === 'box') {
++    const round = Math.min(part.round ?? 0, r.x, r.y, r.z);
++    const dx = Math.abs(q.x) - (r.x - round);
++    const dy = Math.abs(q.y) - (r.y - round);
++    const dz = Math.abs(q.z) - (r.z - round);
++    return Math.hypot(Math.max(dx, 0), Math.max(dy, 0), Math.max(dz, 0)) + Math.min(Math.max(dx, dy, dz), 0) - round;
++  }
+   const k0 = Math.hypot(q.x / r.x, q.y / r.y, q.z / r.z);
+   const k1 = Math.hypot(q.x / (r.x * r.x), q.y / (r.y * r.y), q.z / (r.z * r.z));
+   return k1 === 0 ? -Math.min(r.x, r.y, r.z) : (k0 * (k0 - 1)) / k1;
+@@ -71,11 +106,16 @@ const smin = (a: number, b: number, k: number): number => {
+   const h = Math.max(k - Math.abs(a - b), 0) / k;
+   return Math.min(a, b) - (h * h * k) / 4;
+ };
++/** Its partner: `a` with `b` taken out of it, the cut's edge softened over `k`. */
++const smax = (a: number, b: number, k: number): number => -smin(-a, -b, k);
+ 
+ function reach(part: BlendPart): { lo: Vec; hi: Vec } {
+-  if (part.kind === 'ellipsoid') {
++  if (part.kind === 'ellipsoid' || part.kind === 'box') {
+     const r = part.radii as Vec;
+-    return { lo: { x: part.a.x - r.x, y: part.a.y - r.y, z: part.a.z - r.z }, hi: { x: part.a.x + r.x, y: part.a.y + r.y, z: part.a.z + r.z } };
++    // Turned, it reaches at most its longest half-size in any direction (corners of a box: the half-diagonal).
++    const e = part.turn ? (part.kind === 'box' ? len(r) : Math.max(r.x, r.y, r.z)) : 0;
++    const h = part.turn ? { x: e, y: e, z: e } : r;
++    return { lo: { x: part.a.x - h.x, y: part.a.y - h.y, z: part.a.z - h.z }, hi: { x: part.a.x + h.x, y: part.a.y + h.y, z: part.a.z + h.z } };
+   }
+   const ends = part.kind === 'capsule' ? [part.a, part.b as Vec] : [part.a];
+   const r = Math.max(part.radius as number, part.kind === 'capsule' ? (part.radius2 as number) : 0);
+@@ -85,46 +125,112 @@ function reach(part: BlendPart): { lo: Vec; hi: Vec } {
+   };
+ }
+ 
+-/** The parts reflected across the plane where `axis` equals `at`, added to the originals. */
++/** The parts reflected across the plane where `axis` equals `at`, added to the originals. A turn is reflected with them. */
+ export function mirrored(parts: BlendPart[], axis: 'x' | 'y' | 'z', at: number): BlendPart[] {
+   const flip = (v: Vec): Vec => ({ ...v, [axis]: 2 * at - v[axis] });
+-  return [...parts, ...parts.map((p) => ({ ...p, a: flip(p.a), ...(p.b ? { b: flip(p.b) } : {}) }))];
++  // Reflecting across a plane keeps the turn about that axis and reverses the other two.
++  const turn = (t: Vec): Vec => ({ x: axis === 'x' ? t.x : -t.x, y: axis === 'y' ? t.y : -t.y, z: axis === 'z' ? t.z : -t.z });
++  // Each copy right after its original: parts apply in order (a carve, then what goes in the hole), on both sides alike.
++  return parts.flatMap((p) => [p, { ...p, a: flip(p.a), ...(p.b ? { b: flip(p.b) } : {}), ...(p.turn ? { turn: turn(p.turn) } : {}) }]);
+ }
+ 
++const hexRgb = (hex: string): [number, number, number] => {
++  const h = hex.length === 4 ? hex.slice(1).split('').map((c) => c + c).join('') : hex.slice(1);
++  const n = parseInt(h, 16);
++  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
++};
++
+ /**
+- * The soft union of the parts as a triangle mesh (surface nets on a grid of `detail` cells along the longest side). `smooth` is
+- * how wide the soft joins are, in mm: 0 leaves creases where parts meet.
++ * The soft union of the parts, less the carved ones, taken in order (a carve removes what came before it; a part after it can
++ * fill back in), as a triangle mesh (surface nets on a grid of `detail` cells along the
++ * longest side). `smooth` is how wide the soft joins are, in mm: 0 leaves creases where parts meet. When any part has a colour
++ * the mesh has `colors`: r, g, b (0..1) per vertex from the nearest part, SHAPE_COLOUR where that part has none.
+  */
+-export function blendMesh(parts: BlendPart[], opts: { smooth: number; detail: number }): RawMesh {
++export function blendMesh(parts: BlendPart[], opts: { smooth: number; detail: number }): RawMesh & { detail: number } {
+   if (!parts.length) bad('Give at least one part.');
+   if (parts.length > MAX_PARTS) bad(`At most ${MAX_PARTS} parts (mirroring doubles them).`);
+-  const boxes = parts.map(reach);
+-  const pad = Math.max(opts.smooth, 0) + 1;
++  const adds = parts.filter((p) => !p.carve);
++  if (!adds.length) bad('Every part is carved: give at least one that adds.');
++  const k = Math.max(opts.smooth, 0);
++  // Only what is added sets the grid: a carve outside the form takes nothing away.
++  const boxes = adds.map(reach);
++  const pad = Math.max(k, ...parts.map((p) => p.smooth ?? 0)) + 1;
+   const lo = { x: Math.min(...boxes.map((b) => b.lo.x)) - pad, y: Math.min(...boxes.map((b) => b.lo.y)) - pad, z: Math.min(...boxes.map((b) => b.lo.z)) - pad };
+   const hi = { x: Math.max(...boxes.map((b) => b.hi.x)) + pad, y: Math.max(...boxes.map((b) => b.hi.y)) + pad, z: Math.max(...boxes.map((b) => b.hi.z)) + pad };
+   const longest = Math.max(hi.x - lo.x, hi.y - lo.y, hi.z - lo.z);
+   if (!(longest > 0) || !Number.isFinite(longest)) bad('The parts have no size.');
+-  const cell = longest / Math.max(8, Math.min(MAX_DETAIL, Math.round(opts.detail)));
++  let detail = Math.max(8, Math.min(MAX_DETAIL, Math.round(opts.detail)));
++  const points = (d: number) => {
++    const c = longest / d;
++    return (Math.ceil((hi.x - lo.x) / c) + 1) * (Math.ceil((hi.y - lo.y) / c) + 1) * (Math.ceil((hi.z - lo.z) / c) + 1);
++  };
++  while (detail > 8 && points(detail) * parts.length > BUDGET) detail = Math.floor(detail * 0.9);
++  const cell = longest / detail;
+   const nx = Math.ceil((hi.x - lo.x) / cell) + 1;
+   const ny = Math.ceil((hi.y - lo.y) / cell) + 1;
+   const nz = Math.ceil((hi.z - lo.z) / cell) + 1;
+ 
++  const prepared = parts.map((part) => {
++    const box = reach(part);
++    return { part, inv: part.turn && (part.kind === 'ellipsoid' || part.kind === 'box') ? unturn(part.turn) : null, lo: box.lo, hi: box.hi };
++  });
++  /** How far `p` is from a part's box at least: a part that far off cannot change a soft min or max, so it is not worked out. */
++  const atLeast = (q: (typeof prepared)[number], p: Vec) =>
++    Math.hypot(Math.max(q.lo.x - p.x, 0, p.x - q.hi.x), Math.max(q.lo.y - p.y, 0, p.y - q.hi.y), Math.max(q.lo.z - p.z, 0, p.z - q.hi.z));
++  // In order: a part added after a carve fills back into it (an eyeball in its socket), and a carve takes from all before it.
++  const fieldAt = (p: Vec): number => {
++    let d = Infinity;
++    for (const q of prepared) {
++      const kk = q.part.smooth ?? k;
++      if (q.part.carve) {
++        if (d === Infinity || atLeast(q, p) >= kk - d) continue;
++        d = smax(d, -distance(q.part, p, q.inv), kk);
++      } else {
++        if (d !== Infinity && atLeast(q, p) >= d + kk) continue;
++        d = smin(d, distance(q.part, p, q.inv), kk);
++      }
++    }
++    return d;
++  };
++
+   const field = new Float32Array(nx * ny * nz);
+-  const at = (i: number, j: number, k: number) => (k * ny + j) * nx + i;
++  const at = (i: number, j: number, k2: number) => (k2 * ny + j) * nx + i;
+   const point: Vec = { x: 0, y: 0, z: 0 };
+-  for (let k = 0; k < nz; k++) {
+-    point.z = lo.z + k * cell;
++  for (let kz = 0; kz < nz; kz++) {
++    point.z = lo.z + kz * cell;
+     for (let j = 0; j < ny; j++) {
+       point.y = lo.y + j * cell;
+       for (let i = 0; i < nx; i++) {
+         point.x = lo.x + i * cell;
+-        let d = Infinity;
+-        for (const part of parts) d = smin(d, distance(part, point), opts.smooth);
+-        field[at(i, j, k)] = d;
++        field[at(i, j, kz)] = fieldAt(point);
+       }
+     }
+   }
+-  return surfaceNets(field, nx, ny, nz, lo, cell);
++  const mesh = surfaceNets(field, nx, ny, nz, lo, cell);
++  if (!parts.some((p) => p.color)) return { ...mesh, detail };
++  // Each point of the surface takes the colour of the part it lies on (the nearest surface of any part, added or carved).
++  const colors: number[] = [];
++  const v: Vec = { x: 0, y: 0, z: 0 };
++  const rgb = prepared.map((q) => (q.part.color ? hexRgb(q.part.color) : null));
++  for (let i = 0; i < mesh.positions.length; i += 3) {
++    v.x = mesh.positions[i];
++    v.y = mesh.positions[i + 1];
++    v.z = mesh.positions[i + 2];
++    let best = -1;
++    let near = Infinity;
++    prepared.forEach((q, n) => {
++      if (atLeast(q, v) >= near) return;
++      const d = Math.abs(distance(q.part, v, q.inv));
++      if (d < near) {
++        near = d;
++        best = n;
++      }
++    });
++    const c = best >= 0 ? rgb[best] : null;
++    if (c) colors.push(c[0], c[1], c[2]);
++    else colors.push(SHAPE_COLOUR, SHAPE_COLOUR, SHAPE_COLOUR);
++  }
++  return { ...mesh, colors, detail };
+ }
+ 
+ /** Naive surface nets: one vertex in each grid cell the surface passes through, a quad across each edge that crosses it. */
+@@ -178,7 +284,7 @@ function surfaceNets(field: Float32Array, nx: number, ny: number, nz: number, lo
+ }
+ 
+ /** Turns every triangle round if the mesh came out inside-out (negative volume), so the faces look outward. */
+-function facingOut(mesh: RawMesh): RawMesh {
++export function facingOut(mesh: RawMesh): RawMesh {
+   const p = mesh.positions;
+   let volume = 0;
+   for (let t = 0; t < mesh.indices.length; t += 3) {
+@@ -275,6 +381,7 @@ export function loftMesh(sections: Section[], opts: { sides: number; steps: numb
+ /** Splits every triangle in four at its edge midpoints (the shape stays the same; it only gives smoothing more to work with). */
+ export function subdivide(mesh: RawMesh): RawMesh {
+   const positions = mesh.positions.slice();
++  const colors = mesh.colors ? mesh.colors.slice() : null;
+   const mid = new Map<number, number>();
+   const n = mesh.positions.length / 3;
+   const between = (a: number, b: number): number => {
+@@ -283,6 +390,8 @@ export function subdivide(mesh: RawMesh): RawMesh {
+     if (m === undefined) {
+       m = positions.length / 3;
+       positions.push((positions[a * 3] + positions[b * 3]) / 2, (positions[a * 3 + 1] + positions[b * 3 + 1]) / 2, (positions[a * 3 + 2] + positions[b * 3 + 2]) / 2);
++      // A midpoint between a painted point and one in the shape's colour takes the painted one, so paint does not go muddy.
++      if (colors) colors.push(...[0, 1, 2].map((c) => (colors[a * 3 + c] === SHAPE_COLOUR ? colors[b * 3 + c] : colors[b * 3 + c] === SHAPE_COLOUR ? colors[a * 3 + c] : (colors[a * 3 + c] + colors[b * 3 + c]) / 2)));
+       mid.set(key, m);
+     }
+     return m;
+@@ -295,7 +404,7 @@ export function subdivide(mesh: RawMesh): RawMesh {
+     const ca = between(c, a);
+     indices.push(a, ab, ca, ab, b, bc, ca, bc, c, ab, bc, ca);
+   }
+-  return { ...mesh, positions, indices };
++  return { ...mesh, positions, indices, ...(colors ? { colors } : {}) };
+ }
+ 
+ /**

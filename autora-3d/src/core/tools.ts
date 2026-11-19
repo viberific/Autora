@@ -147,7 +147,7 @@ export const TOOL_SPECS: ToolSpec[] = [
   {
     name: 'mesh_import',
     description:
-      'Bring in a triangle mesh from a file as ONE shape: .glb/.gltf, .obj or .stl (a free CC0 model from Poly Pizza, Quaternius or Sketchfab, or one made in Blender). It arrives as the real surface, so organic forms (an animal, a face, a scan) are possible, which stock shapes and extruded outlines cannot give. It stands on the ground; size sets its longest side in mm (without it a GLB is read in metres, STL and OBJ in mm, and a result that is a speck or a building is fitted to 100 mm). Very large meshes are simplified to 60000 triangles. Move, turn, resize (shape_resize scales it whole), recolour, group and export work on it; it has no outline, faces, bevels or holes, and cannot be joined or cut with the outline tools. A GLB\'s base colour picture (texture) comes with it when it is inside the file and every part has a layout (UVs); otherwise colour it with color, material or surface_set.',
+      'Bring in a triangle mesh from a file as ONE shape: .glb/.gltf, .obj or .stl (a free CC0 model from Poly Pizza, Quaternius or Sketchfab, or one made in Blender). It arrives as the real surface, so organic forms (an animal, a face, a scan) are possible, which stock shapes and extruded outlines cannot give. It stands on the ground; size sets its longest side in mm (without it a GLB is read in metres, STL and OBJ in mm, and a result that is a speck or a building is fitted to 100 mm). Very large meshes are simplified to 60000 triangles. Move, turn, resize (shape_resize scales it whole), recolour, group and export work on it; it has no outline, faces, bevels or holes; shapes_join and shapes_subtract work on it as a solid when it is closed. A GLB\'s base colour picture (texture) comes with it when it is inside the file and every part has a layout (UVs); otherwise colour it with color, material or surface_set.',
     inputSchema: obj({
       file: { type: 'string', description: 'The mesh file: an artifact id (file_...) or a path on the host. The host reads it.' },
       format: { type: 'string', enum: ['glb', 'obj', 'stl'], description: 'Only if the file name does not say (glTF counts as glb).' },
@@ -164,26 +164,31 @@ export const TOOL_SPECS: ToolSpec[] = [
   {
     name: 'sculpt_blend',
     description:
-      'Make ONE smooth, organic shape by blending simple parts into a soft surface: the way to model an animal, a creature, a hand, a bottle, a cloud. Give parts: spheres, tapered capsules (a limb or neck: at, to, radius at each end) and ellipsoids (a body or head: radii along x, y, z). Where parts overlap they melt together over `smooth` mm. Positions are in mm on the ground (x, y) and up (z); parts may overlap and may sit anywhere. Give half of a symmetric creature and set mirror ({axis, at}) to reflect it. Build the big masses first (body, chest, hips, head), then limbs overlapping into them; look with scene_get / a view and adjust the numbers, or use sculpt_smooth. The result is a mesh shape: move, turn, resize, recolour and export work; it has no outline, faces or holes. A person can refine it by hand in the window.',
+      'Make ONE smooth, organic shape by blending simple parts into a soft surface: the way to model a person, an animal, a creature, a hand, a bottle, a cloud. Give parts: spheres, tapered capsules (a limb, neck or finger: at, to, radius at each end), ellipsoids (a body or head: radii along x, y, z) and boxes (a palm, a foot, a chest: radii, round for soft corners). An ellipsoid or box can be turned ({x, y, z} degrees). A part with carve:true is taken OUT of the form instead (an eye socket, a mouth, nostrils, the gap under a jaw); parts apply in order, so a carve removes what came before it and a part listed after it fills back in (the eyeball in its socket). A part with a color paints the surface where it is the nearest part (a black mane, white socks, red lips); the rest is the shape\'s colour. Where parts overlap they melt together over `smooth` mm. Positions are in mm on the ground (x, y) and up (z); parts may overlap and may sit anywhere. Give half of a symmetric creature and set mirror ({axis, at}) to reflect it. Build the big masses first (body, chest, hips, head), then limbs overlapping into them; look with scene_get / a view and adjust the numbers, or use sculpt_smooth. Fine features need fine detail: detail is spread over the whole form, so make hands or a face as their own blend at high detail and join them to the body (shapes_join). The result is a mesh shape: move, turn, resize, recolour and export work; it has no outline, faces or holes. A person can refine it by hand in the window.',
     inputSchema: obj(
       {
         parts: {
           type: 'array',
-          description: 'The parts to blend (1 to 64; mirroring doubles them).',
+          description: 'The parts to blend (1 to 96 counting the mirrored copies).',
           items: obj(
             {
-              kind: { type: 'string', enum: ['sphere', 'capsule', 'ellipsoid'] },
-              at: { ...point3, description: 'Sphere or ellipsoid centre, or a capsule\'s first end, mm.' },
+              kind: { type: 'string', enum: ['sphere', 'capsule', 'ellipsoid', 'box'] },
+              at: { ...point3, description: 'Sphere, ellipsoid or box centre, or a capsule\'s first end, mm.' },
               to: { ...point3, description: 'A capsule\'s other end.' },
               radius: { type: 'number', description: 'Sphere radius, or a capsule\'s radius at `at`.' },
               radius2: { type: 'number', description: 'A capsule\'s radius at `to` (default: the same).' },
-              radii: { ...point3, description: 'An ellipsoid\'s half-sizes along x, y and z.' },
+              radii: { ...point3, description: 'An ellipsoid\'s or box\'s half-sizes along x, y and z.' },
+              round: { type: 'number', description: 'A box\'s corner rounding, mm (default 0, sharp).' },
+              turn: { ...point3, description: 'An ellipsoid or box turned about x, then y, then z, in degrees (a tilted head, a foot pointing out).' },
+              carve: { type: 'boolean', description: 'Take this part out of the form instead of adding it, its edge softened by smooth.' },
+              color: { ...color, description: 'Paint the surface where this part is nearest (hex, e.g. "#1a1a1a" for a mane). Others take the shape\'s colour.' },
+              smooth: { type: 'number', description: 'How softly THIS part joins (or carves) what came before it, mm, instead of the blend\'s smooth: small (1 to 3) for eyelids, lips and creases, large for cheeks and muscle.' },
             },
             ['kind', 'at']
           ),
         },
         smooth: { type: 'number', description: 'How wide the soft joins are, mm. Default: 0.6 x the smallest part radius. 0 leaves creases.' },
-        detail: { type: 'number', description: 'Fineness: grid cells along the longest side (8 to 120, default 72). Higher is smoother and slower.' },
+        detail: { type: 'number', description: 'Fineness: grid cells along the longest side (8 to 256, default 96). Higher is smoother and slower; with many parts it is lowered to keep the call quick, and the reply says so.' },
         mirror: obj({ axis: { type: 'string', enum: ['x', 'y', 'z'] }, at: { type: 'number', description: 'Where the mirror plane is on that axis. Default: the middle of the parts.' } }, ['axis']),
         name: { type: 'string' },
         color: color,
@@ -210,6 +215,23 @@ export const TOOL_SPECS: ToolSpec[] = [
         material,
       },
       ['sections']
+    ),
+  },
+  {
+    name: 'mesh_build',
+    description:
+      'Make ONE shape from triangles you write out: vertices ([x, y, z] in mm, z up, where it goes in the model) and triangles ([a, b, c] vertex numbers from 0, counter-clockwise seen from outside; clockwise ones are turned round for you). For a low-poly character or animal, a gem, a rock, a terrain or any surface the stock shapes and blends cannot make. Optional uvs ([u, v] per vertex) lay a surface_set picture on by your own layout; optional colors (a hex colour or null per vertex) paint it. Up to 20000 vertices and 40000 triangles; a closed surface is a solid (it can be printed, joined and cut), an open one is shown as a sheet and the reply says how many edges are open. For a smooth organic form sculpt_blend is usually easier; this is for exact control.',
+    inputSchema: obj(
+      {
+        vertices: { type: 'array', items: { type: 'array', items: { type: 'number' }, minItems: 3, maxItems: 3 }, description: '[x, y, z] for each point, mm.' },
+        triangles: { type: 'array', items: { type: 'array', items: { type: 'integer' }, minItems: 3, maxItems: 3 }, description: '[a, b, c] vertex numbers for each triangle.' },
+        uvs: { type: 'array', items: { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2 }, description: 'Optional [u, v] (0 to 1 across a picture) for each vertex.' },
+        colors: { type: 'array', items: { oneOf: [{ type: 'string' }, { type: 'null' }] }, description: 'Optional colour for each vertex: hex, or null for the shape\'s colour.' },
+        name: { type: 'string' },
+        color: color,
+        material,
+      },
+      ['vertices', 'triangles']
     ),
   },
   {
@@ -374,12 +396,12 @@ export const TOOL_SPECS: ToolSpec[] = [
   { name: 'group_remove', description: 'Dissolve one group (its shapes and inner groups stay, moving up into the group around it).', inputSchema: obj({ group: { type: 'string' } }, ['group']) },
   {
     name: 'shapes_join',
-    description: 'Join shapes into one solid: outlines are united wherever they overlap or touch, each keeping its own height and elevation. Bevels on the inputs are not kept.',
+    description: 'Join shapes into one solid: outlines are united wherever they overlap or touch, each keeping its own height and elevation. Bevels on the inputs are not kept. With a mesh among them (a blend, a built or imported mesh) they are joined as solids into ONE mesh shape, each part keeping the colour it showed as paint (sculpt_smooth then softens the seams); every one must be closed.',
     inputSchema: obj({ ids }, ['ids']),
   },
   {
     name: 'shapes_subtract',
-    description: 'Cut the cutters out of the "from" shapes where they overlap in height (the cutters are used up). A short cutter leaves a slab above and below.',
+    description: 'Cut the cutters out of the "from" shapes where they overlap in height (the cutters are used up). A short cutter leaves a slab above and below. With a mesh among them each "from" shape is cut as a solid and becomes a mesh shape in its place (the exact shape of the cutter is taken out, at any height or angle).',
     inputSchema: obj({ from: ids, cutters: ids }, ['from', 'cutters']),
   },
   {
@@ -513,6 +535,8 @@ export function runDocTool(ctx: ToolContext, name: string, rawArgs: unknown): To
       return done(ops.sculptBlend(doc, ids, a as unknown as ops.BlendArgs));
     case 'sculpt_loft':
       return done(ops.sculptLoft(doc, ids, a as unknown as ops.LoftArgs));
+    case 'mesh_build':
+      return done(ops.buildMesh(doc, ids, a as unknown as ops.BuildMeshArgs));
     case 'sculpt_smooth':
       return done(ops.smoothShape(doc, a as unknown as ops.SmoothArgs));
     case 'surface_set':

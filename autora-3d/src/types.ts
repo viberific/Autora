@@ -176,6 +176,8 @@ export interface MeshData {
   indices: number[];
   /** Where each vertex sits on the surface's image (u, v pairs), when the file had a layout. Ignored once its count no longer matches. */
   uvs?: number[];
+  /** A colour for each vertex (r, g, b, 0..1; -1 where it takes the shape's own colour): a form painted part by part. Ignored once its count no longer matches. */
+  colors?: number[];
 }
 
 export interface Body3D {

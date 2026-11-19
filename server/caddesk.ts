@@ -310,6 +310,7 @@ const NO_CONTROL: Record<string, string> = {
   doc_set: "the window has no control that puts in a whole model",
   library_import: "the window has no control that imports library objects",
   mesh_import: "the window has no control that reads a mesh file",
+  mesh_build: "the window has no control that writes out triangles",
   sculpt_blend: "the window has no control that blends parts into a form",
   sculpt_loft: "the window has no control that lofts sections into a tube",
   sculpt_smooth: "the window has no control that smooths a surface",
