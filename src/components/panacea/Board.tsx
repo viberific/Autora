@@ -33,6 +33,14 @@ function shifted<T extends { x: number; zoom: number }>(next: T | null, inset: n
 
 interface View { x: number; y: number; zoom: number }
 
+/** The smallest a phone shows the work at. Below it a fingertip cannot hit a control (a surface fitted whole into a
+    phone's width came out at 0.37, its buttons 10px), so a piece too big to fit is framed from its top-left corner at this
+    size and the person pans to the rest, as with any page. */
+const PHONE_FLOOR = 0.85;
+function legible<T extends { x: number; y: number; zoom: number }>(next: T | null, box: { x: number; y: number } | undefined, pad: number): T | null {
+  return next && box && next.zoom < PHONE_FLOOR ? { ...next, x: box.x - pad / PHONE_FLOOR, y: box.y - pad / PHONE_FLOOR, zoom: PHONE_FLOOR } : next;
+}
+
 /** One window's frame (see EngineFrame): a value that changes only with the window's own state, so panning the board
     does not re-render every editor on it. */
 function EngineFrameScope({ id, full, onFull, children }: { id: string; full: boolean; onFull: (id: string, next: boolean) => void; children: ReactNode }) {
@@ -309,9 +317,14 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
       const alone = framed && framed.zoom < READABLE ? fitWorkView(group.slice(0, 1), size, fitOpts) : framed;
       if (alone) next = alone;
     }
+    if (phone && boxes.length > 0) {
+      const current = canvasRef.current;
+      const id = latest.current ?? current.focus ?? current.surfaces.at(-1)?.id ?? hostedRef.current.at(-1)?.id ?? null;
+      next = legible(next, (id ? groupOf(id)[0] : undefined) ?? boxes[0], 8) ?? next;
+    }
     fitted.current = boxes.length > 0;
     setView(shifted(next, insetOf(el, room)) ?? next);
-  }, [boxesOf, groupOf, setView, fitOpts]);
+  }, [boxesOf, groupOf, setView, fitOpts, phone]);
   const focus = useCallback(() => {
     const el = root.current;
     const current = canvasRef.current;
@@ -480,7 +493,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
             : canvasRef.current.surfaces.find((surface) => surface.id === canvasRef.current.focus);
           if (!freshTarget) return;
           const room = workViewport(currentRoot);
-          const next = shifted(fitWorkView([freshTarget], { width: room.width, height: room.height }, fitOpts), insetOf(currentRoot, room));
+          const next = shifted(legible(fitWorkView([freshTarget], { width: room.width, height: room.height }, fitOpts), freshTarget, 8), insetOf(currentRoot, room));
           if (next) setView(next);
         }));
         return;
