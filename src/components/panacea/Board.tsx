@@ -582,6 +582,8 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     const el = root.current;
     if (!id || !box || !el || !ready || phone) return;
     arrived.current = null;
+    // The camera is automatic until the person takes it: then it already fits everything (autoFit), this window with the rest.
+    if (!interacted.current) return;
     if (handsBusy() || enginePins.size > 0 || canvasRef.current.panels.some((panel) => panel.pinned)) return;
     const room = workViewport(el);
     if (room.width <= 0 || room.height <= 0) return;

@@ -44,7 +44,8 @@ async function main() {
       await page.waitForSelector(".office-window");
       await until("the editor's frame", async () => !!editorOf(page), 40_000);
       const frame = editorOf(page)!;
-      await frame.waitForSelector("#autora-rail", { timeout: 40_000 });
+      // Sheets has no card on a click (its tools are in the right-click menu), so its bar may be there and not shown.
+      await frame.waitForSelector("#autora-rail", { state: "attached", timeout: 40_000 });
       // The rail reads every ribbon command, tab by tab, as soon as the editor is up; a press during that lands on whatever tab is open.
       await frame.waitForSelector("html[data-rail-scanned]", { state: "attached", timeout: 40_000 });
       // The buttons the bar has marked as needed; the rest are collapsed and faded out.
@@ -64,8 +65,10 @@ async function main() {
         await caret();
         await until("the paragraph tools", async () => (await shown()).includes("Centre"));
         const idle = await shown();
-        for (const l of ["Bold", "Italic", "Underline", "Bullets", "Numbering", "Align left", "Centre"]) assert.ok(idle.includes(l), `${l} is on the bar with a caret in words: ${idle}`);
-        for (const l of ["Highlight", "Text colour", "Undo", "Redo"]) assert.ok(!idle.includes(l), `${l} waits: ${idle}`);
+        // The card at the caret (0.9.3xx, the contextual menus): lists and alignment for a paragraph with words in it; what can be done
+        // to words (Bold, Italic, Underline, Highlight, colour) only comes once words are picked, and Undo once there is a change.
+        for (const l of ["Bullets", "Numbering", "Align left", "Centre"]) assert.ok(idle.includes(l), `${l} is on the bar with a caret in words: ${idle}`);
+        for (const l of ["Bold", "Italic", "Underline", "Highlight", "Text colour", "Undo", "Redo"]) assert.ok(!idle.includes(l), `${l} waits: ${idle}`);
         if (process.env.OFFICE_SHOTS) await page.screenshot({ path: `${process.env.OFFICE_SHOTS}/pages-caret.png` });
         // Pick the words (with the keyboard, as a person does: the editor takes its selection from real keys): what can be done to them comes on.
         await page.keyboard.press("Control+A");
@@ -80,7 +83,8 @@ async function main() {
         await until("the picked words to be italic", async () => (await frame.locator(".ProseMirror em, .ProseMirror i").count()) > 0, 8000);
         await page.keyboard.press("ArrowRight");
         await until("the text tools to fade away with nothing picked", async () => !(await shown()).includes("Highlight"));
-        assert.ok((await shown()).includes("Bold"), "and the bar's always-tools stay");
+        assert.ok((await shown()).includes("Centre"), "and the paragraph tools stay with the caret in words");
+        assert.ok(!(await shown()).includes("Bold"), "while what is done to words goes with the pick");
       });
       await page.close();
     }
