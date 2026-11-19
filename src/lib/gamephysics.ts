@@ -284,7 +284,7 @@ const hasLight = (layer: Json): boolean => list(layer?.effects).some((e: Json) =
  * Gives the base layer an ambient light and a sun when it has no light of its own. Everything made from a model is a lit material,
  * and a 3D scene with no light draws black; one a person lit themselves is left as it is. Returns whether it added them.
  */
-export function lightScene(layout: Json): boolean {
+function lightScene(layout: Json): boolean {
   layout.layers = list(layout.layers);
   const base = layout.layers.find((l: Json) => l?.name === "");
   if (!base || hasLight(base)) return false;

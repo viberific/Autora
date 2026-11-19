@@ -60,7 +60,7 @@ test("a step the app held back is not a failure: planning, the person's words, s
   assert.deepEqual(["planning", "theirs", "busy", undefined].map((h) => heldWords(h as never)), ["planning first", "yours to write", "waited for you", "declined"]);
 });
 
-await test("a step the app held back reads as not run, so \"Making 35 changes\" never looks like work that was done", () => {
+test("a step the app held back reads as not run, so \"Making 35 changes\" never looks like work that was done", () => {
   // Usability trial 2026-11-19 (F16): a follow-up turn starts in planning, its 35 edits came back "Not run", and the thread
   // said "Making 35 changes" with only a small chip to tell them apart.
   assert.equal(heldTitle("Making 35 changes", 1, 1), "Not run: making 35 changes");

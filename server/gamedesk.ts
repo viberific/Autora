@@ -1478,7 +1478,7 @@ export async function runGameTool(session: string, name: string, args: Record<st
       case "game_import": {
         // A placeholder picture made here (a Sprite with no image is invisible, and the agent has no paint tool): no file is read.
         const made = isObject(args.placeholder) ? placeholderPng(args.placeholder) : null;
-        if (isObject(args.placeholder) && !made) return { ok: false, summary: `placeholder is { width, height (1 to 1024 pixels), color: \"#rrggbb\", shape: ${PLACEHOLDER_SHAPES.join(", ")}, direction: right, left, up or down }.` };
+        if (isObject(args.placeholder) && !made) return { ok: false, summary: `placeholder is { width, height (1 to 1024 pixels), color: "#rrggbb", shape: ${PLACEHOLDER_SHAPES.join(", ")}, direction: right, left, up or down }.` };
         const given = made ? "" : need(args, "file");
         const art = !made && /^file_[0-9a-f]{16}$/.test(given) ? getArtifact(given) : null;
         let file = made || art ? "" : path.resolve(hooks.cwd ?? process.cwd(), given);
