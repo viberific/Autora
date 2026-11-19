@@ -113,6 +113,8 @@ COPY scripts/opencut-checkout.mjs scripts/prepare-opencut-editor.mjs scripts/typ
 COPY gdevelop-editor/ gdevelop-editor/
 COPY gdevelop/PIN.json gdevelop/PIN.json
 COPY scripts/gdevelop-checkout.mjs scripts/prepare-gdevelop-editor.mjs scripts/build-gdevelop-editor.mjs scripts/
+# The delegate wrappers (server/delegates/, copied to dist/delegates/ by `npm run build`).
+COPY scripts/build-delegates.mjs scripts/
 
 # Typecheck both halves before building either. A container that builds and
 # then fails at runtime on something the compiler already knew is a wasted
