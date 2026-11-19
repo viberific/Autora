@@ -208,13 +208,10 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  A faster way to watch and use the browser, as a preview. In the
-  browser's menu, Live copy (preview) shows the page as a copy drawn by
-  your own browser instead of a stream of pictures: scrolling, text and
-  hover are local and smooth, your clicks, typing and scrolls go to the
-  real page, and the server stops encoding pictures while you use it.
-  Canvas, video and embedded frames appear as small live pictures in
-  place, and a page the copy cannot carry falls back to pictures with a
-  button to try again. Nothing the site wrote runs in your browser, and
-  passwords arrive as dots only. Picture mode in the same menu turns it
-  off; pictures stay the default for now.
+  Gemini and Claude can be picked as the model, on your own subscription
+  instead of a key. Choose "Gemini (subscription)" or "Claude (subscription)"
+  in Settings: each turn runs the signed-in command-line tool and streams the
+  answer into the chat, and everything it reads, writes or runs appears as a
+  step you can watch, the same as the agent's own calls. Nothing is billed
+  per token. The two can also be called as tools while another model answers.
+  Gemini's sign-in had lapsed and is signed in again.
