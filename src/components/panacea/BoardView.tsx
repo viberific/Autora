@@ -112,6 +112,8 @@ export function BoardView({ surface }: { surface: Surface }) {
         delete next.selLink;
         take(moveCard(next, card.id, card.x + point.x - start.x, card.y + point.y - start.y), "Moved a card");
       }
+      // No double-click under a finger that can be counted on: a tap on the card that is already selected is how it is edited.
+      else if (ev.pointerType === "touch" && board.sel === card.id && !card.ask) setEditing({ id: card.id, text: card.text, fresh: false });
       else select(card.id);
     };
     el.addEventListener("pointermove", move);

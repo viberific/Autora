@@ -276,7 +276,9 @@ const STUDIO = [
     "Delete track, Instrument); a clip drawn across its lane, dragged to its place or by its end, named in the piano roll's name field; " +
     "Split, Duplicate and Delete on the bar; notes drawn in the piano roll (its Snap set to fit them) and hits clicked in the drum " +
     "grid; the roll's own sharp, flat, +8, -8, Clear, Humanize and Tidy timing; a velocity set by picking the notes and moving the " +
-    "roll's Force slider. The studio_* tools do the same directly, and the song simply changes, the clips you touched lit for a moment.",
+    "roll's Force slider. On a touch screen the grids scroll under a finger, so a tap (not a drag across empty space) places a note, a " +
+    "hit or a one-bar clip, a note or clip is tapped to select and then dragged, and the piano roll's tools are one row that slides sideways. " +
+    "The studio_* tools do the same directly, and the song simply changes, the clips you touched lit for a moment.",
   "  Saving. The song is saved as you go; the window's top bar (beside the song's name, before Export) also has Save (and Ctrl+S), which writes it now and keeps a copy in Artifacts as <song name>.song.json. Export makes the WAV.",
   "  Who did what in the song. Every change to the song in the Music window is a command in a log, with who made it (you, or the person working in the window) and a line saying what. " +
     "studio_history reads it: call it with since_revision (the revision you last saw) to learn what the person changed while you were not looking, instead of guessing from the notes. " +

@@ -214,12 +214,14 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Learn mode replaces the agent's cursor. There is no cursor to watch any
-  more: the agent works at its own speed in every window, and the window shows
-  the result. Turn on Learn (the new switch in the header, beside the
-  permissions) and, instead of doing a task for you, Autora teaches it: it
-  rings the real control for each step, waits until you have used it, and
-  moves on. You can skip a step, leave the lesson, or press "Do this one for
-  me". The Visible work switch, in Settings and beside Follow, is gone. For
-  now, controls inside an editor's own frame (PDF, Pages, Sheets, Slides,
-  Video, Photo, 3D, Games) are described in words rather than ringed.
+  Better on a touch screen. On a phone, a piece of work such as a flowchart or
+  a canvas now opens at a size you can read and press, instead of being
+  shrunk to fit its whole width (its buttons were about 10px). Controls that
+  only appeared when a mouse hovered over them, such as a surface's Maximise
+  and Close, are always shown on touch. Small buttons in the tool windows and
+  the header have bigger touch areas. In Music, the piano roll is usable on a
+  phone (its tools are one sliding row instead of three wrapped ones that left
+  the notes no room), and the piano roll, drum grid and arrangement scroll
+  under a finger: a tap places a note, a hit or a clip, and a selected note or
+  clip is dragged. In flowcharts, cards can be dragged by a finger, and a tap
+  on the selected card edits it.
