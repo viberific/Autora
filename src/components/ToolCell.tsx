@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { SpanState } from "../lib/derive";
 import { thoughtForTool } from "../lib/thought";
 import { IconChevron } from "./Icons";
+import { VendorLogo } from "./VendorLogo";
 
 /**
  * Everything else the agent did, one line each.
@@ -24,6 +25,14 @@ export function ToolCell({ span }: { span: SpanState }) {
         aria-expanded={detail ? open : undefined}
       >
         {detail ? <IconChevron size={10} /> : <span className="cell-line-dot" />}
+        {span.vendor && (
+          <em
+            className={`cell-chip is-vendor is-${span.vendor.replace(/-cli$/, "")}`}
+            title={span.vendor.replace(/-cli$/, "")}
+          >
+            <VendorLogo provider={span.vendor.replace(/-cli$/, "")} size={11} />
+          </em>
+        )}
         <b>{span.name}</b>
         <span className="cell-line-text">{stepWords(span.name, span.args)}</span>
         {span.status === "running" && <em className="cell-chip is-running">running</em>}

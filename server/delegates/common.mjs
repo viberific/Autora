@@ -72,7 +72,7 @@ export function reasonOf(text) {
 /** A tool call as one short line for the person watching: "Read src/a.ts", "Bash npm test". */
 export function brief(name, input) {
   const bits = input && typeof input === "object" ? input : {};
-  const first = bits.file_path ?? bits.path ?? bits.command ?? bits.pattern ?? bits.query ?? bits.url ?? bits.description ?? "";
+  const first = bits.file_path ?? bits.path ?? bits.Path ?? bits.command ?? bits.CommandLine ?? bits.pattern ?? bits.query ?? bits.url ?? bits.description ?? "";
   const text = typeof first === "string" ? first.replace(/\s+/g, " ").trim() : "";
   return `${name}${text ? ` ${text.length > 80 ? `${text.slice(0, 79)}…` : text}` : ""}`;
 }
