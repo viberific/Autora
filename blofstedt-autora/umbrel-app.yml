@@ -4,7 +4,7 @@ name: Autora
 tagline: An agentic AI harness you can watch in real time
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-autora/icon.svg
 category: ai
-version: "0.9.376"
+version: "0.9.378"
 port: 8817
 description: >-
   Autora is a local AI agent that you can watch while it works. Point it at
@@ -208,6 +208,11 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
+  A subscription turn's tool calls show under that vendor's own mark, so a
+  Gemini step reads as Gemini's and a Claude step as Claude's, not the
+  agent's. The tool lines now name the tool and what it acted on instead of
+  repeating a bare "tool". The CLI is found on the PATH after a restart,
+  which it was not before.
   Gemini and Claude can be picked as the model, on your own subscription
   instead of a key. Choose "Gemini (subscription)" or "Claude (subscription)"
   in Settings: each turn runs the signed-in command-line tool and streams the
