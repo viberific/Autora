@@ -2575,6 +2575,8 @@ export class LiveBrowser {
    * the whole of the server's saving.
    */
   private pictureWanted(): boolean {
+    /* Nobody connected: Chrome would encode a JPEG for every change of the page only for each one to be dropped. */
+    if (this.hooks.watchers() === 0) return false;
     const now = Date.now();
     let mirrors = 0;
     for (const [id, v] of this.views) {
@@ -2598,6 +2600,11 @@ export class LiveBrowser {
       this.screencasting = false;
       await cdp.send("Page.stopScreencast").catch(() => undefined);
     }
+  }
+
+  /** Someone opened or closed this chat: the picture stream follows whether anyone is left to see it. */
+  async watchersChanged(): Promise<void> {
+    await this.syncPictures();
   }
 
   /** A viewer's choice of view, said when its window opens and every so often after. */

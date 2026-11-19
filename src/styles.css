@@ -3024,19 +3024,6 @@ label + .jf-hint { margin-top: -5px; }
 
 /* --- moods of the one presence (see AutoraMark.tsx) --- */
 
-/* Idle: a breath slower than any other motion in the app, and every so often
-   the mark catches the light. Switched on, not busy. */
-.amark.is-rest.is-idle .amark-wash { animation: amarkIdle 6.5s ease-in-out infinite; }
-.amark.is-rest.is-idle .amark-shape { animation: amarkTwinkle 13s ease-in-out infinite; }
-@keyframes amarkIdle {
-  0%, 100% { transform: scale(0.5); opacity: 0.2; }
-  50%      { transform: scale(0.66); opacity: 0.34; }
-}
-@keyframes amarkTwinkle {
-  0%, 88%, 100% { filter: drop-shadow(0 0 2px rgba(var(--accent-rgb), 0.45)); transform: scale(1); }
-  93%           { filter: drop-shadow(0 0 8px rgba(var(--glow-light-rgb), 0.95)) brightness(1.35); transform: scale(1.08); }
-}
-
 /* Waiting on you: warm, and reaching -- out and back, with a pause, like a
    hand raised rather than an alarm. */
 .amark.is-waiting .amark-wash { fill: var(--warn); animation: amarkBeckon 2.8s var(--ease) infinite; }

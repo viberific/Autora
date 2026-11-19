@@ -208,7 +208,11 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Smoother browsing. The slider under browser and desktop cards that
-  stepped back through earlier pictures is gone, and so is the drag
-  track in the canvas history: each card now just shows the latest
+  Autora uses less of your computer. The browser stops encoding
+  pictures of a page while nobody has the chat open, and starts again
+  the moment you come back. The Autora mark no longer animates while
+  resting, which kept every page redrawing sixty times a second; an idle
+  page now does about a tenth of the work. The slider under browser and
+  desktop cards that stepped back through earlier pictures is gone, and
+  so is the drag track in the canvas history: cards show the latest
   picture, and the canvas keeps Undo and Redo.

@@ -7260,6 +7260,9 @@ async function startServer() {
         sessionSockets.set(sessionId, new Set());
       }
       sessionSockets.get(sessionId)!.add(ws);
+      // Someone to see the page now: the browser and the app preview send pictures again.
+      void browsers.get(sessionId)?.watchersChanged();
+      void previews.get(sessionId)?.live?.watchersChanged();
 
       // Replay backlog
       const fromSeq = parseInt(url.searchParams.get("from_seq") || "0", 10) || 0;
@@ -7363,6 +7366,9 @@ async function startServer() {
         // Nobody left watching: stop asking the relay for pictures of
         // somebody's screen.
         releaseDesktopIfIdle(sessionId);
+        // The same for the browser: Chrome stops encoding pictures nobody will see.
+        void browsers.get(sessionId)?.watchersChanged();
+        void previews.get(sessionId)?.live?.watchersChanged();
         // An incognito chat goes with the tab that opened it.
         scheduleEphemeralDrop(sessionId);
       });

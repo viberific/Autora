@@ -2123,7 +2123,7 @@ export function App() {
             <IconMenu size={18} />
           </button>
           <span className="top-presence">
-            <AutoraMark size={24} state={mood} idle attention={attention} pulse={welcome} />
+            <AutoraMark size={24} state={mood} attention={attention} pulse={welcome} />
           </span>
 
           {/* The menu folded to icons: the way back to the whole menu and New session, in a row just right of the
