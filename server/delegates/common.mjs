@@ -54,7 +54,10 @@ export function timeoutMs(text) {
 
 /** Where an executable is on PATH, or null. */
 export function onPath(name) {
-  for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
+  /* /data/bin is where this box installs its own CLIs, and it outlives an
+     update; the image's PATH does not carry it, so a restart lost agy. */
+  const dirs = [...(process.env.PATH ?? "").split(path.delimiter), "/data/bin"];
+  for (const dir of dirs) {
     if (!dir) continue;
     const file = path.join(dir, name);
     try { fs.accessSync(file, fs.constants.X_OK); if (fs.statSync(file).isFile()) return file; } catch { /* not here */ }
@@ -72,7 +75,7 @@ export function reasonOf(text) {
 /** A tool call as one short line for the person watching: "Read src/a.ts", "Bash npm test". */
 export function brief(name, input) {
   const bits = input && typeof input === "object" ? input : {};
-  const first = bits.file_path ?? bits.path ?? bits.command ?? bits.pattern ?? bits.query ?? bits.url ?? bits.description ?? "";
+  const first = bits.file_path ?? bits.path ?? bits.Path ?? bits.command ?? bits.CommandLine ?? bits.pattern ?? bits.query ?? bits.url ?? bits.description ?? "";
   const text = typeof first === "string" ? first.replace(/\s+/g, " ").trim() : "";
   return `${name}${text ? ` ${text.length > 80 ? `${text.slice(0, 79)}…` : text}` : ""}`;
 }

@@ -2174,6 +2174,11 @@ label + .jf-hint { margin-top: -5px; }
 }
 .cell-chip.is-running { background: var(--accent-soft); color: var(--accent); }
 .cell-chip.is-bad { background: rgba(var(--danger-rgb), 0.13); color: var(--danger); }
+/* Whose work a step is, when it is a subscription CLI's rather than the agent's own. */
+.cell-chip.is-vendor { background: var(--surface-2, rgba(127, 127, 127, 0.12)); color: var(--muted); letter-spacing: 0.02em; padding: 0 4px; }
+.cell-chip.is-vendor .vendor-logo { display: block; }
+.cell-chip.is-vendor.is-gemini { color: #4285f4; }
+.cell-chip.is-vendor.is-claude { color: #c8794f; }
 .cell-chip.is-warn { background: rgba(var(--warn-rgb), 0.13); color: var(--warn); }
 .cell-at { font-style: normal; font-family: var(--mono); font-size: var(--fs-xs); color: var(--text-3); }
 

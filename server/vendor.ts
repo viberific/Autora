@@ -285,6 +285,8 @@ interface VendorRunOptions {
   onStatus?: (text: string) => void;
   /** Called for each tool it calls, as it calls it (name, and what it acted on), already redacted. */
   onTool?: (name: string, detail: string) => void;
+  /** Called with one finished line per tool call, ready to show: "Read src/app.ts". */
+  onStep?: (text: string) => void;
 }
 
 interface VendorRunResult {
@@ -572,7 +574,13 @@ async function runAttempt(opts: VendorRunOptions, form: PromptForm, jsonl = true
       if (!parsed) return;
       if (parsed.type === "delta") pushDelta(redact(parsed.text));
       else if (parsed.type === "status") opts.onStatus?.(redact(parsed.text));
-      else if (parsed.type === "tool") opts.onTool?.(redact(parsed.name), redact(parsed.detail));
+      else if (parsed.type === "tool") {
+        opts.onTool?.(redact(parsed.name), redact(parsed.detail));
+        /* One finished line for the transcript: the verb and what it acted on, the same shape the agent's own
+           tool cells take, so a delegate's work reads like any other. */
+        const said = [redact(parsed.name), redact(parsed.detail)].filter(Boolean).join(" ").trim();
+        if (said) opts.onStep?.(said);
+      }
       else if (parsed.type === "result") {
         /* The result carries the whole answer. When text already streamed,
            it is the same answer again and only its files and usage are news;

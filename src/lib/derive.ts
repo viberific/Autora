@@ -14,6 +14,8 @@ export type SpanState = {
   durationMs: number | null;
   exitCode: number | null;
   seq: number;
+  /** Whose work this is, when it is not the agent's own: a subscription CLI's tool call (`gemini-cli`, `claude-cli`). */
+  vendor?: string;
 };
 
 export type TranscriptTurn = {
@@ -1220,6 +1222,7 @@ export function derive(events: AutoraEvent[]): Derived {
           const span: SpanState = {
             id: e.span ?? `vt-${e.seq}`, name, args: rest ? { on: rest } : {},
             status: "ok", output: "", preview: "", durationMs: null, exitCode: null, seq: e.seq,
+            ...(typeof e.payload.vendor === "string" ? { vendor: e.payload.vendor } : {}),
           };
           spansById.set(span.id, span);
           push({ kind: "tool", seq: e.seq, span });
