@@ -16,7 +16,7 @@
 
 /** The wire protocol a vendor speaks. Three shapes cover every provider here:
     most of the field has settled on OpenAI's chat-completions schema. */
-type ProviderKind = "gemini" | "openai" | "anthropic";
+type ProviderKind = "gemini" | "openai" | "anthropic" | "cli";
 
 export interface ModelSpec {
   id: string;
@@ -89,6 +89,9 @@ interface ProviderSpec {
       not a vendor-neutral field, and a gateway that does not know it refuses
       the whole request rather than ignoring it. */
   pinnable?: boolean;
+  /** True where nothing is paid per token: the turns run on a subscription, through the vendor's own CLI signed in on this
+      host (server/llm-cli.ts). Such a vendor needs no key, and its turns are counted but not billed. */
+  cli?: boolean;
 }
 
 /**
@@ -187,6 +190,44 @@ export const PROVIDERS: ProviderSpec[] = [
       { window: 200_000, id: "claude-haiku-4-5", label: "Claude Haiku 4.5", input: 1, output: 5, note: "Previous Haiku" },
       { window: 200_000, id: "claude-opus-4-1", label: "Claude Opus 4.1", input: 15, output: 75, note: "Older Opus, priciest" },
     ],
+  },
+  /* ------------------------------------------- subscription CLIs -- */
+  /* Not the API: the vendor's own CLI, signed in on this host, answering a chat turn. No key, no per-token bill, and the
+     person's subscription quota is what it spends (server/llm-cli.ts). The model ids are the CLI's own names, which drift
+     with the CLI rather than with a price page, so both lists are open-ended and unpriced. */
+  {
+    id: "gemini-cli",
+    label: "Gemini (subscription)",
+    kind: "cli",
+    cli: true,
+    note: "Gemini through the Antigravity CLI signed in on this host. No API key; it spends the Google subscription's quota.",
+    envKeys: [],
+    keyHint: "",
+    keysUrl: "https://antigravity.google/cli",
+    baseUrl: "",
+    defaultModel: "gemini-3.8-flash-high",
+    listable: false,
+    openEnded: true,
+    models: [
+      { window: 1_000_000, id: "gemini-3.8-flash-high", label: "Gemini 3.8 Flash (high)", input: 0, output: 0, priced: false },
+      { window: 1_000_000, id: "gemini-3.8-flash-medium", label: "Gemini 3.8 Flash (medium)", input: 0, output: 0, priced: false },
+      { window: 1_000_000, id: "gemini-3.8-flash-low", label: "Gemini 3.8 Flash (low)", input: 0, output: 0, priced: false },
+    ],
+  },
+  {
+    id: "claude-cli",
+    label: "Claude (subscription)",
+    kind: "cli",
+    cli: true,
+    note: "Claude Code signed in on this host. No API key; it spends the Claude subscription's quota.",
+    envKeys: [],
+    keyHint: "",
+    keysUrl: "https://claude.ai/code",
+    baseUrl: "",
+    defaultModel: "",
+    listable: false,
+    openEnded: true,
+    models: [],
   },
   {
     id: "deepseek",

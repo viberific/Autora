@@ -9,7 +9,7 @@ import express, { type Request, type Response } from "express";
 import { captureConsole, log, setLogRedactor, type LogLevel } from "./server/logs";
 import { WebSocketServer, WebSocket } from "ws";
 import {
-  PROVIDERS, cheaperSibling, contextWindow, costParts, isPriced, } from "./server/providers";
+  PROVIDERS, cheaperSibling, contextWindow, costParts, isPriced, providerSpec, } from "./server/providers";
 import {
   flushState, recordUsage,
   reachFor, resolveProvider, save, state, stateDir, stateFilePath, type Resolved,
@@ -4521,6 +4521,19 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
               ...(opts.quick ? { thinking: "off" as const } : {}),
               signal: running.get(session.id)?.signal,
               tools: sentTools,
+              /* A subscription CLI runs its own tools: each call is shown in
+                 its bubble as it happens, the way an API vendor's tool cells
+                 are, so the person watches the work rather than the wait. */
+              onStep: (text: string) => {
+                if (running.get(session.id)?.stopped) return;
+                /* The model goes with the step so the chat can mark whose work it is: a subscription CLI's calls show under
+                   its own name and mark, not as the agent's, and the person can tell Gemini from Claude at a glance. */
+                emitEvent(session, "vendor.tool", "agent", {
+                  id: `chat-${session.id}-${rounds}`,
+                  text,
+                  ...(providerSpec(answering.provider)?.kind === "cli" ? { vendor: answering.provider, model: answering.model } : {}),
+                });
+              },
             }, (piece) => {
               // The client coalesces these deltas into one reply (see
               // derive.ts), so a chunk per emit is a sentence appearing,
@@ -4745,6 +4758,8 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
             signal: running.get(session.id)?.signal,
             onDelta: (text) => emitEvent(session, "vendor.delta", "agent", { id, text }),
             onStatus: (text) => emitEvent(session, "vendor.status", "agent", { id, text }),
+            /* Each tool it calls, as the delegate's own step: the person sees what it is doing here rather than a spinner. */
+            onStep: (text) => emitEvent(session, "vendor.tool", "agent", { id, text, vendor: ask.id }),
           });
           /* What it touched: its own report when it gives one, otherwise the
              files in the folder that changed while it ran -- in the folder's

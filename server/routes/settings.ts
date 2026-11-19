@@ -68,7 +68,9 @@ export function settingsRoutes(app: Express, deps: {
         default_model: spec.defaultModel,
         listable: spec.listable,
         open_ended: Boolean(spec.openEnded),
-        needs_key: spec.id !== "local",
+        needs_key: spec.id !== "local" && !spec.cli,
+        /* A subscription CLI: no key, and the turns are not billed. */
+        cli: Boolean(spec.cli),
         /* Whether this vendor publishes a balance at all. The panel uses it to
            offer the "paid in" box only where the figure can be turned into a
            spend, rather than collecting a number it can never use. */

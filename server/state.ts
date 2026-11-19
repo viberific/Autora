@@ -1171,7 +1171,7 @@ export function backgroundProviderFor(providerId: string): string {
 export function reachFor(providerId: string): { key: string; baseUrl: string } | null {
   if (!providerSpec(providerId)) return null;
   const key = keyFor(providerId);
-  if (!key && providerId !== "local") return null;
+  if (!key && providerId !== "local" && !providerSpec(providerId)?.cli) return null;
   return { key, baseUrl: baseUrlFor(providerId) };
 }
 
@@ -1288,7 +1288,7 @@ export function resolveProvider(): Resolved {
   // A local server needs no key, but on Automatic it only counts once a model
   // has been named for it: otherwise a fresh install "chose" Local server and
   // reported "No model chosen for Local server" -- a provider nobody picked.
-  const usable = (id: string) => Boolean(keyFor(id)) || (id === "local" && Boolean(modelFor(id)));
+  const usable = (id: string) => Boolean(keyFor(id)) || (id === "local" && Boolean(modelFor(id))) || Boolean(providerSpec(id)?.cli);
 
   let chosen = wanted;
   if (wanted === "auto") {
@@ -1358,8 +1358,9 @@ export function resolveProvider(): Resolved {
   const key = keyFor(chosen);
   const model = modelFor(chosen);
   let problem: string | null = null;
-  if (!key && chosen !== "local") problem = `${spec.label} has no API key set.`;
-  else if (!model) problem = `No model chosen for ${spec.label}.`;
+  if (!key && chosen !== "local" && !spec.cli) problem = `${spec.label} has no API key set.`;
+  // A CLI picks its own model when none is named, so only a keyed vendor needs one chosen.
+  else if (!model && !spec.cli) problem = `No model chosen for ${spec.label}.`;
   /* Roles are Automatic's own trick: when the person named the model, that
      model answers, every round -- moving background work to another model
      behind a named choice would be choosing for them. */

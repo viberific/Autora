@@ -87,7 +87,7 @@ function bundledWrapper(id: VendorId): string | null {
 }
 
 /** Whether an executable of that name is on PATH. */
-function onPath(bin: string): boolean {
+export function onPath(bin: string): boolean {
   for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
     if (!dir) continue;
     try {
@@ -107,15 +107,25 @@ function vendorPath(id: VendorId): string {
   const set = (process.env[VENDORS[id].env] ?? "").trim();
   if (set) return set;
   if (fs.existsSync(VENDORS[id].file)) return VENDORS[id].file;
-  return bundledWrapper(id) ?? VENDORS[id].file;
+  return bundledWrapper(id) ?? "";
 }
 
 /** Can this vendor be called at all, right now? Cheap: one stat. */
 export function vendorReady(id: VendorId): { ok: boolean; path: string; detail: string } {
   const file = vendorPath(id);
+  if (!file) {
+    return {
+      ok: false,
+      path: "",
+      detail:
+        `No wrapper for ${VENDORS[id].name} in this build (dist/delegates/), so it cannot be called from here. ` +
+        `To fix it, ${VENDORS[id].install}.`,
+    };
+  }
   try {
     fs.accessSync(file, fs.constants.X_OK);
-    // The bundled wrapper is only a way to call the CLI: with no CLI behind it every call would fail, so it is not ready.
+    /* The bundled wrapper is only a way to call the CLI: with no CLI behind it every call would fail, so it is not ready.
+       A wrapper the person pointed at themselves (AUTORA_CLAUDE_CLI) may be anything, so it is trusted as it is. */
     if (file === bundledWrapper(id) && !onPath(CLI_OF[id].bin)) {
       return {
         ok: false,
@@ -140,6 +150,7 @@ export function vendorReady(id: VendorId): { ok: boolean; path: string; detail: 
 type VendorLine =
   | { type: "delta"; text: string }
   | { type: "status"; text: string }
+  | { type: "tool"; name: string; detail: string }
   | { type: "result"; text: string; files: string[]; usage: Record<string, number> | null }
   | { type: "error"; message: string; reason: string };
 
@@ -178,6 +189,10 @@ export function parseLine(raw: string): VendorLine | null {
   if (type === "status") {
     const text = str(parsed.text) || str(parsed.message);
     return text ? { type: "status", text } : null;
+  }
+  if (type === "tool") {
+    const name = str(parsed.name);
+    return name ? { type: "tool", name, detail: str(parsed.detail) } : null;
   }
   if (type === "result") {
     const files = Array.isArray(parsed.files) ? parsed.files.filter((f: unknown) => typeof f === "string") : [];
@@ -268,6 +283,10 @@ interface VendorRunOptions {
   onDelta?: (text: string) => void;
   /** Called with what it says it is doing, already redacted. */
   onStatus?: (text: string) => void;
+  /** Called for each tool it calls, as it calls it (name, and what it acted on), already redacted. */
+  onTool?: (name: string, detail: string) => void;
+  /** Called with one finished line per tool call, ready to show: "Read src/app.ts". */
+  onStep?: (text: string) => void;
 }
 
 interface VendorRunResult {
@@ -350,6 +369,10 @@ export function filesTouched(cwd: string, since: number, limit = 4000): string[]
 const KEEP = new Set([
   "PATH", "HOME", "USER", "LOGNAME", "SHELL", "TERM", "TMPDIR", "LANG",
   "NODE_OPTIONS", "NO_COLOR", "TZ", "PWD",
+  /* Where a sign-in is kept when it is not in HOME: the image sets these under
+     /data so a sign-in survives an update. Without them the CLI starts signed
+     out and answers "set an Auth method" instead of doing the job. */
+  "AUTORA_DELEGATE_HOME",
 ]);
 /** What a wrapper legitimately needs: its own vendor's variables, the XDG
     directories it keeps a sign-in in, and anything Autora set on purpose. */
@@ -371,6 +394,10 @@ export function vendorEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.Process
   }
   env.NO_COLOR = "1";
   env.TERM = "dumb";
+  /* This container runs as root, and Claude Code refuses its bypass mode as root
+     unless it is told it is a sandbox: every write turn would otherwise fail
+     with "--dangerously-skip-permissions cannot be used with root". */
+  if (process.getuid?.() === 0) env.IS_SANDBOX = "1";
   return env;
 }
 
@@ -547,6 +574,13 @@ async function runAttempt(opts: VendorRunOptions, form: PromptForm, jsonl = true
       if (!parsed) return;
       if (parsed.type === "delta") pushDelta(redact(parsed.text));
       else if (parsed.type === "status") opts.onStatus?.(redact(parsed.text));
+      else if (parsed.type === "tool") {
+        opts.onTool?.(redact(parsed.name), redact(parsed.detail));
+        /* One finished line for the transcript: the verb and what it acted on, the same shape the agent's own
+           tool cells take, so a delegate's work reads like any other. */
+        const said = [redact(parsed.name), redact(parsed.detail)].filter(Boolean).join(" ").trim();
+        if (said) opts.onStep?.(said);
+      }
       else if (parsed.type === "result") {
         /* The result carries the whole answer. When text already streamed,
            it is the same answer again and only its files and usage are news;

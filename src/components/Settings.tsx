@@ -56,6 +56,8 @@ type ProviderCard = {
   listable: boolean;
   open_ended: boolean;
   needs_key: boolean;
+  /** A subscription CLI: no key at all, and its turns are not billed. */
+  cli?: boolean;
   /** True where this vendor publishes a balance, so a "paid in" figure can be
       turned into a real spend. Absent on an older server. */
   balance_endpoints?: boolean;
@@ -519,7 +521,7 @@ export function Settings({
   const voiceKeys = state.credentials.filter((c) => c.role === "voice");
   /** Connected: has a key, or (a local server) has a model named. Shown
       first; the rest wait behind "Add another provider". */
-  const isConnected = (card: ProviderCard) => card.key.set || (!card.needs_key && !!card.model);
+  const isConnected = (card: ProviderCard) => card.key.set || card.cli || (!card.needs_key && !!card.model);
   const connectedCards = state.catalog.filter(isConnected);
   const otherCards = state.catalog.filter((card) => !isConnected(card));
   const choiceCards = allProviders
@@ -645,6 +647,8 @@ export function Settings({
                   {card.label}
                   {card.key.set ? (
                     <em className="set-badge">key set</em>
+                  ) : card.cli ? (
+                    <em className="set-badge">subscription</em>
                   ) : card.needs_key ? (
                     <em className="set-badge is-unset">no key</em>
                   ) : null}
@@ -1021,6 +1025,8 @@ function ProviderRow({
           <em className="set-badge">
             {card.key.source === "env" ? "environment" : card.key.masked}
           </em>
+        ) : card.cli ? (
+          <em className="set-badge">subscription</em>
         ) : card.needs_key ? (
           <em className="set-badge is-unset">no key</em>
         ) : (
@@ -1036,7 +1042,7 @@ function ProviderRow({
             {card.keys_url && (
               <>
                 {" "}
-                <a href={card.keys_url} target="_blank" rel="noreferrer">Get a key</a>.
+                <a href={card.keys_url} target="_blank" rel="noreferrer">{card.cli ? "Set it up" : "Get a key"}</a>.
               </>
             )}
           </p>
