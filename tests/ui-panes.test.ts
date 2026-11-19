@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { chromium } from "playwright-core";
-import { sleep, startApp } from "./e2e-harness";
+import { settled, sleep, startApp } from "./e2e-harness";
 import { CHROME } from "./chrome";
 
 let passed = 0;
@@ -33,6 +33,7 @@ async function main() {
     await page.goto(`${app.base}/?session=${s}`);
     const width = (sel: string) => page.locator(sel).first().evaluate((el) => Math.round(el.getBoundingClientRect().width));
     await page.waitForSelector(".rail-slot");
+    await settled(page);
 
     await test("dragging the seam by the menu changes its width, and it is remembered", async () => {
       const before = await width(".rail-slot");
@@ -45,6 +46,7 @@ async function main() {
       assert.ok(after >= before + 70 && after <= before + 90, `${before} -> ${after}`);
       await page.reload();
       await page.waitForSelector(".rail-slot");
+      await settled(page);
       assert.equal(await width(".rail-slot"), after);
     });
 

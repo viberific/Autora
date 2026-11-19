@@ -49,7 +49,11 @@ const SCHEMA_BUDGET_CHARS = 52_000;
 // guides (know-it-before-you-do-it, the organization, the to-do list, Saving and files, the layout, Games, Video, the office
 // suite) was trimmed first: 29,755 became about 28,800 on CI's machine (the Office, Spectra and Photo builds are what make it
 // larger than a machine without them). Set against that, with little room, so the next addition is caught.
-const BRIEFING_BUDGET_CHARS = 29_000;
+// Raised again, to 32_000 (2026-11-19): CI measured 31,963 on main and 31,736 on the tour branch, over 29,000 on every push since
+// the 3D rigging guide (this box, with every editor but Photo, reads 31,436). Nothing was trimmed this time: cutting the
+// guides' words changes what the agent is told, and that is measured with `npm run eval -- code` on a real model (CLAUDE.md),
+// which this change had no key for. Set against CI's number with a little room, so the next addition is caught.
+const BRIEFING_BUDGET_CHARS = 32_000;
 
 console.log("tool budget");
 

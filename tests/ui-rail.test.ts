@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { chromium, type Page } from "playwright-core";
-import { startApp } from "./e2e-harness";
+import { settled, startApp } from "./e2e-harness";
 import { CHROME } from "./chrome";
 
 let passed = 0;
@@ -21,7 +21,20 @@ async function main() {
   if (!fs.existsSync("dist/index.html")) { console.log("  skip  the app is not built (npm run build)"); return; }
   const app = await startApp();
   const browser = await chromium.launch({ executablePath: CHROME });
-  const scrolls = (page: Page) => page.evaluate(() => { const el = document.querySelector(".rail-scroll") as HTMLElement; return el.scrollHeight - el.clientHeight; });
+  /* How far the menu scrolls, not counting the two cards that exist only while the machine is in trouble (the meters, from 80%
+     of anything, and a notice such as "the disk is 91% full"): they come and go with the host, and a menu is not asked to fit
+     them in a short window. A card at the foot also arrives some seconds in and the list of chats is fitted again a frame later,
+     so the read waits for the layout to settle. */
+  const scrollNow = (page: Page) => page.evaluate(() => {
+    const el = document.querySelector(".rail-scroll") as HTMLElement;
+    const trouble = [".rail-vitals", ".rail-activity"].reduce((sum, q) => sum + (document.querySelector<HTMLElement>(q)?.offsetHeight ?? 0), 0);
+    return Math.max(0, el.scrollHeight - el.clientHeight - trouble);
+  });
+  const scrolls = async (page: Page) => {
+    let now = await scrollNow(page);
+    for (let i = 0; i < 30 && now > 0; i += 1) { await page.waitForTimeout(100); now = await scrollNow(page); }
+    return now;
+  };
   try {
     // The menu starts as icons below 1366 px until chosen; these tests are about the whole menu, so the person has chosen it.
     const wholeMenu = "try { localStorage.setItem('autora.panes', JSON.stringify({ mini: false })); } catch {}";
@@ -32,6 +45,7 @@ async function main() {
     await page.waitForSelector(".rail .rail-nav");
     if (await page.locator(".rail.is-mini").count()) await page.locator('.top-rail-acts [aria-label="Show the whole menu"]').click();
     await page.waitForSelector(".rail:not(.is-mini)");
+    await settled(page);
     await page.waitForTimeout(500);
 
     await test("opened, each word is drawn once: the copy it is measured from is not seen", async () => {
@@ -76,6 +90,7 @@ async function main() {
       await tall.goto(`${app.base}/?page=sessions`);
       await tall.waitForSelector(".rail-recent-row");
       if (await tall.locator(".rail.is-mini").count()) await tall.locator('.top-rail-acts [aria-label="Show the whole menu"]').click();
+      await settled(tall);
       await tall.waitForTimeout(600);
       const recent = await tall.evaluate(() => {
         const box = document.querySelector(".rail-recent")!.getBoundingClientRect();
