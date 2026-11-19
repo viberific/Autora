@@ -2176,7 +2176,7 @@ export function App() {
               dot={tightHeader}
             />
           )}
-          {page === "chat" && sessionId && <LearnToggle on={sessionLearn} onChange={setSessionLearn} dot={tightHeader} />}
+          {page === "chat" && sessionId && <LearnToggle on={sessionLearn} onChange={setSessionLearn} dot />}
 
           {/* The one state of the header worth stating outright: this chat is
               written down nowhere, and leaving it ends it. */}
