@@ -6,7 +6,6 @@
 
 import type fs from "node:fs";
 import type { LiveBrowser } from "./browser";
-import type { ChangeCue, DomItem } from "./domdiff";
 import type { Permissions, Phase, WorkMode } from "./modes";
 import type { ReviewComment } from "./pick";
 import type { Device, StaticServer } from "./preview";
@@ -46,6 +45,8 @@ export interface Session {
       person's own words. */
   permissions?: Permissions;
   askWhen?: string;
+  /** Learn mode (server/learn.ts): the agent teaches the tools by highlighting instead of driving them. Absent reads as off. */
+  learn?: boolean;
   /** What Agent mode is doing right now. Not kept: every turn starts in plan. */
   phase?: Phase;
   events: AutoraEvent[];
@@ -75,16 +76,7 @@ export interface PreviewRun {
   /** The dev server it started has exited: what it last said, for the window. */
   serverDown: { exit: number | null; last: string } | null;
   /** Pending work to cancel when it closes. */
-  timers: { reload: NodeJS.Timeout | null; console: NodeJS.Timeout | null; job: NodeJS.Timeout | null; follow: NodeJS.Timeout | null };
-  /** What was on the page at the last look, and at which address, to find
-      what a change touched (server/domdiff.ts). */
-  dom: DomItem[] | null;
-  domUrl: string | null;
-  /** A look at what changed is under way, and another was asked for meanwhile. */
-  following: boolean;
-  again: boolean;
-  /** Where the cursor last went, and a number that goes up each time. */
-  cues: { seq: number; items: ChangeCue[] };
+  timers: { reload: NodeJS.Timeout | null; console: NodeJS.Timeout | null; job: NodeJS.Timeout | null };
 }
 
 /** A line in the app's corner that says something happened. */

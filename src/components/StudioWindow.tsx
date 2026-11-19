@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useWindowFull } from "../lib/fullscreen";
 import { onStudioCommand } from "../lib/studio";
-import { isWorkVisible } from "../lib/frameCoordinates";
 import { bounce, Transport } from "../lib/studio/engine";
 import {
   addNotes, bassNotes, chordNotes, clamp, contentEnd, copyClip, drumNotes, fitBars, findClip, instrumentOf, isDrumTrack, MAX_BARS,
@@ -12,8 +11,6 @@ import { Arrangement, headWidth, type Pick } from "./studio/Arrangement";
 import { Mixer } from "./studio/Mixer";
 import { PianoRoll } from "./studio/PianoRoll";
 import { useSong } from "./studio/useSong";
-import { runStudioHand } from "./studio/hand";
-import type { StudioStep } from "../lib/studio/handsteps";
 import { SaveButton, keptAs } from "./SaveButton";
 import { LoadButton } from "./LoadButton";
 import {
@@ -70,10 +67,6 @@ export function StudioWindow({ sessionId, phone }: { sessionId: string; phone: b
   const base = `/api/studio/${encodeURIComponent(sessionId)}`;
   const bw = ZOOMS[zoom]!;
   const head = headWidth(phone);
-
-  /* No pointer is played over clips the server changed: that would be a recording of work already done. With Visible
-     work on, the agent's edits are done here, live, by its hand (`hand` below, src/components/studio/hand.ts); what the
-     server changes (Visible work off) simply appears, the clips it touched lit for a moment. */
 
   if (!transport.current) transport.current = new Transport(() => song.live.current, { onEnd: () => setPlaying(false) });
   const tp = transport.current;
@@ -134,7 +127,6 @@ export function StudioWindow({ sessionId, phone }: { sessionId: string; phone: b
   // What the agent asks of this window: the things only a browser can do.
   useEffect(() => {
     const off = onStudioCommand((cmd) => {
-      if (cmd.name === "hand" && (!root.current || !isWorkVisible(root.current, { whole: true }))) return;
       void (async () => {
         const claim = (await fetch(`${base}/claim?id=${encodeURIComponent(cmd.id)}`, { method: "POST" }).then((r) => r.json()).catch(() => null)) as { won?: boolean } | null;
         if (!claim?.won) return;
@@ -152,12 +144,6 @@ export function StudioWindow({ sessionId, phone }: { sessionId: string; phone: b
           } else if (cmd.name === "seek") {
             tp.seek(typeof cmd.args.beat === "number" ? cmd.args.beat : 0);
             await reply(true, {});
-          } else if (cmd.name === "hand") {
-            // The agent's edit, done here by its hand with this window's own controls, while the tool call waits.
-            const el = root.current;
-            if (!el) throw new Error("The music window is not on screen.");
-            const steps = Array.isArray(cmd.args.steps) ? (cmd.args.steps as StudioStep[]) : [];
-            await reply(true, await runStudioHand(steps, { root: el, live: () => song.live.current, saveNow: song.saveNow }));
           } else if (cmd.name === "export") {
             const wav = await bounce(song.live.current);
             const name = typeof cmd.args.name === "string" ? cmd.args.name : "song";

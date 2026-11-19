@@ -65,8 +65,7 @@ await test("a picture change is said in a colleague's words: size, layers added 
 
 const S = "photolog1";
 const app = express();
-const pushes: Array<Record<string, unknown>> = [];
-photo.photoRoutes(app, { exists: (id) => id === S, incognito: () => false, off: () => false, push: (_i, m) => { pushes.push(m); }, visible: () => false });
+photo.photoRoutes(app, { exists: (id) => id === S, incognito: () => false, off: () => false });
 const server = app.listen(0, "127.0.0.1");
 await new Promise((r) => server.once("listening", r));
 const base = `http://127.0.0.1:${(server.address() as { port: number }).port}/api/photo/${S}`;
@@ -140,7 +139,6 @@ try {
     assert.match(last.summary, /before command 3/);
     const state = photo.photoState(S);
     assert.equal(state.by, "agent", "so the window loads it");
-    assert.equal(state.hand, undefined);
   });
 
   await test("the person goes back to before any command through the route, and it is a command of theirs", async () => {

@@ -78,6 +78,12 @@ export const FAMILIES: Family[] = [
     words: /\bautora photo\b|\bphotocraft\b|\bphotoshop\b|\.(?:psd|psb|pcraft)\b|\bphotos?\b|\bretouch|\bcolou?r[- ]grad|\bcrop (?:the |this |my )?(?:photo|image|picture)|\bremove (?:the )?background\b|\blayers?\b.*\b(?:image|photo|picture)|\b(?:edit|fix|touch up|enhance|sharpen|blur) (?:the |this |my |a )?(?:photo|image|picture)/i,
   },
   {
+    id: "learn",
+    about: "teach the person a tool by highlighting its controls one step at a time (Learn mode)",
+    match: (n) => n === "learn_show",
+    words: /\bshow me how\b|\bshow me where\b|\bteach me\b|\bwalk me through\b|\bhow (?:do|can|would) i\b|\bhow to use\b|\btutorial\b|\blearn (?:how|to)\b/i,
+  },
+  {
     id: "widgets",
     about: "show a chart, table or small interactive widget in the thread",
     match: (n) => n === "widget_show",
@@ -272,6 +278,8 @@ interface LoadContext {
   said?: string;
   /** A PDF is open in the window, or was uploaded: the pdf set is wanted. */
   hasPdf?: boolean;
+  /** Learn mode is on in this chat: the lesson tool is always wanted. */
+  learn?: boolean;
   /** Everything on, whatever else is true. */
   all?: boolean;
   /** Bring families in only as they are wanted (the person's words, use, tools_enable). On by default: the specialist sets are the expensive part of every call. */
@@ -285,6 +293,7 @@ export function loadedFamilies(ctx: LoadContext): Set<string> {
   if (ctx.all || !ctx.lazy) return new Set(FAMILIES.map((f) => f.id));
   const out = loadedFromLog(ctx.events);
   if (ctx.hasPdf) out.add("pdf");
+  if (ctx.learn) out.add("learn");
   const said = ctx.said ?? "";
   if (said) for (const f of FAMILIES) if (f.words.test(said)) out.add(f.id);
   return out;

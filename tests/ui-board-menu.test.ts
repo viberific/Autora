@@ -26,7 +26,6 @@ async function main() {
   const app = await startApp();
   const browser = await chromium.launch({ executablePath: CHROME });
   try {
-    await app.api("PATCH", "/api/agent-cursor", { on: false });
     const s = await app.newSession("Board menu", "build");
     const page: Page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
     const errors: string[] = [];

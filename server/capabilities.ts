@@ -22,21 +22,16 @@ export interface Capability {
   /** File extensions it can open and save (the window's Load and Save); `tests/capabilities.test.ts` holds them to `loadable()` and the manual. */
   opens: string[];
   saves: string[];
-  /**
-   * Whether the agent's changes are done by hand in the window with Visible work on: `live`, or `gap` (the change is made
-   * and the window shows it). docs/VISIBLE-WORK.md is the account and the test holds this to it.
-   */
-  hand: "live" | "gap";
 }
 
 export const CAPABILITIES: Capability[] = [
-  { id: "pdf", name: "Autora PDF", engine: "Spectra", modes: ["pdf"], windows: ["pdf"], workMode: "PDF", opens: ["pdf"], saves: ["pdf"], hand: "live" },
-  { id: "video", name: "Autora Video", engine: "OpenCut", modes: ["video"], windows: ["video"], workMode: "Video", opens: ["mp4", "mov", "webm", "mp3", "wav", "png", "jpg"], saves: ["mp4", "webm"], hand: "live" },
-  { id: "studio", name: "Autora Music", engine: "Studio", modes: ["studio"], windows: ["studio"], workMode: "Music", opens: ["song.json"], saves: ["wav", "song.json"], hand: "live" },
-  { id: "office", name: "Autora Pages, Sheets and Slides", engine: "GenOffice", modes: ["pages", "sheets", "slides"], windows: ["pages", "sheets", "slides"], workMode: "Documents, Spreadsheets or Presentations", opens: ["docx", "xlsx", "pptx"], saves: ["docx", "xlsx", "pptx"], hand: "live" },
-  { id: "cad", name: "Autora 3D", engine: "Autora 3D", modes: ["cad"], windows: ["cad"], workMode: "3D", opens: ["json", "glb", "gltf", "obj", "stl"], saves: ["stl", "glb", "obj"], hand: "live" },
-  { id: "game", name: "Autora Games", engine: "GDevelop", modes: ["game"], windows: ["game"], workMode: "Games", opens: ["json", "png", "mp3", "wav", "ttf"], saves: ["json"], hand: "gap" },
-  { id: "photo", name: "Autora Photo", engine: "PhotoCraft", modes: ["photo"], windows: ["photo"], workMode: "Images", opens: ["png", "jpg", "webp", "psd"], saves: ["png", "psd"], hand: "live" },
+  { id: "pdf", name: "Autora PDF", engine: "Spectra", modes: ["pdf"], windows: ["pdf"], workMode: "PDF", opens: ["pdf"], saves: ["pdf"] },
+  { id: "video", name: "Autora Video", engine: "OpenCut", modes: ["video"], windows: ["video"], workMode: "Video", opens: ["mp4", "mov", "webm", "mp3", "wav", "png", "jpg"], saves: ["mp4", "webm"] },
+  { id: "studio", name: "Autora Music", engine: "Studio", modes: ["studio"], windows: ["studio"], workMode: "Music", opens: ["song.json"], saves: ["wav", "song.json"] },
+  { id: "office", name: "Autora Pages, Sheets and Slides", engine: "GenOffice", modes: ["pages", "sheets", "slides"], windows: ["pages", "sheets", "slides"], workMode: "Documents, Spreadsheets or Presentations", opens: ["docx", "xlsx", "pptx"], saves: ["docx", "xlsx", "pptx"] },
+  { id: "cad", name: "Autora 3D", engine: "Autora 3D", modes: ["cad"], windows: ["cad"], workMode: "3D", opens: ["json", "glb", "gltf", "obj", "stl"], saves: ["stl", "glb", "obj"] },
+  { id: "game", name: "Autora Games", engine: "GDevelop", modes: ["game"], windows: ["game"], workMode: "Games", opens: ["json", "png", "mp3", "wav", "ttf"], saves: ["json"] },
+  { id: "photo", name: "Autora Photo", engine: "PhotoCraft", modes: ["photo"], windows: ["photo"], workMode: "Images", opens: ["png", "jpg", "webp", "psd"], saves: ["png", "psd"] },
 ];
 
 /** The editor a tool belongs to, by its prefix (`pdf_read` -> pdf), or undefined. */

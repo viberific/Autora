@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useAgentCursor } from "../lib/agentCursor";
 
 const MOODS = [
   { id: "quiet", label: "Quiet" },
@@ -12,7 +11,6 @@ const MOODS = [
  * Both are presentation -- the work is the same either way -- and apply at once.
  */
 export function CollabSettings() {
-  const [cursor, setCursor] = useAgentCursor();
   const [remarks, setRemarks] = useState<boolean | null>(null);
   const [threads, setThreads] = useState<boolean | null>(null);
   const [mood, setMood] = useState<string | null>(null);
@@ -76,13 +74,6 @@ export function CollabSettings() {
         You and the agent can work in the same PDF, app, browser and code at once. What you touch is yours: the agent
         works elsewhere, and "Take control" holds a window until you hand it back.
       </p>
-      <label className="set-switch">
-        <input type="checkbox" checked={cursor} onChange={(e) => setCursor(e.target.checked)} />
-        <span>
-          <b>Visible work</b>
-          <small>See the agent's cursor click and type in every window, and code typed out as it is written. Off, it works at speed and the changes just land. Also the eye beside Follow.</small>
-        </span>
-      </label>
       <label className="set-switch">
         <input type="checkbox" checked={remarks ?? true} disabled={remarks === null} onChange={(e) => toggleRemarks(e.target.checked)} />
         <span>

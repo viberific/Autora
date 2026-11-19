@@ -1,8 +1,7 @@
 /**
  * Panacea as a person uses it, in a real browser: a blank canvas beside the chat; a table pasted and a photo dropped
  * bring their panels with them; a filter chip filters the chart; the picker summons a piece; a slider moves the
- * picture; a panel put away comes back; the history undoes; and the agent's panels arrive live, by its hand when
- * Visible work is on.
+ * picture; a panel put away comes back; the history undoes; and the agent's panels arrive.
  *
  *   npx tsx tests/ui-panacea.test.ts          (PANACEA_SHOTS=<dir> keeps screenshots)
  */
@@ -57,7 +56,6 @@ async function main() {
   const shot = async (name: string) => { if (shots) await page.screenshot({ path: `${shots}/${name}.png` }); };
   onFail = () => shot("failed");
   try {
-    await app.api("PATCH", "/api/agent-cursor", { on: false });
     const s = await app.newSession("Canvas", "build");
     await page.goto(`${app.base}/?session=${s}`);
     await page.waitForSelector('textarea[aria-label="Ask Autora"]');
@@ -223,16 +221,6 @@ async function main() {
       await page.click('.pa-panel [data-bind="shoot.when"] button[data-value="Dusk"]');
       await until("set", async () => (await doc()).values["shoot.when"] === "Dusk");
       await shot("4-agent");
-    });
-
-    await test("with Visible work on, the agent's panacea_set is done by its hand on the person's own slider", async () => {
-      await app.api("PATCH", "/api/agent-cursor", { on: true });
-      app.script = [{ tools: [{ name: "panacea_set", args: { values: { [`@${photoId}.contrast`]: 40 } } }] }, { text: "Set." }];
-      await app.turn(s, "More contrast please.", 60_000);
-      const result = toolResults().join(" ");
-      assert.match(result, /Done by hand in the Panacea window/);
-      assert.equal(Number((await doc()).surfaces.find((x: { id: string }) => x.id === photoId).params.contrast), 40);
-      await app.api("PATCH", "/api/agent-cursor", { on: false });
     });
 
     const docSurface = async () => (await doc()).surfaces.find((x: { kind: string }) => x.kind === "doc");

@@ -331,10 +331,6 @@ interface PersistedState {
   /** Whether the agent looks back over its work after a turn and writes
       down what it learned (as unconfirmed memories). */
   learning: boolean;
-  /** Whether the agent's work is shown as it is done: the cursor in the PDF
-      and app windows, and code typed out in the thread. A presentation only --
-      off, the work is the same and simply appears. */
-  agentCursor: boolean;
   /** Whether the agent says a short word about what the person does in the
       windows they share, when no turn is running (server/companion.ts). */
   collabRemarks: boolean;
@@ -597,7 +593,6 @@ function blank(): PersistedState {
     captcha: { ...DEFAULT_CAPTCHA, backends: [...DEFAULT_CAPTCHA.backends] },
     proactivity: { ...DEFAULT_PROACTIVITY },
     learning: true,
-    agentCursor: true,
     collabRemarks: true,
     threadsAlive: true,
     threadsMood: "quiet",
@@ -691,7 +686,6 @@ function read(): PersistedState {
     if (typeof raw.balanceAt === "number") state.balanceAts.deepseek = raw.balanceAt;
     if (typeof raw.topUpUsd === "number") state.topUps.deepseek = raw.topUpUsd;
     if (typeof raw.learning === "boolean") state.learning = raw.learning;
-    if (typeof raw.agentCursor === "boolean") state.agentCursor = raw.agentCursor;
     if (typeof raw.collabRemarks === "boolean") state.collabRemarks = raw.collabRemarks;
     if (typeof raw.threadsAlive === "boolean") state.threadsAlive = raw.threadsAlive;
     if (typeof raw.threadsUnprompted === "boolean") state.threadsUnprompted = raw.threadsUnprompted;

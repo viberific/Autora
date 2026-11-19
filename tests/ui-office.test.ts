@@ -134,15 +134,6 @@ async function main() {
       // Wait out the lease, as the agent would by working on something else.
       await sleep(22_000);
       const frameBefore = frame;
-      // With Visible work on, the agent's hand types the heading in the editor itself, a key at a time.
-      const seen: string[] = [];
-      let watching = true;
-      void (async () => {
-        while (watching) {
-          seen.push(await bodyText(frame).catch(() => ""));
-          await sleep(60);
-        }
-      })();
       const ev = await app.turn(s, "rename the heading to Launch notes", 120_000);
       if (process.env.OFFICE_DEBUG) {
         console.log("last events:", JSON.stringify(ev.slice(-14).map((e) => [e.kind, JSON.stringify(e.payload).slice(0, 160)])));
@@ -151,9 +142,6 @@ async function main() {
         console.log("frame text:", (await bodyText(frame)).slice(0, 300).replace(/\n/g, " | "));
       }
       await until("the new heading", async () => /Launch notes/.test(await bodyText(frame)), 40_000);
-      watching = false;
-      // In between, the heading was part typed: neither the old words nor the finished ones, in the editor itself.
-      assert.ok(seen.some((t) => /Launch(?! memo| notes)/.test(t) && !/Launch (memo|notes)/.test(t)), "the heading was typed in steps");
       assert.equal(page.frames().filter((f) => f.url().includes("/office-app/docs/")).length, 1);
       assert.strictEqual(frameBefore, frame);
       // Their typing survived the agent's change.

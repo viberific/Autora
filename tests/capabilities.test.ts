@@ -1,6 +1,6 @@
 /**
  * The parity matrix for the hosted editors: server/capabilities.ts is the one table, and every other place that names an editor
- * (the Tools page switch, the manual, the tool families, what Load opens, Visible work, the workspace modes, the desks) must
+ * (the Tools page switch, the manual, the tool families, what Load opens, the workspace modes, the desks) must
  * agree with it. A new editor, or a changed one, that is not in step fails here by name.
  *
  *   npx tsx tests/capabilities.test.ts
@@ -28,9 +28,6 @@ const specs = [
   ...(await import("../server/specs/cad")).cadSPECS, ...(await import("../server/specs/game")).gameSPECS, ...(await import("../server/specs/photo")).photoSPECS,
 ];
 const TOOLS = specs;
-
-const visibleWork = fs.readFileSync(path.join(import.meta.dirname, "..", "docs", "VISIBLE-WORK.md"), "utf8");
-const rowOf = (label: string) => visibleWork.split("\n").find((l) => l.startsWith(`| ${label} |`));
 
 await test("every editor has tools under its prefix, and the prefix finds it", () => {
   for (const c of CAPABILITIES) {
@@ -90,16 +87,6 @@ await test("what a window opens agrees with what Load accepts", () => {
       assert.ok(apps[c.id]!.some((a) => loadable(a as never, { name: `file.${ext}`, mime: "" })), `${c.id} lists ${ext} but Load refuses it`);
     }
     assert.ok(!apps[c.id]!.some((a) => loadable(a as never, { name: "file.zzz", mime: "" })), `${c.id}'s Load takes anything`);
-  }
-});
-
-await test("Visible work: live editors are described as live, and a gap as not here yet", () => {
-  const rows: Record<string, string> = { pdf: "PDF", video: "Video", studio: "Music", office: "Pages, Sheets, Slides", cad: "3D", game: "Games", photo: "Photo" };
-  for (const c of CAPABILITIES) {
-    const row = rowOf(rows[c.id]!);
-    assert.ok(row, `docs/VISIBLE-WORK.md has no row for ${rows[c.id]}`);
-    const cell = row!.split("|")[2]!.trim();
-    assert.ok(c.hand === "live" ? /^Live/.test(cell) : /^Not here yet/.test(cell), `${c.id} says ${c.hand} but the doc says: ${cell.slice(0, 50)}`);
   }
 });
 

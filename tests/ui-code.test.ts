@@ -1,7 +1,6 @@
 /**
  * Code written out in the thread, in a real browser: the agent writes a file
- * with the terminal, and the card for it is typed as it is watched, can be
- * replayed, and is shown whole when the agent cursor is switched off.
+ * with the terminal, and the card for it is there whole at once (no typing, no replay).
  *
  * Needs the app built (npm run build); skips without a browser.
  *
@@ -10,7 +9,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { chromium } from "playwright-core";
-import { sleep, startApp } from "./e2e-harness";
+import { startApp } from "./e2e-harness";
 import { CHROME } from "./chrome";
 
 let passed = 0;
@@ -38,11 +37,8 @@ async function main() {
     const s = await app.newSession("Code", "build");
     await app.turn(s, "write app.js");
 
-    const open = async (off: boolean) => {
-      // The switch lives on the server and the page follows it, so that is where it is turned (this page's own copy alone is overruled).
-      await app.api("PATCH", "/api/agent-cursor", { on: !off });
+    const open = async () => {
       const ctx = await browser.newContext({ viewport: { width: 1200, height: 900 } });
-      if (off) await ctx.addInitScript(() => localStorage.setItem("autora.agentCursor", "off"));
       const page = await ctx.newPage();
       await page.goto(`${app.base}/?session=${s}`);
       // A turn's steps are folded by default (the conversation's contracted activity): open them, as a person would.
@@ -51,48 +47,13 @@ async function main() {
     };
     const code = (page: import("playwright-core").Page) => page.locator(".cell.diff .diff-code");
 
-    await test("a card that has just arrived is typed, with the cursor on the line, then settles whole", async () => {
-      const { ctx, page } = await open(false);
-      let sawWriting = false, sawCaret = false;
-      let longest = 0;
-      let last = "";
-      for (let i = 0; i < 100; i++) {
-        const state = await page.evaluate(() => ({
-          writing: document.querySelector(".cell.diff[data-writing]") !== null,
-          caret: document.querySelector("[data-typing]") !== null,
-          text: document.querySelector(".cell.diff .diff-code")?.textContent ?? "",
-        })).catch(() => ({ writing: false, caret: false, text: "" }));
-        if (state.writing) sawWriting = true;
-        if (state.caret) sawCaret = true;
-        longest = Math.max(longest, state.text.length);
-        if (sawWriting && !state.writing && state.text.length > 0) { last = state.text; break; }
-        await sleep(50);
-      }
-      assert.ok(sawWriting, "the card said it was being written");
-      assert.ok(sawCaret, "the cursor rode the line being typed");
-      for (const l of LINES) assert.ok(last.includes(l), `${l} is there at the end`);
-      assert.equal(await page.locator("[data-typing]").count(), 0, "and the cursor has gone");
-      await ctx.close();
-    });
-
-    await test("it can be played again from the card", async () => {
-      const { ctx, page } = await open(true);
-      await page.waitForSelector(".cell.diff .diff-code");
-      assert.equal(await page.locator(".cell.diff[data-writing]").count(), 0);
-      await page.getByRole("button", { name: "Replay this change" }).click();
-      await page.waitForSelector(".cell.diff[data-writing]", { timeout: 3000 });
-      for (let i = 0; i < 60 && (await page.locator(".cell.diff[data-writing]").count()) > 0; i++) await sleep(60);
-      assert.equal(await page.locator(".cell.diff[data-writing]").count(), 0);
-      assert.ok((await code(page).textContent())!.includes(LINES[13]));
-      await ctx.close();
-    });
-
-    await test("with the agent cursor off, the whole card is there at once", async () => {
-      const { ctx, page } = await open(true);
+    await test("the whole card is there at once, with no typing and no replay button", async () => {
+      const { ctx, page } = await open();
       await page.waitForSelector(".cell.diff .diff-code");
       const text = (await code(page).textContent())!;
       for (const l of LINES) assert.ok(text.includes(l));
       assert.equal(await page.locator(".cell.diff[data-writing]").count(), 0);
+      assert.equal(await page.getByRole("button", { name: "Replay this change" }).count(), 0);
       await ctx.close();
     });
   } finally {

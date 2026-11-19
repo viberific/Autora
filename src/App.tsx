@@ -1,5 +1,4 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { haltHands } from "./lib/handHalt";
 import { useFullscreen } from "./lib/fullscreen";
 import { SessionStream, mergeEvents, type StreamStatus } from "./lib/stream";
 import { derive, isRunning, type Cell, type Derived } from "./lib/derive";
@@ -16,9 +15,9 @@ import { AppPreview, CadWindow, GameWindow, OfficeWindow, OpenCutWindow, PhotoWi
 import { PanaceaWorkspace } from "./components/PanaceaWorkspace";
 import { CANVAS_BAR_SLOT, type NativeWorkspaceActions, type WorkspaceMode } from "./lib/workspace";
 import { useWorkspaceFocus, workspaceToolKey } from "./lib/workspaceFocus";
-import { emitCadHand, resetCad, setCadState, useCadState } from "./lib/caddesk";
+import { resetCad, setCadState, useCadState } from "./lib/caddesk";
 import { emitGamePlay, resetGame, setGameState, useGameState } from "./lib/gamedesk";
-import { emitPhotoHand, resetPhoto, setPhotoState, usePhotoState } from "./lib/photodesk";
+import { resetPhoto, setPhotoState, usePhotoState } from "./lib/photodesk";
 import { emitStudioCommand, resetStudio, setStudioState, useStudioState } from "./lib/studio";
 import { emitPanaceaCommand, resetPanacea, setPanaceaState, usePanaceaState } from "./lib/panacea";
 import { emitSpectraEvent } from "./lib/spectra";
@@ -26,8 +25,8 @@ import { ResizeHandle } from "./components/ResizeHandle";
 import { RAIL, setRailMini, setRailWidth, usePanes } from "./lib/panes";
 import { RAIL_SLACK, useGivesWay, useRailIcons, useRowSpare, useWidthOf } from "./lib/railfit";
 import { clearOfficePick, getOfficePick, pickLabel, pickSentence, useOfficePick } from "./lib/officeSelection";
-import { emitOfficeHand, emitOfficePush, resetOffice, setOfficeState, useOfficeState, type OfficeKind } from "./lib/officedesk";
-import { emitDeskHand, resetDesk, setDeskState, useDeskState } from "./lib/pdfdesk";
+import { emitOfficePush, resetOffice, setOfficeState, useOfficeState, type OfficeKind } from "./lib/officedesk";
+import { resetDesk, setDeskState, useDeskState } from "./lib/pdfdesk";
 import { emitVideoCommand, resetVideo, setVideoState, useVideoState } from "./lib/opencut";
 import { resetCollab, setCollabState } from "./lib/collab";
 import { cellKey, dockedPlan, pickSurfaces, usePhone } from "./lib/stage";
@@ -86,7 +85,6 @@ import { loadInto } from "./components/LoadButton";
 import { loadable } from "./lib/loadable";
 import { announceLoaded, canKeepCanvas, keepCanvas } from "./lib/panaceaBridge";
 import { ToolsSheet } from "./components/ToolsSheet";
-import { VisibleWork } from "./components/VisibleWork";
 import { OPEN_NOTEBOOK, type ArtifactInfo, type NotebookRef } from "./lib/notebooks";
 import { MONEY_CHANGED } from "./lib/spend";
 import type { Bucket } from "./lib/memory";
@@ -112,11 +110,13 @@ import { setStepBack, useBackGesture } from "./lib/back";
 import { Notices } from "./components/Notices";
 import { InstallApp } from "./components/InstallApp";
 import { PermissionsPill } from "./components/PermissionsPill";
+import { LearnToggle } from "./components/LearnToggle";
+import { LearnGuide } from "./components/LearnGuide";
+import { lessonFrom } from "./lib/learn";
 import { ModeSelect } from "./components/ModeSelect";
 import { DEFAULT_PERMISSIONS, DEFAULT_WORK_MODE, type Permissions, type WorkMode } from "./lib/modes";
 import { AutoraMark, type MarkState } from "./components/AutoraMark";
 import { readActivity } from "./lib/activity";
-import { setCursorWho, whoFromEvents } from "./lib/cursorWho";
 import { adoptDeviceTimezone } from "./lib/timezone";
 import {
   dictationSupported, recognitionAvailable, sameReply, secureOrigin, speakable,
@@ -131,7 +131,6 @@ import {
   MAX_UPLOAD_BYTES, isPicture, sizeLabel, uploadAttachment, type Attachment,
 } from "./lib/attachments";
 import { SureHost } from "./components/SureHost";
-import { AgentThought } from "./components/AgentThought";
 
 /** A phone or tablet keyboard: Enter stays a new line there (the composer). */
 const TOUCH_KEYBOARD = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
@@ -531,24 +530,19 @@ export function App() {
       },
       onPreview: (state) => setPreviewState(state as PreviewState),
       onPdfDesk: setDeskState,
-      onPdfHand: emitDeskHand,
       onCadDesk: setCadState,
       onGameDesk: setGameState,
       onGamePlay: emitGamePlay,
       onPhotoDesk: setPhotoState,
-      onPhotoHand: emitPhotoHand,
       onStudioDesk: setStudioState,
       onStudioCommand: emitStudioCommand,
       onPanaceaDesk: setPanaceaState,
       onPanaceaCommand: emitPanaceaCommand,
-      onHandsHalt: (stop: boolean) => haltHands(stop),
       onSpectra: emitSpectraEvent,
       onVideoDesk: setVideoState,
       onVideoCommand: emitVideoCommand,
       onOfficeDesk: setOfficeState,
       onOfficePush: emitOfficePush,
-      onOfficeHand: emitOfficeHand,
-      onCadHand: emitCadHand,
       onPresence: setCollabState,
       onBrowser: (state) => {
         setLiveFields(state?.fields);
@@ -610,8 +604,6 @@ export function App() {
      states says that best: a step in flight is the mark building itself,
      everything else is it thinking. */
   const reading = useMemo(() => readActivity(events), [events]);
-  /* Whose cursor the windows draw: the agent of the Organization this chat belongs to, else Autora. */
-  useEffect(() => { setCursorWho(whoFromEvents(events)); }, [events]);
   const doing = reading.text;
   /* How long this turn has been going, ticking on its own so the line counts
      up without needing a new event to arrive. Nothing to show once the turn
@@ -874,8 +866,6 @@ export function App() {
    * server at all is still reported here.
    */
   const stopTurn = useCallback(async () => {
-    // Nothing goes on being shown after Stop: the hand halts here at once, before the server has heard.
-    haltHands(true);
     streamRef.current?.interrupt();
     if (!sessionId) return;
     try {
@@ -1541,7 +1531,7 @@ export function App() {
      says wins, except for a chat that is not in the list at all (incognito)
      or a change that has not been answered yet: those live here, so a
      control never disagrees with what was just pressed. */
-  type ChatSettings = { mode: WorkMode; permissions: Permissions; ask_when: string };
+  type ChatSettings = { mode: WorkMode; permissions: Permissions; ask_when: string; learn: boolean };
   const [settingsOverride, setSettingsOverride] = useState<Record<string, Partial<ChatSettings>>>({});
   const [modeSaving, setModeSaving] = useState(false);
   const [modeError, setModeError] = useState<string | null>(null);
@@ -1551,6 +1541,7 @@ export function App() {
   const sessionPermissions: Permissions =
     own?.permissions ?? (listedSession?.permissions as Permissions | undefined) ?? DEFAULT_PERMISSIONS;
   const sessionAskWhen: string = own?.ask_when ?? listedSession?.ask_when ?? "";
+  const sessionLearn: boolean = own?.learn ?? listedSession?.learn ?? false;
 
   const changeSession = useCallback(
     async (change: Partial<ChatSettings>) => {
@@ -1589,6 +1580,15 @@ export function App() {
     (permissions: Permissions) => void changeSession({ permissions }),
     [changeSession],
   );
+  const setSessionLearn = useCallback((learn: boolean) => void changeSession({ learn }), [changeSession]);
+  const lesson = useMemo(() => lessonFrom(events), [events]);
+  /* "Do this one for me" in a lesson: an ordinary message, so it goes through the same turn as anything typed. */
+  const askForStep = useCallback((text: string) => {
+    if (!sessionId) return;
+    void fetch(`/api/sessions/${sessionId}/message`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }),
+    }).catch(() => undefined);
+  }, [sessionId]);
   const setSessionAskWhen = useCallback(
     (ask_when: string) => void changeSession({ ask_when }),
     [changeSession],
@@ -2119,7 +2119,6 @@ export function App() {
         <UpdateNotice />
         <Notices onOpenSession={openSession} />
         <SureHost />
-        <AgentThought events={events} />
         <InstallApp />
 
         <header className="top" ref={headerRef}>
@@ -2177,6 +2176,7 @@ export function App() {
               dot={tightHeader}
             />
           )}
+          {page === "chat" && sessionId && <LearnToggle on={sessionLearn} onChange={setSessionLearn} dot={tightHeader} />}
 
           {/* The one state of the header worth stating outright: this chat is
               written down nowhere, and leaving it ends it. */}
@@ -2228,11 +2228,9 @@ export function App() {
               bar at the top, not a second one under it. Empty until there is native work on the canvas. */}
           {page === "chat" && <div id={CANVAS_BAR_SLOT} className="top-canvas-slot" data-chat={currentName} />}
 
-          {/* Following the agent's work, and watching it work (its mouse and keyboard), where they are always in reach
-              rather than in a bar of the workspace's own. */}
+          {/* Following the agent's work, where it is always in reach rather than in a bar of the workspace's own. */}
           {page === "chat" && sessionId && (
             <span className="top-work">
-              <VisibleWork className="stage-follow" compact />
               {/* Nothing to follow until the agent has worked or a window is open: a lit switch on an empty screen reads as broken. */}
               {(openWindows.length > 0 || events.some((e) => e.actor === "agent")) && <button
                 type="button"
@@ -2978,6 +2976,8 @@ export function App() {
           onOpenPage={() => navigate("sessions")}
         />
       )}
+
+      <LearnGuide state={lesson} sessionId={sessionId} onDoForMe={askForStep} />
 
       {trash && (
         <div className="toast" role="status">

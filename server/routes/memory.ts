@@ -11,7 +11,7 @@ import { tidyRecords } from "../mindrules";
 import { save, state } from "../state";
 import { MOODS } from "../threadlife";
 
-export function memoryRoutes(app: Express, deps: { mind: MemoryGraph; haltHands?: () => void }) {
+export function memoryRoutes(app: Express, deps: { mind: MemoryGraph }) {
   const { mind } = deps;
   // 8. Memory / Knowledge Web
   app.get("/api/memory", (req: Request, res: Response) => {
@@ -48,20 +48,6 @@ export function memoryRoutes(app: Express, deps: { mind: MemoryGraph; haltHands?
     if (mood) state.threadsMood = req.body.mood;
     if (mood || ["remarks", "threads", "unprompted"].some((k) => typeof req.body?.[k] === "boolean")) save();
     res.json({ remarks: state.collabRemarks, threads: state.threadsAlive, mood: state.threadsMood, unprompted: state.threadsUnprompted });
-  });
-
-  /** Whether the agent's work is shown as it is done (the cursor, the typed code). */
-  app.get("/api/agent-cursor", (_req: Request, res: Response) => {
-    res.json({ on: state.agentCursor });
-  });
-  app.patch("/api/agent-cursor", (req: Request, res: Response) => {
-    if (typeof req.body?.on === "boolean") {
-      state.agentCursor = req.body.on;
-      save();
-      // Switched off: any hand at work in any window stops showing at once (src/lib/handHalt.ts).
-      if (!req.body.on) deps.haltHands?.();
-    }
-    res.json({ on: state.agentCursor });
   });
 
   /** Whether the agent writes down what it learns after a turn. */

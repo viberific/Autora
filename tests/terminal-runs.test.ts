@@ -9,7 +9,7 @@ process.env.AUTORA_STATE_DIR = path.join(dir, "state");
 process.env.AUTORA_WORKDIR = dir;
 
 const { findTool, runTool, terminalDir, updateToolSettings } = await import("../server/tools");
-const { flushState, state } = await import("../server/state");
+const { flushState } = await import("../server/state");
 const root = path.join(import.meta.dirname, "..");
 const spec = findTool("terminal");
 assert.ok(spec, "shell execution remains available without a terminal window");
@@ -48,8 +48,7 @@ const configured = path.join(dir, "configured");
 fs.mkdirSync(configured);
 updateToolSettings({ terminal: { cwd: configured } });
 assert.equal(terminalDir(), configured);
-for (const visible of [false, true]) {
-  state.agentCursor = visible;
+{
   const outcome = await runTool(spec, { command: "echo output", cwd: "missing" }, ctx);
   assert.equal(outcome.ok, false);
   assert.match(outcome.summary, /does not exist on this machine/);

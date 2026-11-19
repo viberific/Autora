@@ -31,7 +31,6 @@
 
 import { refLine, scrollLine } from "./pagedescribe";
 import { MirrorRecorder, ResourceCache, rewriteCss, servedType, type MirrorStatus } from "./mirror";
-import type { DomItem } from "./domdiff";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -45,7 +44,6 @@ import { MAX_ARTIFACT_BYTES } from "./artifacts";
 import type { BrowserCookie } from "./cookies";
 import { humanClick, humanMove, humanPath, humanType, pointIn, wander, type Point } from "./human";
 import { DEFAULT_CAPTCHA, findChallenge, findPageCheckbox, solveChallenge, type CaptchaSettings, type SolveReport } from "./captcha";
-import { thoughtFromAction } from "../src/lib/thought";
 import { browserRoots, settleTree, sweepBrowsers } from "./processes";
 
 /* Playwright's types are not imported: the package is optional, and a type
@@ -469,9 +467,6 @@ interface BrowserHooks {
   onAction: (action: string, at: { x: number; y: number } | null, url: string) => void;
   /** Whose pointer to draw: the agent of the Organization working in this chat, or null for Autora itself. */
   who?: () => { name: string; color: string; rgb: string; sides: number } | null;
-  /** Visible work (Settings, and the switch beside Follow): false, the agent works at speed with no pointer drawn,
-      no words beside it and no typing rhythm. Missing means on. */
-  visible?: () => boolean;
   /** The typeable fields on the page moved, appeared or went. */
   onFields: () => void;
   /** The page wrote an error or a warning to its console. */
@@ -856,7 +851,7 @@ export const CURSOR_SCRIPT = `
     /* Whose hand is on the page. "agent": the input is Autora's, and its pointer shows it. "you": the person is using
        the page (the server says so before it passes on their tap, key or scroll), so their input is never drawn as
        Autora's pointer; it lapses on its own a moment after their last input. "off": the agent is working at speed
-       with nothing shown (Visible work is off), until it is told "agent" again. */
+       with nothing shown, until it is told "agent" again. */
     let hand = "agent";
     let handUntil = 0;
     const agents = () => hand === "agent" || (hand === "you" && Date.now() > handUntil);
@@ -975,42 +970,6 @@ export const CURSOR_SCRIPT = `
   }
   window.__autoraCursorMount = mount;
 })();
-`;
-
-/**
- * What is on the page, as a list that two looks can be compared by (see
- * server/domdiff.ts): each visible element that has words of its own, or is a
- * picture, a control or a drawn box -- what it is, how it looks, where it is.
- */
-const DOM_MAP_SCRIPT = `
-(() => {
-  const SKIP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "META", "LINK", "HEAD", "TITLE", "BR", "HTML", "BODY"]);
-  const CONTROL = new Set(["IMG", "INPUT", "TEXTAREA", "SELECT", "BUTTON", "CANVAS", "VIDEO", "HR", "IFRAME"]);
-  const out = [];
-  const all = document.body ? document.body.querySelectorAll("*") : [];
-  const own = (el) => {
-    let t = "";
-    for (const n of el.childNodes) if (n.nodeType === 3) t += n.nodeValue;
-    return t.replace(/\\s+/g, " ").trim();
-  };
-  for (let i = 0; i < all.length && out.length < 700; i++) {
-    const el = all[i];
-    if (SKIP.has(el.tagName) || el.closest("[data-autora]")) continue;
-    const r = el.getBoundingClientRect();
-    if (r.width < 1 || r.height < 1) continue;
-    const cs = getComputedStyle(el);
-    if (cs.display === "none" || cs.visibility === "hidden" || Number(cs.opacity) === 0) continue;
-    const text = own(el);
-    const bg = cs.backgroundColor;
-    const boxed = bg && bg !== "rgba(0, 0, 0, 0)" && bg !== "transparent" && el.childElementCount === 0 && r.width * r.height >= 400;
-    if (!text && !CONTROL.has(el.tagName) && !boxed) continue;
-    const src = el.tagName === "IMG" ? String(el.getAttribute("src") || "").split("/").pop() : "";
-    const k = el.tagName.toLowerCase() + "|" + text.slice(0, 60) + "|" + String(el.className && el.className.baseVal !== undefined ? el.className.baseVal : el.className || "").slice(0, 60) + "|" + src;
-    const s = [cs.color, bg, cs.fontSize, cs.fontWeight, cs.borderTopColor, cs.borderRadius].join(";");
-    out.push({ k, s, tag: el.tagName.toLowerCase(), x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) });
-  }
-  return out;
-})()
 `;
 
 /**
@@ -2139,9 +2098,6 @@ export class LiveBrowser {
     private opts: { viewport?: { width: number; height: number }; fps?: number; quality?: number; sharp?: boolean } = {},
   ) {
     if (opts.viewport) this.vp = { ...opts.viewport };
-    /* Whatever the browser says it is doing is also said, in a few words, beside its pointer in the page. */
-    const said = hooks.onAction;
-    this.hooks = { ...hooks, onAction: (action, at, url) => { said(action, at, url); void this.think(action); } };
   }
 
   /** The words beside the pointer for `action` (see src/lib/thought.ts); nothing for an act with nothing to say. */
@@ -2149,21 +2105,6 @@ export class LiveBrowser {
   private signature(): string {
     const w = this.hooks.who?.();
     return w ? `if (window.__autoraWho) window.__autoraWho(${JSON.stringify(w.name)}, ${JSON.stringify(w.color)}, ${JSON.stringify(w.rgb)}, ${Number(w.sides) || 3});` : "";
-  }
-
-  private async think(action: string): Promise<void> {
-    // The person's own act ("you clicked ...") is theirs, and is never said beside Autora's pointer.
-    if (action.startsWith("you ") || !this.visible()) return;
-    const words = thoughtFromAction(action);
-    if (!words) return;
-    await this.page?.evaluate(
-      `(() => { if (window.__autoraCursorMount) window.__autoraCursorMount(); ${this.signature()} if (window.__autoraHand) window.__autoraHand("agent"); if (window.__autoraThought) window.__autoraThought(${JSON.stringify(words)}); })()`,
-    ).catch(() => undefined);
-  }
-
-  /** Whether the agent's work is shown as it is done (see LiveBrowserHooks.visible). */
-  private visible(): boolean {
-    return this.hooks.visible?.() ?? true;
   }
 
   /** When the page was last told the person's hand is on it. */
@@ -2968,40 +2909,6 @@ export class LiveBrowser {
     });
   }
 
-  /** The page as a list two looks can be compared by (server/domdiff.ts), or
-      null when there is no page to look at. */
-  domMap(): Promise<DomItem[] | null> {
-    return this.run(async () => {
-      const page = this.page;
-      if (!page || page.isClosed()) return null;
-      try {
-        return (await Promise.race([
-          page.evaluate(DOM_MAP_SCRIPT),
-          new Promise((resolve) => setTimeout(() => resolve(null), 3000)),
-        ])) as DomItem[] | null;
-      } catch {
-        return null;
-      }
-    });
-  }
-
-  /**
-   * The pointer glides to a place and outlines it with a name, so a change to
-   * the page is seen being found. Real mouse movement, so the dot in the page
-   * follows every step of it, and a click is never sent.
-   */
-  async markAt(x: number, y: number, w: number, h: number, label: string): Promise<void> {
-    if (!(await this.glideTo(x + Math.min(w, 28), y + h * 0.6))) return;
-    await this.run(async () => {
-      await this.page
-        ?.evaluate(
-          `(() => { if (window.__autoraCursorMount) window.__autoraCursorMount();
-             if (window.__autoraMark) window.__autoraMark(${Math.round(x)}, ${Math.round(y)}, ${Math.round(w)}, ${Math.round(h)}, ${JSON.stringify(label)}); })()`,
-        )
-        .catch(() => undefined);
-    });
-  }
-
   /** The pointer travels to a place in real mouse movements, so the dot in the
       page is seen going there. False if the page went away on the way. */
   async glideTo(x: number, y: number): Promise<boolean> {
@@ -3465,10 +3372,7 @@ export class LiveBrowser {
            it -- selected by the field itself rather than with Ctrl+A, which
            on a click that did not land in the box selected the whole page. */
         await page.evaluate(SELECT_FIELD_SCRIPT(ref)).catch(() => undefined);
-        // A person's typing rhythm for whoever is watching; nobody watching,
-        // it is typed straight in.
-        if (this.hooks.watchers() > 0 && this.visible()) await humanType(page, text, () => this.touched());
-        else await page.keyboard.type(text);
+        await page.keyboard.type(text);
         let held = await this.valueOf(ref);
         /* A field that swallowed the typing (a script that rebuilds it on
            focus, an input that ignores synthetic keys) gets its value set
@@ -4161,8 +4065,8 @@ export class LiveBrowser {
     const page = this.page;
     if (!page) return;
     try {
-      // Nobody watching, or Visible work off: straight there and click, at speed.
-      if (!always && (this.hooks.watchers() === 0 || !this.visible())) {
+      // Straight there and click, at speed; only a CAPTCHA asks for the hand regardless.
+      if (!always) {
         await page.mouse.click(to.x, to.y);
         this.pointer = to;
         return;
@@ -4614,11 +4518,11 @@ export class LiveBrowser {
   }
 
   /** Draw the pointer at a place. `you`: the person's own tap, drawn as theirs (a neutral ring), never as Autora's
-      pointer. With Visible work off the agent's pointer is not drawn at all. */
+      pointer. The agent's pointer is not drawn at all. */
   private async showCursor(x: number, y: number, tap: boolean, you = false) {
     // The pointer is on screen: frames come at the faster rate so it is seen travelling, not arriving.
     this.touched();
-    const hand = you ? "you" : this.visible() ? "agent" : "off";
+    const hand = you ? "you" : "off";
     if (you) this.youAt = Date.now();
     await this.page
       ?.evaluate(
@@ -4627,9 +4531,6 @@ export class LiveBrowser {
            if (window.__autoraCursor) window.__autoraCursor(${x}, ${y}, ${tap ? "true" : "false"}); })()`,
       )
       .catch(() => undefined);
-    // Long enough for the dot's own transition to play, so the pointer is seen
-    // arriving rather than teleporting.
-    if (!tap && hand === "agent") await this.page?.waitForTimeout?.(200).catch(() => undefined);
   }
 
   /** The scan, folded into the shape the model is given. */

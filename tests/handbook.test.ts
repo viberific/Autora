@@ -91,7 +91,7 @@ await test("the Games manual teaches the tool bar, Play in the window and the Ad
 
 await test("the 3D manual teaches the tool bar and not the bottom bar it replaced", () => {
   const cad = manualText("cad");
-  for (const needle of ["All tools", "Size & position", "Pick edges", "Push & pull", "pin any tool", "no bottom bar", "whatever is shown", "parts pane", "Edit inside", "independent copy", "cad_group_enter", "Search by name"]) {
+  for (const needle of ["All tools", "Size & position", "Pick edges", "Push & pull", "pin any tool", "no bottom bar", "whatever is shown", "parts pane", "Edit inside", "independent copy", "Exit group", "Search by name"]) {
     assert.ok(cad.includes(needle), `the 3D manual lacks "${needle}"`);
   }
 });
@@ -117,9 +117,9 @@ await test("the Photo manual teaches the tool bar and not the menu bar and toolb
   }
 });
 
-await test("the Office manual says that with Visible work on office_edit's words are typed in the window by hand", () => {
+await test("the Office manual says how a person makes the edits office_edit makes: the name box, the formula bar's tick, a box opened on its slide", () => {
   const office = manualText("office");
-  for (const needle of ["With Visible work on", "typed there by your hand, live", "name box", "formula bar's tick", "box is opened on its slide", "With Visible work off"]) {
+  for (const needle of ["How a person makes the edits", "name box", "formula bar's tick", "box is opened on its slide", "directly"]) {
     assert.ok(office.includes(needle), `the Office manual lacks "${needle}"`);
   }
 });
@@ -154,9 +154,9 @@ await test("the Video manual says Panacea's Video panels drive the project, with
   }
 });
 
-await test("the Video manual says which edits are done in the window by hand with Visible work on", () => {
+await test("the Video manual says how a person makes the edits video_edit makes", () => {
   const v = manualText("video");
-  for (const needle of ["With Visible work on", "by your hand, live", "the ruler clicked at the cut", "Delete pressed", "dragged along the timeline", "Default text", "With Visible work off"]) {
+  for (const needle of ["How a person makes the edits", "click the ruler at the cut", "drag the clip along the timeline", "Default text", "directly, at speed"]) {
     assert.ok(v.includes(needle), `the Video manual lacks "${needle}"`);
   }
 });
@@ -351,9 +351,9 @@ await test("the 3D manual says Panacea's 3D panels drive the model, with a Part 
   }
 });
 
-await test("the 3D manual says every changing call is done in the window by hand with Visible work on, and what has no control", () => {
+await test("the 3D manual says how a person works the modeller, and what has no control for a lesson", () => {
   const cad = manualText("cad");
-  for (const needle of ["With Visible work on", "every call that changes the model is done there", "by your hand, live", "Shape tray", "with Draw", "Size & position", "Shift for each after the first", "dragging the ring", "Curved edge", "Undo and Redo in the top bar", "one command at a time", "Done by hand in the 3D window", "Not by hand", "cad_doc_set", "With Visible work off"]) {
+  for (const needle of ["How a person works the modeller", "Shape tray", "Draw for outlines", "Size & position", "Shift for each after the first", "dragging the ring", "Curved edge", "Undo and Redo in the top bar", "change the model directly, at speed", "cad_doc_set", "a lesson on those is in words"]) {
     assert.ok(cad.includes(needle), `the 3D manual lacks "${needle}"`);
   }
 });
@@ -365,9 +365,9 @@ await test("the Music manual says Panacea's Music panels drive the song, with a 
   }
 });
 
-await test("the Music manual says that with Visible work on the studio tools are done in the window by hand", () => {
+await test("the Music manual says how a person makes the edits the studio tools make", () => {
   const music = manualText("studio");
-  for (const needle of ["With Visible work on", "by your hand, live", "Song tray", "Add track", "piano roll", "drum grid", "finished song goes in", "With Visible work off"]) {
+  for (const needle of ["How a person makes the edits", "Song tray", "Add track", "piano roll", "drum grid", "directly"]) {
     assert.ok(music.includes(needle), `the Music manual lacks "${needle}"`);
   }
 });
@@ -381,7 +381,7 @@ await test("the Panacea manual teaches a document's history and suggestions: pro
 
 await test("the Panacea manual teaches laying out the windows: the person's gestures and the agent's, kept with the canvas", () => {
   const p = manualText("panacea");
-  for (const needle of ["Layout. The apps' windows", "Tidy in the board's", "panacea_arrange: `windows`", "`tidy`", "front first", "same gesture"]) {
+  for (const needle of ["Layout. The apps' windows", "Tidy in the board's", "panacea_arrange: `windows`", "`tidy`", "front first"]) {
     assert.ok(p.includes(needle), `the Panacea manual lacks "${needle}"`);
   }
 });
@@ -393,9 +393,9 @@ await test("the Games manual carries what the usability trial found: quoted keys
   }
 });
 
-await test("the 3D manual says there is a Sphere, what Visible work costs, and not to guess ids", () => {
+await test("the 3D manual says there is a Sphere, and that a batch cannot use an id made earlier in it", () => {
   const c = manualText("cad");
-  for (const needle of ["Sphere (a true ball", "takes many minutes", "never guess the next one", "cannot use an id made earlier in the same batch"]) {
+  for (const needle of ["Sphere (a true ball", "cannot use an id made earlier in the same batch"]) {
     assert.ok(c.includes(needle), `the 3D manual lacks "${needle}"`);
   }
   assert.ok(manualText("game").includes("runs after the 3D calls that change the model"));
@@ -450,11 +450,11 @@ await test("the Panacea manual distinguishes real flowcharts from idea boards", 
   }
 });
 
-await test("the Panacea manual says that with Visible work on its changes are done in the window by hand, and what has no control", () => {
+await test("the Panacea manual says how a person works the canvas", () => {
   const p = manualText("panacea");
-  for (const needle of ["With Visible work on", "every Panacea call that changes the canvas is done there by your hand", "name typed in the picker",
-    "listed there as yours", "dragging a slider", "More opened", "dragged by its title bar", "a table pasted, a file dropped",
-    "a document's words typed in", "linked by dragging a dot", "finished canvas goes in", "With Visible work off", "a Board, Flowchart or Document",
+  for (const needle of ["How a person works the canvas", "typing its name in the picker",
+    "dragging a slider", "with More opened", "dragged by its title bar", "a table pasted, a file dropped",
+    "words are typed in", "linked by dragging a dot", "glide to where you set them", "a Board, Flowchart or Document",
     "panacea_project", "project strip", "only then can you move past the first phase", "picker (Project)",
     "moves by its title bar", "Maximise", "arrow halfway", "arrows pointing in and reads Restore", "reads Unpin while that window is pinned"]) {
     assert.ok(p.includes(needle), `the Panacea manual lacks "${needle}"`);
@@ -468,31 +468,31 @@ await test("the Panacea manual says that with Visible work on its changes are do
   assert.ok(!p.includes("Save native work"), "the canvas's Save is called Save");
 });
 
-await test("the PDF manual says that with Visible work on pdf_edit is done in the window by hand, and what is not", () => {
+await test("the PDF manual says how a person makes a mark, and that pdf_edit works on the file at once", () => {
   const pdf = manualText("pdf");
-  for (const needle of ["With Visible work on", "by your hand, live", "Fill N fields", "Ctrl+S", "done on the file afterwards", "With Visible work off"]) {
+  for (const needle of ["How a person makes a mark", "Fill N fields", "Ctrl+S", "works on the file at once", "accept or decline"]) {
     assert.ok(pdf.includes(needle), `the PDF manual lacks "${needle}"`);
   }
 });
 
-await test("the Office manual says Pages' bold, italic and underline are pressed by hand", () => {
+await test("the Office manual says how Pages' bold, italic and underline are put on", () => {
   assert.ok(manualText("office").includes("bold, italic or underline put on or taken off words"));
 });
 
-await test("the PDF manual says an item over several pages is done a page at a time", () => {
-  assert.ok(manualText("pdf").includes("a page at a time"));
+await test("the PDF manual says an item over several pages is one item", () => {
+  assert.ok(manualText("pdf").includes("is one item"));
 });
 
-await test("the Video manual says which edits are done by hand, the fields a title is typed into, and what is not", () => {
+await test("the Video manual says the fields a title is typed into, and that the edits are made directly", () => {
   const video = manualText("video");
-  for (const needle of ["Properties panel's own", "Extract audio", "dragged out to its time", "seek (the ruler clicked)", "Every other action", "With Visible work off"]) {
+  for (const needle of ["Properties panel's own", "Extract audio", "seek (click the ruler)", "directly, at speed"]) {
     assert.ok(video.includes(needle), `the Video manual lacks "${needle}"`);
   }
 });
 
 await test("the Music manual says an instrument is chosen in the track's menu and a velocity set with the Force slider", () => {
   const music = manualText("studio");
-  for (const needle of ["Instrument", "Force slider", "a quantize at less than full strength"]) {
+  for (const needle of ["Instrument", "Force slider"]) {
     assert.ok(music.includes(needle), `the Music manual lacks "${needle}"`);
   }
 });
@@ -504,14 +504,9 @@ await test("the Games manual says Panacea's Game panels drive the game, with an 
   }
 });
 
-await test("the Games manual says Visible work is not here yet, and that no cursor is played over the game", () => {
-  const game = manualText("game");
-  assert.ok(game.includes("nothing on its bar says so") && game.includes("no cursor is played"));
-});
-
-await test("the Photo manual says that with Visible work on the edit is done in the window by hand", () => {
+await test("the Photo manual says how a person runs a command, and that photo_edit runs at once", () => {
   const photo = manualText("photo");
-  for (const needle of ["Visible work on", "by your hand", "clicks its tile", "command's own dialog", "Visible work off"]) {
+  for (const needle of ["A person runs a command", "clicking its tile", "command's own dialog", "runs at once on the server"]) {
     assert.ok(photo.includes(needle), `the Photo manual lacks "${needle}"`);
   }
 });
@@ -540,7 +535,7 @@ await test("the overview every turn explains the layout and points at the manual
   }
   assert.doesNotMatch(overview, /x on its tab|Autora Terminal|Working on/);
   // The switch beside Follow, and what turning it off changes for the agent.
-  assert.ok(overview.includes("Visible work on") && overview.includes("Visible work off you work at speed"));
+  assert.ok(overview.includes("Learn mode") && overview.includes("learn_show") && overview.includes("at your own speed"));
   // Video: the name is in the window's bar, the editor's own row is the projects menu and Export.
   assert.match(manualText("video"), /only the projects menu \(New project, Rename/);
   const briefing = await capabilityBriefing();

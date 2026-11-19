@@ -4,7 +4,6 @@ import { hostedWork } from "../lib/workspaceScene";
 import { PanaceaWindow } from "./lazyWindows";
 import type { BoardHandle } from "./panacea/Board";
 import { IconChevron, IconMaximize, IconMinimize } from "./Icons";
-import { VisibleWork } from "./VisibleWork";
 
 /** Every engine and native surface shares the Board's world and camera. */
 export function PanaceaWorkspace({
@@ -37,12 +36,11 @@ export function PanaceaWorkspace({
   };
   return (
     <section className={`panacea-workspace${phone ? " is-phone" : ""}${collapsed ? " is-collapsed" : ""}`} aria-label="Panacea workspace" data-mode={active}>
-      {/* In the app the workspace has no bar of its own: Follow and Visible work sit in the header (App). Only the
-          pinned stage, which can fold and grow, keeps one for those two buttons. */}
+      {/* In the app the workspace has no bar of its own: Follow sits in the header (App). Only the
+          pinned stage, which can fold and grow, keeps one for it. */}
       {(onToggle || onExpand) && (
         <header className="pw-bar">
           <div className="spacer" />
-          <VisibleWork className={phone ? "stage-follow" : "pane-follow"} compact={phone} />
           <button type="button" className={`${phone ? "stage-follow" : "pane-follow"}${following ? " is-on" : ""}`} onClick={onFollow}
             aria-pressed={following} title={following ? "Following the agent — stop following" : "Follow the agent's work"}>
             <span className="watch-dot" aria-hidden="true" /> Follow

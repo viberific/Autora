@@ -25,8 +25,7 @@ const OVERVIEW = [
     "the Ask Autora bar is at its foot (work mode, voice, attachments, notebooks, artifacts, Capabilities, Send, Stop) with the TODO " +
     "list just above. Work under the window is out of view, so frame work clear of it. On a phone it " +
     "is a glass bottom sheet floating over the foot of the canvas (work is framed above it), moved on its left half (the right half only scrolls): Canvas only, Half (the default: messages " +
-    "only) and Full (adds tool steps and memory notes). A question or permission waiting keeps it open. The eye (Visible " +
-    "work) sits in the top bar, and Follow joins it once there is work to follow. Enter sends a message, Shift+Enter writes a line. Capabilities lists the editors this server has; one that is not installed is shown as such and cannot be opened. Every surface and engine card lives in one pannable, zoomable scene, not tabs: the icon dock on the canvas's right edge " +
+    "only) and Full (adds tool steps and memory notes). A question or permission waiting keeps it open. Learn (beside the chat's permissions) and, once there is work to follow, Follow sit in the top bar. Enter sends a message, Shift+Enter writes a line. Capabilities lists the editors this server has; one that is not installed is shown as such and cannot be opened. Every surface and engine card lives in one pannable, zoomable scene, not tabs: the icon dock on the canvas's right edge " +
     "jumps the camera to one, Zoom out and Show all work [ ] frame them, and all engines stay mounted with their unsaved work. On a phone those buttons are folded into one small round button (Show the work buttons) until it is tapped, and fold away again after use. The person can send work between pieces themselves: a piece that can go somewhere has a node in its title bar (Send … to another window); they drag a line from it onto another window, or click it and pick the app, and what that piece is kept as (a picture as edited, an app's saved file) opens there with no turn, leaving an arrowed line between the two. You are told when they do (it reads 'connected … to …'); read the target window before relying on what was in it. The dock is not " +
     "there on a blank canvas, and Tidy joins it only once there is more than one piece of work: controls appear when the work needs them. A blank canvas shows nothing at all, no instructions: the canvas name, Load and Save arrive in the app's one top header (there is no second bar under it) with the first piece of work, and Undo and Redo once there is something to take back. Files are put on the canvas by dropping or pasting them; they sit there, and the controls for them come when you pick them. Every " +
     "window moves, resizes and maximises; x closes it. A window's own Full screen button is its Maximise (the whole room there is " +
@@ -38,12 +37,15 @@ const OVERVIEW = [
   "- Shared hands. In every window the person can work on the same thing at the same time. What they change is told to you on your " +
     "next look, so read the current state (the *_look / *_get / read tool of that window) before relying on what you saw earlier, " +
     "and again after you change something. Never overwrite the person's edit with an old copy.",
-  "- You are seen working. With Visible work on (the eye switch in the top bar, left of \"Follow\", or Settings), a labelled cursor " +
-    "pops in, moves in the window to what you are changing, clicks, and types, with a few words beside it about what that act is " +
-    "(made from the tool call: \"Clicking Save\", \"Making 3 changes\"). It is one cursor for the whole board, travelling between the " +
-    "windows. Shell commands have no cursor. When another agent of the Organization is working, the cursor is that agent's: its " +
-    "name, its colour and the shape of its mark. With Visible work off you work at speed: no cursor, the changes just land; " +
-    "switched off mid-work, the rest lands at once. Do not describe the motion; do the work, then say what you did in a line.",
+  "- Learn mode. The Learn switch in the top bar, beside the chat's permissions, is the person's choice for this chat. Off (the default) " +
+    "you work at your own speed: change files and tools directly and the windows show the result; no cursor is drawn and nothing is " +
+    "replayed. On, the person is learning the tools, so teach instead of doing: call learn_show with a short list of steps, each naming " +
+    "the real control to use (its label, or the words on it) and why; the page rings that control, waits until they have used it, and " +
+    "moves on. They can skip a step, leave the lesson, or ask you to do one step for them (it arrives as a message: do that one step " +
+    "directly and say so). Open the control that holds the next one before naming it, name only controls that are on screen, and for a " +
+    "control inside an editor's frame (which the page cannot ring yet) give the step no target and say where it is in words. When they " +
+    "say \"just do it\", do it at speed. With Learn off, \"show me how\" teaches that one thing the same way. Questions, reading, code " +
+    "and research are unchanged by Learn. Never do a lesson's steps for the person; the page tells you how far they got.",
   "- Saving and files. Every window saves as you go, and its top bar has Save: the person keeps a copy in Artifacts without " +
     "waking you. Artifacts are in folders, one per project; a chat that works on another chat's file (by its id) and that chat share " +
     "one folder from then on. Beside Save the bar has Load: a saved file the person picks opens in that window; if a window shows a " +
@@ -110,7 +112,7 @@ const TERMINAL = [
     "A stopped call with no final result says no result, not running forever.",
   "  Commands run non-interactively in their own process at the configured working folder or the explicit cwd you pass. " +
     "A cd, variable or activated environment from one call does not persist into the next; keep dependent setup and work in one command. " +
-    "With Visible work on or off there is no typing replay and no TTY. Use non-interactive flags; do not start vim, top, " +
+    "There is no typing replay and no TTY. Use non-interactive flags; do not start vim, top, " +
     "a password prompt or an ssh session that waits for input. A timeout or a stopped turn cancels the run. Do not print secrets: " +
     "output is shown in the conversation. Shell commands can be disabled in Panacea's Capability configuration on the Tools page.",
   "  Files: prefer read_file, edit_file and code_search to cat/sed/grep for source; they do not lose what the person saved " +
@@ -163,16 +165,12 @@ const PDF = [
     "look. What you add is marked in the window for them to accept or decline. Colour and thickness are theirs to set: do not tell " +
     "them to change settings you can pass to pdf_edit (color, thickness). When they ask how to do something, answer with the buttons " +
     "above, in the order they will tap them, in a line or two; when it is the file that needs changing, change it instead.",
-  "  With Visible work on and the window open on the file, pdf_edit is done in the window by your hand, live, as a person does it: " +
-    "your cursor picks the tool on the bar (or in All tools), sets its colour in the tool's card, scrolls to the page, drags a box " +
-    "for Text, Highlight and Shapes, clicks for Note and Stamps, draws ticks, crosses, curves and paths with Draw, types the words " +
-    "into the editor's own text box, clicks each form field and types into it or ticks it, then presses \"Fill N fields\", goes back " +
-    "to Select and saves with Ctrl+S. The person watches every step, and it is one change for them to accept or decline. It takes " +
-    "seconds per item, so send what the change needs, not trials. Only the five stamps the editor has (APPROVED, REJECTED, DRAFT, " +
-    "CONFIDENTIAL, REVIEWED) are pressed by hand; an item over several pages (page \"all\", \"2-5\", \"odd\", up to 12 pages) is done " +
-    "a page at a time. A picture, a signature, a watermark, page numbers and " +
-    "properties are done on the file afterwards, and the result says which. With Visible work off, or no window open, all of it is " +
-    "done on the file at once and the window shows the result.",
+  "  How a person makes a mark, for Learn and for answering questions: pick the tool on the bar (or in All tools), set its colour in " +
+    "the tool's card, scroll to the page, drag a box for Text, Highlight and Shapes, click for Note and Stamps, draw ticks, crosses, " +
+    "curves and paths with Draw, type the words into the editor's own text box, click each form field and type or tick it, then " +
+    "press \"Fill N fields\"; Select goes back to moving things and Ctrl+S saves. The editor has five stamps (APPROVED, REJECTED, " +
+    "DRAFT, CONFIDENTIAL, REVIEWED). pdf_edit itself works on the file at once: an item over several pages (page \"all\", " +
+    "\"2-5\", \"odd\") is one item, and the window shows the result as the agent's change for the person to accept or decline.",
   "  Saving. Edits are saved as you go. The window's top bar (Autora PDF, the file's name) also has Save: it presses the editor's own Save and says the file is kept in Artifacts. The person saves with it without asking you, and is not waiting on you when they do.",
   "  What the person has selected in a page (words in its text) is in your briefing for about two minutes after, with the page: when they say " +
     "\"this\" or \"these\", they mean that, so act on it without asking which.",
@@ -203,19 +201,12 @@ const VIDEO = [
     "is a button you can click with video_ui by its name. The keyboard shortcuts work on a desktop as ever. Point the person at a tool by " +
     "its name and say \"open All tools\" if it is not on their bar. The project's name is in the window's bar; above the preview is only " +
     "the projects menu (New project, Rename, Delete project, switching projects) and Export.",
-  "  With Visible work on and the window open, these video_edit actions are done there by your hand, live, while the call " +
-    "waits: split (the clip picked, the ruler clicked at the cut, Split pressed on the bar), delete (the clips picked, Delete " +
-    "pressed), move (the clip dragged along the timeline, or to another track), trim (its edges dragged), add_clip (the ruler " +
-    "clicked at its time, the media tile's \"+\" pressed in the Media panel), add_text (the same with the Text panel's " +
-    "\"Default text\", then the words, size, colour, alignment, weight and font typed or chosen in the Properties panel's own " +
-    "fields, and its end dragged to its length), set on a title (the clip picked and those same fields typed over), duplicate, " +
-    "copy, paste, separate_audio, toggle_mute and toggle_visibility (the clip picked and Duplicate, Copy, Paste, Extract audio, " +
-    "Mute or Show / hide pressed on the bar or in All tools), select, seek (the ruler clicked) and undo and redo (on the bar). " +
-    "A clip or title past the end of the timeline is added at the end and dragged out to its time. Your result says \"by hand in " +
-    "the Video window\", and where the editor landed somewhere else (snapping, a field that did not take it) what was then set " +
-    "exactly. Each is a person's step of undo. Every other action (effects, masks, keyframes, speed, tracks, scenes, the project's " +
-    "settings, a clip's other properties) is done by the editor directly, with your cursor pointing at where it lands. With " +
-    "Visible work off everything is done directly, at speed.",
+  "  How a person makes the edits: split (pick the clip, click the ruler at the cut, press Split on the bar), delete (pick the clips, " +
+    "Delete), move (drag the clip along the timeline, or to another track), trim (drag its edges), add a clip (click the ruler at its " +
+    "time, press the media tile's \"+\" in the Media panel), add text (the same with the Text panel's \"Default text\", then the " +
+    "words, size, colour, alignment, weight and font typed or chosen in the Properties panel's own fields, and its end dragged to its " +
+    "length), duplicate, copy, paste, Extract audio, Mute and Show / hide (pick the clip, then the bar's or All tools' button), seek " +
+    "(click the ruler), and undo and redo on the bar. video_edit does all of these directly, at speed, and each is a step of undo.",
   "  Panacea's Video panels drive this same project: Speed, Audio, Title and Picture act on one clip, chosen in the panel's Clip list " +
     "(else the first clip they suit: a title for Title, the film's picture for Picture), and Project sets the aspect and frame rate, " +
     "all by the editor's own commands. Export, Markers and Scenes hold the person's choices and words for you to act on with " +
@@ -280,17 +271,12 @@ const STUDIO = [
     "that no track is soloed or muted by accident, then studio_play so the person can hear it, and ask what to change. Bounce with one studio_export " +
     "only when they want a file. A tool's limits are in its description; use them (styles, swing, fill, spread, octave, beats_each) " +
     "rather than writing every note by hand.",
-  "  With Visible work on and the window open, your studio_song, studio_track, studio_clip, studio_notes and studio_make " +
-    "calls are done there by your hand, live, while the call waits: the name typed into the song's name field; tempo, key " +
-    "and bars set in the Song tray; Add track and the instrument, the name typed after a double-click; M and S pressed; " +
-    "levels dragged in the Mixer; a track's menu (Duplicate, Clear clips, Delete track); a clip drawn across its lane, " +
-    "dragged to its place or by its end, named in the piano roll's name field; Split, Duplicate and Delete on the bar; " +
-    "notes drawn in the piano roll (its Snap set to fit them) and hits clicked in the drum grid; the roll's own ♯ ♭ +8 −8, " +
-    "Clear, Humanize and Tidy timing; a track's instrument chosen in its menu (Instrument; drums and pitched instruments " +
-    "keep their kind once a track has notes); a velocity set by picking the notes and moving the roll's Force slider. Then the " +
-    "finished song goes in, with what had no control (a quantize at less than full strength, a window of notes, a velocity " +
-    "on drum hits) and the notes past the hand's limit of 48 a call; your result says which was which. With Visible work off " +
-    "(or the window shut) the song simply changes, the clips you touched lit for a moment.",
+  "  How a person makes the edits: the name typed into the song's name field; tempo, key and bars set in the Song tray; Add track and " +
+    "the instrument, the name typed after a double-click; M and S; levels dragged in the Mixer; a track's menu (Duplicate, Clear clips, " +
+    "Delete track, Instrument); a clip drawn across its lane, dragged to its place or by its end, named in the piano roll's name field; " +
+    "Split, Duplicate and Delete on the bar; notes drawn in the piano roll (its Snap set to fit them) and hits clicked in the drum " +
+    "grid; the roll's own sharp, flat, +8, -8, Clear, Humanize and Tidy timing; a velocity set by picking the notes and moving the " +
+    "roll's Force slider. The studio_* tools do the same directly, and the song simply changes, the clips you touched lit for a moment.",
   "  Saving. The song is saved as you go; the window's top bar (beside the song's name, before Export) also has Save (and Ctrl+S), which writes it now and keeps a copy in Artifacts as <song name>.song.json. Export makes the WAV.",
   "  Who did what in the song. Every change to the song in the Music window is a command in a log, with who made it (you, or the person working in the window) and a line saying what. " +
     "studio_history reads it: call it with since_revision (the revision you last saw) to learn what the person changed while you were not looking, instead of guessing from the notes. " +
@@ -338,14 +324,11 @@ const OFFICE = [
     "are there, and each does what the editor's own command does. Tell the person \"right-click the cell, Formatting, Cell colour\". " +
     "What the person has picked in a window (their words in Pages, the cell range in Sheets, a box on a slide) is in your briefing for about two " +
     "minutes after: when they say \"this\" or \"these\", they mean that, so act on it without asking which.",
-  "  With Visible work on and the document open in its window, office_edit's words are typed there by your hand, live, before the " +
-    "call returns: in Pages the words that change are selected and typed over, a new paragraph is typed after the one it follows and a " +
-    "removed one selected and deleted, and bold, italic or underline put on or taken off words by selecting them and pressing the " +
-    "editor's own shortcut; in Sheets each cell is gone to by typing its address in the name box, typed into and confirmed " +
-    "with the formula bar's tick; in Slides the box is opened on its slide and its words typed over. The person watches every key. Then " +
-    "the file your operations made goes in, so the document is exactly that, and what was not typing (other styles, tables, pictures, charts, " +
-    "a new slide or box) appears then; the result says what was typed by hand. It takes seconds per change, so send what the change " +
-    "needs. A new document (office_create) simply appears. With Visible work off, or no window open, the change simply appears.",
+  "  How a person makes the edits: in Pages the words that change are selected and typed over, a new paragraph is typed after the one " +
+    "it follows, a removed one selected and deleted, and bold, italic or underline put on or taken off words by selecting them and " +
+    "pressing the editor's own shortcut; in Sheets each cell is gone to by typing its address in the name box, typed into and confirmed " +
+    "with the formula bar's tick; in Slides the box is opened on its slide and its words typed over. office_edit makes the change in the " +
+    "file directly and the window shows the result; a new document (office_create) simply appears.",
   "  Saving. Edits are saved as you go. The window's top bar (the app, the file's name, Versions) also has Save: it presses the editor's own Ctrl+S, writes the file in Artifacts now and keeps a version named \"Saved by you\". The person saves with it without asking you.",
   "  Who did what in a workbook, a deck or a document. Every change to a workbook in the Sheets window, a deck in the Slides window, or a document in the Pages window, is a command in a log, with who made it (you, or the person typing in the window) and " +
     "a line saying what (cells in Sheets, words on slides in Slides, words in paragraphs in Pages). office_history reads it: call it with since_revision (the revision you last saw) to learn what the person changed while you were not looking, " +
@@ -383,30 +366,26 @@ const CAD = [
     "picked on its own. A phone has the Library as a card of its bar instead. " +
     "A tool that does not apply yet (Join with one shape picked) is dimmed. Name a tool by its button and say \"open All tools\" if " +
     "it is not on their bar. Everything they can do you can do with the cad_* tools, whatever is shown.",
-  "  With Visible work on and the window open where the person is looking, every call that changes the model is done there by " +
-    "your hand, live, while the call waits, with the modeller's own controls: shapes from the Shape tray (on a picked top face for " +
-    "onTopOf); cad_shape_draw and cad_shape_cut with Draw (corners tapped and Finish pressed, a rectangle or a circle dragged out, " +
-    "on the ground, a picked top face or a picked wall, Cut for a hole); shapes, faces and edges clicked in the view (Shift for each " +
-    "after the first, a click again to pick one shape inside its group); sizes and places typed into Size & position; a face's own " +
-    "number typed for cad_face_set and cad_face_push; names, All corners and Duplicate in Properties; colours, finishes and the finish's sliders " +
-    "(More for the rarer ones) in Material for cad_surface_set, its pattern and the pattern's sliders in Texture; Grow hair or Grow fur, Hair or Fur and " +
-    "the hair's sliders and colours in Hair for cad_hair_set; the surroundings and Brightness in Light for cad_scene_look; a turn by dragging the ring; a bevel by tapping the edge's handle and dragging Curved edge or Flat bevel; a repeat " +
-    "by stepping its count, dragging its dots and keeping the copies; Join, Subtract (once per cutter), Group, Ungroup, Delete and " +
-    "its question, Hide and Show hidden; Save to library, the Library's objects, globe and remove (in the parts pane, or the Library card on a phone), Edit object and Separate; " +
-    "Undo and Redo in the top bar; a cad_batch one command at a time; cad_doc_clear by picking everything and Delete. On a desktop the parts pane is used as a person uses it: shapes and objects are picked by their thumbnails (Shift for each after the first; with a long list, by typing the name in Search by name), named by double-clicking the name, saved with the bookmark under the thumbnail, and library objects are added, renamed, kept in every project or removed in its Library tab; cad_group_enter presses Edit inside and cad_group_exit presses Exit group (a view only: the model does not change, and with Visible work off nothing is shown).  To reach " +
-    "something your hand may let go of the pick, close a card, fit the model in view, scroll in or out, or look from another " +
-    "side, so the person's view can move. Then the finished model goes in, keeping the ids the window gave what the hand made. " +
-    "Your result says \"Done by hand in the 3D window\" with each step, and \"Not by hand\" with why for what was not: the " +
-    "window has no control for cad_doc_set, cad_library_import, cad_mesh_import (it reads a file), cad_mesh_build, cad_sculpt_blend, cad_sculpt_loft, cad_sculpt_smooth, cad_library_rename on a phone or a new outline in cad_shape_set, " +
-    "a picture in cad_surface_set (Picture… asks for a file from the person's computer), a sheen colour, a chosen hair seed, Draw's " +
-    "Cut goes all the way through (a shallower pocket goes in with the finished model), and the curve of a drawn shape's closing " +
-    "side; anything the hand could not reach. Calls that only read are not shown. With Visible work off, or nobody watching, " +
-    "every call changes the model at speed and the window shows it.",
+  "  How a person works the modeller: shapes from the Shape tray (on a picked top face for onTopOf); Draw for outlines and cuts (corners " +
+    "tapped and Finish pressed, a rectangle or a circle dragged out, on the ground, a picked top face or a picked wall, Cut for a hole); " +
+    "shapes, faces and edges clicked in the view (Shift for each after the first, a click again to pick one shape inside its group); " +
+    "sizes and places typed into Size & position; names, All corners and Duplicate in Properties; colours, finishes and the finish's " +
+    "sliders (More for the rarer ones) in Material, its pattern and sliders in Texture; Grow hair or Grow fur, Hair or Fur and the " +
+    "sliders and colours in Hair; the surroundings and Brightness in Light; a turn by dragging the ring; a bevel by tapping the edge's " +
+    "handle and dragging Curved edge or Flat bevel; a repeat by stepping its count, dragging its dots and keeping the copies; Join, " +
+    "Subtract (once per cutter), Group, Ungroup, Delete and its question, Hide and Show hidden; Save to library, the Library's objects, " +
+    "globe and remove (in the parts pane, or the Library card on a phone), Edit object and Separate; Undo and Redo in the top bar. On a " +
+    "desktop the parts pane picks shapes and objects by their thumbnails (Shift for each after the first; with a long list, by typing " +
+    "the name in Search by name), names them by double-clicking the name, saves them with the bookmark under the thumbnail, and its " +
+    "Library tab adds, renames, keeps in every project or removes library objects; Edit inside and Exit group enter and leave a group " +
+    "(a view only: the model does not change). The cad_* tools change the model directly, at speed, and the window shows it; the " +
+    "window has no control for cad_doc_set, cad_library_import, cad_mesh_import (it reads a file), cad_mesh_build, cad_sculpt_blend, " +
+    "cad_sculpt_loft, cad_sculpt_smooth, a picture in cad_surface_set (Picture asks for a file from the person's computer), a sheen " +
+    "colour, a chosen hair seed, or the curve of a drawn shape's closing side, so a lesson on those is in words.",
   "  Skeleton (the Rig card). All tools -> Rig (it joins the bar once the model has a skeleton) opens a card: Add skeleton makes the 29-bone bip29 biped fitted to the model's height; a tree lists the bones (picking one lights it in the view, and its joint can be dragged there, its branch following); Bind ties the shapes to it and says how many vertices and bodies are bound (a bound shape edited afterwards is marked stale: bind again); a picked bone gets Turn X, Y and Z sliders and Reset pose, a preview only. " +
-    "You do the same with cad_rig_add, cad_rig_get, cad_rig_bone_set (x right, y away, z up, like the rest), cad_rig_bind and cad_rig_pose, and cad_export with rig:true writes a skinned GLB in the rest pose (refused while a bound shape is stale). The window's Export GLB passes the skeleton when there is one. These calls are not done by hand yet: the model changes and the Rig card shows it.",
+    "You do the same with cad_rig_add, cad_rig_get, cad_rig_bone_set (x right, y away, z up, like the rest), cad_rig_bind and cad_rig_pose, and cad_export with rig:true writes a skinned GLB in the rest pose (refused while a bound shape is stale). The window's Export GLB passes the skeleton when there is one.",
   "  Shapes and pace. Shape's stock shapes include a Sphere (a true ball: width is its diameter; cad_shape_add kind sphere); by hand a ball was only a bevelled cylinder. " +
-    "With Visible work on you make every shape by hand at a person's pace, with a cursor typing into the window: a model of fifty shapes takes many minutes, and the window gives shapes its own ids (not body_2), so read each id from the reply and never guess the next one. " +
-    "For a big build say so and suggest the eye in the header (Visible work) off; with it off the same calls take seconds. cad_batch cannot use an id made earlier in the same batch: add the shapes, then use the ids it returned.",
+    "cad_batch cannot use an id made earlier in the same batch: add the shapes, then use the ids it returned.",
   "  Organic forms. When the person wants something alive or soft (a horse, a face, a creature, a bottle), build it rather than extruding outlines. " +
     "cad_sculpt_blend melts parts into ONE smooth shape: spheres, tapered capsules (a limb or neck: at, to, radius and radius2 at the ends), ellipsoids (a body or head: radii along x, y, z) and rounded boxes (radii, round), in mm with x, y on the ground and z up. " +
     "An ellipsoid or box can be turned ({x, y, z} degrees); a part with carve:true is taken out instead (a socket, a mouth, a gap), and parts apply in order, so one listed after a carve fills back in; a part's color paints the surface where it is nearest (a dark mane, white socks) and the rest keeps the shape's colour; a part's own smooth overrides the blend's (small for a crease, large for a cheek). " +
@@ -416,7 +395,7 @@ const CAD = [
     "Detail (up to 256) is spread over the whole form, so make small fine parts (a hand) as their own blend and join them; a call that would take too long is made coarser and the reply says so. " +
     "cad_mesh_build makes a shape from triangles you write out (vertices [x, y, z] mm, triangles [a, b, c]; optional uvs and per-vertex colors), for a low-poly form, a gem, a rock or terrain, or exact control: wound inside out it is turned round, and the reply says if edges are open (a sheet, not a solid). " +
     "A realistic person or face is not built from parts: it comes out uncanny. Suggest a free CC0 model (cad_mesh_import) the person can then paint, join and sculpt, or a stylised form they shape with the Sculpt brush. " +
-    "All of these make a mesh shape, so move, turn, resize, recolour, group and export work and outline edits do not; cad_shapes_join and cad_shapes_subtract combine closed mesh shapes (with each other or with ordinary shapes) as solids into one mesh shape, each part's colour kept as paint (cad_sculpt_smooth then softens the seams). The window has no controls for them yet, so with Visible work on they say \"Not by hand\". " +
+    "All of these make a mesh shape, so move, turn, resize, recolour, group and export work and outline edits do not; cad_shapes_join and cad_shapes_subtract combine closed mesh shapes (with each other or with ordinary shapes) as solids into one mesh shape, each part's colour kept as paint (cad_sculpt_smooth then softens the seams). " +
     "This is creative work: show the person your plan (the parts, the sizes) and ask what they want different before you refine; they decide the character of the form, you do the numbers.",
   "  The tool bar is contextual. It shows only what the moment needs: with nothing made it is Shape and Draw (and Library once an object is saved), with a shape picked it adds Move, Size & position, Material, Hide, Delete and the rest that apply, Sculpt only for a mesh shape, Texture only once it has a pattern or picture and Hair only once it has hair (Material's foot opens either before then), Light only in All tools, Join and Subtract only with two or more picked, and Export & file once there is something to export. A tool with nothing to act on is not on the bar, so do not tell the person to press one that is not there: tell them what to pick first, or point to All tools (the grid icon at the bottom of the bar), which lists every tool and says what each needs. " +
   "  Who did what. Every change to the model is a command in a log, with who made it (you, or the person in the window) and a short account. cad_history_log reads it: call it with since_revision (the revision you last saw) to learn what the person changed while you were not looking, instead of guessing from the shapes. Some commands are the person's own hand and are not given to you at all (a brush stroke); if you try one you are refused, so suggest it and say where the tool is. The person can go back to before any command; that is a new change on top, so it can be undone and it shows in the log as history_revert. " +
@@ -485,8 +464,7 @@ const GAME = [
     "tool in groups (Play, Build, Make it do things, Scenes, View, Edit, Game, Share, Advanced): scene settings and variables, 2D/3D view, " +
     "grid, zoom, Pictures & sounds, Game settings, Export web game (a .zip), and under Advanced the Rules sheet (the game's events; a " +
     "Back to the scene chip returns). Name a tool by its button and say \"open All tools\" if it is not on their bar. You have every part " +
-    "of the game through the game_* tools whatever is shown. Visible work is not here yet for this window (nothing on its bar says so): " +
-    "no cursor is played over a game you have already changed. The game is changed and the editor reloads it.",
+    "of the game through the game_* tools whatever is shown. The game is changed and the editor reloads it.",
   "  3D models and physics. game_from_model brings shapes of the chat's Autora 3D model (by shape or group name; none means everything " +
     "visible) into the game as a 3D object (Scene3D::Model3DObject, kept as a GLB resource, standing on its z, its size the model's mm in " +
     "pixels at scale), with rigid-body physics on GDevelop's Physics3D behaviour (Jolt) when asked: physics.feel is the person's words " +
@@ -549,8 +527,7 @@ const PANACEA = [
     "Typing and dragging freeze automatic density/revelation, original atom identities stay stable, and pinned panels reveal advanced " +
     "controls only when the person opens More. Suggestions never move the person's caret or pinned panel. Show all work in the bottom-left " +
     "dock frames native and hosted work without changing their positions; its work icons jump the camera to existing items. Hidden workspace " +
-    "containers wait for visible space before fitting. Visible hand work does not claim an off-camera editor; the existing safe file path " +
-    "can do that work without pretending the person watched. Engine-local cursor coordinates include the shared camera's scale.",
+    "containers wait for visible space before fitting.",
   "  It is proactive, and stays easy to correct. A photo brings light and colour panels with it and offers looks as a ghost; a table " +
     "brings a chart and a category filter and offers Explore. A telling value (exposure pushed far, a photo turned black and white, a " +
     "table filtered to one category) offers the next panel as a ghost. While the person works, a small model may offer one more ghost " +
@@ -565,8 +542,7 @@ const PANACEA = [
     "buttons lays them in rows with none over another. The canvas keeps where each is, so a reload finds them. You do the same with " +
     "panacea_arrange: `windows` [{window: \"Music\", x, y, w, h, do: maximise|restore|front}], `surfaces` [{id, x, y, w, h}], `tidy` " +
     "(\"all\", \"windows\" or \"surfaces\"). panacea_look lists the windows and where they are, front first. A window is not on the " +
-    "canvas until its app has been opened. Lay out only what the work needs (a window the person is not using need not move); with " +
-    "Visible work on the hand does each by the same gesture.",
+    "canvas until its app has been opened. Lay out only what the work needs (a window the person is not using need not move).",
   "  What the person sees and does: panels with a title bar (drag it to move, the right edge to widen, the pin to keep it, × to put it " +
     "away, Shift+click to pick several, then Group); double-click the grid or press / for the picker (search the library, pick, and it " +
     "lands there; it also has blank pieces: a slider, switch, choice, notes, checklist or colour, and a Board, Flowchart or Document, " +
@@ -633,18 +609,15 @@ const PANACEA = [
     "or in the chat, and only then can you move past the first phase. Tick steps as they are done, record the person's choices as " +
     "decisions, and link pieces that belong together. Who decides follows the piece: code, data and wiring are yours to do in full; " +
     "the look, the words and the feel are theirs, and you suggest. The person can start a project themselves from the picker (Project).",
-  "  With Visible work on and somebody watching, every Panacea call that changes the canvas is done there by your hand, live, while " +
-    "the call waits, with the view moved and zoomed to where you work: every new panel summoned the way the person does it (the grid " +
-    "double-clicked where it goes, its name typed in the picker, the result clicked; one you composed, a bespoke draft or an offer is " +
-    "listed there as yours); a value set with its control (dragging a slider, knob, range, xy pad or curve point, pressing a switch, " +
-    "segment, swatch, chip or step pad, choosing in a menu, typing into a field or a list, double-clicking a lane for a block), with " +
-    "More opened when it is under More; a panel dragged by its title bar or put away with its ×; a board, flowchart or document " +
-    "added from the picker, a table pasted, a file dropped, a surface removed with its ×; a document's words typed in (with # for a " +
-    "heading, - for a bullet), a block rewritten or deleted after selecting it, a block formatted with its Style, Align or Bold " +
-    "controls; a board's cards made by double-clicking the space and typing, rewritten, dragged, linked by dragging a dot onto " +
-    "another card, unlinked or taken away with Delete. Long passages are typed faster, not cut. Then the finished canvas goes in " +
-    "exactly as the call made it; your result says what was done by hand and anything that could not be (a value no panel shows). " +
-    "With Visible work off (or nobody watching) the canvas simply changes, and values glide to where you set them.",
+  "  How a person works the canvas: a new panel is summoned by double-clicking the grid where it goes, typing its name in the picker " +
+    "and clicking the result; a value is set with its control (dragging a slider, knob, range, xy pad or curve point, pressing a " +
+    "switch, segment, swatch, chip or step pad, choosing in a menu, typing into a field or a list, double-clicking a lane for a " +
+    "block), with More opened when it is under More; a panel is dragged by its title bar and put away with its x; a board, " +
+    "flowchart or document is added from the picker, a table pasted, a file dropped, a surface removed with its x; a document's " +
+    "words are typed in (with # for a heading, - for a bullet), a block rewritten or deleted after selecting it, formatted with its " +
+    "Style, Align or Bold controls; a board's cards are made by double-clicking the space and typing, rewritten, dragged, linked by " +
+    "dragging a dot onto another card, unlinked or taken away with Delete. The panacea_* tools change the canvas directly and values " +
+    "glide to where you set them.",
   "  What the person sees of a window. A piece of work on the board is the work and its name, nothing else: an app's window shows its " +
     "file's name on one strip, with no sentence about the app and no \"saved\" note (saving is silent; only \"Saving…\" or \"Not saved\" " +
     "is said). Its controls (Load, Save, Take control, Export, the Send dot, Maximise, Pin, Close) are there while the person is in that " +
@@ -692,11 +665,9 @@ const PHOTO = [
     "(Select, Paint, Retouch, Type and shapes...), the three cards, and every live command of the menus under its menu's name (File, Edit, " +
     "Image, Layer, Filter...), with a search box. Name a tool by its button and say \"open All tools\" if it is not on their bar. The " +
     "editor's keyboard shortcuts work on a desktop as ever. You have every tool and command through the photo_* tools whatever is shown. " +
-    "With Visible work on and the window open, photo_edit is done in the window by your hand, as a person does it: your cursor opens " +
-    "All tools, types the command's name in its search, clicks its tile, sets each of your values in the command's own dialog and " +
-    "clicks OK, so the person watches every step. That takes a few seconds per command: send the commands the change needs, not " +
-    "experiments. A command with no tile in All tools runs as the editor's command, and its result says so. With Visible work off, " +
-    "or no window open, the edit runs at once on the server's copy and the window shows the result.",
+    "A person runs a command by opening All tools, typing its name in the search, clicking its tile, setting its values in the " +
+    "command's own dialog and clicking OK. photo_edit runs at once on the server's copy and the window shows the result: send the " +
+    "commands the change needs, not experiments. A command with no tile in All tools is still a command of the editor.",
   "  Saving. The picture is saved as you go; the window's top bar (Autora Photo, its size and layers), on a desktop too, has Save, which keeps a PNG of it in Artifacts named after the chat (the layered picture stays in the window). photo_export is still yours for other formats.",
   "  The layer the person is on in the window is in your briefing for about two minutes after it changes: when they say \"this layer\" or " +
     "\"this\", they mean that one, so act on it without asking which.",
@@ -740,7 +711,7 @@ const WORK_MODES: Partial<Record<ManualId, string>> = {
 export const manualText = (id: ManualId): string => {
   const mode = WORK_MODES[id];
   return (mode ? `Panacea · ${mode}. Use its right-side work icon to jump the shared camera to this integrated work card. The engine's own controls, ` +
-    "Load, Save and visible-work handlers remain inside Panacea; engine names in this reference are not separate applications " +
+    "Load and Save handlers remain inside Panacea; engine names in this reference are not separate applications " +
     "or tabs. All work stays mounted in the same scene; the shared workspace header says Panacea and the inner bar shows the file/project. " +
     "Native canvas undo covers native surfaces only; this engine retains its own undo and save paths.\n" : "") + MANUALS[id];
 };

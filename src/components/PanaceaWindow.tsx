@@ -14,7 +14,6 @@ import { bindsOf, parseBind, type Node } from "../lib/panacea/recipe";
 import { addSurfaceTo, placeRecipe, type SurfaceInput } from "../lib/panacea/rules";
 import { filteredRows, looksTabular, splitDelimited, tableCsv, tableFrom } from "../lib/panacea/surfaces";
 import { onPanaceaCommand } from "../lib/panacea";
-import type { HandStep } from "../lib/panacea/handsteps";
 import { Board, type BoardHandle, type NewFileKind } from "./panacea/Board";
 import { LibraryPicker } from "./LibraryPicker";
 
@@ -26,7 +25,6 @@ import { createProject, type Project } from "../lib/panacea/project";
 import { standaloneSvg } from "./panacea/Chart";
 import { PanaceaCtx, type PanaceaApi } from "./panacea/context";
 import { History } from "./panacea/History";
-import { runPanaceaHand, type HandPending } from "./panacea/hand";
 import { autoSettings, renderFull } from "./panacea/imagegl";
 import type { PanelActions } from "./panacea/PanelCard";
 import { pictureOf } from "./panacea/Surfaces";
@@ -102,7 +100,6 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
   const [toast, setToast] = useState<string | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const board = useRef<BoardHandle | null>(null);
-  const pending = useRef<HandPending | null>(null);
   const saveRef = useRef<HTMLSpanElement>(null);
   const touched = useRef(new Set<string>());
   const activityTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -449,28 +446,17 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
 
   // ------------------------------------------------------------- board --
 
-  /** The agent's hand added a surface the way a person would (picker, paste, drop): put in the server's own, as planned. */
-  const putPendingSurface = useCallback((): boolean => {
-    const made = pending.current?.surface;
-    if (!made) return false;
-    edit((d) => { if (!d.surfaces.some((s) => s.id === made.id)) d.surfaces.push(structuredClone(made)); }, `Added ${made.title}`);
-    return true;
-  }, [edit]);
-
   const pickRecipe = useCallback((r: Recipe, at: { x: number; y: number }) => {
-    const forced = pending.current;
-    if ((r.id === BOARD_PIECE || r.id === FLOWCHART_PIECE || r.id === DOC_PIECE) && putPendingSurface()) return;
-    // A project: the agent's hand puts in the server's (pending), a person gets one in three phases, theirs to rename.
+    // A project: a person gets one in three phases, theirs to rename.
     if (r.id === PROJECT_PIECE) {
-      const theirs = forced?.project;
-      const made = theirs ?? createProject({ title: live.current.name === "Canvas" ? "Project" : live.current.name, by: "person" });
+      const made = createProject({ title: live.current.name === "Canvas" ? "Project" : live.current.name, by: "person" });
       if (typeof made === "string") { setProblem(made); return; }
       edit((d) => {
-        if (d.project && !theirs) return;
+        if (d.project) return;
         d.project = structuredClone(made);
         for (const s of d.surfaces) s.phase ??= made.phase;
       }, "Started a project");
-      if (!theirs) void tell(`started a project, "${made.title}"`);
+      void tell(`started a project, "${made.title}"`);
       return;
     }
     // A document: a surface of its own, blank, where it can be seen whole.
@@ -484,17 +470,8 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
       else void tell("added a document to write in");
       return;
     }
-    // The agent's hand picked what it made (handOffer.ts): put in the server's own panel, where it said.
-    if (forced?.panel) {
-      const made = forced.panel;
-      edit((d) => {
-        if (d.panels.some((p) => p.id === made.id)) return;
-        d.panels.push({ ...structuredClone(made), x: forced.at.x, y: forced.at.y });
-      }, `Summoned ${made.title}`);
-      return;
-    }
     // Not a panel: a board, a surface of its own, where it was asked for.
-    if ((r.id === BOARD_PIECE || r.id === FLOWCHART_PIECE) && !forced) {
+    if ((r.id === BOARD_PIECE || r.id === FLOWCHART_PIECE)) {
       let err: string | null = null;
       edit((d) => {
         // Where it can be seen whole, as an agent's surface is: a board is too big to hang off the point they double-clicked.
@@ -517,13 +494,13 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
     let placed: Panel | null = null;
     edit((d) => {
       // Where the person asked for it, or the free spot nearest there: it never lands on top of something.
-      const spot = forced?.at ?? nearestFree(d, recipe.w, estimateHeight(recipe.tree, recipe.w), { x: at.x + recipe.w / 2, y: at.y + 40 });
-      const p = placeRecipe(d, recipe, { at: spot, ...(forced ? { id: forced.id } : {}), by: forced ? "agent" : "person", why: forced ? "Autora summoned it." : "You added it.", side: preferredSide(profile) });
+      const spot = nearestFree(d, recipe.w, estimateHeight(recipe.tree, recipe.w), { x: at.x + recipe.w / 2, y: at.y + 40 });
+      const p = placeRecipe(d, recipe, { at: spot, by: "person", why: "You added it.", side: preferredSide(profile) });
       if ("error" in p) setProblem(p.error);
       else placed = p;
     }, `Summoned ${r.name}`);
-    if (placed && !forced) void tell(`summoned "${r.name}"`, { kind: "use", recipe: r.id });
-  }, [edit, find, live, profile, tell, putPendingSurface]);
+    if (placed) void tell(`summoned "${r.name}"`, { kind: "use", recipe: r.id });
+  }, [edit, find, live, profile, tell]);
   const onPick = useCallback((recipe: Recipe, at: { x: number; y: number }) => {
     if (nativeOpen && doc.ready) { pickRecipe(recipe, at); return; }
     void (async () => {
@@ -573,7 +550,6 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
   }, [edit, find, profile, tell]);
 
   const onFiles = useCallback((files: File[], at: { x: number; y: number }) => {
-    if (putPendingSurface()) return;
     void (async () => {
       let added = false;
       for (const [i, f] of files.slice(0, 4).entries()) {
@@ -620,7 +596,7 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
          edge: frame it all once, because the person just asked for this. */
       if (added) window.setTimeout(() => board.current?.fit(), 900);
     })();
-  }, [base, addSurface, refresh, nativeOpen, onJump, sessionId, putPendingSurface]);
+  }, [base, addSurface, refresh, nativeOpen, onJump, sessionId]);
   const loaded = useCallback(async (result: { kind?: string; engine?: string }) => {
     if (result.kind === "engine") {
       const mode = workspaceMode(result.engine ?? "");
@@ -666,7 +642,6 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
   }, [sessionId, loaded]);
 
   const onPaste = useCallback((text: string, at: { x: number; y: number }) => {
-    if (putPendingSurface()) return;
     // Rows (most lines split the same way by tabs, commas or semicolons) are a table; anything else is words, and
     // lands as a page that is the person's to write on.
     const table = looksTabular(text) ? tableFrom(splitDelimited(text)) : null;
@@ -679,7 +654,7 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
     const first = plain.split("\n")[0]!.replace(/^#{1,6}\s+/, "").trim();
     const title = first && first.length <= 48 ? first : "Pasted text";
     addSurface({ kind: "doc", name: `${title}.md`, title, doc: createDoc(marked ? plain : plain.replace(/\n+/g, "\n\n"), "guide"), at });
-  }, [addSurface, putPendingSurface]);
+  }, [addSurface]);
 
   const onRemoveSurface = useCallback((s: Surface) => {
     edit((d) => { removeSurface(d, s.id); }, `Removed ${s.title}`);
@@ -719,19 +694,7 @@ export function PanaceaWindow({ sessionId, hosted = [], nativeOpen = true, scene
         const reply = (ok: boolean, value: unknown) =>
           fetch(`${base}/reply`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: cmd.id, ok, value }) }).catch(() => undefined);
         try {
-          if (cmd.name === "hand") {
-            const el = root.current;
-            if (!el || !board.current) throw new Error("The canvas is not on screen.");
-            const steps = Array.isArray(cmd.args.steps) ? (cmd.args.steps as HandStep[]) : [];
-            /* The steps were planned from the canvas as the server has it: the agent's last change may not have reached
-               this page yet (two calls a moment apart), so take it, and let it draw, before the hand starts. */
-            await saveNow();
-            await refresh();
-            await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
-            const out = await runPanaceaHand(steps, { root: el, board: board.current, pending });
-            await saveNow();
-            await reply(true, out);
-          } else if (cmd.name === "render") {
+          if (cmd.name === "render") {
             const s = live.current.surfaces.find((x) => x.id === cmd.args.surface);
             const img = s ? pictureOf(s.id) : null;
             if (!s || !img) throw new Error("That picture is not loaded in the window.");

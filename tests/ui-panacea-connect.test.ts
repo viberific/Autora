@@ -60,7 +60,6 @@ async function main() {
   const browser = await chromium.launch({ executablePath: CHROME });
   const errors: string[] = [];
   try {
-    await app.api("PATCH", "/api/agent-cursor", { on: false });
     const open = async (name: string, engines: string[] = []) => {
       const s = await app.newSession(name, "build");
       await app.api("POST", `/api/panacea/${s}/open`);

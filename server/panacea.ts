@@ -14,8 +14,6 @@
  * The library is the built-in recipes (src/lib/panacea/library.ts) and what has been composed and used since, kept
  * once per install and deduplicated by shape; the profile is kept once per install too.
  *
- * With Visible work on and the window up, an agent's change is done there by its hand (src/lib/panacea/handsteps.ts):
- * the window's own picker, sliders and switches, while the call waits.
  */
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -27,7 +25,6 @@ import {
   contextOf, describeCanvas, enterPhase, fade, MAX_PANELS, newCanvas, normalizeCanvas, refocus, removeSurface, restore,
   setValue, snap, uid, valueProblem, wordsOwner, PANEL_MAX_W, PANEL_MIN_W, type Canvas, type Panel, type Surface,
 } from "../src/lib/panacea/canvas";
-import { panaceaSteps, stepWords } from "../src/lib/panacea/handsteps";
 import { addFlow, type Flow } from "../src/lib/panacea/flows";
 import type { Join } from "../src/lib/panacea/joins";
 import { WORKSPACE_MODES, type WorkspaceMode } from "../src/lib/workspace";
@@ -109,14 +106,6 @@ interface Saved {
 
 const entries = new Map<string, Entry>();
 const listeners = new Set<(session: string) => void>();
-let visible: (session: string) => boolean = () => false;
-/** Whether Visible work is on and somebody has this chat on screen to watch it (server.ts says). */
-export function panaceaVisible(fn: (session: string) => boolean) {
-  visible = fn;
-}
-
-/** How long a change waits for a window it has just opened to come up, so even the first one is done by hand. */
-const HAND_OPEN_WAIT_MS = 8_000;
 
 const validSession = (id: string) => /^[A-Za-z0-9_-]{1,80}$/.test(id);
 const savedName = (session: string) => `panacea-${session}`;
@@ -382,30 +371,6 @@ export function noteFlow(session: string, flow: Omit<Flow, "at">): void {
   next.flows = addFlow(next.flows ?? [], { ...flow, at: Date.now() });
   e.quiet = e.rev + 1;
   commit(session, e, next, "agent");
-}
-
-/** With Visible work on and the window up, the change is done there by the agent's hand while this waits. */
-async function byHand(session: string, e: Entry, next: Canvas): Promise<string | null> {
-  if (!visible(session) || !e.open) return null;
-  /* The call has just opened the window (setOpen marks it not ready until the page has drawn it): wait for it, or
-     the first change of a chat -- usually the one the person is watching for -- appears instead of being done. */
-  for (let waited = 0; !e.ready && waited < HAND_OPEN_WAIT_MS; waited += 150) await sleep(150);
-  if (!e.ready) return null;
-  const plan = panaceaSteps(e.canvas, next);
-  if (!plan.steps.length) return null;
-  type Reply = { results?: Array<{ i: number; ok: boolean; error?: string }> } | null;
-  let reply: Reply;
-  try {
-    reply = (await command(session, "hand", { steps: plan.steps }, 30_000 + plan.steps.length * 12_000, 4000)) as Reply;
-  } catch {
-    return null;
-  }
-  const results = reply?.results ?? [];
-  const did = results.filter((r) => r.ok).map((r) => stepWords(plan.steps[r.i]!));
-  const not = results.filter((r) => !r.ok).map((r) => `${stepWords(plan.steps[r.i]!)} (${r.error ?? "not done"})`);
-  if (!did.length) return null;
-  return `Done by hand in the Panacea window, where the person watched: ${did.join("; ")}.` +
-    (not.length || plan.skipped ? ` Not by hand (in the finished canvas, which is in the window now): ${[...not, ...(plan.skipped ? [`${plan.skipped} more change${plan.skipped === 1 ? "" : "s"} with no control on screen`] : [])].join("; ")}.` : "");
 }
 
 // ------------------------------------------------------------- suggesting --
@@ -1363,13 +1328,8 @@ export async function runPanaceaTool(session: string, name: string, args: Record
         const next = structuredClone(e.canvas);
         const done = edit(session, name, next, modelled.args, hooks);
         setOpen(session, true);
-        // Stop ends the wait for the window's hand at once (the page halts the hand itself: src/lib/handHalt.ts).
-        hooks.onCancel?.(() => hs.cancelAll(session, "Stopped by the person."));
-        const hand = await byHand(session, e, next);
-        if (hooks.cancelled?.()) return { ok: false, summary: "Stopped by the person before this was done: the canvas keeps what the hand had done so far, and nothing more." };
-        if (hand) e.quiet = e.rev + 1;
         commit(session, e, next, "agent", done.text.split("\n")[0]!.slice(0, 160));
-        return { ok: true, summary: `${done.text}${modelNote}${hand ? ` ${hand}` : ""}`, preview: done.preview };
+        return { ok: true, summary: `${done.text}${modelNote}`, preview: done.preview };
       }
 
       case "panacea_export": {

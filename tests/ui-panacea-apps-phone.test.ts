@@ -39,7 +39,6 @@ async function main() {
   const browser = await chromium.launch({ executablePath: exe });
   const errors: string[] = [];
   try {
-    await app.api("PATCH", "/api/agent-cursor", { on: false });
     const until = async (what: string, fn: () => Promise<boolean> | boolean, ms = 10_000) => {
       const end = Date.now() + ms;
       while (Date.now() < end) { if (await fn()) return; await sleep(100); }

@@ -27,7 +27,6 @@ async function main() {
   const browser: Browser = await chromium.launch({ executablePath: exe });
   const errors: string[] = [];
   try {
-    await app.api("PATCH", "/api/agent-cursor", { on: false });
     const until = async (what: string, fn: () => Promise<boolean> | boolean, ms = 15_000) => {
       const end = Date.now() + ms;
       while (Date.now() < end) { if (await fn()) return; await sleep(100); }
@@ -118,31 +117,6 @@ async function main() {
       await page.waitForSelector('button[aria-label="Restore Music"]');
       await page.locator('button[aria-label="Restore Music"]').click();
       await until("the window is as it was", async () => { const w = (await wins(s)).find((x) => x.id === "engine:studio")!; return !w.was && w.w === was.w && w.h === was.h; });
-    });
-    await test("with Visible work on, the agent lays a window out by hand: its title bar is dragged and its corner sized", async () => {
-      await app.api("PATCH", "/api/agent-cursor", { on: true });
-      const page2 = await (await browser.newContext({ viewport: { width: 1600, height: 1000 } })).newPage();
-      page2.on("pageerror", (e) => errors.push(e.message));
-      await page2.goto(`${app.base}/?session=${s}`);
-      await page2.waitForSelector('.pw-engine[data-work="engine:cad"]');
-      await sleep(2500);
-      const now = (await wins(s)).find((w) => w.id === "engine:cad")!;
-      const target = { x: now.x + 320, y: now.y + 160, w: now.w + 160, h: now.h };
-      let done = false;
-      app.decide = (req) => {
-        if (/You check one action/.test(req.system)) return { text: '{"destructive": false, "requested": true}' };
-        if (done) return { text: "Moved." };
-        done = true;
-        return { tools: [{ name: "panacea_arrange", args: { windows: [{ window: "3D", ...target }] } }] };
-      };
-      app.seen.length = 0;
-      const events = await app.turn(s, "move the 3D window and make it wider", 150_000);
-      assert.deepEqual(events.filter((e) => e.kind === "tool.error").map((e) => e.payload.error), [], "no tool failed");
-      const said = app.seen.map((r) => JSON.stringify(r.messages.filter((m) => m.role === "tool"))).join("\n");
-      assert.match(said, /Done by hand in the Panacea window, where the person watched: moved 3D; sized 3D/, "the hand did both");
-      await until("the canvas has the window where it was told", async () => { const w = (await wins(s)).find((x) => x.id === "engine:cad")!; return Math.abs(w.x - target.x) <= 16 && Math.abs(w.y - target.y) <= 16 && Math.abs(w.w - target.w) <= 16; });
-      await page2.context().close();
-      await app.api("PATCH", "/api/agent-cursor", { on: false });
     });
     await page.context().close();
 

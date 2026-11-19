@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { DOMAIN_NAMES, searchLibrary, type Recipe } from "../../lib/panacea/library";
 import type { Node } from "../../lib/panacea/recipe";
-import { handOffer, OFFER_PREFIX } from "./handOffer";
 
 /** The picker's way to a board: not a panel but a surface, which the window adds where the person double-clicked. */
 export const BOARD_PIECE = "blank.board";
@@ -73,10 +72,7 @@ export function Summon({ x, y, recipes, onPick, onClose }: {
     const lib = words ? searchLibrary(recipes, words, null, 9) : searchLibrary(recipes, "", null, 6);
     const w = words.toLowerCase();
     const extra = words ? blanks.filter((b) => b.name.toLowerCase().startsWith(w) || b.tags.some((t) => t.startsWith(w))) : blanks;
-    // The agent's hand looking for what it made (handOffer.ts): first, under the name it typed.
-    const offer = handOffer();
-    const mine = offer && (!w || offer.name.toLowerCase().includes(w)) ? [offer] : [];
-    return [...mine, ...lib.filter((r) => !r.id.startsWith(OFFER_PREFIX)), ...extra];
+    return [...lib, ...extra];
   }, [q, recipes, blanks]);
   useEffect(() => setAt(0), [q]);
   const key = (e: ReactKeyboardEvent) => {
@@ -91,7 +87,7 @@ export function Summon({ x, y, recipes, onPick, onClose }: {
       <div className="pa-summon-list" role="listbox">
         {found.map((r, i) => (
           <button key={r.id} type="button" role="option" aria-selected={i === at} data-recipe={r.id} className={i === at ? "is-on" : ""} onMouseEnter={() => setAt(i)} onClick={() => onPick(r)}>
-            <b>{r.name}</b><span>{r.id.startsWith(OFFER_PREFIX) ? "Autora's" : r.id.startsWith("blank.") ? "Blank" : DOMAIN_NAMES[r.domain]} · {r.about}</span>
+            <b>{r.name}</b><span>{r.id.startsWith("blank.") ? "Blank" : DOMAIN_NAMES[r.domain]} · {r.about}</span>
           </button>
         ))}
         {!found.length && <p className="pa-note">Nothing called that. Ask Autora below: it can make one.</p>}

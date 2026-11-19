@@ -154,14 +154,15 @@ non-creative work completely. Ask of every feature: is there creativity in this?
   chat, by the person: the header's Yolo / Ask selector (`permissions`, with
   `ask_when` for when to ask, in `server/modes.ts`). Don't make Ask the
   default or add approval prompts anywhere else unless asked.
-- Visible work (the Visible switch, `state.agentCursor`) means the agent uses the app as a person does: with it on, every
-  click, move, selection, keystroke and adjustment in a tool window goes through that window's own controls (real text
-  selected and typed into, the real tool or menu opened, the real slider, the real OK), with its cursor travelling there at a
-  person's pace. It is live, not a recording: the person watches the work as it is being done, and the tool call is not
-  finished until the window has done it. Never change the file first and show it afterwards (a cursor played over the
-  result, staged copies swapped in while a cursor pretends to type): that is a replay. With it off (or nobody
-  watching) the agent may change files directly, at speed. A window that still replays is a gap, listed in
-  `docs/VISIBLE-WORK.md`; a change to a window's agent path closes its gap or keeps that list true.
+- There is no agent cursor. The agent works at its own speed in every window and the window shows the result. A chat's Learn
+  mode (the header's Learn switch, `session.learn`, `docs/LEARN.md`) is how the agent teaches the tools instead: it calls
+  `learn_show` with steps that name real controls, the page rings each one and waits until the person has used it, and the agent
+  does not do the steps for them. With Learn on, a request to do something in a tool window is taught, not done, unless the
+  person says "just do it" or presses "Do this one for me"; with it off, "show me how" teaches that one thing. A lesson is
+  never started on its own (the offer chip, "Show me" when someone seems stuck, is planned: `docs/LEARN.md`). Never change a file first and then point at it, and
+  never replay work as an animation (a cursor typing over a finished file): the ring points at a control that is really there.
+  A window whose controls the page cannot find (a sandboxed editor's frame) says the step in words until that frame answers
+  where its control is; a change to a window's UI keeps its handbook entry true and, where it can, its Learn targets.
 - A chat also has a work mode, chosen in the message box: Agent (the default:
   plans first, then switches itself to build with `set_mode`; the switches show in the thread, the
   selector stays on Agent), Build (works straight away) or Plan (read-only).

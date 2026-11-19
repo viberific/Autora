@@ -71,9 +71,7 @@ import {
 import { folderOfFile, getFolder, joinWork } from "./folders";
 import { checkWidget } from "./widgets";
 import { deskHooks } from "./pdfdesk";
-import { handToWindow } from "./pdfhand";
 import { officeHooks } from "./officedesk";
-import { handToWindow as officeHandToWindow } from "./officehand";
 import { runPdfTool } from "./pdf";
 import { runVideoTool } from "./opencut";
 import { loadSong, runStudioTool, studioBriefing, studioState } from "./studio";
@@ -181,6 +179,9 @@ import { makesTimerOrWake, waitsInside } from "./guard";
 import { browserSPECS } from "./specs/browser";
 import { computerSPECS } from "./specs/computer";
 import { personSPECS } from "./specs/person";
+import { learnSPECS } from "./specs/learn";
+import { runLearnShow } from "./learn";
+import type { LessonStep } from "../src/lib/learn";
 import { voiceSPECS } from "./specs/voice";
 import { vendorSPECS } from "./specs/vendor";
 import { VENDORS, vendorReady } from "./vendor";
@@ -260,6 +261,7 @@ const TOOLS: ToolSpec[] = [
   ...browserSPECS,
   ...computerSPECS,
   ...personSPECS,
+  ...learnSPECS,
   ...voiceSPECS,
   ...vendorSPECS,
   ...filesSPECS,
@@ -743,6 +745,8 @@ export interface ToolContext {
     /** Use the page as a person would: click, hover, type, press a key, scroll. */
     act: (args: { action: string; target?: string; text?: string; key?: string; dy?: number; submit?: boolean; hold_ms?: number }) => Promise<{ ok: boolean; summary: string; png?: Buffer }>;
   };
+  /** Start a lesson in this chat: the page highlights its first control (server/learn.ts). Absent where there is no page. */
+  teach?: (lesson: { title: string; steps: LessonStep[] }) => void;
   /** Agent mode's switch between planning and building. Absent where there is
       no session to switch. */
   setPhase?: (to: Phase, reason: string) => { ok: boolean; summary: string };
@@ -3673,6 +3677,9 @@ async function runToolUnredacted(
       case "improvements":
         return runImprovements(args, ctx);
 
+      case "learn_show":
+        return runLearnShow(args, ctx);
+
       case "agent_run":
         return await runAgents({ ...args, action: "run" }, ctx);
 
@@ -3703,7 +3710,7 @@ async function runToolUnredacted(
           onCancel: ctx.onCancel,
           // The PDF window shows the work; an incognito chat keeps nothing on
           // disk, so it works on files without one.
-          ...(ctx.memory.incognito ? {} : { desk: deskHooks(ctx.session), hand: (job: Parameters<typeof handToWindow>[1], label: string) => handToWindow(ctx.session, job, label) }),
+          ...(ctx.memory.incognito ? {} : { desk: deskHooks(ctx.session) }),
           ...(ctx.held ? { held: (id: string) => ctx.held!("pdf", id) } : {}),
         });
 
@@ -3789,7 +3796,6 @@ async function runToolUnredacted(
           showImage: ctx.showImage,
           ...(ctx.memory.incognito ? {} : {
             desk: deskHooks(ctx.session), win: officeHooks(ctx.session),
-            hand: (kind: Parameters<typeof officeHandToWindow>[1], steps: Parameters<typeof officeHandToWindow>[2]) => officeHandToWindow(ctx.session, kind, steps),
           }),
           ...(ctx.held ? { held: (_surface: "office", subject: string) => ctx.held!("office", subject) } : {}),
           off: (["docx", "xlsx", "pptx"] as const).filter((k) => !toolSettings()[{ docx: "pages", xlsx: "sheets", pptx: "slides" }[k] as "pages" | "sheets" | "slides"].enabled),
