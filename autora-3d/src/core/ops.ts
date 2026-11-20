@@ -9,6 +9,7 @@ import { DEFAULT_HAIR, FUR_START, HAIR_NUMBERS, HAIR_RANGES, MAX_STROKES, mirror
 import { BodyTransform, resizeBody, scaleMeshHeight, selectionBounds, transformBody } from '../utils/transform';
 import { MeshError, meshFormatOf, placeMesh, readMesh, type MeshFormat, type RawMesh } from '../utils/meshImport';
 import { boundsOf } from '../utils/sculpt';
+import { FigureError, figure, type FigureArgs, type FigurePart } from '../utils/figures';
 import { BlendPart, MAX_DETAIL, OrganicError, Section, Vec, blendMesh, facingOut, loftMesh, mirrored, smoothMesh, subdivide } from '../utils/organic';
 import { cutShape, getPolygonSignedArea } from '../utils/geometry';
 import { joinBodies } from '../utils/join';
@@ -1253,6 +1254,8 @@ export interface BlendArgs {
   name?: string;
   color?: string;
   material?: MaterialType;
+  /** A mesh shape to make again from these parts, in place (its id, name, colour, finish and group stay). */
+  replace?: string;
 }
 
 /** The parts of a blend, checked: what sculpt_blend and the body-part shapes both build from. */
@@ -1307,7 +1310,7 @@ export function sculptBlend(doc: Doc, ids: IdGen, a: BlendArgs) {
   try {
     const asked = a.detail === undefined ? 96 : num(a.detail, 'detail');
     const form = blendMesh(all, { smooth, detail: asked });
-    const made = addSurface(doc, ids, form, a, 'Form');
+    const made = a.replace !== undefined ? remadeSurface(doc, ids, form, a, a.replace) : addSurface(doc, ids, form, a, 'Form');
     // A grid too big to work out in good time is made coarser: say so, so a finer part is made as its own shape instead.
     if (form.detail < Math.min(asked, MAX_DETAIL) && 'result' in made && made.result) {
       made.result.note = [made.result.note, `detail ${asked} would take too long for ${all.length} parts this size; it was made at ${form.detail}. For fine features (fingers, a face) make that part as its own blend and join them.`].filter(Boolean).join(' ');
@@ -1317,6 +1320,71 @@ export function sculptBlend(doc: Doc, ids: IdGen, a: BlendArgs) {
     if (e instanceof OrganicError) return fail(e.message);
     throw e;
   }
+}
+
+/** A form made again in the place of an existing mesh shape: the new surface, the old shape's identity and look. */
+function remadeSurface(doc: Doc, ids: IdGen, raw: RawMesh, a: { name?: string; color?: string; material?: MaterialType }, id: string): ReturnType<typeof addSurface> {
+  const old = need(doc, id);
+  if (!old.mesh) return fail(`${old.name} (${id}) is not a mesh shape, so it cannot be made again from parts.`, 'Leave out replace to make a new shape.');
+  const made = addSurface(doc, ids, raw, a, 'Form');
+  if (!('result' in made) || !made.result) return made;
+  const fresh = made.doc.bodies[made.doc.bodies.length - 1];
+  const body: Body3D = {
+    ...old,
+    points: fresh.points,
+    basePoints: fresh.basePoints,
+    mesh: fresh.mesh,
+    extrusionHeight: fresh.extrusionHeight,
+    elevation: fresh.elevation,
+    ...(a.name ? { name: fresh.name } : {}),
+    ...(a.color ? { color: fresh.color } : {}),
+    ...(a.material ? { materialType: fresh.materialType } : {}),
+  };
+  return {
+    doc: { ...doc, bodies: doc.bodies.map((b) => (b.id === id ? body : b)) },
+    result: { ...made.result, id, note: [made.result.note, 'Made again in place: hand sculpting on the old surface is gone.'].filter(Boolean).join(' ') },
+  };
+}
+
+export interface FigureOpArgs extends FigureArgs {
+  /** Where the figure stands, mm (default x 0, y 0). */
+  x?: number;
+  y?: number;
+  detail?: number;
+  name?: string;
+  color?: string;
+  material?: MaterialType;
+  replace?: string;
+}
+
+/** A figure blocked out from a body plan, as one blend: the shape, and the named parts it was made from to change and make again. */
+export function sculptFigure(doc: Doc, ids: IdGen, a: FigureOpArgs) {
+  let made;
+  try {
+    made = figure(a);
+  } catch (e) {
+    if (e instanceof FigureError) return fail(e.message);
+    throw e;
+  }
+  const dx = a.x === undefined ? 0 : num(a.x, 'x');
+  const dy = a.y === undefined ? 0 : num(a.y, 'y');
+  const shift = (p: Vec) => ({ x: Math.round((p.x + dx) * 100) / 100, y: Math.round((p.y + dy) * 100) / 100, z: p.z });
+  const parts: FigurePart[] = made.parts.map((p) => ({ ...p, at: shift(p.at), ...(p.to ? { to: shift(p.to) } : {}) }));
+  const detail = a.detail === undefined ? made.detail : num(a.detail, 'detail');
+  const name = a.name ?? `${a.plan[0].toUpperCase()}${a.plan.slice(1)}`;
+  const r = sculptBlend(doc, ids, { parts, smooth: made.smooth, detail, name, color: a.color, material: a.material, replace: a.replace });
+  if (!('result' in r) || !r.result) return r;
+  return {
+    doc: r.doc,
+    result: {
+      ...r.result,
+      landmarks: made.landmarks + (dx || dy ? ` (then moved by x ${dx}, y ${dy}).` : ''),
+      smooth: made.smooth,
+      detail,
+      parts,
+      next: 'Look at it with scene_view. To change it, edit these parts (by label) and make it again with sculpt_blend {parts, smooth, detail, replace: id}; add parts for what the plan does not have (a mane, a crest, armour, clothes), or carve.',
+    },
+  };
 }
 
 export interface LoftArgs {

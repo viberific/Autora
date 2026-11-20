@@ -214,14 +214,13 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Better on a touch screen. On a phone, a piece of work such as a flowchart or
-  a canvas now opens at a size you can read and press, instead of being
-  shrunk to fit its whole width (its buttons were about 10px). Controls that
-  only appeared when a mouse hovered over them, such as a surface's Maximise
-  and Close, are always shown on touch. Small buttons in the tool windows and
-  the header have bigger touch areas. In Music, the piano roll is usable on a
-  phone (its tools are one sliding row instead of three wrapped ones that left
-  the notes no room), and the piano roll, drum grid and arrangement scroll
-  under a finger: a tap places a note, a hit or a clip, and a selected note or
-  clip is dragged. In flowcharts, cards can be dragged by a finger, and a tap
-  on the selected card edits it.
+  Better 3D models from any model you chat with, including ones that
+  cannot see pictures. The agent can now look at its 3D model: it is drawn as
+  text from the front, the side and above, and the agent is told what is
+  wrong (a part floating, a form that came apart, one side unlike the other)
+  so it fixes its own mistakes. When you ask outright for a model to be made
+  ("generate a 3D dragon", "make me a horse in 3D"), it starts from a body
+  plan with real proportions (a person, a four-legged animal, a bird or a
+  fish), then looks, fixes and adds detail in rounds before handing it to you
+  to shape. Asked to help you make one instead, it still guides and leaves
+  the making to you. Nothing is sent to another service.

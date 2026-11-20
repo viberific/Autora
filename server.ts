@@ -34,7 +34,7 @@ import { ensureHostNames } from "./server/hosts";
 import { attachDictation } from "./server/dictation";
 import { missingPathIn, pathHint } from "./server/hints";
 import { MANUAL_IDS, manualId, manualText, type ManualId } from "./server/handbook";
-import { FAMILIES, familyIds, loadedFamilies, loadedFromLog, mcpServerOf, preloadMcp, searchMcp, shortName, signatureOf, unloadedIndex, withoutUnloaded } from "./server/toolload";
+import { FAMILIES, PERSON_ONLY, familyIds, loadedFamilies, loadedFromLog, mcpServerOf, personOnlyFamilyOf, preloadMcp, searchMcp, shortName, signatureOf, unloadedIndex, withoutUnloaded } from "./server/toolload";
 import { applyLedger, latestLedger, ledgerBriefing, renderLedger, touched as touchedThings } from "./server/ledger";
 import { applyTodos, latestTodos, todoBriefing, unfinishedTodos } from "./server/todos";
 import {
@@ -3836,11 +3836,13 @@ function loggedTools(session: Session): Set<string> {
   for (let i = from; i < events.length; i++) {
     const e = events[i];
     if (e.kind === "tools.enable") {
-      if (typeof e.payload?.family === "string") set.add(e.payload.family);
+      const fam = typeof e.payload?.family === "string" ? e.payload.family : "";
+      // A person-only set (server/toolload.ts) is in only where the person's own words brought it in.
+      if (fam && (!PERSON_ONLY.has(fam) || e.payload?.why === "wanted")) set.add(fam);
       if (Array.isArray(e.payload?.tools)) for (const t of e.payload.tools) set.add(`mcpt:${t}`);
     } else if (e.kind === "tool.call") {
       const name = String(e.payload?.name ?? "");
-      for (const f of FAMILIES) if (f.match(name) || f.after?.(name)) set.add(f.id);
+      for (const f of FAMILIES) if (!f.personOnly && (f.match(name) || f.after?.(name))) set.add(f.id);
       if (mcpServerOf(name)) set.add(`mcpt:${name}`);
     }
   }
@@ -3870,7 +3872,13 @@ function pdfInChat(session: Session): boolean {
  * the log so the next turn has them without asking again.
  */
 function autoLoadTools(session: Session, text: string) {
-  if (!allToolsOn()) {
+  if (allToolsOn()) {
+    // Every tool on still leaves out the person-only sets: the person's words bring those in, here as anywhere.
+    const have = loadedTools(session);
+    for (const id of loadedFamilies({ events: session.events, said: text, lazy: true })) {
+      if (PERSON_ONLY.has(id) && !have.has(id)) emitEvent(session, "tools.enable", "system", { family: id, why: "wanted" });
+    }
+  } else {
     const have = loadedFromLog(session.events);
     for (const id of loadedFamilies({ events: session.events, said: text, hasPdf: pdfInChat(session), learn: session.learn === true, lazy: true })) {
       if (!have.has(id)) emitEvent(session, "tools.enable", "system", { family: id, why: "wanted" });
@@ -4817,6 +4825,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
           }
           return result;
         },
+        mayGenerate: () => loadedTools(session).has("generate3d"),
         enableTools: ({ family, query, tools: named }) => {
           const have = loadedTools(session);
           const all = mcpTools();
@@ -4836,7 +4845,9 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
           }
           if (family) {
             const bare = family.replace(/^mcp:/, "");
-            if (FAMILIES.some((f) => f.id === family)) {
+            if (PERSON_ONLY.has(family)) {
+              notes.push(`${family} comes in only when the person asks for a model to be generated, in their own words. Build with the cad tools (cad_sculpt_blend, cad_scene_view), or ask them whether they want you to make the whole model.`);
+            } else if (FAMILIES.some((f) => f.id === family)) {
               if (!have.has(family)) emitEvent(session, "tools.enable", "agent", { family, why: "asked" }, span);
               notes.push(have.has(family) ? `${family} is already in your list.` : `${family} tools are in your list from your next step.`);
             } else {
@@ -5617,7 +5628,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
           }
           if (spec && !tools.some((t) => t.name === use.name)) {
             const family = FAMILIES.find((f) => f.match(use.name));
-            if (family && !loadedTools(session).has(family.id)) {
+            if (family && !family.personOnly && !loadedTools(session).has(family.id)) {
               emitEvent(session, "tools.enable", "system", { family: family.id, why: "called" }, span);
               /* The list is read from the log, which this event just grew:
                  without rebuilding it here the call below would still not find
@@ -5639,6 +5650,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
             const editor = spec ? capabilityOf(use.name) : undefined;
             const missing = editor ? editor.windows.some((w) => installedWindows()[w] === false) : false;
             const why = !spec ? `There is no tool called "${use.name}".`
+              : personOnlyFamilyOf(use.name) ? `"${use.name}" makes a whole model, which you do only when the person asks you to generate one. They have not, so build with the other cad tools or ask them whether they want it made for them.`
               : editor && missing ? `${editor.name} is not installed on this server, so "${use.name}" cannot be used. Tell the person that plainly (it is not switched off, it was never built here), and offer what can be done without it.`
               : editor ? `${editor.name} is switched off on the Tools page, so "${use.name}" is not available. Tell the person; they can switch it on there.`
               : `"${use.name}" exists but its group is not available right now.`;

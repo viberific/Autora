@@ -169,6 +169,14 @@ await test("the 3D manual teaches organic forms: blend, loft, smooth, and that t
   }
 });
 
+await test("the 3D manual teaches looking with cad_scene_view and the generation mode, only when the person asks", () => {
+  const cad = manualText("cad");
+  for (const needle of ["cad_scene_view", "replace: id", "Generating a model", "asks you outright", "never offer to", "cad_sculpt_figure", "What is wrong", "Block out", "Look again", "theirs to shape"]) {
+    assert.ok(cad.includes(needle), `the 3D manual lacks "${needle}"`);
+  }
+  assert.ok(!cad.includes("(a view, cad_scene_get)"), "the manual no longer points at a view tool that did not exist");
+});
+
 await test("the 3D manual teaches the Rig card and the cad_rig_* tools", () => {
   const cad = manualText("cad");
   for (const needle of ["the Rig card", "Add skeleton", "bip29", "cad_rig_bind", "cad_rig_pose", "cad_rig_bone_set", "rig:true", "stale"]) {

@@ -24,7 +24,33 @@ interface Family {
   words: RegExp;
   /** A tool in another set that brings this one in once it is used (the page actions of a browser that has just been opened). */
   after?: (name: string) => boolean;
+  /**
+   * Only the person's own words bring it in: the agent cannot load it with tools_enable or by calling one of its tools, it is
+   * not named in the index of sets, and "every tool on" does not include it. For work the person must ask for outright
+   * (generating a whole 3D model), where the Core principle says the agent guides unless asked to make it.
+   */
+  personOnly?: boolean;
+  /** Words that keep it out even when `words` match ("help me make a 3D horse" asks for guidance, not a finished model). */
+  unless?: RegExp;
 }
+
+/** The 3D tools that make a whole figure for the person: in the generate3d set, not the cad set. */
+const GENERATE_3D = new Set(["cad_sculpt_figure"]);
+
+/* An outright ask for a model to be made: "generate a 3D dragon", "make me a 3D model of a horse", "create a fox in 3D",
+   "model me a cat", "sculpt a bust of a knight for me". */
+const MADE = String.raw`(?:make|create|build|generate|model|sculpt|design|produce|give)`;
+const GENERATE_3D_WORDS = new RegExp(
+  [
+    String.raw`\bgenerat\w* (?:me |us )?(?:a |an |the |some |my )?(?:[\w-]+ ){0,4}(?:3d|model|mesh|figure|figurine|character|creature|statue|sculpture)s?\b`,
+    String.raw`\b${MADE} (?:me |us )?(?:a |an |the |some )?(?:[\w-]+ ){0,3}3d (?:model|figure|figurine|version|character|creature|statue|mesh|print|asset)s?\b`,
+    String.raw`\b${MADE} (?:me |us )?(?:a |an |the |some )?(?:[\w-]+ ){0,4}in 3d\b`,
+    String.raw`\b${MADE} (?:me |us )?(?:a |an )?3d [\w-]+`,
+    String.raw`\b(?:make|turn) (?:this|it|that) (?:into )?(?:a )?3d\b`,
+    String.raw`\b(?:model|sculpt) (?:me|us) (?:a |an )?[\w-]+`,
+  ].join("|"),
+  "i",
+);
 
 export const FAMILIES: Family[] = [
   {
@@ -61,9 +87,19 @@ export const FAMILIES: Family[] = [
   {
     id: "cad",
     about: "Panacea 3D engine: model, edit, measure and export shapes (STL for printing, GLB for games)",
-    match: (n) => n.startsWith("cad_"),
+    match: (n) => n.startsWith("cad_") && !GENERATE_3D.has(n),
     // Also "3D" on its own ("make a horse in 3D"), sculpting, meshes and low-poly forms: the organic work the modeller does too.
     words: /\bautora 3d\b|\b3d\b|\bcad\b|\.(?:stl|glb|obj)\b|\bstl\b|\bextrud|\bbevel|\bprintable\b|\bsculpt|\b(?:3d |triangle |polygon )?mesh(?:es)?\b|\blow[- ]?poly\b|\bfigurine\b/i,
+  },
+  {
+    /* Generation mode for 3D: the person asked for a model to be made, so the agent makes the whole of it. The body plans
+       live here; seeing the model (cad_scene_view) is in the cad set, for guiding as much as for making. */
+    id: "generate3d",
+    about: "make a whole 3D figure from a body plan (only when the person asks for a model to be generated)",
+    match: (n) => GENERATE_3D.has(n),
+    personOnly: true,
+    words: GENERATE_3D_WORDS,
+    unless: /\bhelp me\b|\bshow me how\b|\bteach me\b|\bwalk me through\b|\bi(?:'ll| will| want to| would like to|'d like to) (?:make|model|sculpt|build)\b|\bguide me\b/i,
   },
   {
     id: "game",
@@ -261,11 +297,13 @@ export function loadedFromLog(events: readonly LoadEvent[]): Set<string> {
   const out = new Set<string>();
   for (const e of events) {
     if (e.kind === "tools.enable") {
-      if (typeof e.payload?.family === "string") out.add(e.payload.family);
+      const fam = typeof e.payload?.family === "string" ? e.payload.family : "";
+      // A person-only set counts only where the person's words brought it in, whatever else the log says.
+      if (fam && (!PERSON_ONLY.has(fam) || e.payload?.why === "wanted")) out.add(fam);
       if (Array.isArray(e.payload?.tools)) for (const t of e.payload.tools) out.add(`mcpt:${t}`);
     } else if (e.kind === "tool.call") {
       const name = String(e.payload?.name ?? "");
-      for (const f of FAMILIES) if (f.match(name) || f.after?.(name)) out.add(f.id);
+      for (const f of FAMILIES) if (!f.personOnly && (f.match(name) || f.after?.(name))) out.add(f.id);
       if (mcpServerOf(name)) out.add(`mcpt:${name}`);
     }
   }
@@ -290,12 +328,18 @@ interface LoadContext {
 export function loadedFamilies(ctx: LoadContext): Set<string> {
   // On by default: the specialist sets are off the list until the words, a call or tools_enable ask for them (AUTORA_ALL_TOOLS=1
   // puts every one of them back, which is what the e2e harness and tests/e2e-alltools.test.ts use).
-  if (ctx.all || !ctx.lazy) return new Set(FAMILIES.map((f) => f.id));
+  const said = ctx.said ?? "";
+  const asked = (f: Family) => !!said && f.words.test(said) && !f.unless?.test(said);
+  if (ctx.all || !ctx.lazy) {
+    const out = new Set(openFamilyIds());
+    for (const id of loadedFromLog(ctx.events)) out.add(id);
+    for (const f of FAMILIES) if (f.personOnly && asked(f)) out.add(f.id);
+    return out;
+  }
   const out = loadedFromLog(ctx.events);
   if (ctx.hasPdf) out.add("pdf");
   if (ctx.learn) out.add("learn");
-  const said = ctx.said ?? "";
-  if (said) for (const f of FAMILIES) if (f.words.test(said)) out.add(f.id);
+  if (said) for (const f of FAMILIES) if (asked(f)) out.add(f.id);
   return out;
 }
 
@@ -311,7 +355,8 @@ export function withoutUnloaded<T extends { name: string }>(tools: readonly T[],
 
 /** The one-line index of what is not in the list, or null when everything is. */
 export function unloadedIndex(loaded: ReadonlySet<string>, mcp: readonly McpBrief[] = []): string | null {
-  const left = FAMILIES.filter((f) => !loaded.has(f.id));
+  // A person-only set is never offered: the agent cannot load it, so naming it would only invite a refused call.
+  const left = FAMILIES.filter((f) => !loaded.has(f.id) && !f.personOnly);
   const hidden = loaded.has("mcp:*") ? [] : mcp.filter((t) => {
     const server = mcpServerOf(t.name);
     return server && !loaded.has(`mcp:${server}`) && !loaded.has(`mcpt:${t.name}`);
@@ -339,4 +384,16 @@ export function unloadedIndex(loaded: ReadonlySet<string>, mcp: readonly McpBrie
 }
 
 /** The families the model may ask for. */
-export const familyIds = () => FAMILIES.map((f) => f.id);
+export const familyIds = () => openFamilyIds();
+
+/** Every family but the person-only ones: what tools_enable and "every tool on" can bring in. */
+export const openFamilyIds = () => FAMILIES.filter((f) => !f.personOnly).map((f) => f.id);
+
+/** Families only the person's words bring in. */
+export const PERSON_ONLY: ReadonlySet<string> = new Set(["generate3d"]);
+
+/** Whether a tool belongs to a person-only family, and which. */
+export function personOnlyFamilyOf(toolName: string): string | null {
+  const f = FAMILIES.find((x) => x.personOnly && x.match(toolName));
+  return f ? f.id : null;
+}

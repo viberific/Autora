@@ -334,6 +334,17 @@ interface CadToolHooks {
   cwd?: string;
   /** Show a saved file in the thread. */
   showFile?: (file: { id: string; name: string; mime: string; size: number }) => void;
+  /** Whether the person asked for a model to be generated: without it, the tools that make a whole figure are refused. */
+  mayGenerate?: () => boolean;
+}
+
+/** The engine's tools that make a whole figure, which run only when the person asked for one (server/toolload.ts, generate3d). */
+const GENERATES = new Set(["sculpt_figure"]);
+
+/** A look, as the text it is: the views would be unreadable with every line break escaped inside JSON. */
+function lookText(result: { text?: string; findings?: string[] }): string {
+  const found = result.findings ?? [];
+  return [result.text ?? "", "", found.length ? `What is wrong:\n${found.map((f) => `- ${f}`).join("\n")}` : "Nothing floats or came apart, and it stands on the ground."].join("\n");
 }
 
 /**
@@ -352,6 +363,11 @@ export async function runCadTool(
     const engine = await engineOf(session);
     const name = toolName.slice(4);
     const given = { ...args };
+    const generating = GENERATES.has(name) || (name === "batch" && Array.isArray(given.commands) &&
+      given.commands.some((c: any) => c && typeof c.tool === "string" && GENERATES.has(c.tool.replace(/^cad_/, ""))));
+    if (generating && !hooks.mayGenerate?.()) {
+      return { ok: false, summary: "cad_sculpt_figure makes a whole model, which you do only when the person asks you to generate one, and they have not. Build with cad_sculpt_blend and cad_scene_view, or ask them whether they want it made for them." };
+    }
     // Commands inside a batch name their tool either way.
     if (name === "batch" && Array.isArray(given.commands)) {
       given.commands = given.commands.map((c: any) =>
@@ -407,6 +423,7 @@ export async function runCadTool(
       hooks.showFile?.({ id: art.id, name: art.name, mime: art.mime, size: art.size });
       return { ok: true, summary: `Exported the model as ${art.name} (${data.length} bytes), saved as artifact ${art.id}. The person can download it from the thread.`, preview: art.name };
     }
+    if (name === "scene_view") return { ok: true, summary: asAgentSees(lookText(res.result as { text?: string; findings?: string[] })), preview: name };
     let summary = asAgentSees(JSON.stringify({ result: res.result, shapes: res.shapes, changed: res.changed, revision: res.revision }));
     if (summary.length > MOST) {
       summary = `${summary.slice(0, MOST)}\n[cut: the answer was ${summary.length} characters. Ask for less (cad_scene_get lists shapes; cad_shape_get takes one id).]`;

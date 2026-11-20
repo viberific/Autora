@@ -732,6 +732,8 @@ export interface ToolContext {
   protectedPaths?: string[];
   /** Bring in a set of tools (see toolload.ts); says what came in. */
   enableTools?: (what: { family: string; query: string; tools: string[] }) => { ok: boolean; summary: string };
+  /** Whether the person has asked, in their own words, for a 3D model to be generated (the generate3d set is in). */
+  mayGenerate?: () => boolean;
   /** The chat's working notes (see ledger.ts). */
   ledger?: (action: Record<string, any>) => LedgerResult;
   /** What the person asked for, kept whole (see requirements.ts). */
@@ -4001,7 +4003,7 @@ async function runToolUnredacted(
         // Autora 3D: one tool for each call the modeller declares (server/specs/cad.ts), run on the chat's model.
         if (spec.name.startsWith("cad_")) {
           if (ctx.memory.incognito) return { ok: false, summary: "An incognito chat keeps nothing, so it has no 3D window. Model in a normal chat." };
-          return await runCadTool(ctx.session, spec.name, args, { showFile: ctx.showFile, cwd: terminalDir() });
+          return await runCadTool(ctx.session, spec.name, args, { showFile: ctx.showFile, cwd: terminalDir(), mayGenerate: ctx.mayGenerate });
         }
         const custom = spec.name.startsWith(CUSTOM_PREFIX) ? getCustomTool(spec.name) : undefined;
         if (custom) {
