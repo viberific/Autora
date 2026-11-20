@@ -51,6 +51,16 @@ export function OfficeWindow({ sessionId, kind, phone }: { sessionId: string; ki
     return `${at}${at.includes("?") ? "&" : "?"}kind=${kind}`;
   }, [sessionId, kind]);
 
+  /* Say the window is really on screen. A tool may not report a document open until this has been sent, so which
+     page is looking and which window it has is answered here rather than assumed (server/windowseen.ts). Sent again
+     whenever the window changes, so it answers the open that has just happened. */
+  useEffect(() => {
+    if (!word.open || !sessionId) return;
+    void fetch(`/api/officedesk/${encodeURIComponent(sessionId)}/seen`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind }),
+    }).catch(() => undefined);
+  }, [sessionId, kind, word.open, word.rev]);
+
   const post = useCallback((msg: Record<string, unknown>, transfer?: Transferable[]) => {
     frame.current?.contentWindow?.postMessage(msg, "*", transfer ?? []);
   }, []);

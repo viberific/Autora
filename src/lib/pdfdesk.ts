@@ -35,6 +35,8 @@ type DeskState = {
   problem?: string | null;
   marks?: DeskMark[];
   versions?: DeskVersion[];
+  /** The editor asked to open a file (its own File > Open): the window shows Autora's picker. 0 when it has not. */
+  ask?: number;
   /** The agent's last edits, and a number that goes up when there are new ones to play. */
   cues?: DeskCue[];
   cueSeq?: number;

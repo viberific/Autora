@@ -36,6 +36,7 @@ import { dropPages, latestPages, pageFile, pagesFor, type Locator } from "./offi
 import { addCommand, logText, openPersonRun, type OfficeCommand } from "./commandlog";
 import { PICK_FRESH_MS, PICK_MAX } from "./picked";
 import { stateDir } from "./state";
+import { markSeen } from "./windowseen";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 export type OfficeKind = "docx" | "pptx" | "xlsx";
@@ -1272,6 +1273,15 @@ export function officeRoutes(app: Express, opts: { exists: (session: string) => 
   app.get("/api/officedesk/:session", (req, res) => {
     const id = known(req, res);
     if (id) res.json(officeState(id));
+  });
+
+  /* The page saying which windows it has on screen (see server/windowseen.ts): no history, no log, nothing changed in a file. */
+  app.post("/api/officedesk/:session/seen", express.json({ limit: "1kb" }), (req, res) => {
+    const id = known(req, res);
+    if (!id) return;
+    const said = Array.isArray(req.body?.kinds) ? req.body.kinds : [req.body?.kind];
+    for (const k of said) if (KIND.includes(k as OfficeKind)) markSeen(k as string, id);
+    res.json({ ok: true });
   });
 
   app.get("/api/officedesk/:session/data", (req, res) => {

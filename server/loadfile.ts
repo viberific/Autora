@@ -19,6 +19,7 @@ import { officeHooks } from "./officedesk";
 import { runOfficeTool } from "./office";
 import { runVideoTool } from "./opencut";
 import { deskHooks, deskState } from "./pdfdesk";
+import { notShownLine, waitSeen } from "./windowseen";
 import { photoState, runPhotoTool } from "./photodesk";
 import { loadSong, studioState } from "./studio";
 import { loadIntoPanacea, noteFlow, panaceaState } from "./panacea";
@@ -64,8 +65,12 @@ async function load(session: string, app: LoadApp, art: Artifact, route?: Panace
       } catch (err) {
         return { ok: false, error: /encrypt|password/i.test(String((err as Error)?.message)) ? "That PDF is password-protected. Ask Autora to open it with the password." : "That is not a PDF Autora PDF can read." };
       }
+      const since = Date.now();
       deskHooks(session).open({ name: art.name, base: data, items: [], ...origin, outName: art.name });
-      return { ok: true, said: `${art.name} is open in Autora PDF.` };
+      /* Opened is not open: the page has to say it has the window (server/windowseen.ts), or this says so. */
+      return (await waitSeen("pdf", session, since))
+        ? { ok: true, said: `${art.name} is open in Autora PDF.` }
+        : { ok: true, said: `${notShownLine(art.name, "the PDF window")}` };
     }
     case "pages": case "sheets": case "slides": {
       const win = officeHooks(session);
@@ -101,8 +106,13 @@ async function load(session: string, app: LoadApp, art: Artifact, route?: Panace
         // Opening a different Office file discards its engine versions. Keep the settled bytes first.
         saveArtifact({ origin: "user", session, name: previous.name, data: previous.data, note: "Preserved before loading another file" });
       }
+      const kind = app === "pages" ? "docx" : app === "sheets" ? "xlsx" : "pptx";
+      const since = Date.now();
       win.open({ name: art.name, data, ...origin, outName: art.name, label: "Opened by you" });
-      return { ok: true, said: `${art.name} is open in ${NAME[app]}.` };
+      /* Opened is not open: the page has to say it has the window (server/windowseen.ts), or this says so. */
+      return (await waitSeen(kind, session, since))
+        ? { ok: true, said: `${art.name} is open in ${NAME[app]}.` }
+        : { ok: true, said: `${notShownLine(art.name, NAME[app])}` };
     }
     case "photo": {
       const out = await runPhotoTool(session, "photo_open", { file: art.id }, quiet);

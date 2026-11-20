@@ -32,6 +32,7 @@ import type { ChatImage } from "./llm";
 import { FileRefError, readFileRef, type FileInput } from "./fileref";
 import { lookAtPdf, type DeskHooks } from "./pdf";
 import type { OfficeHooks } from "./officedesk";
+import { notShownLine, waitSeen } from "./windowseen";
 import { APP_OF, OfficeRenderError, editorBuilt, renderToPdf } from "./officerender";
 import { PdfRenderError } from "./pdfrender";
 
@@ -325,8 +326,10 @@ const meanwhile = (ctx: OfficeContext, kind?: Kind): string => {
 };
 
 /** Show a document in the window the agent and the person share. */
-function showInWindow(ctx: OfficeContext, name: string, data: Buffer, saved: { id: string; name: string } | null, from: FileInput | null, label?: string) {
+function showInWindow(ctx: OfficeContext, name: string, data: Buffer, saved: { id: string; name: string; elsewhere?: string } | null, from: FileInput | null, label?: string) {
   if (!ctx.win) return;
+  // It is going into the window, so nothing needs to warn that it is somewhere else.
+  if (saved) saved.elsewhere = undefined;
   // The window this document belongs to -- Autora Pages, Sheets or Slides -- is the one it opens in.
   const kind = kindOf(name);
   const here = kind ? ctx.win.at(kind) : null;
@@ -370,18 +373,36 @@ function outputName(file: FileInput | null, kind: Kind, output: unknown, suffix:
   return cleanName(`${base}-${suffix}.${kind}`);
 }
 
-function deliver(ctx: OfficeContext, name: string, data: Buffer, mime: string, note: string): { id: string; name: string; replaced: boolean; size: number } {
+/**
+ * Whether the file just written is the one in the window.
+ *
+ * When it is not, the person's screen is showing something else, and a turn that says "fixed" is a turn that lied: on
+ * 2026-11-20 a PDF window kept showing proposal.pdf while v2, v3 and v4 were written beside it, and the agent said it
+ * was fixed three times. So every save names the file it went to and, when that is not the open one, names the one
+ * that is. showInWindow clears this when the file does go into the window, which is why it is read after the write.
+ */
+function elsewhereLine(ctx: OfficeContext, art: { id: string; name: string }): string | undefined {
+  if (!ctx.win) return undefined;
+  const kind = kindOf(art.name);
+  if (!kind) return undefined;
+  const here = ctx.win.at(kind);
+  if (!here) return undefined;
+  if (here.working === art.id || here.name === art.name) return undefined;
+  return `This went to ${art.name} (${art.id}), which is NOT the file open in the ${WINDOW[kind]} window: that one is ${here.name}, so the person cannot see this yet. Say which file is which, and put this one in the window with office_open (file ${art.id}) before saying it is fixed.`;
+}
+
+function deliver(ctx: OfficeContext, name: string, data: Buffer, mime: string, note: string): { id: string; name: string; replaced: boolean; size: number; elsewhere?: string } {
   if (data.byteLength > MAX_ARTIFACT_BYTES) {
     throw new Problem(`The result is ${formatSize(data.byteLength)}, over the ${formatSize(MAX_ARTIFACT_BYTES)} an artifact may be. Nothing was saved.`);
   }
   const replaced = listArtifacts().some((a) => a.origin === "agent" && a.name === name);
   const art = saveArtifact({ origin: "agent", name, data, mime, session: ctx.session, note, ...(appOfFile(name) ? { app: appOfFile(name)! } : {}) });
   ctx.showFile?.({ id: art.id, name: art.name, mime: art.mime, size: art.size });
-  return { id: art.id, name: art.name, replaced, size: art.size };
+  return { id: art.id, name: art.name, replaced, size: art.size, elsewhere: elsewhereLine(ctx, art) };
 }
 
-const savedLine = (s: { id: string; name: string; replaced: boolean; size: number }) =>
-  `${s.replaced ? "Updated" : "Saved as"} artifact ${s.id} (${s.name}, ${formatSize(s.size)}).`;
+const savedLine = (s: { id: string; name: string; replaced: boolean; size: number; elsewhere?: string }) =>
+  `${s.replaced ? "Updated" : "Saved as"} artifact ${s.id} (${s.name}, ${formatSize(s.size)}). ${s.elsewhere ?? ""}`.trim();
 
 const warningsOf = (e: Envelope | null): string =>
   (e?.warnings ?? []).map((w) => w.message).filter(Boolean).slice(0, 5).join(" ");
@@ -688,7 +709,12 @@ async function lookTool(args: Record<string, any>, ctx: OfficeContext): Promise<
 async function openTool(args: Record<string, any>, ctx: OfficeContext): Promise<OfficeOutcome> {
   const { file, kind } = input(args, ctx);
   if (!ctx.win) throw new Problem("There is no window to open it in here (an incognito chat keeps none).");
+  const since = Date.now();
   showInWindow(ctx, file.name, file.data, null, file, "Opened");
+  /* Opened is not open: the page has to say it has the window before this tool may claim it (server/windowseen.ts). */
+  if (!(await waitSeen(kind, ctx.session, since))) {
+    return { ok: false, summary: notShownLine(file.name, `the ${WINDOW[kind]} window`) };
+  }
   return {
     ok: true,
     summary: `${file.name} is open in the ${WINDOW[kind]} window beside the conversation. The person can read it and ${kind === "docx" ? "type in it" : "change it"} as you work; what they change is saved as they go, and you are told what they changed.`,
@@ -705,10 +731,12 @@ async function pdfTool(args: Record<string, any>, ctx: OfficeContext): Promise<O
   const name = cleanName(asked ? (/\.pdf$/i.test(asked) ? asked : `${asked}.pdf`) : `${base}.pdf`);
   const saved = deliver(ctx, name, pdf, "application/pdf", `${file.name} as a PDF`);
   // The PDF is the PDF editor's: it opens there to mark up, sign, redact or send on.
+  const since = Date.now();
   ctx.desk?.open({ name: saved.name, base: pdf, items: [], working: saved.id, source: null, outName: saved.name });
+  const shown = ctx.desk ? await waitSeen("pdf", ctx.session, since) : false;
   return {
     ok: true,
-    summary: `${savedLine(saved)}${ctx.desk ? " It is open in Autora PDF." : ""}`,
+    summary: `${savedLine(saved)}${ctx.desk && shown ? " It is open in Autora PDF." : ""}${ctx.desk && !shown ? ` ${notShownLine(saved.name, "the PDF window")}` : ""}`,
     preview: saved.name,
   };
 }

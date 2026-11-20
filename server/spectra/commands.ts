@@ -31,6 +31,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { askOpen } from "../pdfdesk";
 import { EngineProblem, type SpectraEngine } from "./engine";
 
 /** Whether a path is the document the window is showing. */
@@ -451,6 +452,13 @@ export async function runCommand(
       const target = path.join(dir, path.basename(suggested || "document.pdf"));
       return target;
     }
+    /* The editor's Open. This window has no desktop file dialog, so the ask goes to the page, which shows Autora's
+       own picker; what is chosen is loaded through the ordinary route. (It used to answer "cancelled".) */
+    case "open_files_dialog":
+      askOpen(ctx.session);
+      REFUSED.add(command);
+      return [];
+
     case "pick_watermark_image":
     case "pick_icc_file":
     case "pick_pem_file":
@@ -460,7 +468,6 @@ export async function runCommand(
     case "pick_dictionary_files":
     case "pick_pkcs11_module":
     case "pick_watermark_pdf":
-    case "open_files_dialog":
     case "pick_any_file":
     case "pick_any_files":
     case "pick_folder_dialog":
@@ -470,7 +477,7 @@ export async function runCommand(
          one a cancelled dialog gives, and nothing is pretended. */
       REFUSED.add(command);
       return command === "pick_any_files" || command === "pick_dictionary_files" ||
-        command === "pick_create_pdf_sources" || command === "open_files_dialog"
+        command === "pick_create_pdf_sources"
         ? []
         : null;
 

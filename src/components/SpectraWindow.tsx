@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SaveButton, settle } from "./SaveButton";
-import { LoadButton } from "./LoadButton";
+import { LoadButton, loadInto } from "./LoadButton";
+import { LibraryPicker } from "./LibraryPicker";
+import { loadable } from "../lib/loadable";
 import { useWindowFull } from "../lib/fullscreen";
 import { useCollab } from "../lib/collab";
 import { TakeControl } from "./TakeControl";
@@ -42,6 +44,29 @@ export function SpectraWindow({ sessionId, phone }: { sessionId: string; phone: 
       .catch(() => undefined);
     return () => { live = false; };
   }, []);
+  /* Say the window is really on screen. A tool may not report a PDF open until this has been sent, so a window
+     nobody can see is reported as a failure instead of an "it is open" (server/windowseen.ts). */
+  useEffect(() => {
+    if (!desk.open) return;
+    void fetch(`/api/pdfdesk/${encodeURIComponent(sessionId)}/seen`, { method: "POST" }).catch(() => undefined);
+  }, [sessionId, desk.open, desk.rev]);
+
+  /* The editor's own Open (its File menu) asks for a file, and this window has no desktop file dialog: Autora's own
+     picker is shown instead (server/pdfdesk.ts askOpen). Nothing about the open file changes unless one is chosen. */
+  const [asking, setAsking] = useState(false);
+  const asked = useRef(0);
+  const closeAsk = useCallback(() => {
+    setAsking(false);
+    void fetch(`/api/pdfdesk/${encodeURIComponent(sessionId)}/ask`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clear: true }),
+    }).catch(() => undefined);
+  }, [sessionId]);
+  useEffect(() => {
+    if (!desk.ask || desk.ask === asked.current) return;
+    asked.current = desk.ask;
+    setAsking(true);
+  }, [desk.ask]);
+
   /** Bumped when the agent changes the document under the editor: the frame is
    *  loaded again, which is the only way it re-reads a file it already has. */
   const [generation, setGeneration] = useState(0);
@@ -163,6 +188,22 @@ export function SpectraWindow({ sessionId, phone }: { sessionId: string; phone: 
 
   return (
     <div className={`pdf-window${phone ? " is-phone" : ""}${phone && full ? " is-full" : ""}`}>
+      {asking && (
+        <LibraryPicker
+          tabs={["files"]}
+          title="Open a PDF"
+          action="Open"
+          filter={(f) => loadable("pdf", f)}
+          single
+          onClose={closeAsk}
+          onPick={(picked) => {
+            const file = picked.files[0];
+            closeAsk();
+            if (!file) return;
+            void loadInto("pdf", sessionId, file).catch((err: unknown) => setTrouble(err instanceof Error ? err.message : String(err)));
+          }}
+        />
+      )}
       <div className="pdf-bar">
         <span className="pdf-bar-ico" aria-hidden="true"><IconFile size={14} /></span>
         <span className="pdf-bar-app">PDF</span>

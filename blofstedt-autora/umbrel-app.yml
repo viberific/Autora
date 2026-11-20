@@ -215,18 +215,14 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Choosing Claude (subscription) works now. On a new install, "Connect a
-  model" opens Settings, where picking Claude or Gemini (subscription) shows
-  its Sign in right there, and Claude's subscription has a model to choose
-  (Opus, Sonnet or Haiku) instead of an empty box. The model can also be
-  changed at the top of Settings, under Currently using, for subscriptions as
-  well as API keys. Every reply in the chat now says which model wrote it.
-  A message you send while the agent is working can be deleted (the bin on
-  the message) until the agent has read it: it never reaches the agent, and
-  deleting it stops the agent's work at once.
-  Memory recall is smarter: instead of matching words, a model reads your
-  request, and what the agent is doing as it works, and picks the memories
-  that actually bear on it, so "ship it" finds your note about deploying.
-  If that model cannot answer quickly, word matching is used as before.
-  Background work on a subscription (summaries, learning, choosing memories)
-  now runs as a plain question that cannot change anything.
+  Opening a document no longer leaves a blank canvas. Autora Pages, Sheets,
+  Slides and the PDF window now tell the server they are really on screen, and
+  a tool may not report a document open until they have: a window that never
+  appears is reported as a failure, with what to do about it, instead of
+  "opened" repeated while nothing shows.
+  A tool that saves a different file from the one open in a window now says so
+  plainly, naming both files, so "this is fixed" can no longer be said while
+  the window is still showing the old document.
+  The PDF editor's own Open works: it opens Autora's file picker, because the
+  window has no desktop file dialog, so it used to do nothing at all. Load and
+  Save are unchanged.

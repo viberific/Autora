@@ -324,7 +324,7 @@ function setPages(doc: PDFDocument, pages: PDFPage[]) {
   if (doc.getPageCount() !== pages.length) throw new Problem("The pages could not be put in order; nothing was saved.");
 }
 
-type Saved = { art: Artifact; replaced: boolean };
+type Saved = { art: Artifact; replaced: boolean; /** Said when the file written is not the one open in the window. */ elsewhere?: string };
 
 /** The name a result is saved under. The agent's own file is updated in
     place; the person's never is -- theirs gets a new name beside it. */
@@ -357,7 +357,21 @@ function deliver(ctx: PdfContext, name: string, data: Buffer, note: string, inpu
     const source = ctx.desk.current()?.source ?? (input.artifact?.origin === "user" ? input.artifact.id : null);
     ctx.desk.open({ name: art.name, base: data, items: [], working: art.id, source, outName: art.name, review: { label: note, diff: false }, ...(cues?.length ? { cues } : {}) });
   }
-  return { art, replaced };
+  return { art, replaced, elsewhere: elsewhereLine(ctx, art) };
+}
+
+/**
+ * "This went to another file" -- said whenever the file just written is not the one in the PDF window.
+ *
+ * On 2026-11-20 the window kept showing proposal.pdf while v2.pdf, v3.pdf and v4.pdf were written beside it, and the
+ * agent told the person it was fixed three times; the screen never changed and there was nothing in the tool's answer
+ * that said why. Now there is: the save is reported, and so is the file the window is really showing.
+ */
+function elsewhereLine(ctx: PdfContext, art: { id: string; name: string }): string | undefined {
+  const here = ctx.desk?.current();
+  if (!here) return undefined;
+  if (here.working === art.id || here.name === art.name) return undefined;
+  return `This went to ${art.name} (${art.id}), which is NOT the file open in the PDF window: that one is ${here.name}, so the person cannot see this yet. Say plainly which file is which, and put this one in the window before saying it is fixed: the person can press Load in the PDF window and choose ${art.name}, and there is nothing yet that does it for them.`;
 }
 
 function savedLine(saved: Saved, pages: number, input: Input): string {
@@ -366,8 +380,9 @@ function savedLine(saved: Saved, pages: number, input: Input): string {
     `${saved.replaced ? "Updated" : "Saved as"} artifact ${art.id} (${art.name}, ${pages} page${pages === 1 ? "" : "s"}, ` +
     `${formatSize(art.size)})${saved.replaced ? ", replacing the earlier version of that file" : ""}. ` +
     (input.artifact?.origin === "user" || !input.artifact ? `${input.name} itself is unchanged. ` : "") +
-    `It is shown in the conversation for the person to open, and is on this host at ${artifactPath(art.id)}.`
-  );
+    `It is shown in the conversation for the person to open, and is on this host at ${artifactPath(art.id)}. ` +
+    (saved.elsewhere ?? "")
+  ).trim();
 }
 
 // ------------------------------------------------------------ geometry --

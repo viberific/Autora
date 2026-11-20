@@ -27,6 +27,7 @@ import { outlineLines } from "./compose";
 import { cueForItem, flattenDesk, type Cue, type DeskHooks, type DeskItem, type DeskSnapshot } from "./pdf";
 import { addCommand, extendRun, logText, openPersonRun, type OfficeCommand } from "./commandlog";
 import { pickText, rememberPick, type Pick } from "./picked";
+import { markSeen } from "./windowseen";
 import { stateDir } from "./state";
 
 type Desk = DeskSnapshot & {
@@ -56,6 +57,8 @@ type Desk = DeskSnapshot & {
   cueSeq?: number;
   /** The words the person has selected in the page, and when it was said; not kept on disk. */
   pick?: Pick;
+  /** When the editor asked to open a file (its own File > Open): the page shows Autora's picker. Not kept on disk. */
+  ask?: number;
   /** Every change as a command (who, what, the version just before), oldest first. See commandlog.ts. */
   log?: OfficeCommand[];
   /** The number the next command gets. */
@@ -276,11 +279,35 @@ export function deskState(session: string) {
   if (!desk) return { open: false };
   return {
     open: desk.open, name: desk.name, working: desk.working, baseRev: desk.baseRev, rev: desk.rev,
+    ask: desk.ask ?? 0,
     items: desk.items, since: desk.since, problem: desk.problem,
     cues: desk.cues, cueSeq: desk.cueSeq,
     marks: desk.marks.map(({ before: _before, ...m }) => m),
     versions: desk.versions.map(({ items: _items, ...v }) => v),
   };
+}
+
+/**
+ * The editor's own Open (its File menu, Ctrl+O).
+ *
+ * The window has no desktop file dialog: the editor asks the host to pick files and there is nothing behind that ask,
+ * so Open did nothing at all -- the person's complaint on 2026-11-20 was 'the "Open" doesn't work in the pdf editor by
+ * the way, only load and save'. The ask now becomes Autora's own picker in the page (SpectraWindow), and what is
+ * chosen comes back through the ordinary load route, so the editor ends up with the file it was opened with.
+ */
+export function askOpen(session: string): void {
+  const desk = load(session);
+  if (!desk) return;
+  desk.ask = Date.now();
+  changed(session);
+}
+
+/** The page has shown the picker: nothing is left to ask. */
+export function clearAsk(session: string): void {
+  const desk = load(session);
+  if (!desk || !desk.ask) return;
+  desk.ask = 0;
+  changed(session);
 }
 
 export function deskBase(session: string): Buffer | null {
@@ -760,6 +787,22 @@ export function deskRoutes(app: Express, opts: { exists: (session: string) => bo
     const item = load(id)?.items.find((i) => i.id === target);
     if (!item) return res.json({ ok: true });
     touched(id, target, kind, `${kind === "drag" ? "is moving" : "has selected"} ${label(item)}`, { tell: false });
+    res.json({ ok: true });
+  });
+
+  /* The picker from the editor's own Open has been shown (or put away): nothing about the file changes. */
+  app.post("/api/pdfdesk/:session/ask", express.json({ limit: "1kb" }), (req, res) => {
+    const id = known(req, res);
+    if (!id) return;
+    if (req.body?.clear === true) clearAsk(id);
+    res.json({ ok: true });
+  });
+
+  /* The page saying it has this window on screen (server/windowseen.ts): no change to the file. */
+  app.post("/api/pdfdesk/:session/seen", express.json({ limit: "1kb" }), (req, res) => {
+    const id = known(req, res);
+    if (!id) return;
+    markSeen("pdf", id);
     res.json({ ok: true });
   });
 
