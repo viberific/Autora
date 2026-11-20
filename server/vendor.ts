@@ -32,6 +32,7 @@
 
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { cliPath } from "./clibin";
 import { redactSecrets } from "./state";
@@ -258,6 +259,9 @@ interface VendorRunOptions {
   id: VendorId;
   /** What to ask it. */
   prompt: string;
+  /** Standing instructions, the same from turn to turn: handed over as a file (`--system-file`) so Claude Code puts them in
+      its system prompt, where they are cached, rather than at the head of every new prompt. */
+  system?: string;
   /** The folder it works in. */
   cwd: string;
   /** Let it edit files and run commands. Off means it only reads. */
@@ -308,13 +312,14 @@ type PromptForm = "stdin" | "argv";
 /** The command line a wrapper is called with: options, then the prompt.
  *
  * `--jsonl` asks for the streaming contract at the top of this file; a wrapper
- * that predates it answers in plain text, which is read as one delta. `--effort`
- * goes only to Gemini: Antigravity takes a reasoning effort, Claude Code does
- * not, and its wrapper refuses an option it does not know. */
-export function vendorArgs(opts: VendorRunOptions, form: PromptForm = "stdin", jsonl = true): string[] {
+ * that predates it answers in plain text, which is read as one delta. Both
+ * bundled wrappers take `--effort` and `--system-file`; a wrapper of the
+ * person's own that refuses one is asked again without it (runVendor). */
+export function vendorArgs(opts: VendorRunOptions, form: PromptForm = "stdin", jsonl = true, systemFile = ""): string[] {
   const args: string[] = jsonl ? ["--jsonl"] : [];
   if (opts.model) args.push("--model", opts.model);
-  if (opts.effort && opts.id === "gemini") args.push("--effort", opts.effort);
+  if (opts.effort) args.push("--effort", opts.effort);
+  if (systemFile) args.push("--system-file", systemFile);
   if (opts.cwd) args.push("--cwd", opts.cwd);
   if (opts.write) args.push("--write");
   if (opts.timeoutArg) args.push("--timeout", opts.timeoutArg);
@@ -456,7 +461,7 @@ export async function runVendor(opts: VendorRunOptions): Promise<VendorRunResult
   let form: PromptForm = "stdin";
   let jsonl = true;
   let last: VendorRunResult | null = null;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
     const result = await runAttempt(opts, form, jsonl);
     last = result;
     /* Anything said is the answer, and a failure that is not about our options
@@ -470,6 +475,15 @@ export async function runVendor(opts: VendorRunOptions): Promise<VendorRunResult
     }
     if (refused === "-" && form === "stdin") {
       form = "argv";
+      continue;
+    }
+    /* Options a wrapper can do without: the effort is a preference, and standing instructions can go ahead of the prompt. */
+    if (refused === "--effort" && opts.effort) {
+      opts = { ...opts, effort: undefined };
+      continue;
+    }
+    if (refused === "--system-file" && opts.system) {
+      opts = { ...opts, prompt: `${opts.system}\n\n---\n\n${opts.prompt}`, system: undefined };
       continue;
     }
     return result;
@@ -537,14 +551,32 @@ async function runAttempt(opts: VendorRunOptions, form: PromptForm, jsonl = true
     const finish = (result: VendorRunResult) => {
       if (settled) return;
       settled = true;
+      dropSystem();
       if (flushTimer) clearTimeout(flushTimer);
       if (opts.signal) opts.signal.removeEventListener("abort", onAbort);
       done(result);
     };
 
+    /* Standing instructions go in a file of their own for this run, removed when it ends: a command line has a length limit,
+       and it would put them in every process listing. */
+    let systemFile = "";
+    if (opts.system?.trim()) {
+      try {
+        const where = fs.mkdtempSync(path.join(os.tmpdir(), "autora-system-"));
+        systemFile = path.join(where, "system.md");
+        fs.writeFileSync(systemFile, opts.system, { mode: 0o600 });
+      } catch {
+        systemFile = "";
+      }
+    }
+    const dropSystem = () => {
+      if (systemFile) fs.rmSync(path.dirname(systemFile), { recursive: true, force: true });
+    };
+    const prompt = opts.system?.trim() && !systemFile ? `${opts.system}\n\n---\n\n${opts.prompt}` : opts.prompt;
+
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn(ready.path, vendorArgs(opts, form, jsonl), {
+      child = spawn(ready.path, vendorArgs({ ...opts, prompt }, form, jsonl, systemFile), {
         cwd: opts.cwd,
         env: vendorEnv(),
         stdio: ["pipe", "pipe", "pipe"],
@@ -568,6 +600,9 @@ async function runAttempt(opts: VendorRunOptions, form: PromptForm, jsonl = true
     const split = lineSplitter((line) => {
       const parsed = parseLine(line);
       if (!parsed) return;
+      /* Text held back for coalescing goes out before anything else it said: a tool step sent ahead of the words written
+         before it split a sentence in two, its first half after the step and its end in a reply of its own. */
+      if (parsed.type !== "delta") flush();
       if (parsed.type === "delta") pushDelta(redact(parsed.text));
       else if (parsed.type === "status") opts.onStatus?.(redact(parsed.text));
       else if (parsed.type === "tool") {
@@ -607,6 +642,8 @@ async function runAttempt(opts: VendorRunOptions, form: PromptForm, jsonl = true
 
     child.on("close", (code) => {
       clearTimeout(hard);
+      /* A last line with no newline after it is still a line: held by the splitter, it was lost. */
+      split("\n");
       flush();
       const durationMs = Date.now() - started;
       const ok = code === 0 && !timedOut && !failure;
@@ -640,7 +677,7 @@ async function runAttempt(opts: VendorRunOptions, form: PromptForm, jsonl = true
        an unhandled stdin error would take the whole process down mid-turn. */
     child.stdin?.on("error", () => undefined);
     try {
-      child.stdin?.end(form === "stdin" ? opts.prompt : "");
+      child.stdin?.end(form === "stdin" ? prompt : "");
     } catch {
       /* The wrapper took no stdin: it will say so on its own. */
     }

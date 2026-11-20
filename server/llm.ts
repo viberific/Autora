@@ -129,6 +129,9 @@ export interface ChatCall {
       short line. Only a vendor that runs its own tools (a subscription CLI)
       has anything to say here; an API vendor's calls are already events. */
   onStep?: (text: string) => void;
+  /** The folder a vendor that runs its own tools (a subscription CLI) works in: the chat's own, so what it makes is where the
+      person's windows and Artifacts look. */
+  cwd?: string;
 }
 
 export interface ChatUsage {

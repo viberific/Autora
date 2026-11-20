@@ -222,4 +222,7 @@ releaseNotes: >-
   Antigravity's agy where you have installed it. A chat that is not signed in
   now says so at once instead of retrying for a minute, Automatic no longer
   picks a subscription nobody has signed in, and an API key in the
-  environment no longer takes the place of your subscription.
+  environment no longer takes the place of your subscription. Claude's
+  replies now stream as they are written and start sooner, a reply no longer
+  breaks in two around a step, and what Claude or Gemini builds lands in the
+  chat's own folder and shows as file changes, as the agent's own work does.

@@ -30,11 +30,12 @@ function line(message: ChatCall["messages"][number]): string {
   return `${who}: ${message.text ?? ""}`.trim();
 }
 
-/** The whole conversation as one prompt: the CLI has no memory of the last call. */
+/** The whole conversation as one prompt: the CLI has no memory of the last call. The system prompt goes separately (runVendor's
+    `system`), so the part that stays the same turn after turn is cached by the vendor rather than sent fresh at the head of a
+    new message every time. */
 function promptOf(call: ChatCall): string {
   const said = call.messages.filter((m) => (m.text ?? "").trim()).map(line);
   return [
-    call.system.trim(),
     said.length ? `The conversation so far:\n\n${said.join("\n\n")}` : "",
     "Answer the person's last message. You are the one writing in their chat now: reply with the answer only, in their " +
       "language, and do not restate the conversation or introduce yourself.",
@@ -67,15 +68,18 @@ export async function streamCli(call: ChatCall, onDelta: (text: string) => void)
   const out = await runVendor({
     id,
     prompt: promptOf(call),
-    /* /data/work/agy-scratch in the container (AUTORA_HOME=/data); elsewhere beside the settings file, a folder this user can
-       write, where /data usually is not. */
-    cwd: process.env.AUTORA_CLI_CWD || path.join(process.env.AUTORA_HOME || stateDir(), "work", "agy-scratch"),
+    system: call.system,
+    /* The chat's own folder, the one its windows, code cards and Artifacts read: a CLI working in a scratch folder built
+       things nobody could see. A scratch folder only when no chat names one (/data/work/agy-scratch in the container). */
+    cwd: call.cwd || process.env.AUTORA_CLI_CWD || path.join(process.env.AUTORA_HOME || stateDir(), "work", "agy-scratch"),
     /* It works: a chat turn may read, write and run things, the same hands a delegate has. */
     write: true,
     timeoutArg: `${seconds}s`,
     hardTimeoutMs: seconds * 1000 + 15_000,
     model: call.model || undefined,
-    effort: call.effort || undefined,
+    /* A turn Autora answers without thinking (small talk, the voice) is asked for the least effort: the CLI thinks by default,
+       and that wait is most of what a short answer costs. */
+    effort: call.effort || (call.thinking === "off" ? "low" : undefined),
     // The wrapper's own streaming contract is what makes the answer arrive as it is written.
     onDelta,
     /* One step per tool call: the wrapper says each call twice (a status line and a tool line), and runVendor already turns

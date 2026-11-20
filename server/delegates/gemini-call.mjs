@@ -14,9 +14,15 @@
  * for the run (`--skip-trust`): otherwise the CLI quietly drops back to approving every edit by hand, and with nobody there to
  * approve, a write turn stalls.
  */
+import fs from "node:fs";
 import { brief, emit, fail, onPath, readOptions, reasonOf, runCli } from "./common.mjs";
 
 const opts = await readOptions(process.argv.slice(2));
+/* Neither Gemini CLI takes standing instructions beside the prompt, so a system file goes ahead of it. */
+if (opts.systemFile) {
+  const system = fs.readFileSync(opts.systemFile, "utf8").trim();
+  if (system) opts.prompt = `${system}\n\n---\n\n${opts.prompt}`;
+}
 const agy = onPath("agy");
 const bin = agy ?? onPath("gemini");
 if (!bin) fail("not_installed", "Neither the Gemini CLI (npm install -g @google/gemini-cli) nor Antigravity's agy is installed here.");

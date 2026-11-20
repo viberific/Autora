@@ -2138,6 +2138,9 @@ const MAX_NUDGES = 3;
 
 /** Codes worth asking again for: rate limits, overload, and the generic 500. */
 const TRANSIENT = new Set([429, 500, 502, 503, 504]);
+/** A subscription CLI's tool step that may have changed files (Claude Code's Write/Edit/Bash, Gemini's write_file/replace/
+    run_shell_command, agy's own names): after one, the chat's folder is looked at for what it wrote. */
+const CLI_WRITES = /^(?:Write|Edit|MultiEdit|NotebookEdit|Bash|write_file|replace|edit|run_shell_command|write_to_file|replace_file_content|run_command)\b/i;
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -4419,6 +4422,28 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
             context.useRequest(answering.model, sentTools);
             const sent = context.messagesFor(system, { anchorInMessages: true });
             const sentEstimate = context.estimateSent(pinned, sent);
+            /* A subscription CLI writes with its own tools, in the chat's folder: the folder is primed first so what it
+               writes can be told from what was there, and each write becomes the same code card the agent's own edits do. */
+            const cliTurn = providerSpec(answering.provider)?.kind === "cli";
+            const cliSpan = `chat-${session.id}-${rounds}`;
+            let cliWrites: Promise<void> = Promise.resolve();
+            const cliWrote = () => { cliWrites = cliWrites.then(() => announceCode(cliSpan)).catch(() => undefined); };
+            /* Whatever the sieve still holds, said now. */
+            const sayHeld = () => {
+              const tail = sieve.flush();
+              if (tail.text) {
+                if (handedOver) {
+                  workerSaid += tail.text;
+                } else {
+                  emitEvent(session, "turn.agent.text", "agent", { text: tail.text });
+                  result.reply += tail.text;
+                }
+                delivered += tail.text.length;
+                streamed += tail.text.length;
+              }
+              show(tail.images);
+            };
+            if (cliTurn && !workspace.hasBaseline) await workspace.prime();
             const turn = await streamChat({
               provider: answering.provider,
               model: answering.model,
@@ -4446,18 +4471,23 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
               ...(opts.quick ? { thinking: "off" as const } : {}),
               signal: running.get(session.id)?.signal,
               tools: sentTools,
+              ...(cliTurn ? { cwd: terminalDir() } : {}),
               /* A subscription CLI runs its own tools: each call is shown in
                  its bubble as it happens, the way an API vendor's tool cells
                  are, so the person watches the work rather than the wait. */
               onStep: (text: string) => {
                 if (running.get(session.id)?.stopped) return;
+                /* The words written before this step go out before it: the sieve holds the last few characters back (an
+                   image address may be starting), and a step sent past them split a word between two replies. */
+                sayHeld();
                 /* The model goes with the step so the chat can mark whose work it is: a subscription CLI's calls show under
                    its own name and mark, not as the agent's, and the person can tell Gemini from Claude at a glance. */
                 emitEvent(session, "vendor.tool", "agent", {
                   id: `chat-${session.id}-${rounds}`,
                   text,
-                  ...(providerSpec(answering.provider)?.kind === "cli" ? { vendor: answering.provider, model: answering.model } : {}),
+                  ...(cliTurn ? { vendor: answering.provider, model: answering.model } : {}),
                 });
+                if (cliTurn && CLI_WRITES.test(text)) cliWrote();
               },
             }, (piece) => {
               // The client coalesces these deltas into one reply (see
@@ -4484,18 +4514,12 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
               show(images);
             });
 
-            const tail = sieve.flush();
-            if (tail.text) {
-              if (handedOver) {
-                workerSaid += tail.text;
-              } else {
-                emitEvent(session, "turn.agent.text", "agent", { text: tail.text });
-                result.reply += tail.text;
-              }
-              delivered += tail.text.length;
-              streamed += tail.text.length;
+            sayHeld();
+            /* What a subscription CLI wrote, as code cards, once its last write has been looked at. */
+            if (cliTurn) {
+              await cliWrites;
+              await announceCode(cliSpan);
             }
-            show(tail.images);
 
             // What the turn cost, written down at the moment it happened.
             // Prices move, so re-pricing an old turn later from today's

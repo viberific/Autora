@@ -45,6 +45,16 @@ let input = ""; process.stdin.on("data", (c) => input += c); process.stdin.on("e
   const mode = process.env.CLAUDE_STUB || "ok";
   if (mode === "auth") { say({ type: "result", subtype: "success", is_error: true, result: "Invalid API key · Please run /login" }); return; }
   if (mode === "limit") { console.error("Claude usage limit reached. Your limit will reset at 9pm."); process.exit(1); }
+  if (mode === "partial") {
+    // --include-partial-messages: the words in pieces, then the finished message repeating them.
+    const ev = (event) => say({ type: "stream_event", event });
+    ev({ type: "message_start" });
+    ev({ type: "content_block_delta", delta: { type: "text_delta", text: "Hel" } });
+    ev({ type: "content_block_delta", delta: { type: "text_delta", text: "lo." } });
+    say({ type: "assistant", message: { content: [{ type: "text", text: "Hello." }, { type: "tool_use", name: "Read", input: { file_path: "a.ts" } }] } });
+    say({ type: "result", subtype: "success", is_error: false, result: "Hello." });
+    return;
+  }
   say({ type: "system", subtype: "init" });
   say({ type: "assistant", message: { content: [{ type: "text", text: "Looking at it. " }, { type: "tool_use", name: "Read", input: { file_path: "src/a.ts" } }] } });
   say({ type: "assistant", message: { content: [{ type: "tool_use", name: "Edit", input: { file_path: "src/a.ts" } }, { type: "text", text: "Done." }] } });
@@ -113,6 +123,21 @@ await test("Claude: the prompt goes on standard input; the text streams, its too
   assert.deepEqual(argv.slice(0, 4), ["-p", "--output-format", "stream-json", "--verbose"]);
   assert.ok(argv.includes("--model") && argv.includes("sonnet"));
   assert.ok(argv.includes("acceptEdits"), "write lets it edit");
+});
+
+await test("Claude streams its words as they are written, once each, with its effort and its instructions as a system prompt", async () => {
+  withCli();
+  process.env.CLAUDE_STUB = "partial";
+  const { result, deltas, statuses } = await run("claude", { effort: "low", system: "Be brief." });
+  delete process.env.CLAUDE_STUB;
+  assert.equal(result.ok, true, result.message);
+  assert.equal(deltas.join(""), "Hello.", "the finished message does not say it twice");
+  assert.deepEqual(statuses, ["Read a.ts"]);
+  const argv = JSON.parse(fs.readFileSync(argvLog, "utf8")) as string[];
+  assert.ok(argv.includes("--include-partial-messages"));
+  assert.deepEqual(argv.slice(argv.indexOf("--effort"), argv.indexOf("--effort") + 2), ["--effort", "low"]);
+  assert.ok(argv.includes("--append-system-prompt-file"));
+  assert.equal(fs.readFileSync(stdinLog, "utf8"), "check the code", "the instructions are not in the prompt");
 });
 
 await test("Claude without write may only read", async () => {

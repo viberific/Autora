@@ -29,6 +29,14 @@ An API key in the environment (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_AP
 would answer on the key, billed per token, instead of on the subscription. `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`)
 is passed, since it is a subscription sign-in.
 
+## Chatting on a subscription
+
+Choosing Claude (subscription) or Gemini (subscription) as the provider has the CLI answer the chat (`server/llm-cli.ts`). It works
+in the chat's own folder (the one the terminal, the code cards and Artifacts use), and each file it writes is shown as a code card,
+as the agent's own edits are. Autora's instructions go to Claude Code as its system prompt (`--append-system-prompt-file`), where
+they are cached from turn to turn, and its words stream as they are written (`--include-partial-messages`). The CLI uses its own
+tools, not Autora's: it cannot drive Autora's windows (Pages, PDF, the board) directly.
+
 ## Running outside Docker
 
 Install the CLIs (`npm install -g @anthropic-ai/claude-code @google/gemini-cli`), sign in as you normally do, and start Autora

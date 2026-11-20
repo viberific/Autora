@@ -3,7 +3,8 @@
  * job to a subscription CLI; the stream it prints is that file's contract (JSON Lines: delta, status, result, error).
  *
  * Plain Node, no dependencies, so it runs from the image as it is. Each wrapper takes the options vendor.ts passes:
- *   [--jsonl] [--model m] [--effort e] [--cwd dir] [--write] [--timeout t]  ( - | -- prompt... )
+ *   [--jsonl] [--model m] [--effort e] [--cwd dir] [--write] [--timeout t] [--system-file f]  ( - | -- prompt... )
+ * A system file holds standing instructions; a wrapper with no place for them puts them ahead of the prompt.
  */
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -20,7 +21,7 @@ export function fail(reason, message) {
 
 /** The options vendor.ts passes, and the prompt (from standard input for `-`, else the words after `--`). */
 export async function readOptions(argv) {
-  const out = { model: "", effort: "", cwd: process.cwd(), write: false, timeoutMs: 0, prompt: "" };
+  const out = { model: "", effort: "", cwd: process.cwd(), write: false, timeoutMs: 0, prompt: "", systemFile: "" };
   let fromStdin = false;
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
@@ -30,6 +31,7 @@ export async function readOptions(argv) {
     else if (a === "--cwd") out.cwd = argv[++i] ?? out.cwd;
     else if (a === "--write") out.write = true;
     else if (a === "--timeout") out.timeoutMs = timeoutMs(argv[++i] ?? "");
+    else if (a === "--system-file") out.systemFile = argv[++i] ?? "";
     else if (a === "-") fromStdin = true;
     else if (a === "--") { out.prompt = argv.slice(i + 1).join(" "); break; }
     else { process.stderr.write(`unknown option ${a}\n`); process.exit(2); }
