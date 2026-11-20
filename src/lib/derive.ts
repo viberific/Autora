@@ -27,6 +27,9 @@ export type TranscriptTurn = {
   thinking?: string;
   /** No model was connected: the reply carries a button to Settings. */
   setup?: boolean;
+  /** Which model wrote it, as people know it, and where it ran (a provider's name). Set from the model call that ended
+      (usage.turn); while a reply is still being written it is the model that answered last. */
+  model?: { label: string; via: string };
 };
 
 export type Approval = {
@@ -307,7 +310,9 @@ export type Cell =
   | { kind: "note"; seq: number; tone: "bad" | "warn" | "plain"; text: string }
   /** The person's words sent while the agent worked, added to the turn in flight: drawn as their own message. `read`
       once the agent has taken them in (turn.amend.read). */
-  | { kind: "said"; seq: number; text: string; read: boolean }
+  | { kind: "said"; seq: number; text: string; read: boolean;
+      /** The server's id for it, by which it can be taken back while unread. Absent on a log from before. */
+      id?: string }
   /** Agent mode moving between planning and building: said in the thread,
       where it happened, and nowhere else. */
   | { kind: "mode"; seq: number; to: "plan" | "build"; reason: string;
@@ -487,6 +492,9 @@ export function derive(events: AutoraEvent[]): Derived {
   /* A model call ended (usage.turn) while a reply was open: what the next call says is a new paragraph of the same reply,
      not more of its last word -- "make slides?" and "Done." used to read "make slides?Done." */
   let stepEnded = false;
+  /** The model the last call ran on, and the replies opened since, which the next usage.turn names. */
+  let lastModel: { label: string; via: string } | undefined;
+  let unnamed: TranscriptTurn[] = [];
   const approvals: Approval[] = [];
   const asks = new Map<string, Ask>();
   const files: FileChange[] = [];
@@ -553,7 +561,8 @@ export function derive(events: AutoraEvent[]): Derived {
   /** Start a new reply. A memory pulse sitting just before it moves into it,
       so what the agent recalled shows where its reasoning is. */
   const openReply = (seq: number, text: string): TranscriptTurn => {
-    const turn: TranscriptTurn = { role: "agent", text, seq };
+    const turn: TranscriptTurn = { role: "agent", text, seq, ...(lastModel ? { model: lastModel } : {}) };
+    unnamed.push(turn);
     transcript.push(turn);
     bucket.replies.push(turn);
     const memories: MemoryTouch[] = [];
@@ -637,7 +646,21 @@ export function derive(events: AutoraEvent[]): Derived {
       case Kind.Amend:
         /* Said while the agent worked and added to what it was doing, so it
            sits in the turn it joined rather than starting a new one. */
-        push({ kind: "said", seq: e.seq, text: String(e.payload.text ?? ""), read: false });
+        push({
+          kind: "said", seq: e.seq, text: String(e.payload.text ?? ""), read: false,
+          ...(typeof e.payload.id === "string" ? { id: e.payload.id } : {}),
+        });
+        break;
+
+      case Kind.AmendWithdrawn:
+        /* Taken back before the agent read it: gone from the thread, as it never reached the agent. */
+        for (const b of buckets) {
+          const at = b.cells.findIndex((c) => c.kind === "said" && c.id === e.payload.id);
+          if (at >= 0) {
+            if (open === b.cells[at]) open = null;
+            b.cells.splice(at, 1);
+          }
+        }
         break;
 
       case Kind.AmendRead:
@@ -1311,6 +1334,15 @@ export function derive(events: AutoraEvent[]): Derived {
 
       case Kind.UsageTurn:
         if (e.payload.context) gauge(e.payload.context);
+        if (typeof e.payload.model === "string" || typeof e.payload.model_label === "string") {
+          const label = String(e.payload.model_label || e.payload.model || "");
+          const via = String(e.payload.provider_label || e.payload.provider || "");
+          if (label || via) {
+            lastModel = { label: label || via, via };
+            for (const reply of unnamed) reply.model = lastModel;
+          }
+          unnamed = [];
+        }
         if (openAgentTurn) stepEnded = true;
         break;
 

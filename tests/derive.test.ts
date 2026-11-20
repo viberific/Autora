@@ -318,4 +318,35 @@ test("the working line knows when the turn last did anything", () => {
   assert.ok(r.since !== null && r.since < r.lastAt!);
 });
 
+test("each reply says which model wrote it, from the call that ended", () => {
+  const e = (seq: number, kind: string, actor: string, payload: Record<string, any>): AutoraEvent =>
+    ({ seq, ts: 1_700_000_000 + seq, kind, actor, span: null, payload, blob: null });
+  const events: AutoraEvent[] = [
+    e(1, Kind.UserMessage, "user", { text: "hi" }),
+    e(2, Kind.AgentText, "agent", { text: "Hello." }),
+    e(3, Kind.UsageTurn, "system", { provider: "claude-cli", model: "opus", provider_label: "Claude (subscription)", model_label: "Claude Opus (latest)" }),
+    e(4, Kind.AgentDone, "agent", {}),
+    e(5, Kind.UserMessage, "user", { text: "again" }),
+    e(6, Kind.AgentText, "agent", { text: "Still writing" }),
+  ];
+  const d = derive(events);
+  const replies = d.transcript.filter((t) => t.role === "agent");
+  assert.deepEqual(replies[0].model, { label: "Claude Opus (latest)", via: "Claude (subscription)" });
+  assert.equal(replies[1].model?.label, "Claude Opus (latest)", "while still being written, the model that answered last");
+  const older = derive([e(1, Kind.UserMessage, "user", { text: "hi" }), e(2, Kind.AgentText, "agent", { text: "Hi." }),
+    e(3, Kind.UsageTurn, "system", { provider: "openai", model: "gpt-x" })]);
+  assert.equal(older.transcript[1].model?.label, "gpt-x", "a log from before the labels names the model by its id");
+});
+
+test("a message taken back before the agent read it leaves the thread; one without an id cannot be", () => {
+  const e = (seq: number, kind: string, actor: string, payload: Record<string, any>): AutoraEvent =>
+    ({ seq, ts: 1_700_000_000 + seq, kind, actor, span: null, payload, blob: null });
+  const cells = (events: AutoraEvent[]) => derive(events).buckets.flatMap((b) => b.cells).filter((c) => c.kind === "said");
+  const base = [e(1, Kind.UserMessage, "user", { text: "go" }), e(2, Kind.Amend, "user", { text: "also this", id: "amend-1" }),
+    e(3, Kind.Amend, "user", { text: "and that", id: "amend-2" })];
+  assert.deepEqual(cells(base).map((c: any) => [c.text, c.id, c.read]), [["also this", "amend-1", false], ["and that", "amend-2", false]]);
+  assert.deepEqual(cells([...base, e(4, Kind.AmendWithdrawn, "user", { id: "amend-1" })]).map((c: any) => c.text), ["and that"]);
+  assert.equal((cells([e(1, Kind.UserMessage, "user", { text: "go" }), e(2, Kind.Amend, "user", { text: "old" })])[0] as any).id, undefined);
+});
+
 console.log(`\nderive: ${passed} passed`);

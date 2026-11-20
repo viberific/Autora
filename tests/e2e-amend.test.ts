@@ -65,6 +65,39 @@ async function main() {
       app.decide = null;
     });
 
+    await test("a message sent while it works can be deleted until the agent reads it, and then never reaches it", async () => {
+      app.seen.length = 0;
+      let step = 0;
+      app.decide = (req) => {
+        const g = guardOk(req);
+        if (g) return g;
+        step += 1;
+        if (step === 1) return { tools: [{ name: "terminal", args: { command: "sleep 2; echo slow" } }] };
+        return { text: "Finished." };
+      };
+      const s = await app.newSession("withdraw", "build");
+      await app.say(s, "do the slow job");
+      await app.until(s, (ev) => ev.some((e) => e.kind === "tool.call" && e.payload.args?.command === "sleep 2; echo slow"), "the slow step to start");
+      const sent = await app.api("POST", `/api/sessions/${s}/message`, { text: "also paint the walls purple" });
+      assert.equal(sent.body.queued, true);
+      const amend = (await app.until(s, (ev) => ev.some((e) => e.kind === "turn.amend"), "the message")).find((e) => e.kind === "turn.amend")!;
+      assert.ok(typeof amend.payload.id === "string", "it has an id to take it back by");
+      assert.ok((lastList(await app.events(s)) ?? []).some((r) => /paint the walls purple/.test(r.text)), "it added an ask");
+      const gone = await app.api("DELETE", `/api/sessions/${s}/amend/${amend.payload.id}`);
+      assert.equal(gone.status, 200, JSON.stringify(gone.body));
+      assert.equal(gone.body.stopped, true, "deleting it stopped the turn");
+      const ev = await app.until(s, (e) => e.some((x) => x.kind === "turn.agent.done"), "the turn to end", 30_000);
+      assert.equal(ev.filter((e) => e.kind === "turn.agent.done").at(-1)?.payload.stopped, true, "hard stop: the turn ended stopped");
+      assert.ok(!ev.some((e) => e.kind === "turn.agent.text" && /Finished/.test(e.payload.text ?? "")), "no further step ran");
+      assert.ok(ev.some((e) => e.kind === "turn.amend.withdrawn" && e.payload.id === amend.payload.id), "the thread is told");
+      assert.ok(!ev.some((e) => e.kind === "turn.amend.read" && e.seq > amend.seq), "nothing was read");
+      assert.doesNotMatch(told(app), /paint the walls purple/, "the agent never saw it");
+      assert.ok(!(lastList(ev) ?? []).some((r) => /paint the walls purple/.test(r.text)), "and the ask it added went with it");
+      const again = await app.api("DELETE", `/api/sessions/${s}/amend/${amend.payload.id}`);
+      assert.equal(again.status, 409, "once gone (or read) it cannot be deleted");
+      app.decide = null;
+    });
+
     await test("a message that lands as the agent is finishing is not lost", async () => {
       app.seen.length = 0;
       let step = 0;

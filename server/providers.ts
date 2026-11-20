@@ -224,10 +224,16 @@ export const PROVIDERS: ProviderSpec[] = [
     keyHint: "",
     keysUrl: "https://claude.ai/code",
     baseUrl: "",
-    defaultModel: "",
+    /* Claude Code's own aliases: each follows the newest model of its line as the CLI updates, so a choice made here does
+       not go stale. A full id (claude-opus-5-5) is typed in when one model must be held. Sonnet by default: every plan has it. */
+    defaultModel: "sonnet",
     listable: false,
     openEnded: true,
-    models: [],
+    models: [
+      { window: 1_000_000, id: "opus", label: "Claude Opus (latest)", input: 0, output: 0, priced: false, note: "Most capable; spends the plan's quota fastest" },
+      { window: 1_000_000, id: "sonnet", label: "Claude Sonnet (latest)", input: 0, output: 0, priced: false, note: "Balanced; everyday work" },
+      { window: 1_000_000, id: "haiku", label: "Claude Haiku (latest)", input: 0, output: 0, priced: false, note: "Fast; lightest on the quota" },
+    ],
   },
   {
     id: "deepseek",
@@ -581,6 +587,12 @@ export function costParts(
  */
 export function cheaperSibling(providerId: string, mainModel: string): string | null {
   const spec = providerSpec(providerId);
+  /* A subscription has no prices to compare, but its quota and its wait both go further on its lightest model: the last in
+     its list (Haiku, Flash low). Background work -- folding old turns, choosing memories -- does not need more. */
+  if (spec?.cli) {
+    const light = spec.models[spec.models.length - 1]?.id;
+    return light && light !== mainModel ? light : null;
+  }
   const pick = spec?.defaultModel;
   if (!pick || pick === mainModel) return null;
   if (!isPriced(providerId, pick) || !isPriced(providerId, mainModel)) return null;

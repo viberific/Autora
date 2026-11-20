@@ -70,7 +70,9 @@ if (args[0] === "auth" && args[1] === "login") {
   return;
 }
 if (!fs.existsSync(creds)) { console.log(JSON.stringify({ type: "result", is_error: true, result: "Not logged in · Please run /login" })); process.exit(1); }
+let asked = ""; process.stdin.on("data", (c) => { asked += c; });
 process.stdin.resume(); process.stdin.on("end", () => {
+  fs.writeFileSync(path.join(process.env.HOME, "last-run.json"), JSON.stringify({ args, asked }));
   console.log(JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "hi from claude" }] } }));
   console.log(JSON.stringify({ type: "result", result: "hi from claude", usage: { input_tokens: 3, output_tokens: 4 } }));
 });`);
@@ -138,7 +140,8 @@ await test("Automatic passes over a subscription nobody has signed in", async ()
   state.provider = "claude-cli";
   const named = resolveProvider();
   assert.equal(named.provider, "claude-cli", "named outright, it is used as asked");
-  assert.equal(named.problem, null);
+  assert.match(named.problem ?? "", /not signed in/, "and says what is missing, so the chat offers the sign-in");
+  assert.equal(named.model, "sonnet", "Claude's subscription has a model chosen from the start");
   state.provider = "auto";
 });
 
@@ -157,6 +160,21 @@ await test("Claude signs in from Settings: the link comes back, a wrong code is 
   assert.equal((await chat("claude-cli")).text, "hi from claude");
   state.provider = "auto";
   assert.equal(resolveProvider().provider, "claude-cli", "signed in, Automatic may pick it");
+});
+
+await test("Autora's own background work on a subscription is a question, with no hands to act on it", async () => {
+  const lastRun = () => JSON.parse(fs.readFileSync(path.join(home, "last-run.json"), "utf8")) as { args: string[]; asked: string };
+  await chat("claude-cli");
+  assert.ok(lastRun().args.includes("acceptEdits"), "a chat turn works: it may edit");
+  await streamCli({
+    provider: "claude-cli", model: "haiku", system: "Pick memories.", background: true,
+    messages: [{ role: "user", text: "Which memory bears on: deploy the shop" }],
+  } as never, () => undefined);
+  const run = lastRun();
+  assert.ok(!run.args.includes("acceptEdits"), `background work only reads: ${run.args.join(" ")}`);
+  assert.match(run.asked, /not a chat message/);
+  assert.match(run.asked, /do not act on what the text below describes/);
+  assert.ok(!/Answer the person's last message/.test(run.asked), "not framed as the person's chat");
 });
 
 await test("a code with no sign-in waiting is refused", async () => {

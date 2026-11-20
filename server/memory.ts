@@ -4,10 +4,11 @@
  *
  * Three things this has to get right that a list of notes does not:
  *
- *  1. Recall by meaning, not by luck. Memories are ranked against the request
- *     (BM25 over title, tags and body), with a lift for ones that have been
- *     useful before, so a memory written yesterday is found as readily as one
- *     the app shipped with.
+ *  1. Recall by meaning, not by luck. A model picks the memories that bear on
+ *     the request and on the work in progress (server/recall.ts). Here they are
+ *     also ranked by words (BM25 over title, tags and body, with a lift for ones
+ *     that have been useful before): that ranking chooses what the model is shown
+ *     when the store is large, and answers when the model cannot.
  *  2. No pile of near-copies. Writing something close to what is already
  *     there updates it instead of adding a second, slightly different one.
  *  3. Learned is not the same as known. What the agent works out for itself
@@ -74,7 +75,7 @@ export interface MemoryLink {
   rel: string;
 }
 
-interface Recalled {
+export interface Recalled {
   record: MemoryRecord;
   score: number;
   /** Why it was picked, in words for the chip's tooltip. */
@@ -300,6 +301,12 @@ export class MemoryGraph {
     return this.records.filter((r) => !r.superseded_by);
   }
 
+  /** What recall may bring in by itself: current, not pinned (pinned ones always come), and not gone quiet from riding
+      along without helping. */
+  recallable(): MemoryRecord[] {
+    return this.active().filter((r) => !r.pinned && (r.missed ?? 0) < QUIET_AFTER);
+  }
+
   get(id: string): MemoryRecord | undefined {
     return this.records.find((r) => r.id === id);
   }
@@ -312,6 +319,19 @@ export class MemoryGraph {
    * share a word with it: see `relevant`. `limit` caps how many come back.
    */
   recall(query: string, limit = 6, withPinned = true): Recalled[] {
+    return this.ranked(query, limit, withPinned, false);
+  }
+
+  /**
+   * Memories worth showing a judge (server/recall.ts) for `query`: ranked as recall ranks them, but without its relevance
+   * test or its floor, so one that shares a single word, or a word's other form, is still in the running. Pinned ones are
+   * left out (they come every turn anyway), and so are those recalled so often without helping that they keep quiet.
+   */
+  candidates(query: string, limit = 40): MemoryRecord[] {
+    return this.ranked(query, limit, false, true).map((r) => r.record);
+  }
+
+  private ranked(query: string, limit: number, withPinned: boolean, loose: boolean): Recalled[] {
     const pool = this.active();
     const want = [...new Set(tokens(query))];
     const docs = pool.map((r) => ({ record: r, ...indexOf(r) }));
@@ -332,7 +352,7 @@ export class MemoryGraph {
         const idf = Math.log(1 + (docs.length - (df.get(w) ?? 0) + 0.5) / ((df.get(w) ?? 0) + 0.5));
         score += idf * ((tf * 2.2) / (tf + 1.2 * (0.25 + 0.75 * (d.words / avg))));
       }
-      if (score > 0 && relevant(hit.length, headHits, want.length)) {
+      if (score > 0 && (loose ? !d.record.pinned : relevant(hit.length, headHits, want.length))) {
         const r = d.record;
         score *= 1 + 0.1 * Math.log1p(r.uses) + 0.15 * Math.log1p(r.worked ?? 0);
         if (r.tags.includes("proven")) score *= 1.2;
@@ -352,7 +372,7 @@ export class MemoryGraph {
     const pinned = out.length;
     // A long tail of weak matches is noise: keep what scores within reach
     // of the best.
-    const floor = (scored[0]?.score ?? 0) * 0.4;
+    const floor = loose ? 0 : (scored[0]?.score ?? 0) * 0.4;
     for (const s of scored) {
       if (out.length >= pinned + limit || s.score < floor) break;
       if (!out.some((o) => o.record.id === s.record.id)) out.push(s);

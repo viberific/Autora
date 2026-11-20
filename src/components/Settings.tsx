@@ -5,6 +5,7 @@ import {
   IconTerminal, IconX,
 } from "./Icons";
 import { ModelPicker } from "./ModelPicker";
+import { SubscriptionSignIn } from "./SubscriptionSignIn";
 import { VoiceCheck } from "./VoiceCheck";
 import { VoiceCard } from "./VoiceCard";
 import { CaptchaCard } from "./CaptchaCard";
@@ -58,6 +59,8 @@ type ProviderCard = {
   needs_key: boolean;
   /** A subscription CLI: no key at all, and its turns are not billed. */
   cli?: boolean;
+  /** A subscription's CLI looks signed in. Absent on an older server and for any other provider. */
+  signed_in?: boolean;
   /** True where this vendor publishes a balance, so a "paid in" figure can be
       turned into a real spend. Absent on an older server. */
   balance_endpoints?: boolean;
@@ -163,6 +166,8 @@ type SettingsState = {
     role_problems?: string[];
     endpoint: string | null;
     provider: string | null;
+    /** The same provider by id. Absent on an older server. */
+    provider_id?: string | null;
     hint: string | null;
   };
 };
@@ -237,6 +242,8 @@ export function Settings({
   const serverVersion = useServerVersion();
   const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({});
   const [modelDrafts, setModelDrafts] = useState<Record<string, string>>({});
+  /** The model list opened from the "Currently using" card. */
+  const [topPicking, setTopPicking] = useState(false);
   const [fastDrafts, setFastDrafts] = useState<Record<string, string>>({});
   const [backgroundDrafts, setBackgroundDrafts] = useState<Record<string, string>>({});
   /* Which provider the background model is on, per main provider; drafts like the rest. */
@@ -527,6 +534,15 @@ export function Settings({
   const choiceCards = allProviders
     ? state.catalog
     : state.catalog.filter((card) => isConnected(card) || provider === card.id);
+  const chosenCard = state.catalog.find((card) => card.id === provider);
+  /* Signed in: the card says so where it is. Not a reload, which would drop a choice made a moment ago and not yet saved. */
+  const markSignedIn = (id: string) => setState((cur) => cur && {
+    ...cur,
+    catalog: cur.catalog.map((card) => (card.id === id ? { ...card, signed_in: true } : card)),
+  });
+  const activeCard = state.catalog.find((card) => card.id === state.active.provider_id);
+  const activeModelId = activeCard ? (modelDrafts[activeCard.id] ?? activeCard.model) : "";
+  const activeModelLabel = activeCard?.models.find((m) => m.id === activeModelId)?.label ?? (activeModelId || "Choose a model…");
   const providerRow = (card: ProviderCard) => (
     <ProviderRow
       key={card.id}
@@ -613,9 +629,33 @@ export function Settings({
         <section className="set-card set-active">
           <h3>Currently using</h3>
           <div className="set-active-row">
-            {state.active.model && <code>{state.active.model}</code>}
+            {activeCard && activeCard.models.length > 0 ? (
+              /* The model is chosen here as well as in the provider's row below: it is the one thing people change most. */
+              <button
+                type="button"
+                className="set-select mp-open set-active-model"
+                onClick={() => setTopPicking(true)}
+                aria-haspopup="dialog"
+                aria-label={`${activeCard.label} model`}
+              >
+                <span>{activeModelLabel}</span>
+                <IconChevron size={13} />
+              </button>
+            ) : state.active.model && <code>{state.active.model}</code>}
             <span>{state.active.provider ?? "Nothing connected"}</span>
           </div>
+          {topPicking && activeCard && (
+            <ModelPicker
+              vendor={activeCard.label}
+              models={activeCard.models}
+              model={activeModelId}
+              busy={false}
+              listable={false}
+              onPick={(id) => { setModelDrafts((d) => ({ ...d, [activeCard.id]: id })); setTopPicking(false); }}
+              onRefresh={() => undefined}
+              onClose={() => setTopPicking(false)}
+            />
+          )}
           {state.active.role_problems?.map((p) => <p key={p} className="set-warn">{p}</p>)}
           {state.active.hint && (
             <p className={state.active.model ? "jf-hint" : "set-warn"}>{state.active.hint}</p>
@@ -648,7 +688,9 @@ export function Settings({
                   {card.key.set ? (
                     <em className="set-badge">key set</em>
                   ) : card.cli ? (
-                    <em className="set-badge">subscription</em>
+                    card.signed_in === false
+                      ? <em className="set-badge is-unset">not signed in</em>
+                      : <em className="set-badge">subscription</em>
                   ) : card.needs_key ? (
                     <em className="set-badge is-unset">no key</em>
                   ) : null}
@@ -657,6 +699,10 @@ export function Settings({
               </button>
             ))}
           </div>
+          {/* A subscription chosen and not signed in: its sign-in right here, not two cards down in a folded row. */}
+          {chosenCard?.cli && chosenCard.signed_in === false && (
+            <SubscriptionSignIn key={chosenCard.id} id={chosenCard.id} label={chosenCard.label} onSignedIn={() => markSignedIn(chosenCard.id)} />
+          )}
           {choiceCards.length < state.catalog.length && (
             <button className="setup-more set-show-all" onClick={() => setAllProviders(true)}>
               {connectedCards.length === 0
@@ -1026,7 +1072,9 @@ function ProviderRow({
             {card.key.source === "env" ? "environment" : card.key.masked}
           </em>
         ) : card.cli ? (
-          <em className="set-badge">subscription</em>
+          card.signed_in === false
+            ? <em className="set-badge is-unset">not signed in</em>
+            : <em className="set-badge">subscription</em>
         ) : card.needs_key ? (
           <em className="set-badge is-unset">no key</em>
         ) : (
@@ -1176,6 +1224,7 @@ function ProviderRow({
             </p>
           )}
 
+          {!card.cli && <>
           <label className="jf-row">
             <span>API base URL</span>
             <input
@@ -1190,6 +1239,7 @@ function ProviderRow({
           <p className="jf-hint">
             Leave as is unless you use a proxy or run the model yourself.
           </p>
+          </>}
           {card.pinnable && (
             <label className="jf-row">
               <span>Endpoint</span>
@@ -1571,124 +1621,6 @@ function RoleRow({
         />
       )}
     </>
-  );
-}
-
-type SignIn = {
-  installed: boolean;
-  signed_in: boolean;
-  via: string;
-  pending: { url: string } | null;
-  detail: string;
-};
-
-/**
- * A subscription's sign-in, done here rather than in a terminal in the container: the CLI's own sign-in runs on the server, the
- * link it prints opens the vendor's page in a new tab, and the code that page shows is pasted back (server/cli-signin.ts).
- */
-function SubscriptionSignIn({ id, label }: { id: string; label: string }) {
-  const [status, setStatus] = useState<SignIn | null>(null);
-  const [url, setUrl] = useState("");
-  const [code, setCode] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null);
-
-  useEffect(() => {
-    let live = true;
-    fetch(`/api/providers/${id}/signin`)
-      .then((r) => r.json())
-      .then((body: SignIn) => {
-        if (!live) return;
-        setStatus(body);
-        if (body.pending?.url) setUrl(body.pending.url);
-      })
-      .catch(() => undefined);
-    return () => { live = false; };
-  }, [id]);
-
-  const start = useCallback(async () => {
-    setBusy(true);
-    setSaid(null);
-    try {
-      const res = await fetch(`/api/providers/${id}/signin`, { method: "POST" });
-      const body = await res.json();
-      if (!res.ok) { setSaid({ ok: false, text: body.detail ?? "The sign-in did not start." }); return; }
-      setUrl(body.url);
-      setCode("");
-    } catch {
-      setSaid({ ok: false, text: "Could not reach the server." });
-    } finally {
-      setBusy(false);
-    }
-  }, [id]);
-
-  const finish = useCallback(async () => {
-    setBusy(true);
-    setSaid(null);
-    try {
-      const res = await fetch(`/api/providers/${id}/signin/code`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
-      });
-      const body = await res.json();
-      if (res.ok) {
-        setStatus(body);
-        setUrl("");
-        setCode("");
-        setSaid({ ok: true, text: "Signed in. Chats on this provider now run on the subscription." });
-      } else {
-        if (res.status === 409) setUrl("");
-        setSaid({ ok: false, text: body.detail ?? "The code was not taken." });
-      }
-    } catch {
-      setSaid({ ok: false, text: "Could not reach the server." });
-    } finally {
-      setBusy(false);
-    }
-  }, [id, code]);
-
-  if (!status) return null;
-  const signedIn = status.signed_in;
-  /* agy keeps its own sign-in on the boxes that have it: nothing to do here. */
-  const canSignIn = status.installed && status.via !== "agy";
-
-  return (
-    <div className="set-key">
-      <div className="set-key-head">
-        <b>{label} sign-in</b>
-        {signedIn ? <em className="set-badge">signed in</em> : <em className="set-badge is-unset">not signed in</em>}
-      </div>
-      <p className="set-note">{status.detail}</p>
-      {canSignIn && url ? (
-        <>
-          <p className="set-note">
-            <a href={url} target="_blank" rel="noreferrer">Open the sign-in page</a>, approve it, then paste the code it shows.
-          </p>
-          <div className="set-key-edit">
-            <input
-              type="password"
-              autoFocus
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && code.trim()) { e.preventDefault(); void finish(); } }}
-              placeholder="paste the code"
-              spellCheck={false}
-              aria-label={`${label} sign-in code`}
-            />
-            <button className="btn primary" onClick={() => void finish()} disabled={busy || !code.trim()}>
-              {busy ? "Signing in…" : "Sign in"}
-            </button>
-            <button className="btn ghost" onClick={() => { setUrl(""); setCode(""); }}>Cancel</button>
-          </div>
-        </>
-      ) : canSignIn ? (
-        <button className="btn ghost" onClick={() => void start()} disabled={busy}>
-          {busy ? "Starting…" : signedIn ? "Sign in again" : "Sign in"}
-        </button>
-      ) : null}
-      {said && <p className={said.ok ? "prov-ok" : "set-warn"}>{said.text}</p>}
-    </div>
   );
 }
 

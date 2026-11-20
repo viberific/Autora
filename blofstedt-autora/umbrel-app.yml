@@ -154,7 +154,8 @@ description: >-
 
   • A memory that learns — after real work, Autora writes down what worked
   (commands, fixes, your preferences) for you to keep or discard, recalls it
-  when it is relevant, and can save scripts it uses often as tools of its own.
+  when it bears on what you ask or what it is doing (chosen by meaning, not by
+  matching words), and can save scripts it uses often as tools of its own.
 
 
   • Integrations that grow as you go — when a task would be done better through
@@ -214,18 +215,18 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Chat on your Claude or Gemini subscription now works, with no API key.
-  Under Settings, Providers and models, open "Claude (subscription)" or
-  "Gemini (subscription)" and press Sign in: open the sign-in page, approve
-  it, and paste the code it shows. No terminal in the container is needed.
-  Gemini works with the Gemini CLI that ships with Autora, and still uses
-  Antigravity's agy where you have installed it. A chat that is not signed in
-  now says so at once instead of retrying for a minute, Automatic no longer
-  picks a subscription nobody has signed in, and an API key in the
-  environment no longer takes the place of your subscription. Claude's
-  replies now stream as they are written and start sooner, a reply no longer
-  breaks in two around a step, and what Claude or Gemini builds lands in the
-  chat's own folder and shows as file changes, as the agent's own work does.
-  Claude and Gemini can now use Autora's own tools too: they open documents,
-  put work on the Panacea board, drive the app preview and work in every
-  window the way the agent does, with the same checks and the same Ask mode.
+  Choosing Claude (subscription) works now. On a new install, "Connect a
+  model" opens Settings, where picking Claude or Gemini (subscription) shows
+  its Sign in right there, and Claude's subscription has a model to choose
+  (Opus, Sonnet or Haiku) instead of an empty box. The model can also be
+  changed at the top of Settings, under Currently using, for subscriptions as
+  well as API keys. Every reply in the chat now says which model wrote it.
+  A message you send while the agent is working can be deleted (the bin on
+  the message) until the agent has read it: it never reaches the agent, and
+  deleting it stops the agent's work at once.
+  Memory recall is smarter: instead of matching words, a model reads your
+  request, and what the agent is doing as it works, and picks the memories
+  that actually bear on it, so "ship it" finds your note about deploying.
+  If that model cannot answer quickly, word matching is used as before.
+  Background work on a subscription (summaries, learning, choosing memories)
+  now runs as a plain question that cannot change anything.

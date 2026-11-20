@@ -18,6 +18,8 @@ const bin = fs.mkdtempSync(path.join(os.tmpdir(), "autora-e2e-sub-"));
 const argvLog = path.join(bin, "argv.json");
 fs.writeFileSync(path.join(bin, "claude"), `#!${process.execPath}
 const fs = require("node:fs"), path = require("node:path");
+// Asked at start whether it is signed in (server/cli-signin.ts primeSignIn): that is not a chat run.
+if (process.argv[2] === "auth") { console.log(JSON.stringify({ loggedIn: true })); process.exit(0); }
 fs.writeFileSync(${JSON.stringify(argvLog)}, JSON.stringify({ argv: process.argv.slice(2), cwd: process.cwd() }));
 const say = (o) => console.log(JSON.stringify(o));
 const piece = (text) => say({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text } } });

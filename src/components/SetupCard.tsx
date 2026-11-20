@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { IconArrow, IconCheck } from "./Icons";
 import { answerOffer, dismissNotice, fetchProactive, type Proactive } from "../lib/proactive";
 import { ago } from "../lib/ago";
+import { SubscriptionSignIn } from "./SubscriptionSignIn";
 
 type Provider = {
   id: string;
@@ -10,6 +11,10 @@ type Provider = {
   keys_url: string;
   key_hint: string;
   needs_key: boolean;
+  /** A subscription CLI: signed in on the server, no key and no address. */
+  cli?: boolean;
+  signed_in?: boolean;
+  models?: { id: string; label: string; note?: string }[];
   default_model: string;
   default_base_url: string;
   model: string;
@@ -51,9 +56,13 @@ export function SetupCard({
   }, []);
 
   const card = providers?.find((p) => p.id === picked);
+  /** The subscription's CLI said it is signed in, here or already. */
+  const [signedIn, setSignedIn] = useState(false);
+  const onSignedIn = useCallback(() => setSignedIn(true), []);
 
   const choose = (p: Provider) => {
     setPicked(p.id);
+    setSignedIn(Boolean(p.signed_in));
     setKey("");
     setError(null);
     setModel(p.model || p.default_model);
@@ -86,7 +95,7 @@ export function SetupCard({
           provider: card.id,
           ...(card.needs_key ? { credentials: { [card.id]: key.trim() } } : {}),
           ...(model.trim() ? { models: { [card.id]: model.trim() } } : {}),
-          ...(!card.needs_key && url.trim() ? { base_urls: { [card.id]: url.trim() } } : {}),
+          ...(!card.needs_key && !card.cli && url.trim() ? { base_urls: { [card.id]: url.trim() } } : {}),
         }),
       });
       const body = await res.json().catch(() => ({}));
@@ -106,12 +115,12 @@ export function SetupCard({
     }
   };
 
-  const ready = card && (card.needs_key ? key.trim() !== "" : model.trim() !== "");
+  const ready = card && (card.cli ? signedIn : card.needs_key ? key.trim() !== "" : model.trim() !== "");
 
   return (
     <div className="setup">
       <h3>Hello. I need a model to think with.</h3>
-      <p>Pick a provider and paste its API key, and I can start.</p>
+      <p>Pick a provider and paste its API key, or sign in to a subscription, and I can start.</p>
 
       {!providers && !error && <p className="setup-hint">Loading…</p>}
 
@@ -138,7 +147,22 @@ export function SetupCard({
           onSubmit={(e) => { e.preventDefault(); if (ready && !busy) void connect(); }}
         >
           <p className="setup-hint">{card.note}</p>
-          {card.needs_key ? (
+          {card.cli ? (
+            <>
+              {/* A subscription signs in on the server; no key, no address. Then which of its models answers. */}
+              <SubscriptionSignIn key={card.id} id={card.id} label={card.label} onSignedIn={onSignedIn} />
+              {(card.models?.length ?? 0) > 0 && (
+                <select
+                  className="set-select"
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  aria-label={`${card.label} model`}
+                >
+                  {card.models!.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                </select>
+              )}
+            </>
+          ) : card.needs_key ? (
             <>
               <input
                 type="password"

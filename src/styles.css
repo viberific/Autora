@@ -662,6 +662,10 @@ input[type="checkbox"]:disabled { opacity: 0.5; cursor: default; }
    it -- it is worth having and not worth looking at, and it sits under every
    reply in the thread. */
 .msg-tools { display: inline-flex; gap: 2px; margin-left: auto; text-transform: none; letter-spacing: normal; }
+/* Deleting a message the agent has not read yet: at the end of the "You" line, quiet until pointed at. */
+.msg.user .msg-who { display: flex; align-items: center; }
+.msg-delete { margin-left: auto; color: var(--text-3); }
+.msg-delete:hover:not(:disabled) { color: var(--danger); }
 .msg-tool {
   display: inline-flex; align-items: center; justify-content: center;
   width: 22px; height: 22px; padding: 0; border-radius: var(--r-sm);
@@ -920,6 +924,12 @@ input[type="checkbox"]:disabled { opacity: 0.5; cursor: default; }
 .msg-body { min-width: 0; flex: 1; }
 .msg-who { font-size: var(--fs-2xs); font-weight: 650; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-2); margin-bottom: 3px; }
 .msg.agent .msg-who { display: flex; align-items: center; }
+/* Which model wrote the reply, beside the name: quieter than it, in the model's own spelling. */
+.msg-model {
+  margin-left: 8px; padding: 0 6px; border-radius: var(--r-sm); border: 1px solid var(--border);
+  font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--text-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; min-width: 0;
+}
 .msg-text {
   font-size: var(--fs-md); line-height: 1.6; white-space: pre-wrap;
   overflow-wrap: anywhere; color: var(--text);
@@ -2018,6 +2028,9 @@ label + .jf-hint { margin-top: -5px; }
   font-size: var(--fs-sm); color: var(--text-2);
   overflow-wrap: anywhere;
 }
+/* The model chosen right in the "Currently using" card: a picker button, not the grey caption beside it. */
+.set-active-row .set-active-model { flex: 0 1 300px; width: auto; min-width: 0; align-self: center; }
+.set-active-row .set-active-model span { font-size: var(--fs-base); color: var(--text); overflow-wrap: normal; }
 .set-warn { margin: 9px 0 0; font-size: var(--fs-sm); line-height: 1.5; color: var(--warn); }
 /* "How it works" and other detail folded under a one-line summary. */
 .set-more { margin: 6px 0 0; }

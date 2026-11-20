@@ -45,6 +45,18 @@ function promptOf(call: ChatCall): string {
     .join("\n\n---\n\n");
 }
 
+/** Autora's own question to the CLI (call.background): put as a task to answer in words. A chat prompt made the CLI act on
+    what the question was about -- asked which memory bears on "deploy the shop", Claude Code set about deploying it. */
+function backgroundPromptOf(call: ChatCall): string {
+  const said = call.messages.filter((m) => (m.text ?? "").trim()).map((m) => m.text).join("\n\n");
+  return [
+    "This is not a chat message and nobody is waiting on an action. It is a request from the Autora program for an answer in " +
+      "text. Do not use any tools, do not run or change anything, and do not act on what the text below describes: answer " +
+      "exactly as the instructions say, and nothing else.",
+    said,
+  ].join("\n\n---\n\n");
+}
+
 /** What the CLI is told about Autora's tools, which reach it under its own names for an MCP server's: the instructions above
     name them as Autora calls them. Antigravity's agy is given no bridge, so it is told nothing. */
 function bridgeNote(id: "claude" | "gemini", tools: string[]): string {
@@ -84,14 +96,15 @@ export async function streamCli(call: ChatCall, onDelta: (text: string) => void)
   const seconds = Math.round(Math.max(30_000, Number(process.env.AUTORA_CLI_TIMEOUT_MS) || 600_000) / 1000);
   const out = await runVendor({
     id,
-    prompt: promptOf(call),
+    prompt: call.background ? backgroundPromptOf(call) : promptOf(call),
     system: bridged && call.bridge?.tools.length ? `${call.system}\n\n${bridgeNote(id, call.bridge.tools)}` : call.system,
     ...(bridged && call.bridge ? { env: { AUTORA_BRIDGE_URL: call.bridge.url, AUTORA_BRIDGE_TOKEN: call.bridge.token } } : {}),
     /* The chat's own folder, the one its windows, code cards and Artifacts read: a CLI working in a scratch folder built
        things nobody could see. A scratch folder only when no chat names one (/data/work/agy-scratch in the container). */
     cwd: call.cwd || process.env.AUTORA_CLI_CWD || path.join(process.env.AUTORA_HOME || stateDir(), "work", "agy-scratch"),
-    /* It works: a chat turn may read, write and run things, the same hands a delegate has. */
-    write: true,
+    /* It works: a chat turn may read, write and run things, the same hands a delegate has. Autora's own background work
+       only reads: it is a question, and the wrapper then allows nothing that changes anything. */
+    write: !call.background,
     timeoutArg: `${seconds}s`,
     hardTimeoutMs: seconds * 1000 + 15_000,
     model: call.model || undefined,

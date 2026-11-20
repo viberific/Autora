@@ -9,7 +9,7 @@ import express, { type Request, type Response } from "express";
 import { captureConsole, log, setLogRedactor, type LogLevel } from "./server/logs";
 import { WebSocketServer, WebSocket } from "ws";
 import {
-  PROVIDERS, cheaperSibling, contextWindow, costParts, isPriced, providerSpec, } from "./server/providers";
+  PROVIDERS, cheaperSibling, contextWindow, costParts, isPriced, modelsFor, providerSpec, } from "./server/providers";
 import {
   flushState, recordUsage,
   reachFor, resolveProvider, save, state, stateDir, stateFilePath, type Resolved,
@@ -151,6 +151,8 @@ import {
 import { deskDocument, deskBriefing, deskHooks, deskRoutes, deskState, dropDesk, onDeskChange, onDeskCommand, onDeskTouch, personBase } from "./server/pdfdesk";
 import { staticDir } from "./server/staticfiles";
 import { memoryRoutes } from "./server/routes/memory";
+import { RECALL_BUDGET_MS, smartRecall, type Judge } from "./server/recall";
+import { primeSignIn } from "./server/cli-signin";
 import { skillRoutes } from "./server/routes/skills";
 import { healthRoutes } from "./server/routes/health";
 import { taskRoutes } from "./server/routes/tasks";
@@ -193,7 +195,7 @@ import { VENDORS, filesTouched, runVendor } from "./server/vendor";
 import { REFLECT_SYSTEM, parseReflection, reflectionPrompt, worthReflecting } from "./server/learning";
 import {
   MemoryGraph, doubtNote, freshness, siteOf,
-  type MemoryLink, type MemoryRecord,
+  type MemoryLink, type MemoryRecord, type Recalled,
 } from "./server/memory";
 import { actsOnSite, checkSource, checkText, groundingRefusal } from "./server/mindrules";
 import {
@@ -3454,6 +3456,9 @@ async function noticeTick() {
 
 /** How long an unwatched model call may take before it is abandoned. */
 const BACKGROUND_CALL_MS = 90_000;
+/** Steps between two looks at memory for what the agent is doing (see workMemory in runTurn), and how long one may take. */
+const WORK_RECALL_EVERY = 4;
+const WORK_RECALL_MS = 30_000;
 
 /**
  * A model call nobody watches: compaction, learning. The same provider as the
@@ -3477,7 +3482,7 @@ function vendorLabel(id: string): string {
   return PROVIDERS.find((p) => p.id === id)?.label ?? id;
 }
 
-async function backgroundCall(sessionId: string, system: string, prompt: string, maxTokens: number, temperature = 0.2, retryEmpty = false): Promise<string> {
+async function backgroundCall(sessionId: string, system: string, prompt: string, maxTokens: number, temperature = 0.2, retryEmpty = false, signal?: AbortSignal): Promise<string> {
   const active = resolveProvider();
   if (!active.provider || active.problem) throw new Error(active.problem ?? "No model is connected.");
   /* Unwatched work -- folding old turns, learning, remarks -- runs on the
@@ -3500,16 +3505,17 @@ async function backgroundCall(sessionId: string, system: string, prompt: string,
     thinking: "off",
     // Nobody watches it: the least thinking a model that takes the hint will do (server/modelprofile.ts).
     effort: "low",
+    background: true,
     /* Unwatched work must not wait for ever: Threads holds `lifeBusy` across this call, so one
        hung request would silence the whole forum until a restart. */
-    signal: AbortSignal.timeout(BACKGROUND_CALL_MS),
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(BACKGROUND_CALL_MS)]) : AbortSignal.timeout(BACKGROUND_CALL_MS),
   }, () => undefined);
   let turn: Awaited<ReturnType<typeof ask>>;
   try {
     turn = await ask(maxTokens);
   } catch (err) {
     /* The cheaper model was picked here, not by the person: one the key cannot reach is no reason for the work to fail. */
-    if (!cheaper || target.model !== cheaper) throw err;
+    if (!cheaper || target.model !== cheaper || signal?.aborted) throw err;
     target = mainTarget(active);
     turn = await ask(maxTokens);
   }
@@ -3537,6 +3543,23 @@ async function backgroundCall(sessionId: string, system: string, prompt: string,
     cached: turn.usage.cached ?? 0,
   });
   return turn.text;
+}
+
+/**
+ * The model that chooses which memories a turn gets (server/recall.ts): the background model, which is cheap and carries no
+ * conversation. None when no model is connected, and none for memories nobody can reach (the graph is empty).
+ */
+function recallJudge(sessionId: string): Judge | null {
+  /* Off for the end-to-end tests, whose scripted model answers each call in turn: an extra call would shift every reply. */
+  if (process.env.AUTORA_RECALL_JUDGE === "off") return null;
+  const active = resolveProvider();
+  if (!active.provider || active.problem) return null;
+  return (system, prompt, signal) => backgroundCall(sessionId, system, prompt, 500, 0, false, signal);
+}
+
+/** How long a turn waits for that choice: a subscription's CLI takes a few seconds just to start, an API call does not. */
+function recallBudget(): number {
+  return providerSpec(resolveProvider().provider)?.cli ? Math.max(RECALL_BUDGET_MS, 12_000) : RECALL_BUDGET_MS;
 }
 
 /**
@@ -3712,8 +3735,8 @@ export interface TurnResult {
   rounds?: number;
 }
 
-/** Messages sent while a turn ran, to be told to it at its next step. */
-const amendments = new Map<string, string[]>();
+/** Messages sent while a turn ran, to be told to it at its next step. Each has an id, so one can be taken back before then. */
+const amendments = new Map<string, { id: string; text: string }[]>();
 
 /** Take what is waiting for this session, once. Taking it is the agent reading it: the thread marks those messages
     read (turn.amend.read). */
@@ -3722,7 +3745,25 @@ function takeAmendments(sessionId: string): string[] {
   amendments.delete(sessionId);
   const session = waiting.length > 0 ? sessions.get(sessionId) : undefined;
   if (session) emitEvent(session, "turn.amend.read", "agent", { count: waiting.length });
-  return waiting;
+  return waiting.map((m) => m.text);
+}
+
+/**
+ * Take back a message the agent has not read yet: it never reaches the agent, leaves the thread (turn.amend.withdrawn), and
+ * the asks it added to the to-do list go with it. False once the agent has read it -- then it is part of the work.
+ */
+function withdrawAmendment(session: Session, id: string): boolean {
+  const waiting = amendments.get(session.id) ?? [];
+  const at = waiting.findIndex((m) => m.id === id);
+  if (at < 0) return false;
+  const [gone] = waiting.splice(at, 1);
+  if (waiting.length === 0) amendments.delete(session.id);
+  emitEvent(session, "turn.amend.withdrawn", "user", { id });
+  /* Asks it added (noteAsks), still open: in the person's words, so they are found in the message. */
+  const have = latestRequirements(session.events);
+  const kept = have.items.filter((r) => !(r.source === "amend" && r.status === "open" && gone.text.includes(r.text)));
+  if (kept.length !== have.items.length) emitEvent(session, "requirements.update", "system", { ...have, items: kept } as any);
+  return true;
 }
 
 /**
@@ -4144,23 +4185,37 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
      live voice was heard as silence followed by nothing. */
   const fast = opts.spoken === true && !state.speech.liveThinking;
   try {
-    /* Which memories this turn gets: ranked against the request (see
-       server/memory.ts), pinned ones always. */
+    /* Which memories this turn gets: chosen by a model for what the request means (server/recall.ts), the word ranking
+       (server/memory.ts) when it cannot answer in time, pinned ones always. Started now and awaited just before the
+       instructions are written, so the setup in between is not spent waiting. Small talk is not worth a call. */
     const conversation = conversationSoFar(session);
-    const recalled = mind.recallForTurn(text, conversation);
-    const uniqueAccessed = recalled.map((r) => r.record);
-    result.recalled = uniqueAccessed.map((r) => r.id);
-    if (uniqueAccessed.length > 0) {
-      // How often a memory is used is a write: an incognito chat leaves the
-      // graph exactly as it found it.
-      if (!session.incognito) mind.touch(uniqueAccessed.map((r) => r.id));
-      emitEvent(session, "memory.recall", "agent", {
-        ids: uniqueAccessed.map((r) => r.id),
-        titles: uniqueAccessed.map((r) => r.title),
-        kinds: uniqueAccessed.map((r) => r.kind),
-        reasons: recalled.map((r) => r.reason),
-      });
-    }
+    const judge = opts.quick ? null : recallJudge(session.id);
+    const recalling = smartRecall(
+      mind, { request: text, conversation },
+      judge,
+      () => mind.recallForTurn(text, conversation),
+      recallBudget(),
+    ).catch(() => ({ recalled: mind.recallForTurn(text, conversation), judged: false }));
+    let uniqueAccessed: MemoryRecord[] = [];
+    /** Await the recall once, and say what came of it. */
+    const settleRecall = async (): Promise<MemoryRecord[]> => {
+      const { recalled, judged, problem } = await recalling as { recalled: Recalled[]; judged: boolean; problem?: string };
+      console.log(`[recall] ${judged ? "chosen by the model" : "by words"}: ${recalled.length} memor${recalled.length === 1 ? "y" : "ies"}${problem ? ` (${problem})` : ""}`);
+      uniqueAccessed = recalled.map((r) => r.record);
+      result.recalled = [...new Set([...uniqueAccessed.map((r) => r.id), ...result.recalled])];
+      if (uniqueAccessed.length > 0) {
+        // How often a memory is used is a write: an incognito chat leaves the
+        // graph exactly as it found it.
+        if (!session.incognito) mind.touch(uniqueAccessed.map((r) => r.id));
+        emitEvent(session, "memory.recall", "agent", {
+          ids: uniqueAccessed.map((r) => r.id),
+          titles: uniqueAccessed.map((r) => r.title),
+          kinds: uniqueAccessed.map((r) => r.kind),
+          reasons: recalled.map((r) => r.reason),
+        });
+      }
+      return uniqueAccessed;
+    };
 
     // ------------------------------------------------------ the turn --
 
@@ -4599,6 +4654,10 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
             emitEvent(session, "usage.turn", "system", {
               provider: answering.provider,
               model: answering.model,
+              /* As people know them, for the line under each reply that says which model wrote it. */
+              provider_label: vendorLabel(answering.provider),
+              model_label: modelsFor(answering.provider).find((m) => m.id === answering.model)?.label ?? answering.model,
+              subscription: Boolean(providerSpec(answering.provider)?.cli),
               input_tokens: turn.usage.input,
               output_tokens: turn.usage.output,
               cached_tokens: cache.read,
@@ -5024,8 +5083,13 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
             });
             return { id: record.id, action };
           },
-          search: (query) => {
-            const hits = mind.recall(query, 8, false);
+          /* By meaning first (server/recall.ts), then whatever shares its words, so a search finds "deploy" notes for
+             "ship it" and still finds the note that names the exact word. */
+          search: async (query) => {
+            const words = mind.recall(query, 8, false);
+            const { recalled } = await smartRecall(mind, { request: query, exclude: new Set(), limit: 8 }, judge, () => words)
+              .catch(() => ({ recalled: words }));
+            const hits = [...recalled, ...words.filter((w) => !recalled.some((r) => r.record.id === w.record.id))].slice(0, 8);
             if (hits.length > 0 && session.incognito) {
               // Read, recalled, and left: a search is not a change.
               return hits.map(({ record: m }) => ({
@@ -5198,7 +5262,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
       /* Once per turn, not per round: the instructions must open every
          round's request identically for the provider's cache to serve
          them, and so must everything the note is attached ahead of. */
-      const { pinned, note } = await systemInstructionFor(session.id, uniqueAccessed, active, text, carriedThrough ?? 0);
+      const { pinned, note } = await systemInstructionFor(session.id, await settleRecall(), active, text, carriedThrough ?? 0);
       context.setTurnNote(note);
       const watch = new LoopWatch(state.loop);
       /* Failures that say the same thing however the arguments were varied,
@@ -5257,7 +5321,55 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
           }
         }
         const known = siteMemory(name, args);
-        return [shown, verdict.note, budget.note, known].filter(Boolean).join("\n\n");
+        const working = workMemory(name, args);
+        return [shown, verdict.note, budget.note, known, working].filter(Boolean).join("\n\n");
+      };
+      /* Recall during the work, not only from the request: what the agent has done this turn, a line a step, is put to the
+         same judge every few steps, in the background, and what it picks rides on the next result the model reads. The
+         memory about this build's flaky test, or this library's quirk, is found when the work gets there, though the person
+         never named it. */
+      const workLines: string[] = [];
+      let workAskedAt = 0;
+      let workJudging = false;
+      let workFound: Recalled[] = [];
+      let workSaid = "";
+      const workMemory = (name: string, args: unknown): string => {
+        if (workerSaid.trim() && workerSaid !== workSaid) {
+          workSaid = workerSaid;
+          workLines.push(`said: ${workerSaid.replace(/\s+/g, " ").trim().slice(0, 300)}`);
+        }
+        workLines.push(`${name}: ${describeCall(name, args).replace(/\s+/g, " ").slice(0, 200)}`);
+        let note = "";
+        const found = workFound.filter((r) => !result.recalled.includes(r.record.id));
+        workFound = [];
+        if (found.length > 0) {
+          const ids = found.map((r) => r.record.id);
+          if (!session.incognito) mind.touch(ids);
+          result.recalled.push(...ids);
+          emitEvent(session, "memory.recall", "agent", {
+            ids,
+            titles: found.map((r) => r.record.title),
+            kinds: found.map((r) => r.record.kind),
+            reasons: found.map((r) => `for what the agent is doing now: ${r.reason}`),
+          });
+          note = [
+            "[From your memory graph, not from the tool] Relevant to what you are doing now:",
+            ...found.map((r) => memoryLine(r.record)),
+          ].join("\n");
+        }
+        if (judge && !workJudging && workLines.length - workAskedAt >= WORK_RECALL_EVERY) {
+          workAskedAt = workLines.length;
+          workJudging = true;
+          void smartRecall(
+            mind,
+            { request: text, work: workLines.slice(-16).join("\n"), exclude: new Set(result.recalled), limit: 3 },
+            judge, () => [], WORK_RECALL_MS,
+          )
+            .then(({ recalled }) => { workFound = recalled.filter((r) => r.score !== Infinity); })
+            .catch(() => undefined)
+            .finally(() => { workJudging = false; });
+        }
+        return note;
       };
       /* Sites this turn has been to, so what memory holds about one is said
          the first time only. */
@@ -6882,9 +6994,10 @@ async function startServer() {
     if (text && attachments.length === 0 && notebooks.length === 0 && req.body?.spoken !== true &&
         req.body?.mode !== "interrupt" && !text.startsWith("/") && canAmend(session)) {
       const waiting = amendments.get(session.id) ?? [];
-      waiting.push(text);
+      const id = `amend-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+      waiting.push({ id, text });
       amendments.set(session.id, waiting);
-      emitEvent(session, "turn.amend", "user", { text });
+      emitEvent(session, "turn.amend", "user", { text, id });
       noteAsks(session, text, true);
       return res.json({ ok: true, queued: true });
     }
@@ -6943,6 +7056,24 @@ async function startServer() {
   });
 
   // 5. Interrupt current turn
+  /* A message sent while the agent worked, taken back before the agent read it. */
+  app.delete("/api/sessions/:id/amend/:amendId", (req: Request, res: Response) => {
+    const session = sessions.get(req.params.id);
+    if (!session) return res.status(404).json({ error: "No such session" });
+    if (!withdrawAmendment(session, String(req.params.amendId))) {
+      return res.status(409).json({ error: "The agent has already read that message." });
+    }
+    /* Deleting a message is also a hard stop: the person has changed their mind about what the agent is doing, so the turn
+       is stopped the way Stop stops it (a running command killed, the loop ended before any further step), and nothing
+       they deleted is waiting to restart it. */
+    const wasBusy = session.busy;
+    stopTurn(session.id);
+    session.busy = false;
+    broadcastLiveStatus(session);
+    if (wasBusy) emitEvent(session, "system.log", "system", { message: "Turn stopped: a message was deleted before the agent read it" });
+    res.json({ ok: true, stopped: wasBusy });
+  });
+
   app.post("/api/sessions/:id/interrupt", (req: Request, res: Response) => {
     const session = sessions.get(req.params.id);
     if (!session) {
@@ -7582,6 +7713,7 @@ async function startServer() {
 
   const listening = () => {
     console.log(`Autora ${VERSION} running on http://${HOST}:${PORT}`);
+    primeSignIn();
     if (HOST === "127.0.0.1" && !process.env.AUTORA_HOST) {
       console.log("[server] listening on this machine only; set AUTORA_HOST=0.0.0.0 to reach it from others");
     }

@@ -33,8 +33,15 @@ export function historyFor(session: Session, sinceSeq = 0): { message: ChatMessa
      ones already in the history. */
   const attached = new Map<number, AttachmentRef[]>();
 
+  /* Messages sent during a turn and taken back before the agent read them: never part of the conversation. */
+  const withdrawn = new Set<string>();
+  for (const event of session.events) {
+    if (event.kind === "turn.amend.withdrawn" && typeof event.payload?.id === "string") withdrawn.add(event.payload.id);
+  }
+
   for (const event of session.events) {
     if (event.seq <= sinceSeq) continue;
+    if (event.kind === "turn.amend" && withdrawn.has(event.payload?.id)) continue;
     let role: "user" | "assistant" | null = null;
     if (event.kind === "turn.user" || event.kind === "turn.amend") role = "user";
     else if (event.kind === "agent.remark") role = "assistant";

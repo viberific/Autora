@@ -19,7 +19,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { cliHome, cliPath, cliSignedIn, geminiCredsFile } from "./clibin";
+import { cliHome, cliPath, cliSignedIn, geminiCredsFile, noteClaudeSignedIn } from "./clibin";
 import { redact, vendorEnv } from "./vendor";
 
 type SignInCli = "claude" | "gemini";
@@ -85,7 +85,6 @@ sys.exit(os.waitstatus_to_exitcode(status))
 
 /** Terminal colour and cursor codes out, so the link and the prompt can be read from what the CLI printed. */
 function plain(text: string): string {
-  // eslint-disable-next-line no-control-regex
   return text.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "").replace(/\x1b[\]P^_][^\x07\x1b]*(?:\x07|\x1b\\)/g, "").replace(/\r/g, "");
 }
 
@@ -135,7 +134,8 @@ function claudeSignedIn(bin: string): Promise<boolean> {
     let out = "";
     let child: ChildProcess;
     try {
-      child = spawn(bin, ["auth", "status", "--json"], { env: signInEnv(), stdio: ["ignore", "pipe", "ignore"] });
+      // In its own home: never the server's folder, where a CLI that misread the question could leave files.
+      child = spawn(bin, ["auth", "status", "--json"], { env: signInEnv(), cwd: cliHome(), stdio: ["ignore", "pipe", "ignore"] });
     } catch {
       resolve(cliSignedIn("claude"));
       return;
@@ -160,6 +160,7 @@ export async function signInStatus(id: SignInCli): Promise<SignInStatus> {
       return { installed: false, signed_in: false, via: "claude", pending: null, detail: "Claude Code is not installed on this host (npm install -g @anthropic-ai/claude-code)." };
     }
     const signedIn = await claudeSignedIn(bin);
+    noteClaudeSignedIn(signedIn);
     return { installed: true, signed_in: signedIn, via: "claude", pending: open, detail: signedIn ? "Signed in to Claude." : "Not signed in yet." };
   }
   if (cliPath("agy")) {
@@ -270,4 +271,10 @@ export async function finishSignIn(id: SignInCli, code: string): Promise<SignInS
 function clip(text: string, n = 300): string {
   const one = redact(plain(text)).replace(/\s+/g, " ").trim();
   return one.length > n ? `…${one.slice(-(n - 1))}` : one || "nothing";
+}
+
+/** Ask Claude Code once, at start, whether it is signed in: a sign-in it keeps where no file shows one is then known before the
+    first turn, rather than that turn being told "not signed in" until Settings happens to ask. */
+export function primeSignIn(): void {
+  if (cliPath("claude")) void signInStatus("claude").catch(() => undefined);
 }
