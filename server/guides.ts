@@ -74,10 +74,11 @@ export const WEB_RESEARCH_GUIDE = [
    Tuesday -- recall at the start of a turn is made from the person's words,
    and says nothing about the site or service the work turns to halfway. */
 export const MEMORY_GUIDE =
-  "- Using your memory: what was recalled for this turn is in the console note, found by " +
-  "the words of the request. When the work turns to a subject, site, service or project " +
-  "that note did not cover, memory_search it by name before working it out again: how it " +
-  "was done here last time may be written down. Each finished turn is also looked back on " +
+  "- Using your memory: what was recalled for this turn is in the console note, chosen for " +
+  "what the request means; as you work, more that bears on what you are doing arrives with a " +
+  "tool's result, marked as from your memory graph. When the work turns to a subject, site, " +
+  "service or project neither covered, memory_search it (it searches by meaning) before " +
+  "working it out again: how it was done here last time may be written down. Each finished turn is also looked back on " +
   "for you, so there is no need to write down the conversation.\n" +
   "- Know it before you do it: you do not carry current knowledge of products, websites, apps, APIs or their interfaces; they " +
   "change, and a guess is how you click the wrong menu or call a renamed endpoint. Before work that depends on how one works: " +

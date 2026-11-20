@@ -91,7 +91,7 @@ task is about the PDF editor's shim or overlay.
 | Quick turns | `quick.ts` (`isSmallTalk`: a hello or thanks skips the plan and the thinking; `startTurn` sets `opts.quick`), `fastpath.ts` (a few exact questions, time, date and which model, answered with no model call; fails open, logged) |
 | Working notes | `todos.ts`, `ledger.ts`, `requirements.ts` |
 | Sub-agent | `subagent.ts` (+ `researchFor` in `runTurn`) |
-| Memory | `memory.ts`, `mindrules.ts`, `site.ts`, `learning.ts` |
+| Memory | `memory.ts` (the graph, word ranking), `recall.ts` (a model picks what bears on the request and the work in progress; words are the fallback), `mindrules.ts`, `site.ts`, `learning.ts` |
 | Learn mode (the agent teaches by ringing controls; no agent cursor) | `server/learn.ts`, `server/specs/learn.ts`, `src/lib/learn.ts`, `src/lib/learnTarget.ts`, `components/LearnGuide.tsx`, `components/LearnToggle.tsx`; `docs/LEARN.md` |
 | Skills | `skills.ts` (SKILL.md folders, the catalogue in the briefing, drafts and versions), `specs/skills.ts` (the `skill` tool), `routes/skills.ts` |
 | Improvements log | `improvements.ts` (`docs/improvements/`: what agents hit that Autora should do better; the `improvements` tool in `specs/memory.ts`) |

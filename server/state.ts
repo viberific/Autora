@@ -1358,6 +1358,10 @@ export function resolveProvider(): Resolved {
   const model = modelFor(chosen);
   let problem: string | null = null;
   if (!key && chosen !== "local" && !spec.cli) problem = `${spec.label} has no API key set.`;
+  /* Named outright and not signed in: said here, so the chat offers the sign-in instead of every turn failing with "401". */
+  else if (spec.cli && !cliSignedIn(chosen === "claude-cli" ? "claude" : "gemini")) {
+    problem = `${spec.label} is not signed in on this host yet. Sign in to it in Settings, under Which provider answers.`;
+  }
   // A CLI picks its own model when none is named, so only a keyed vendor needs one chosen.
   else if (!model && !spec.cli) problem = `No model chosen for ${spec.label}.`;
   /* Roles are Automatic's own trick: when the person named the model, that

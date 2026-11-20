@@ -33,6 +33,15 @@ export function geminiCredsFile(): string {
   return path.join(cliHome(), ".gemini", "oauth_creds.json");
 }
 
+/** Claude Code's own last word on whether it is signed in (cli-signin.ts asks it), and when: it can hold a sign-in where no file
+    here shows one, and a file can outlive a sign-in that lapsed. */
+let claudeSaid: { signedIn: boolean; at: number } | null = null;
+const CLAUDE_SAID_MS = 15 * 60_000;
+
+export function noteClaudeSignedIn(signedIn: boolean): void {
+  claudeSaid = { signedIn, at: Date.now() };
+}
+
 /**
  * Whether a subscription CLI is there and looks signed in: the files its sign-in leaves, nothing run. Good enough for
  * Automatic to pass over one nobody has set up (cli-signin.ts asks the CLI itself when the answer is shown to the person).
@@ -41,6 +50,7 @@ export function geminiCredsFile(): string {
 export function cliSignedIn(id: "claude" | "gemini"): boolean {
   if (id === "claude") {
     if (!cliPath("claude")) return false;
+    if (claudeSaid && Date.now() - claudeSaid.at < CLAUDE_SAID_MS) return claudeSaid.signedIn;
     if ((process.env.CLAUDE_CODE_OAUTH_TOKEN || "").trim()) return true;
     return fs.existsSync(path.join(cliHome(), ".claude", ".credentials.json"));
   }

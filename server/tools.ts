@@ -621,6 +621,11 @@ export interface AgentJobInput {
   enabled?: boolean;
 }
 
+/** One memory as the memory_search tool reports it. */
+type MemoryHit = {
+  id: string; kind: string; title: string; body: string; status: string; subject?: string; source?: string; fetched?: number;
+};
+
 export interface ToolContext {
   /** A line of live output, as it arrives. */
   onOutput: (chunk: string) => void;
@@ -694,9 +699,7 @@ export interface ToolContext {
       title: string; body: string; kind: string; tags?: string[]; subject?: string; facet?: string;
       source?: string; version?: string; status?: "confirmed" | "provisional";
     }) => { id: string; action: string };
-    search: (query: string) => {
-      id: string; kind: string; title: string; body: string; status: string; subject?: string; source?: string; fetched?: number;
-    }[];
+    search: (query: string) => MemoryHit[] | Promise<MemoryHit[]>;
     /** true when changed, false when there is no such memory, or why the change was refused. */
     update: (id: string, patch: {
       title?: string; body?: string; kind?: string; tags?: string[]; subject?: string; facet?: string; source?: string; version?: string;
@@ -3905,7 +3908,7 @@ async function runToolUnredacted(
       case "memory_search": {
         const query = String(args.query ?? "").trim();
         if (!query) return { ok: false, summary: "No search terms were given." };
-        const found = ctx.memory.search(query);
+        const found = await ctx.memory.search(query);
         if (found.length === 0) {
           return { ok: true, summary: `Nothing in memory matches "${query}".`, preview: "0 found" };
         }

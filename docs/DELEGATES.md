@@ -47,6 +47,15 @@ brought in when it is first called. The token goes to the bridge script only, no
 files are kept under the CLI's home (`/data/home/.autora-run`), never `/tmp`, which Gemini refuses to read settings from.
 Antigravity's `agy` takes no MCP server here, so where it answers for Gemini it keeps to its own tools.
 
+Autora's own background work on a subscription (folding old turns, learning, choosing which memories a turn gets) goes to the CLI
+too, on its lightest model (Haiku, Flash low). Such a call is marked `background` (`server/llm.ts`): the CLI runs without write
+access, and the prompt says it is a request for an answer in text, not a chat message to act on. Framed as a chat, a question about
+which memory bears on "deploy the shop" had Claude Code set about deploying it.
+
+Signing in and choosing a model are in Settings: picking a subscription under Which provider answers shows its sign-in there when
+it is not signed in, and the model (Claude's Opus, Sonnet or Haiku, which follow the newest of each line) is chosen in the
+provider's row or at the top, under Currently using. Every reply in the chat names the model that wrote it.
+
 ## Running outside Docker
 
 Install the CLIs (`npm install -g @anthropic-ai/claude-code @google/gemini-cli`), sign in as you normally do, and start Autora

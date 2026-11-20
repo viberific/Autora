@@ -135,6 +135,9 @@ export interface ChatCall {
   /** Autora's own tools for a vendor that runs its own (a subscription CLI): the bridge the turn opened for it
       (server/clibridge.ts), and the names it offers, for the line that tells the CLI they are there. */
   bridge?: { url: string; token: string; tools: string[] };
+  /** Work Autora does for itself (folding old turns, learning, choosing memories), not a chat answer: a subscription CLI
+      is then asked a plain question, with no hands to act on what the text happens to describe (server/llm-cli.ts). */
+  background?: boolean;
 }
 
 export interface ChatUsage {

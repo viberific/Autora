@@ -2,7 +2,7 @@ import { Suspense, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import type { Bucket, Cell, MemoryTouch, SpanState } from "../lib/derive";
 import { turnItems } from "../lib/steps";
 import { isPicture, sizeLabel, type Attachment } from "../lib/attachments";
-import { IconAlert, IconArrow, IconArrowDown, IconBrain, IconCheck, IconChevron, IconCopy, IconDownload, IconFile, IconNotebook, IconSpeaker, IconSpeakerOff, IconTerminal, IconThumbDown, IconThumbUp, IconUser, IconWrench } from "./Icons";
+import { IconAlert, IconArrow, IconArrowDown, IconBrain, IconCheck, IconChevron, IconCopy, IconDownload, IconFile, IconNotebook, IconSpeaker, IconSpeakerOff, IconTerminal, IconThumbDown, IconThumbUp, IconTrash, IconUser, IconWrench } from "./Icons";
 import { OPEN_NOTEBOOK } from "../lib/notebooks";
 import { copyText } from "../lib/clipboard";
 import { sameReply } from "../lib/voice";
@@ -800,18 +800,62 @@ const Ticks = memo(function Ticks({ receipt }: { receipt: Receipt }) {
 });
 
 /** One thing the person said: at the start of a turn, added while the agent worked, or still on its way. */
-const UserMessage = memo(function UserMessage({ text, receipt, children }: { text: string; receipt: Receipt; children?: ReactNode }) {
+const UserMessage = memo(function UserMessage({ text, receipt, children, onDelete, deleting }: {
+  text: string;
+  receipt: Receipt;
+  children?: ReactNode;
+  /** Take the message back: offered only while the agent has not read it. */
+  onDelete?: () => void;
+  deleting?: boolean;
+}) {
   return (
     <div className={`msg user is-${receipt}`}>
       <span className="avatar"><IconUser size={14} /></span>
       <div className="msg-body">
-        <div className="msg-who">You <Ticks receipt={receipt} /></div>
+        <div className="msg-who">
+          You <Ticks receipt={receipt} />
+          {onDelete && (
+            <button
+              type="button"
+              className="msg-tool msg-delete"
+              onClick={onDelete}
+              disabled={deleting}
+              title="Delete this message and stop the agent: it has not read it yet"
+              aria-label="Delete this message before the agent reads it"
+            >
+              <IconTrash size={13} />
+            </button>
+          )}
+        </div>
         {text && <div className="msg-text">{text}</div>}
         {children}
       </div>
     </div>
   );
 });
+
+/**
+ * A message sent while the agent worked. Until the agent reads it, it can be deleted: the server takes it out of what is
+ * waiting for the agent and the thread drops it (turn.amend.withdrawn). Once read, the delete is refused and the button goes.
+ */
+function SaidMessage({ sessionId, id, text, read }: { sessionId: string; id?: string; text: string; read: boolean }) {
+  const [deleting, setDeleting] = useState(false);
+  const remove = useCallback(() => {
+    if (!id) return;
+    setDeleting(true);
+    void fetch(`/api/sessions/${encodeURIComponent(sessionId)}/amend/${encodeURIComponent(id)}`, { method: "DELETE" })
+      .catch(() => undefined)
+      .finally(() => setDeleting(false));
+  }, [sessionId, id]);
+  return (
+    <UserMessage
+      text={text}
+      receipt={read ? "read" : "received"}
+      onDelete={!read && id ? remove : undefined}
+      deleting={deleting}
+    />
+  );
+}
 
 /** Messages sent from this page that the log has not shown yet. */
 export type Outgoing = { id: number; text: string };
@@ -1121,6 +1165,8 @@ const CellView = memo(function CellView({
           phase={phase}
           onOpenMind={onOpenMind}
           onOpenSettings={cell.turn.setup ? onOpenSettings : undefined}
+          model={cell.turn.model?.label}
+          via={cell.turn.model?.via}
           onSpeak={onSpeakReply}
           speakingReply={speakingReply}
           turn={turnSeq}
@@ -1290,7 +1336,7 @@ const CellView = memo(function CellView({
         </div>
       );
     case "said":
-      return <UserMessage text={cell.text} receipt={cell.read ? "read" : "received"} />;
+      return <SaidMessage sessionId={sessionId} id={cell.id} text={cell.text} read={cell.read} />;
     case "fresh":
       return <FreshChat sessionId={sessionId} text={cell.text} tokens={cell.tokens} first={cell.first} live={live} />;
     case "note":
@@ -1361,9 +1407,14 @@ const Reply = memo(function Reply({
   reply,
   rating,
   onRate,
+  model,
+  via,
 }: {
   text: string;
   thinking?: string;
+  /** Which model wrote this reply, and the provider it ran on: said beside the name, so it is never a guess. */
+  model?: string;
+  via?: string;
   memories?: MemoryTouch[];
   onOpenMind?: () => void;
   onOpenSettings?: () => void;
@@ -1424,6 +1475,10 @@ const Reply = memo(function Reply({
       <div className="msg-body">
         <div className="msg-who">
           autora
+          {model && (
+            /* "(latest)" is said in Settings, where the choice is made; beside every reply it is only width. */
+            <span className="msg-model" title={via && via !== model ? `${model}, through ${via}` : model}>{model.replace(/\s*\(latest\)$/, "")}</span>
+          )}
         {text && !working && (
           <span className="msg-tools">
             <button

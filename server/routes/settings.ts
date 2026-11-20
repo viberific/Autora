@@ -7,6 +7,7 @@
 
 import type { Express, Request, Response } from "express";
 import { mergeAutomation } from "../automation";
+import { cliSignedIn } from "../clibin";
 import { mergeCaptcha } from "../captcha";
 import { dictationStatus } from "../dictation";
 import { AUTO_ROUTERS, PRICES_CHECKED, PROVIDERS, modelsFor, providerSpec } from "../providers";
@@ -43,6 +44,7 @@ export function settingsRoutes(app: Express, deps: {
     const activePrice = () => {
       const models = modelsFor(active.provider);
       const spec = models.find((m) => m.id === active.model);
+      if (activeSpec?.cli) return "Runs on your subscription: its turns are counted, not billed per token.";
       if (!spec || spec.priced === false) {
         return `No published price for ${active.model} — its turns are counted but not billed.`;
       }
@@ -71,6 +73,8 @@ export function settingsRoutes(app: Express, deps: {
         needs_key: spec.id !== "local" && !spec.cli,
         /* A subscription CLI: no key, and the turns are not billed. */
         cli: Boolean(spec.cli),
+        /* For a subscription: whether its CLI looks signed in (the files it leaves, or its own last answer). */
+        ...(spec.cli ? { signed_in: cliSignedIn(spec.id === "claude-cli" ? "claude" : "gemini") } : {}),
         /* Whether this vendor publishes a balance at all. The panel uses it to
            offer the "paid in" box only where the figure can be turned into a
            spend, rather than collecting a number it can never use. */
@@ -148,6 +152,8 @@ export function settingsRoutes(app: Express, deps: {
         role_problems: active.roleProblems,
         endpoint: active.provider ? baseUrlFor(active.provider) : null,
         provider: activeSpec?.label ?? null,
+        /* The same provider by id, so the page can offer its models beside the name. */
+        provider_id: active.provider || null,
         // Not the name again -- that is already on the line above. What is
         // worth saying here is what this choice costs, which is the fact the
         // billing card is about to be counting with.

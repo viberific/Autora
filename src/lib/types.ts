@@ -49,6 +49,8 @@ export const Kind = {
   Amend: "turn.amend",
   /** The running turn took in what the person added (every turn.amend before this one). */
   AmendRead: "turn.amend.read",
+  /** A message sent during the turn, taken back by the person before the agent read it: { id }. */
+  AmendWithdrawn: "turn.amend.withdrawn",
   AgentText: "turn.agent.text",
   AgentThinking: "turn.agent.thinking",
   AgentDone: "turn.agent.done",

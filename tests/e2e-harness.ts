@@ -196,6 +196,9 @@ export async function startApp(opts: { env?: Record<string, string>; port?: numb
         // finds the system's own. Naming a path that does not exist left the
         // server with no browser at all, so widgets went unchecked on CI.
         ...(fs.existsSync(LOCAL_CHROME) && !process.env.AUTORA_BROWSER_PATH ? { AUTORA_BROWSER_PATH: LOCAL_CHROME } : {}),
+        /* Memories are chosen by words here, not by a model (server/recall.ts, tested in tests/recall.test.ts): the scripted
+           model below answers each call in turn, and the extra call would shift every reply after it. */
+        AUTORA_RECALL_JUDGE: "off",
         NODE_ENV: "production", ...opts.env,
       },
       stdio: ["ignore", "pipe", "pipe"],
