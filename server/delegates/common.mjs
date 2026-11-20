@@ -54,9 +54,9 @@ export function timeoutMs(text) {
 
 /** Where an executable is on PATH, or null. */
 export function onPath(name) {
-  /* /data/bin is where this box installs its own CLIs, and it outlives an
-     update; the image's PATH does not carry it, so a restart lost agy. */
-  const dirs = [...(process.env.PATH ?? "").split(path.delimiter), "/data/bin"];
+  /* /data/bin (AUTORA_BIN_DIR) is where a box installs its own CLIs, and it outlives an update; the image's PATH does not
+     carry it, so a restart lost agy. server/vendor.ts looks in the same places. */
+  const dirs = [...(process.env.PATH ?? "").split(path.delimiter), process.env.AUTORA_BIN_DIR || "/data/bin"];
   for (const dir of dirs) {
     if (!dir) continue;
     const file = path.join(dir, name);
@@ -67,7 +67,7 @@ export function onPath(name) {
 
 /** Which of the contract's reasons a CLI's own words amount to: a sign-in to make, a wait, or neither. */
 export function reasonOf(text) {
-  if (/not (?:logged|signed) in|please (?:run|use) \/?login|\/login\b|invalid api key|authenticat|unauthori[sz]ed|credentials|sign in|oauth|\b401\b|\bapi key\b.*(?:missing|required)/i.test(text)) return "auth";
+  if (/not (?:logged|signed) in|please (?:run|use) \/?login|\/login\b|invalid api key|authenticat|unauthori[sz]ed|credentials|sign in|oauth|auth method|manual authorization|\b401\b|\bapi key\b.*(?:missing|required)/i.test(text)) return "auth";
   if (/rate.?limit|usage limit|quota|too many requests|\b429\b|overloaded|resource.?exhausted|limit reached/i.test(text)) return "rate_limit";
   return "other";
 }

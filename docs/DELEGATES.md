@@ -12,18 +12,22 @@ that would fail.
 
 ## Sign in once (the part only you can do)
 
-A subscription login is interactive, so it is done by you, once, in the running container. On Umbrel, open its terminal or use
-`docker exec`; the folder `/data/home` is where the sign-in is kept, and it survives updates:
+Open Settings, Providers and models, and the **Claude (subscription)** or **Gemini (subscription)** row, and press **Sign in**.
+Autora runs the CLI's own sign-in (`server/cli-signin.ts`): open the sign-in page it links to, approve it in your browser, and
+paste the code the page shows. The sign-in is kept in `/data/home` (`AUTORA_DELEGATE_HOME`), which survives updates, and it is the
+same sign-in the chat providers and the `claude_cli` / `gemini_cli` delegates use.
 
-```bash
-# Claude Code: opens a link, you approve it in a browser and paste the code back.
-docker exec -it <autora-container> sh -c 'HOME=/data/home claude'      # then type /login
+- Claude runs `claude auth login --claudeai`, which reads the code as it is.
+- Gemini runs the `gemini` CLI in a terminal of its own (python3's pty: it asks for its code only in one), after setting its auth
+  type to "Sign in with Google" in `/data/home/.gemini/settings.json`. Where a box has Antigravity's `agy` (on PATH or in
+  `/data/bin`, `AUTORA_BIN_DIR`), Gemini runs on that instead, with its own sign-in.
 
-# Gemini: choose "Login with Google" and follow the link.
-docker exec -it <autora-container> sh -c 'HOME=/data/home gemini'
-```
+The terminal way still works: `docker exec -it <autora-container> sh -c 'HOME=/data/home claude'` (then `/login`), or the same with
+`gemini`. Check it worked by chatting on the provider, or by asking the agent to "ask Claude to read README.md".
 
-Check it worked by asking the agent to "ask Claude to read README.md". If it says the sign-in lapsed, repeat the step.
+An API key in the environment (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`) is not passed to the CLIs: with one, they
+would answer on the key, billed per token, instead of on the subscription. `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`)
+is passed, since it is a subscription sign-in.
 
 ## Running outside Docker
 

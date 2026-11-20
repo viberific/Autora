@@ -18,6 +18,10 @@ const work = path.join(dir, "work");
 fs.mkdirSync(bin);
 fs.mkdirSync(work);
 process.env.AUTORA_STATE_DIR = dir;
+// The box's own bin folder (/data/bin in the image): empty unless a test puts agy there.
+const boxBin = path.join(dir, "boxbin");
+fs.mkdirSync(boxBin);
+process.env.AUTORA_BIN_DIR = boxBin;
 // The wrappers this server carries, not any the machine has set up.
 delete process.env.AUTORA_CLAUDE_CLI;
 delete process.env.AUTORA_GEMINI_CLI;
@@ -54,6 +58,7 @@ const say = (o) => console.log(JSON.stringify(o));
 const mode = process.env.GEMINI_STUB || "ok";
 if (mode === "plain") { console.log("an old CLI"); console.log("prints plain text"); process.exit(0); }
 if (mode === "auth") { console.error("Error: Please sign in. Authentication required (401)"); process.exit(1); }
+if (mode === "no-method") { console.error("Please set an Auth method in your ~/.gemini/settings.json or specify one of the following environment variables before running: GEMINI_API_KEY"); process.exit(41); }
 say({ type: "init" });
 say({ type: "message", role: "assistant", content: "Gemini says ", delta: true });
 say({ type: "tool_use", tool_name: "read_file", parameters: { file_path: "README.md" } });
@@ -115,7 +120,7 @@ await test("Claude without write may only read", async () => {
   await run("claude");
   const argv = JSON.parse(fs.readFileSync(argvLog, "utf8")) as string[];
   assert.ok(!argv.includes("acceptEdits"));
-  assert.deepEqual(argv.slice(argv.indexOf("--allowedTools")), ["--allowedTools", "Read", "Glob", "Grep"]);
+  assert.deepEqual(argv.slice(argv.indexOf("--allowedTools"), argv.indexOf("--allowedTools") + 4), ["--allowedTools", "Read", "Glob", "Grep"]);
 });
 
 await test("Claude: a sign-in that has lapsed, and a limit that has been reached, are told apart", async () => {
@@ -124,7 +129,7 @@ await test("Claude: a sign-in that has lapsed, and a limit that has been reached
   const signedOut = (await run("claude")).result;
   assert.equal(signedOut.ok, false);
   assert.equal(signedOut.reason, "auth");
-  assert.match(signedOut.message, /sign in once in the Autora container/);
+  assert.match(signedOut.message, /sign in under Settings/);
   process.env.CLAUDE_STUB = "limit";
   const limited = (await run("claude")).result;
   assert.equal(limited.reason, "rate_limit");
@@ -140,7 +145,53 @@ await test("Gemini: its text streams, its tool shows as status, usage comes thro
   assert.deepEqual(result.usage && { in: result.usage.input_tokens, out: result.usage.output_tokens }, { in: 5, out: 3 });
   const argv = JSON.parse(fs.readFileSync(argvLog + ".g", "utf8")) as string[];
   assert.deepEqual(argv.slice(0, 4), ["-p", "check the code", "-o", "stream-json"]);
-  assert.deepEqual(argv.slice(-2), ["--approval-mode", "auto_edit"]);
+  assert.deepEqual(argv.slice(-3), ["--approval-mode", "auto_edit", "--skip-trust"]);
+});
+
+await test("Gemini: an Antigravity model name is not handed to the gemini CLI, which does not know it", async () => {
+  withCli();
+  await run("gemini", { model: "gemini-3.8-flash-high" });
+  const argv = JSON.parse(fs.readFileSync(argvLog + ".g", "utf8")) as string[];
+  assert.ok(!argv.includes("-m"), argv.join(" "));
+});
+
+await test("Gemini: agy in the box's own bin folder (off PATH) is found, preferred, and its stream read", async () => {
+  // Node on PATH for the wrapper itself, and neither CLI.
+  process.env.PATH = path.dirname(process.execPath);
+  const agy = path.join(boxBin, "agy");
+  fs.writeFileSync(agy, `#!${process.execPath}
+require("node:fs").writeFileSync(${JSON.stringify(argvLog + ".a")}, JSON.stringify(process.argv.slice(2)));
+const say = (o) => console.log(JSON.stringify(o));
+say({ event: "init" });
+say({ event: "step_update", step_update: { step_type: "agent_response", state: "ACTIVE", text_delta: "From " } });
+say({ event: "step_update", step_update: { step_type: "tool", state: "ACTIVE", tool_name: "view_file", tool_info: { parameters: { Path: "a.md" } } } });
+say({ event: "step_update", step_update: { step_type: "agent_response", state: "ACTIVE", text_delta: "agy." } });
+say({ event: "result", result: { status: "SUCCESS", response: "From agy." } });
+`, { mode: 0o755 });
+  try {
+    assert.equal(vendorReady("gemini").ok, true, "agy off PATH still counts");
+    const { result, statuses } = await run("gemini", { write: true, model: "gemini-3.8-flash-high" });
+    assert.equal(result.ok, true, result.message);
+    assert.equal(result.text, "From agy.");
+    assert.deepEqual(statuses, ["view_file a.md"]);
+    const argv = JSON.parse(fs.readFileSync(argvLog + ".a", "utf8")) as string[];
+    assert.ok(argv.includes("--model") && argv.includes("gemini-3.8-flash-high"));
+    assert.ok(argv.includes("--dangerously-skip-permissions"));
+    withCli();
+    await run("gemini");
+    assert.ok(fs.existsSync(argvLog + ".a"), "with both, agy answers");
+  } finally {
+    fs.rmSync(agy);
+  }
+});
+
+await test("Gemini: the CLI asking for an auth method is a sign-in to make, not an unknown failure", async () => {
+  withCli();
+  process.env.GEMINI_STUB = "no-method";
+  const out = (await run("gemini")).result;
+  assert.equal(out.reason, "auth", out.message);
+  assert.match(out.message, /Settings/);
+  delete process.env.GEMINI_STUB;
 });
 
 await test("Gemini: an older CLI that only prints plain text still answers, and a sign-in that is needed is said", async () => {

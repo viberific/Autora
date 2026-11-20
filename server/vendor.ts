@@ -33,6 +33,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { cliPath } from "./clibin";
 import { redactSecrets } from "./state";
 
 type VendorId = "claude" | "gemini";
@@ -71,10 +72,10 @@ export const VENDORS: Record<VendorId, Vendor> = {
   },
 };
 
-/** The CLI each wrapper hands its job to. */
-const CLI_OF: Record<VendorId, { bin: string; install: string }> = {
-  claude: { bin: "claude", install: "npm install -g @anthropic-ai/claude-code" },
-  gemini: { bin: "gemini", install: "npm install -g @google/gemini-cli" },
+/** The CLI each wrapper hands its job to: any one of `bins`, the first found (gemini-call.mjs prefers agy where a box has it). */
+const CLI_OF: Record<VendorId, { bins: string[]; install: string }> = {
+  claude: { bins: ["claude"], install: "npm install -g @anthropic-ai/claude-code" },
+  gemini: { bins: ["agy", "gemini"], install: "npm install -g @google/gemini-cli" },
 };
 
 /** The wrapper this server carries (server/delegates/, copied to dist/delegates/ by the build), or null outside a checkout. */
@@ -86,18 +87,8 @@ function bundledWrapper(id: VendorId): string | null {
   return null;
 }
 
-/** Whether an executable of that name is on PATH. */
-export function onPath(bin: string): boolean {
-  for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
-    if (!dir) continue;
-    try {
-      const file = path.join(dir, bin);
-      fs.accessSync(file, fs.constants.X_OK);
-      if (fs.statSync(file).isFile()) return true;
-    } catch { /* not in this one */ }
-  }
-  return false;
-}
+/** Whether an executable of that name is there (cliPath). */
+const onPath = (bin: string): boolean => cliPath(bin) !== null;
 
 /**
  * Which wrapper to run: the one the environment names, else one the person wrote (/data/bin/claude-call.sh, which keeps its
@@ -126,11 +117,11 @@ export function vendorReady(id: VendorId): { ok: boolean; path: string; detail: 
     fs.accessSync(file, fs.constants.X_OK);
     /* The bundled wrapper is only a way to call the CLI: with no CLI behind it every call would fail, so it is not ready.
        A wrapper the person pointed at themselves (AUTORA_CLAUDE_CLI) may be anything, so it is trusted as it is. */
-    if (file === bundledWrapper(id) && !onPath(CLI_OF[id].bin)) {
+    if (file === bundledWrapper(id) && !CLI_OF[id].bins.some(onPath)) {
       return {
         ok: false,
         path: file,
-        detail: `The ${CLI_OF[id].bin} CLI is not installed here, so ${VENDORS[id].name} cannot be called. To fix it, ${CLI_OF[id].install}, then sign in once (docs/DELEGATES.md).`,
+        detail: `The ${CLI_OF[id].bins[CLI_OF[id].bins.length - 1]} CLI is not installed here, so ${VENDORS[id].name} cannot be called. To fix it, ${CLI_OF[id].install}, then sign in from Settings (docs/DELEGATES.md).`,
       };
     }
     return { ok: true, path: file, detail: `${VENDORS[id].what} (${file})` };
@@ -377,6 +368,10 @@ const KEEP = new Set([
 /** What a wrapper legitimately needs: its own vendor's variables, the XDG
     directories it keeps a sign-in in, and anything Autora set on purpose. */
 const KEEP_PREFIX = ["AUTORA_", "XDG_", "LC_", "ANTHROPIC_", "CLAUDE_", "GEMINI_", "GOOGLE_", "ANTIGRAVITY_"];
+/** API keys a CLI would prefer to the person's sign-in. A delegate runs on the subscription: with one of these in its
+    environment Claude Code or Gemini answers on the key instead -- billed per token, or refused when the key is stale --
+    which is the thing a subscription turn exists to avoid. Keys saved for the API providers stay with those providers. */
+const API_KEYS = new Set(["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "GEMINI_API_KEY", "GOOGLE_API_KEY"]);
 
 /**
  * The environment a delegate is started with.
@@ -390,6 +385,7 @@ export function vendorEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.Process
   const env: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(base)) {
     if (value === undefined) continue;
+    if (API_KEYS.has(key)) continue;
     if (KEEP.has(key) || KEEP_PREFIX.some((prefix) => key.startsWith(prefix))) env[key] = value;
   }
   env.NO_COLOR = "1";
@@ -408,7 +404,7 @@ function sentenceFor(reason: FailureReason, said = ""): string {
   const also = said ? ` It said: ${clip(said)}` : "";
   switch (reason) {
     case "rate_limit": return `It hit its rate limit or quota.${also}`;
-    case "auth": return `It is not signed in any more, or its sign-in expired: sign in once in the Autora container (docs/DELEGATES.md).${also}`;
+    case "auth": return `It is not signed in, or its sign-in expired: sign in under Settings, Providers and models (docs/DELEGATES.md).${also}`;
     case "timeout": return "It ran out of time and was stopped. A shorter or narrower ask is the way in.";
     case "not_installed": return `The CLI is not installed at that path.${also}`;
     default: return said ? clip(said) : "It stopped without saying why.";
@@ -426,7 +422,7 @@ export function failureOf(exitCode: number | null, stderr: string, text: string,
   if (/rate.?limit|429|quota|overloaded|too many requests|limit reached/.test(low)) {
     return { reason: "rate_limit", message: sentenceFor("rate_limit", said) };
   }
-  if (/not signed in|signed out|unauthor|401|403|log ?in|authenticat|credential|api key|expired/.test(low)) {
+  if (/not signed in|signed out|unauthor|401|403|log ?in|authenticat|auth method|manual authorization|credential|api key|expired/.test(low)) {
     return { reason: "auth", message: sentenceFor("auth", said) };
   }
   if (/not installed|command not found|no such file/.test(low)) {

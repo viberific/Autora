@@ -7,6 +7,7 @@
 
 import type { Express, Request, Response } from "express";
 import { billingSummary } from "../billing";
+import { finishSignIn, signInCliOf, signInStatus, startSignIn } from "../cli-signin";
 import { deleteLogin, describeCredentials, saveLogin, setIdentity } from "../credentials";
 import { listModels } from "../llm";
 import { PROVIDERS, modelsFor, rememberModels } from "../providers";
@@ -124,6 +125,38 @@ export function keyRoutes(app: Express) {
       res.json({ provider: id, models: modelsFor(id), refreshed: true, found: models.length });
     } catch (err: any) {
       res.status(502).json({ detail: `Could not reach ${spec.label}: ${err?.message ?? err}` });
+    }
+  });
+
+  /** A subscription provider's sign-in, as its CLI tells it: installed, signed in, or waiting for the code. Read-only. */
+  app.get("/api/providers/:id/signin", async (req: Request, res: Response) => {
+    const cli = signInCliOf(req.params.id);
+    if (!cli) return res.status(404).json({ detail: "Only a subscription provider signs in." });
+    res.json(await signInStatus(cli));
+  });
+
+  /** Start the CLI's own sign-in: the reply carries the link the person opens in their browser. */
+  app.post("/api/providers/:id/signin", async (req: Request, res: Response) => {
+    const cli = signInCliOf(req.params.id);
+    if (!cli) return res.status(404).json({ detail: "Only a subscription provider signs in." });
+    try {
+      res.json(await startSignIn(cli));
+    } catch (err: any) {
+      res.status(502).json({ detail: err?.message ?? String(err) });
+    }
+  });
+
+  /** The code the sign-in page showed, typed into the waiting CLI. */
+  app.post("/api/providers/:id/signin/code", async (req: Request, res: Response) => {
+    const cli = signInCliOf(req.params.id);
+    if (!cli) return res.status(404).json({ detail: "Only a subscription provider signs in." });
+    const code = typeof req.body?.code === "string" ? req.body.code.trim() : "";
+    if (!code) return res.status(400).json({ detail: "Paste the code the sign-in page showed." });
+    try {
+      const out = await finishSignIn(cli, code);
+      res.status(out.ok ? 200 : 400).json(out);
+    } catch (err: any) {
+      res.status(409).json({ detail: err?.message ?? String(err) });
     }
   });
 

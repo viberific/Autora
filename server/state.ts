@@ -19,6 +19,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { cliSignedIn } from "./clibin";
 import { isEphemeral } from "./ephemeral";
 import { AUTO_ROUTERS, PROVIDERS, autoPriceOf, providerSpec } from "./providers";
 import type { Target } from "./roles";
@@ -1282,7 +1283,11 @@ export function resolveProvider(): Resolved {
   // A local server needs no key, but on Automatic it only counts once a model
   // has been named for it: otherwise a fresh install "chose" Local server and
   // reported "No model chosen for Local server" -- a provider nobody picked.
-  const usable = (id: string) => Boolean(keyFor(id)) || (id === "local" && Boolean(modelFor(id))) || Boolean(providerSpec(id)?.cli);
+  /* A subscription counts once its CLI is here and signed in: Automatic picking one nobody set up answered every turn with
+     "not signed in" in place of the plain "nothing connected". Named outright, it is used as asked and says what is missing. */
+  const usable = (id: string) =>
+    Boolean(keyFor(id)) || (id === "local" && Boolean(modelFor(id))) ||
+    (Boolean(providerSpec(id)?.cli) && cliSignedIn(id === "claude-cli" ? "claude" : "gemini"));
 
   let chosen = wanted;
   if (wanted === "auto") {

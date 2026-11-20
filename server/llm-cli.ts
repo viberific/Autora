@@ -19,8 +19,10 @@
  * trying again is worth it.
  */
 
+import path from "node:path";
 import { ProviderError, type ChatCall, type ChatTurn } from "./llm";
-import { onPath, runVendor } from "./vendor";
+import { stateDir } from "./state";
+import { runVendor, vendorReady } from "./vendor";
 
 /** One exchange as the CLI reads it. */
 function line(message: ChatCall["messages"][number]): string {
@@ -41,31 +43,33 @@ function promptOf(call: ChatCall): string {
     .join("\n\n---\n\n");
 }
 
-/** The status a CLI failure is worth retrying at, or null for one that would fail again. */
-function statusOf(reason: string): number | null {
+/** The status a CLI failure is raised with. The turn retries a null status (a network blip) and the transient ones, so a
+    failure that would only fail again gets a status that is neither: a lapsed sign-in is 401, a missing CLI 501. Each retry
+    is a whole CLI run, and five of them made a signed-out chat wait a minute to say so. */
+function statusOf(reason: string): number {
   if (reason === "rate_limit") return 429;
   if (reason === "timeout") return 504;
-  if (reason === "auth" || reason === "not_installed") return null;
+  if (reason === "auth") return 401;
+  if (reason === "not_installed") return 501;
   return 500;
 }
 
 export async function streamCli(call: ChatCall, onDelta: (text: string) => void): Promise<ChatTurn> {
   /* The wrapper is the way to the CLI, not the CLI: with none behind it every turn would fail, so it is refused here rather
-     than four times over by the retry. */
-  const cli = call.provider === "claude-cli" ? "claude" : "agy";
-  if (!onPath(cli)) {
-    throw new ProviderError(
-      `The ${cli} CLI is not installed on this host, so ${call.provider} cannot answer. Install it and sign in once.`,
-      null,
-    );
-  }
+     than four times over by the retry. The same check the wrapper itself makes (vendorReady): Gemini runs on agy where the box
+     has it and on the image's gemini otherwise, and asking for agy alone refused every Gemini turn on a box without it. */
+  const id = call.provider === "claude-cli" ? "claude" : "gemini";
+  const ready = vendorReady(id);
+  if (!ready.ok) throw new ProviderError(ready.detail, statusOf("not_installed"));
   /* A turn is one answer, not a job: no file is edited under the person's feet by a chat message. The wrapper's own timeout
      is the backstop; the signal is the person pressing Stop. */
   const seconds = Math.round(Math.max(30_000, Number(process.env.AUTORA_CLI_TIMEOUT_MS) || 600_000) / 1000);
   const out = await runVendor({
-    id: call.provider === "claude-cli" ? "claude" : "gemini",
+    id,
     prompt: promptOf(call),
-    cwd: process.env.AUTORA_CLI_CWD || "/data/work/agy-scratch",
+    /* /data/work/agy-scratch in the container (AUTORA_HOME=/data); elsewhere beside the settings file, a folder this user can
+       write, where /data usually is not. */
+    cwd: process.env.AUTORA_CLI_CWD || path.join(process.env.AUTORA_HOME || stateDir(), "work", "agy-scratch"),
     /* It works: a chat turn may read, write and run things, the same hands a delegate has. */
     write: true,
     timeoutArg: `${seconds}s`,
@@ -74,8 +78,9 @@ export async function streamCli(call: ChatCall, onDelta: (text: string) => void)
     effort: call.effort || undefined,
     // The wrapper's own streaming contract is what makes the answer arrive as it is written.
     onDelta,
-    onStatus: (text) => call.onStep?.(text),
-    onTool: (name, detail) => call.onStep?.(`${name}${detail ? ` ${detail}` : ""}`),
+    /* One step per tool call: the wrapper says each call twice (a status line and a tool line), and runVendor already turns
+       the tool line into a finished step, so the status is not repeated into the chat. */
+    onStep: (text) => call.onStep?.(text),
     signal: call.signal,
   });
   if (!out.ok || !out.text.trim()) {
