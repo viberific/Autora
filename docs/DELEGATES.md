@@ -34,8 +34,18 @@ is passed, since it is a subscription sign-in.
 Choosing Claude (subscription) or Gemini (subscription) as the provider has the CLI answer the chat (`server/llm-cli.ts`). It works
 in the chat's own folder (the one the terminal, the code cards and Artifacts use), and each file it writes is shown as a code card,
 as the agent's own edits are. Autora's instructions go to Claude Code as its system prompt (`--append-system-prompt-file`), where
-they are cached from turn to turn, and its words stream as they are written (`--include-partial-messages`). The CLI uses its own
-tools, not Autora's: it cannot drive Autora's windows (Pages, PDF, the board) directly.
+they are cached from turn to turn, and its words stream as they are written (`--include-partial-messages`).
+
+It has Autora's own tools as well as its own. For each turn the server opens a bridge (`server/clibridge.ts`): the wrapper registers
+`server/delegates/autora-mcp.mjs` as an MCP server called `autora` (Claude Code through `--mcp-config`, every tool allowed; Gemini
+through a trusted settings file named by `GEMINI_CLI_SYSTEM_SETTINGS_PATH`), and that script passes the tool list and each call to
+`POST /api/cli-bridge` with a token good for that turn only. The turn runs each call through the same executor as the agent's own
+(planning refusals, the person's holds, Ask mode, the tool cells, the windows), so the CLI opens documents, puts work on the board
+and drives the app preview the way the agent does. Not offered through the bridge: Autora's terminal, file and code-search tools
+(the CLI's own do that) and the delegates themselves; `autora_tool` calls any other tool by name, so a family not yet loaded is
+brought in when it is first called. The token goes to the bridge script only, not to the CLI or its shell, and the run's config
+files are kept under the CLI's home (`/data/home/.autora-run`), never `/tmp`, which Gemini refuses to read settings from.
+Antigravity's `agy` takes no MCP server here, so where it answers for Gemini it keeps to its own tools.
 
 ## Running outside Docker
 

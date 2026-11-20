@@ -15,7 +15,7 @@
  * approve, a write turn stalls.
  */
 import fs from "node:fs";
-import { brief, emit, fail, onPath, readOptions, reasonOf, runCli } from "./common.mjs";
+import { autoraBridge, brief, emit, fail, onPath, privateFile, readOptions, reasonOf, runCli } from "./common.mjs";
 
 const opts = await readOptions(process.argv.slice(2));
 /* Neither Gemini CLI takes standing instructions beside the prompt, so a system file goes ahead of it. */
@@ -44,6 +44,14 @@ if (agy) {
      would refuse the turn, so it is left to pick its own model then. */
   if (opts.model && !/-(?:high|medium|low)$/.test(opts.model)) args.push("-m", opts.model);
   if (opts.write) args.push("--approval-mode", "auto_edit", "--skip-trust");
+  /* Autora's own tools, when the turn offers them: an MCP server in a settings file of its own for this run (the CLI takes no
+     server on its command line), trusted, since Autora runs its own checks on each call. */
+  const bridge = autoraBridge();
+  if (bridge) {
+    process.env.GEMINI_CLI_SYSTEM_SETTINGS_PATH = privateFile("settings.json", JSON.stringify({
+      mcpServers: { autora: { ...bridge, timeout: 600_000, trust: true } },
+    }));
+  }
 }
 
 let answer = "";

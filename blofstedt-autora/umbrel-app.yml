@@ -226,3 +226,6 @@ releaseNotes: >-
   replies now stream as they are written and start sooner, a reply no longer
   breaks in two around a step, and what Claude or Gemini builds lands in the
   chat's own folder and shows as file changes, as the agent's own work does.
+  Claude and Gemini can now use Autora's own tools too: they open documents,
+  put work on the Panacea board, drive the app preview and work in every
+  window the way the agent does, with the same checks and the same Ask mode.

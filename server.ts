@@ -54,9 +54,10 @@ import os from "node:os";
 captureConsole();
 import {
   ProviderError, streamChat,
-  type ChatMessage, type ChatTurn, type ToolReply,
+  type ChatMessage, type ChatTurn, type ToolReply, type ToolUse,
 } from "./server/llm";
 import { dayKey } from "./server/billing";
+import { bridgeRoutes, bridgeUrl, openBridge, type BridgeResult, type BridgeTool } from "./server/clibridge";
 import { refreshVendorMoney } from "./server/vendor-money";
 import { dropSession, fromDataUrl, getBlob, putBlob } from "./server/blobs";
 import { threeRuntime } from "./server/widgets";
@@ -2140,6 +2141,27 @@ const MAX_NUDGES = 3;
 const TRANSIENT = new Set([429, 500, 502, 503, 504]);
 /** A subscription CLI's tool step that may have changed files (Claude Code's Write/Edit/Bash, Gemini's write_file/replace/
     run_shell_command, agy's own names): after one, the chat's folder is looked at for what it wrote. */
+/** Autora's tools a subscription CLI is not offered through the bridge: its own file and shell tools do their work, and the
+    delegates would be the CLI calling itself. */
+const CLI_OWN_TOOLS = new Set([
+  "terminal", "run_background", "background_jobs", "background_output", "background_stop",
+  "read_file", "edit_file", "code_search", "claude_cli", "gemini_cli", "think_longer",
+]);
+/** The bridge's way to any of Autora's tools by name, including one whose family is not loaded yet (handle loads it). */
+const AUTORA_TOOL: BridgeTool = {
+  name: "autora_tool",
+  description:
+    "Call any of Autora's tools by name, with that tool's own arguments -- including one the instructions describe that is not " +
+    "in this list yet (its set is brought in when it is first called).",
+  inputSchema: {
+    type: "object",
+    properties: {
+      name: { type: "string", description: "The tool's name, as the instructions give it." },
+      args: { type: "object", description: "The tool's own arguments." },
+    },
+    required: ["name"],
+  },
+};
 const CLI_WRITES = /^(?:Write|Edit|MultiEdit|NotebookEdit|Bash|write_file|replace|edit|run_shell_command|write_to_file|replace_file_content|run_command)\b/i;
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -4444,6 +4466,43 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
               show(tail.images);
             };
             if (cliTurn && !workspace.hasBaseline) await workspace.prime();
+            /* Autora's own tools for the CLI, for this model call only (server/clibridge.ts): every call it makes through
+               them runs through `handle`, one at a time, exactly as the agent's own would. Its own file and shell tools
+               stand in for Autora's, so those are not offered twice, and the delegates are not offered to themselves. */
+            const bridgedTools = () => tools.filter((t) => !CLI_OWN_TOOLS.has(t.name));
+            const bridgeNames = cliTurn ? [...bridgedTools().map((t) => t.name), AUTORA_TOOL.name] : [];
+            let bridge: { token: string; close: () => void } | null = null;
+            if (cliTurn) {
+              const bridgeSlots: Array<ToolReply | undefined> = [];
+              let bridgeQueue: Promise<unknown> = Promise.resolve();
+              let bridgeCalls = 0;
+              bridge = openBridge({
+                list: () => [
+                  ...bridgedTools().map((t) => ({ name: t.name, description: t.description, inputSchema: t.parameters as Record<string, unknown> })),
+                  AUTORA_TOOL,
+                ],
+                call: (name, args) => {
+                  const run = async (): Promise<BridgeResult> => {
+                    const real = name === AUTORA_TOOL.name ? String(args.name ?? "").trim() : name;
+                    const given = name === AUTORA_TOOL.name
+                      ? (args.args && typeof args.args === "object" && !Array.isArray(args.args) ? args.args as Record<string, unknown> : {})
+                      : args;
+                    if (!real) return { ok: false, text: "Say which of Autora's tools to call." };
+                    if (CLI_OWN_TOOLS.has(real)) return { ok: false, text: `${real} is not offered to you here: use your own tools for files and commands.` };
+                    if (running.get(session.id)?.stopped) return { ok: false, text: "The person stopped the turn." };
+                    // What it said before the call goes out before the call's own cells.
+                    sayHeld();
+                    const at = bridgeCalls++;
+                    await handle({ id: `bridge-${session.id}-${rounds}-${at}`, name: real, args: given }, at, bridgeSlots, result.reply.slice(-1500));
+                    const done = bridgeSlots[at];
+                    return done ? { ok: done.ok, text: done.result, images: done.images } : { ok: false, text: "It did not run." };
+                  };
+                  const next = bridgeQueue.then(run, run);
+                  bridgeQueue = next.catch(() => undefined);
+                  return next;
+                },
+              });
+            }
             const turn = await streamChat({
               provider: answering.provider,
               model: answering.model,
@@ -4472,6 +4531,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
               signal: running.get(session.id)?.signal,
               tools: sentTools,
               ...(cliTurn ? { cwd: terminalDir() } : {}),
+              ...(bridge ? { bridge: { url: bridgeUrl(PORT, HOST), token: bridge.token, tools: bridgeNames } } : {}),
               /* A subscription CLI runs its own tools: each call is shown in
                  its bubble as it happens, the way an API vendor's tool cells
                  are, so the person watches the work rather than the wait. */
@@ -4480,6 +4540,13 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
                 /* The words written before this step go out before it: the sieve holds the last few characters back (an
                    image address may be starting), and a step sent past them split a word between two replies. */
                 sayHeld();
+                /* A call to one of Autora's own tools: its own cells are already in the thread (handle drew them), so the
+                   CLI's echo of it is not a second step. Claude names them mcp__autora__<tool>, Gemini by the tool's name. */
+                const called = text.split(/\s+/)[0] ?? "";
+                const bare = called.replace(/^mcp__autora__/, "").replace(/^autora__/, "");
+                if (cliTurn && (called !== bare || bridgeNames.includes(bare))) return;
+                // The CLI looking its tools up is its own plumbing, not work the person needs to watch.
+                if (cliTurn && called === "ToolSearch") return;
                 /* The model goes with the step so the chat can mark whose work it is: a subscription CLI's calls show under
                    its own name and mark, not as the agent's, and the person can tell Gemini from Claude at a glance. */
                 emitEvent(session, "vendor.tool", "agent", {
@@ -4512,7 +4579,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
                 streamed += clean.length;
               }
               show(images);
-            });
+            }).finally(() => bridge?.close());
 
             sayHeld();
             /* What a subscription CLI wrote, as code cards, once its last write has been looked at. */
@@ -5359,6 +5426,445 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
           }
         }
       };
+      /* One tool call, run the whole way -- refusals, holds, approval, the events, the windows -- with its answer put in
+         its slot. `said` is what the model wrote in the step that made it (the approval card and the guard read it). A
+         subscription CLI's calls through the bridge come here too (server/clibridge.ts), so they are the agent's calls in
+         every respect but who chose them. */
+      const handle = async (use: ToolUse, at: number, slots: Array<ToolReply | undefined>, said: string): Promise<void> => {
+        const span = `span-${session.id}-${session.seqCounter}-${spans++}`;
+        const reply = (ok: boolean, result: string, images?: ToolReply["images"]): void => {
+          slots[at] = { id: use.id, name: use.name, ok, result, images };
+        };
+
+        if (running.get(session.id)?.stopped) {
+          reply(false, "The person stopped the turn before this ran.");
+          return;
+        }
+
+        /* Cut off before its arguments were complete. Run with `{}` it
+           fails in a confusing way or, worse, does something; either
+           way the model repeats it at the same length and hits the
+           same wall. Saying why lets it split the work instead. */
+        if (use.incomplete) {
+          emitEvent(session, "tool.call", "agent", { name: use.name, args: {} }, span);
+          const said =
+            `Not run: the arguments of this ${use.name} call were not valid JSON ` +
+            "(cut off at the output limit, or garbled on the way). Make the call again, " +
+            "with the arguments as one plain JSON object; if it was long, " +
+            "split it into several smaller parts.";
+          emitEvent(session, "tool.error", "agent", { error: said }, span);
+          reply(false, said);
+          return;
+        }
+
+        /* Talk mode's hand-over, handled here rather than in the registry:
+           it is not a tool that does anything, it is the work changing
+           hands. The voice keeps the turn and keeps talking; the reasoning
+           model takes the work, and everything it says and does is read to
+           the voice rather than to the person. */
+        if (use.name === THINK_LONGER.name && talkFast && !handedOver) {
+          emitEvent(session, "tool.call", "agent", { name: use.name, args: use.args }, span);
+          handedOver = true;
+          handedTask =
+            String((use.args as Record<string, unknown> | undefined)?.task ?? "").trim();
+          emitEvent(session, "system.log", "system", {
+            message:
+              `${worker().model} has the work now; ${voice} keeps talking and will say what it finds.`,
+          });
+          reply(
+            true,
+            "You have the work now. Think it through and use your tools, and put what you " +
+              "find into plain words: they are read to the model that is speaking to the " +
+              "person, and it says them in its own voice. Do not address the person " +
+              "yourself, and do not ask them anything.",
+          );
+          return;
+        }
+
+        const spec = findTool(use.name);
+        /* A tool from a set that is not in the list yet, called by name: the
+           model knew it was there (the console note says so, and earlier
+           turns used it). Bring the set in and run the call, rather than
+           make it ask first. */
+        /* A connected server's tool that is not loaded yet, called by the name in the console note. If its
+           arguments already fit the real schema the call runs (the model knew them); otherwise it is told how
+           the tool is called and the tool is loaded, which is cheaper than guessing at arguments blind. */
+        if (spec && spec.group === "mcp" && !tools.some((t) => t.name === use.name)) {
+          emitEvent(session, "tools.enable", "system", { tools: [use.name], why: "called" }, span);
+          tools = await offered();
+          const bad = checkArgs(spec.name, spec.parameters, use.args ?? {});
+          if (bad) {
+            emitEvent(session, "tool.call", "agent", { name: use.name, args: use.args }, span);
+            const said = `Not run: ${use.name} was not loaded; it is now. How it is called (* = required):\n${signatureOf(spec)}\n${bad}`;
+            emitEvent(session, "tool.error", "agent", { error: said }, span);
+            reply(false, watched(use.name, use.args, false, said, said));
+            return;
+          }
+        }
+        if (spec && !tools.some((t) => t.name === use.name)) {
+          const family = FAMILIES.find((f) => f.match(use.name));
+          if (family && !family.personOnly && !loadedTools(session).has(family.id)) {
+            emitEvent(session, "tools.enable", "system", { family: family.id, why: "called" }, span);
+            /* The list is read from the log, which this event just grew:
+               without rebuilding it here the call below would still not find
+               the tool it was asking for. */
+            tools = await offered();
+          }
+        }
+        /* Offered tools are the available ones, so an unknown name here
+           means the model invented it -- or asked for something from a
+           group that is switched off. Naming what it does have is more
+           use to it than "unknown tool". */
+        if (!spec || !tools.some((t) => t.name === use.name)) {
+          emitEvent(session, "tool.call", "agent", {
+            name: use.name, args: use.args,
+          }, span);
+          const known = tools.map((t) => t.name).join(", ") || "none";
+          /* Why a tool that exists is not offered, in words the agent can pass on: an editor this server was built
+             without ("not installed") is not the same as one the person switched off on the Tools page. */
+          const editor = spec ? capabilityOf(use.name) : undefined;
+          const missing = editor ? editor.windows.some((w) => installedWindows()[w] === false) : false;
+          const why = !spec ? `There is no tool called "${use.name}".`
+            : personOnlyFamilyOf(use.name) ? `"${use.name}" makes a whole model, which you do only when the person asks you to generate one. They have not, so build with the other cad tools or ask them whether they want it made for them.`
+            : editor && missing ? `${editor.name} is not installed on this server, so "${use.name}" cannot be used. Tell the person that plainly (it is not switched off, it was never built here), and offer what can be done without it.`
+            : editor ? `${editor.name} is switched off on the Tools page, so "${use.name}" is not available. Tell the person; they can switch it on there.`
+            : `"${use.name}" exists but its group is not available right now.`;
+          emitEvent(session, "tool.error", "agent", { error: editor ? (missing ? `${editor.name} is not installed on this server.` : `${editor.name} is switched off on the Tools page.`) : why }, span);
+          const said = `${why} The tools you have are: ${known}.`;
+          reply(false, watched(use.name, use.args, false, said, said));
+          return;
+        }
+
+        emitEvent(session, "tool.call", "agent", {
+          name: spec.name, args: use.args,
+        }, span);
+
+        /* The tool's own schema, enforced before anything else looks at the
+           call: the handlers coerce whatever arrives, so a missing or
+           mistyped argument would otherwise reach the guard, the approval
+           card and the tool. MCP tools keep their servers' own checking. */
+        const badArgs = spec.group === "mcp" ? null : checkArgs(spec.name, spec.parameters, use.args ?? {});
+        if (badArgs) {
+          emitEvent(session, "tool.error", "agent", { error: badArgs }, span);
+          reply(false, watched(spec.name, use.args, false, badArgs, badArgs));
+          return;
+        }
+
+        /* Planning first, and it is a refusal rather than a card: planning
+           is the agent's own state (chosen by the person in Plan, by the
+           agent in Agent), so nobody is being asked -- the call is not run
+           and the agent is told what to do instead. */
+        const work = workMode(session.mode);
+        const refusal = planRefusal(work, session.phase, spec.name, use.args);
+        if (refusal) {
+          emitEvent(session, "tool.error", "agent", {
+            held: true, planning: true, error: "Not run: planning changes nothing.",
+          }, span);
+          reply(false, refusal);
+          return;
+        }
+
+        /* The person is using it, or has taken it: not done, said plainly,
+           and the turn goes on. It is not an error, so it is not counted
+           against the loop watch or the error budget. */
+        const heldNow = heldFor(session.id, spec.name, use.args);
+        if (heldNow) {
+          emitEvent(session, "tool.error", "agent", { held: true, error: "Not done: the person is working on this." }, span);
+          reply(false, heldNow);
+          return;
+        }
+
+        /* An exact call that was repeated after the loop watch said not to:
+           refused in a line, without running, and without the tool list
+           changing under the provider's cache. */
+        const gated = watch.gate(spec.name, use.args);
+        if (gated.stop) {
+          loopStop = gated.stop;
+          reply(false, "Not run: the turn was stopped.");
+          return;
+        }
+        if (gated.refuse) {
+          emitEvent(session, "tool.error", "agent", { held: true, error: gated.refuse }, span);
+          reply(false, gated.refuse);
+          return;
+        }
+
+        /* Acting on a site nothing current is stored about: find out from its own
+           documentation first (see mindrules.groundingRefusal). Reading the
+           page is never held, and a few refusals on one site let it through so
+           a docs site that is down cannot wedge the turn. */
+        if (state.groundFirst && actsOnSite(spec.name, (use.args ?? {}) as Record<string, any>)) {
+          const page = spec.name.startsWith("browser_") ? browsers.get(session.id)?.status().url ?? "" : "";
+          const site = siteOf(targetOf(spec.name, (use.args ?? {}) as Record<string, any>, page));
+          if (site) {
+            const grounding = mind.groundingOf(site);
+            const told = groundingTold.get(site) ?? 0;
+            const why = groundingRefusal({
+              enabled: true, site, fresh: grounding === "fresh", stale: grounding === "stale", refused: told,
+            });
+            if (why) {
+              groundingTold.set(site, told + 1);
+              emitEvent(session, "tool.error", "agent", { held: true, grounding: true, error: `Not done yet: reading ${site}'s own documentation first.` }, span);
+              if (told === 0) {
+                emitEvent(session, "system.log", "system", {
+                  message: `Nothing current is stored about ${site}; the agent was sent to read its official documentation before acting on it.`,
+                });
+              }
+              reply(false, why);
+              return;
+            }
+          }
+        }
+
+        /* Then the person's permissions: with Ask on, a call that changes
+           something waits for a yes on a card -- every one, or the ones
+           that fall under what they wrote for when to ask. Yolo adds
+           nothing here, and the guard and the irrecoverable tier further
+           down are untouched by it. */
+        const perms = permissionsOf(session.permissions);
+        const ruling = askAbout(perms, session.askWhen ?? "", spec.name, use.args);
+        const rendered = ruling === "skip" ? "" : renderCall(spec, use.args);
+        const askHeld = ruling === "hold" ||
+          (ruling === "judge" && await matchesAskRule(
+            (system, prompt) => backgroundCall(session.id, system, prompt, 120),
+            { rules: cleanAskWhen(session.askWhen), tool: spec.name, rendered },
+          ));
+        if (askHeld) {
+          const decision = await askPermission(session, {
+            tool: spec.name,
+            rendered,
+            /* Never saved as a standing agreement: a rule is about a class
+               of work and outlives the chat, and this card is about this
+               conversation's permissions, which end with it. */
+            remember: false,
+            reason: askReason(session.askWhen ?? ""),
+          });
+          if (!decision.approved) {
+            emitEvent(session, "tool.error", "agent", {
+              held: true, denied: true, mode: "ask",
+              error: `Held: this chat is set to ${PERMISSION_INFO.ask.label}.`,
+            }, span);
+            reply(
+              false,
+              "Not run: this chat is set to Ask and the person said no to this call. " +
+                "Do not retry it. Either carry on without it or say what you needed it " +
+                "for and why.",
+            );
+            return;
+          }
+        }
+
+        if (needsApproval(spec)) {
+          const decision = await askPermission(session, {
+            tool: spec.name,
+            rendered: renderCall(spec, use.args),
+            remember: true,
+            reason: said.trim()
+              // The model's own words for why, when it gave any: far more
+              // use on the card than a fixed sentence about elevation.
+              ? said.trim().slice(0, 300)
+              : `${spec.name} needs your approval before it runs.`,
+          });
+          if (!decision.approved) {
+            emitEvent(session, "tool.error", "agent", {
+              denied: true, reason: "The person declined this.",
+            }, span);
+            reply(
+              false,
+              "The person declined this. Do not retry it. Either find " +
+                "another way, or tell them what you needed it for and why.",
+            );
+            return;
+          }
+          if (decision.response) {
+            emitEvent(session, "context.note", "user", {
+              text: `You answered the approval with: ${decision.response}`,
+            });
+          }
+
+          /* The person said "do not ask again". Written down as their own
+             standing agreement, so the next call of this shape goes straight
+             through -- and listed in Scheduled tasks, where it can be taken
+             back. Only ever offered on this tier. */
+          if (decision.remember) {
+            const made = addRule({
+              tool: spec.name,
+              match: matchText(spec.name, use.args) ?? "",
+              note: `allowed on the card: ${renderCall(spec, use.args).slice(0, 140)}`,
+              by: "person",
+            });
+            emitEvent(session, "context.note", "system", {
+              text: made.rule
+                ? `Standing agreement saved: ${spec.name} calls like "${made.rule.match}" now run without asking. It is listed under Standing agreements in Settings, where it can be revoked.`
+                : `That could not be saved as a standing agreement (${made.error ?? "unknown reason"}). This call still ran.`,
+            });
+          }
+        }
+
+        /* The one tier that needs no key, no model and no network. The
+           model's check below judges a much wider set of calls and says
+           something only when it is sure -- which, unreachable, is never.
+           This asks about the handful of commands nothing can undo,
+           whatever else is configured. */
+        const danger = irreversible(spec.name, use.args);
+        if (danger) {
+          const decision = await askPermission(session, {
+            tool: spec.name,
+            rendered: renderCall(spec, use.args),
+            /* Never remembered: nothing that cannot be undone is covered
+               by a standing agreement. */
+            remember: false,
+            reason:
+              `This cannot be undone: it would ${danger.what}` +
+              `${danger.match && danger.match !== String(use.args?.command ?? "")
+                ? ` (${danger.match})` : ""}. ` +
+              "Nothing else in this console waits for an answer; this does.",
+          });
+          if (!decision.approved) {
+            const said =
+              "The person declined this. Do not retry it. Nothing that cannot be " +
+              "undone runs here without their answer, so find another way, or say " +
+              "what you needed it for and why.";
+            emitEvent(session, "tool.error", "agent", {
+              guarded: true, denied: true, error: "Held: the person declined an irreversible command.",
+            }, span);
+            reply(false, said);
+            return;
+          }
+        }
+
+        const held = await modelGuard(session, spec, use.args, text, said.trim());
+        if (held) {
+          emitEvent(session, "tool.error", "agent", {
+            guarded: true, denied: true, error: held,
+          }, span);
+          reply(
+            false,
+            `${held} It did not run. Ask the person with ask_user first -- say ` +
+              "exactly what it will do and what cannot be undone. If they agree, " +
+              "make the same call again and it will go through. If they decline, " +
+              "find another way or stop.",
+          );
+          return;
+        }
+
+        /* The same call, failed, with nothing changed since that could make it pass: not made again, and the agent
+           is told why and what would (server/failedcalls.ts). `retry` with a reason lets it through; it is the
+           loop's, so it is taken off before the tool (or a connected server) sees the arguments. */
+        const retryWhy = String(use.args?.retry ?? "").trim();
+        if (use.args && "retry" in use.args && spec.name !== "terminal") {
+          const { retry: _retry, ...rest } = use.args;
+          use.args = rest;
+        }
+        if (!retryWhy) {
+          const standing = standingFailure(session.events, spec.name, use.args ?? {});
+          if (standing) {
+            emitEvent(session, "tool.error", "agent", { repeat: true, error: "Not done again: it failed, and nothing has changed since." }, span);
+            reply(false, repeatRefusal(standing));
+            return;
+          }
+        }
+
+        const started = Date.now();
+        ranSomething = true;
+        const willWrite = (spec.name === "terminal" && !readOnlyCommand(String(use.args?.command ?? ""))) || spec.name === "edit_file";
+        // What the person changed before this runs is theirs, not this command's.
+        if (willWrite) await personEdits(null);
+        const outcome = await untilStopped(session.id, runTool(spec, use.args, contextFor(span)));
+        noteCall(spec.name, use.args);
+        if (outcome.ok) noteFlowsOf(session.id, spec.name, use.args);
+        /* A command that failed because a path was not there: say what is near
+           it, so the next call is right instead of another guess. */
+        if (spec.name === "terminal" && !outcome.ok && !outcome.held) {
+          const gone = missingPathIn(outcome.summary);
+          const near = gone ? pathHint(terminalDir(), gone) : "";
+          if (near) outcome.summary += `\n[Autora:${near}]`;
+        }
+        // Learned on the first failure: the same call will not be made again unchanged (server/failedcalls.ts).
+        /* Not for a refusal that is the person's own words being theirs: that is the rule working, and the agent is told what to do
+           instead, not that its call "failed" and will be barred. */
+        if (!outcome.ok && !outcome.held && holdsBack(spec.name) && !THEIRS_REFUSAL.test(outcome.summary)) outcome.summary += `\n${FAILED_NOTE}`;
+        const durationMs = Date.now() - started;
+        const wrote = willWrite;
+        if (spec.name === "edit_file" && outcome.ok) changedFiles.push(path.resolve(terminalDir(), String(use.args?.path ?? "")));
+        if (wrote) {
+          changedSinceCheck = true;
+          if (previews.get(session.id)?.opened) previewSince = Date.now();
+        }
+
+        if (spec.group === "terminal" && outcome.exitCode !== undefined) {
+          // The terminal cell reads its exit code from here, and the
+          // pipes are closed by the time this lands.
+          emitEvent(session, "pty.exit", "agent", {
+            exit_code: outcome.exitCode ?? null,
+            duration_ms: durationMs,
+          }, span);
+        }
+
+        if (outcome.ok) {
+          emitEvent(session, "tool.result", "agent", {
+            ok: true,
+            preview: outcome.preview ?? "",
+            duration_ms: durationMs,
+            ...(outcome.exitCode !== undefined
+              ? { display: { exit_code: outcome.exitCode } }
+              : {}),
+          }, span);
+        } else {
+          /* A command that exits non-zero is a result, not a broken
+             tool: the model needs to read it and decide. Only a tool
+             that could not run at all is an error. */
+          if (outcome.held) {
+            emitEvent(session, "tool.error", "agent", { held: true, error: outcome.summary.startsWith("Stopped by the person") ? "Stopped." : "Not done: the person is working on this." }, span);
+          } else if (outcome.exitCode !== undefined) {
+            emitEvent(session, "tool.result", "agent", {
+              ok: false,
+              preview: outcome.preview ?? "",
+              duration_ms: durationMs,
+              display: { exit_code: outcome.exitCode },
+            }, span);
+          } else {
+            /* The agent held back from the person's own words (a story's cards, a document that is theirs to write): the
+               rule working, not a tool that broke. The thread says so plainly instead of showing a failure. */
+            const theirs = THEIRS_REFUSAL.test(outcome.summary);
+            emitEvent(session, "tool.error", "agent", {
+              // Playwright colours its call log; the thread is not a terminal.
+              error: stripAnsi(outcome.summary),
+              duration_ms: durationMs,
+              ...(theirs ? { held: true, theirs: true } : {}),
+            }, span);
+          }
+        }
+
+        // The code the command wrote, as cards after the command's own result.
+        if (wrote) await announceCode(span);
+
+        /* Ingestion filter: control codes and repeated lines out, and
+           anything still too long kept whole in the vault with its head
+           and tail left in the prompt. The thread already showed it
+           all, live; this is only what the model reads. */
+        // Not done because the person is using it: said, not counted as a failure.
+        if (outcome.held) reply(false, outcome.summary);
+        else {
+          const fitted = context.ingest(spec.name, outcome.summary, canReadVault);
+          /* Where a long result went, in the log: the next turn's recap names
+             the artifact, so it reads that part back instead of running the
+             call again. */
+          const stored = context.takeStored();
+          if (stored) emitEvent(session, "tool.stored", "agent", stored, span);
+          /* The window's manual, once per chat, with the result of the first call into it (server/handbook.ts): the agent
+             reads how the window works at the moment it starts to use it, not on every turn. Reading it with
+             tool_manual counts. */
+          const manual = spec.name === "tool_manual" ? (String(use.args?.window ?? "").trim().toLowerCase() as ManualId) : manualId(spec.name);
+          let shown = fitted;
+          if (manual && MANUAL_IDS.includes(manual) && !manualGiven(session.events, manual)) {
+            emitEvent(session, "tool.manual", "system", { id: manual }, span);
+            if (spec.name !== "tool_manual") shown = `${fitted}\n\n[Autora: the manual for this window, once -- read it before the next step]\n${manualText(manual)}`;
+          }
+          reply(outcome.ok, watched(spec.name, use.args, outcome.ok, outcome.summary, shown), outcome.images);
+          if (outcome.ok && spec.name === "skill" && use.args?.action === "use") skillsFollowed.add(String(use.args?.name ?? "").trim());
+        }
+      };
       for (;;) {
         if (running.get(session.id)?.stopped) break;
 
@@ -5579,441 +6085,6 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
            however they finished. Calls that cannot break one another run together (server/overlap.ts, worked out
            from what each reads and changes, in the background); anything else waits for the calls before it. */
         const slots: Array<ToolReply | undefined> = [];
-        const handle = async (use: (typeof turn.calls)[number], at: number): Promise<void> => {
-          const span = `span-${session.id}-${session.seqCounter}-${spans++}`;
-          const reply = (ok: boolean, result: string, images?: ToolReply["images"]): void => {
-            slots[at] = { id: use.id, name: use.name, ok, result, images };
-          };
-
-          if (running.get(session.id)?.stopped) {
-            reply(false, "The person stopped the turn before this ran.");
-            return;
-          }
-
-          /* Cut off before its arguments were complete. Run with `{}` it
-             fails in a confusing way or, worse, does something; either
-             way the model repeats it at the same length and hits the
-             same wall. Saying why lets it split the work instead. */
-          if (use.incomplete) {
-            emitEvent(session, "tool.call", "agent", { name: use.name, args: {} }, span);
-            const said =
-              `Not run: the arguments of this ${use.name} call were not valid JSON ` +
-              "(cut off at the output limit, or garbled on the way). Make the call again, " +
-              "with the arguments as one plain JSON object; if it was long, " +
-              "split it into several smaller parts.";
-            emitEvent(session, "tool.error", "agent", { error: said }, span);
-            reply(false, said);
-            return;
-          }
-
-          /* Talk mode's hand-over, handled here rather than in the registry:
-             it is not a tool that does anything, it is the work changing
-             hands. The voice keeps the turn and keeps talking; the reasoning
-             model takes the work, and everything it says and does is read to
-             the voice rather than to the person. */
-          if (use.name === THINK_LONGER.name && talkFast && !handedOver) {
-            emitEvent(session, "tool.call", "agent", { name: use.name, args: use.args }, span);
-            handedOver = true;
-            handedTask =
-              String((use.args as Record<string, unknown> | undefined)?.task ?? "").trim();
-            emitEvent(session, "system.log", "system", {
-              message:
-                `${worker().model} has the work now; ${voice} keeps talking and will say what it finds.`,
-            });
-            reply(
-              true,
-              "You have the work now. Think it through and use your tools, and put what you " +
-                "find into plain words: they are read to the model that is speaking to the " +
-                "person, and it says them in its own voice. Do not address the person " +
-                "yourself, and do not ask them anything.",
-            );
-            return;
-          }
-
-          const spec = findTool(use.name);
-          /* A tool from a set that is not in the list yet, called by name: the
-             model knew it was there (the console note says so, and earlier
-             turns used it). Bring the set in and run the call, rather than
-             make it ask first. */
-          /* A connected server's tool that is not loaded yet, called by the name in the console note. If its
-             arguments already fit the real schema the call runs (the model knew them); otherwise it is told how
-             the tool is called and the tool is loaded, which is cheaper than guessing at arguments blind. */
-          if (spec && spec.group === "mcp" && !tools.some((t) => t.name === use.name)) {
-            emitEvent(session, "tools.enable", "system", { tools: [use.name], why: "called" }, span);
-            tools = await offered();
-            const bad = checkArgs(spec.name, spec.parameters, use.args ?? {});
-            if (bad) {
-              emitEvent(session, "tool.call", "agent", { name: use.name, args: use.args }, span);
-              const said = `Not run: ${use.name} was not loaded; it is now. How it is called (* = required):\n${signatureOf(spec)}\n${bad}`;
-              emitEvent(session, "tool.error", "agent", { error: said }, span);
-              reply(false, watched(use.name, use.args, false, said, said));
-              return;
-            }
-          }
-          if (spec && !tools.some((t) => t.name === use.name)) {
-            const family = FAMILIES.find((f) => f.match(use.name));
-            if (family && !family.personOnly && !loadedTools(session).has(family.id)) {
-              emitEvent(session, "tools.enable", "system", { family: family.id, why: "called" }, span);
-              /* The list is read from the log, which this event just grew:
-                 without rebuilding it here the call below would still not find
-                 the tool it was asking for. */
-              tools = await offered();
-            }
-          }
-          /* Offered tools are the available ones, so an unknown name here
-             means the model invented it -- or asked for something from a
-             group that is switched off. Naming what it does have is more
-             use to it than "unknown tool". */
-          if (!spec || !tools.some((t) => t.name === use.name)) {
-            emitEvent(session, "tool.call", "agent", {
-              name: use.name, args: use.args,
-            }, span);
-            const known = tools.map((t) => t.name).join(", ") || "none";
-            /* Why a tool that exists is not offered, in words the agent can pass on: an editor this server was built
-               without ("not installed") is not the same as one the person switched off on the Tools page. */
-            const editor = spec ? capabilityOf(use.name) : undefined;
-            const missing = editor ? editor.windows.some((w) => installedWindows()[w] === false) : false;
-            const why = !spec ? `There is no tool called "${use.name}".`
-              : personOnlyFamilyOf(use.name) ? `"${use.name}" makes a whole model, which you do only when the person asks you to generate one. They have not, so build with the other cad tools or ask them whether they want it made for them.`
-              : editor && missing ? `${editor.name} is not installed on this server, so "${use.name}" cannot be used. Tell the person that plainly (it is not switched off, it was never built here), and offer what can be done without it.`
-              : editor ? `${editor.name} is switched off on the Tools page, so "${use.name}" is not available. Tell the person; they can switch it on there.`
-              : `"${use.name}" exists but its group is not available right now.`;
-            emitEvent(session, "tool.error", "agent", { error: editor ? (missing ? `${editor.name} is not installed on this server.` : `${editor.name} is switched off on the Tools page.`) : why }, span);
-            const said = `${why} The tools you have are: ${known}.`;
-            reply(false, watched(use.name, use.args, false, said, said));
-            return;
-          }
-
-          emitEvent(session, "tool.call", "agent", {
-            name: spec.name, args: use.args,
-          }, span);
-
-          /* The tool's own schema, enforced before anything else looks at the
-             call: the handlers coerce whatever arrives, so a missing or
-             mistyped argument would otherwise reach the guard, the approval
-             card and the tool. MCP tools keep their servers' own checking. */
-          const badArgs = spec.group === "mcp" ? null : checkArgs(spec.name, spec.parameters, use.args ?? {});
-          if (badArgs) {
-            emitEvent(session, "tool.error", "agent", { error: badArgs }, span);
-            reply(false, watched(spec.name, use.args, false, badArgs, badArgs));
-            return;
-          }
-
-          /* Planning first, and it is a refusal rather than a card: planning
-             is the agent's own state (chosen by the person in Plan, by the
-             agent in Agent), so nobody is being asked -- the call is not run
-             and the agent is told what to do instead. */
-          const work = workMode(session.mode);
-          const refusal = planRefusal(work, session.phase, spec.name, use.args);
-          if (refusal) {
-            emitEvent(session, "tool.error", "agent", {
-              held: true, planning: true, error: "Not run: planning changes nothing.",
-            }, span);
-            reply(false, refusal);
-            return;
-          }
-
-          /* The person is using it, or has taken it: not done, said plainly,
-             and the turn goes on. It is not an error, so it is not counted
-             against the loop watch or the error budget. */
-          const heldNow = heldFor(session.id, spec.name, use.args);
-          if (heldNow) {
-            emitEvent(session, "tool.error", "agent", { held: true, error: "Not done: the person is working on this." }, span);
-            reply(false, heldNow);
-            return;
-          }
-
-          /* An exact call that was repeated after the loop watch said not to:
-             refused in a line, without running, and without the tool list
-             changing under the provider's cache. */
-          const gated = watch.gate(spec.name, use.args);
-          if (gated.stop) {
-            loopStop = gated.stop;
-            reply(false, "Not run: the turn was stopped.");
-            return;
-          }
-          if (gated.refuse) {
-            emitEvent(session, "tool.error", "agent", { held: true, error: gated.refuse }, span);
-            reply(false, gated.refuse);
-            return;
-          }
-
-          /* Acting on a site nothing current is stored about: find out from its own
-             documentation first (see mindrules.groundingRefusal). Reading the
-             page is never held, and a few refusals on one site let it through so
-             a docs site that is down cannot wedge the turn. */
-          if (state.groundFirst && actsOnSite(spec.name, (use.args ?? {}) as Record<string, any>)) {
-            const page = spec.name.startsWith("browser_") ? browsers.get(session.id)?.status().url ?? "" : "";
-            const site = siteOf(targetOf(spec.name, (use.args ?? {}) as Record<string, any>, page));
-            if (site) {
-              const grounding = mind.groundingOf(site);
-              const told = groundingTold.get(site) ?? 0;
-              const why = groundingRefusal({
-                enabled: true, site, fresh: grounding === "fresh", stale: grounding === "stale", refused: told,
-              });
-              if (why) {
-                groundingTold.set(site, told + 1);
-                emitEvent(session, "tool.error", "agent", { held: true, grounding: true, error: `Not done yet: reading ${site}'s own documentation first.` }, span);
-                if (told === 0) {
-                  emitEvent(session, "system.log", "system", {
-                    message: `Nothing current is stored about ${site}; the agent was sent to read its official documentation before acting on it.`,
-                  });
-                }
-                reply(false, why);
-                return;
-              }
-            }
-          }
-
-          /* Then the person's permissions: with Ask on, a call that changes
-             something waits for a yes on a card -- every one, or the ones
-             that fall under what they wrote for when to ask. Yolo adds
-             nothing here, and the guard and the irrecoverable tier further
-             down are untouched by it. */
-          const perms = permissionsOf(session.permissions);
-          const ruling = askAbout(perms, session.askWhen ?? "", spec.name, use.args);
-          const rendered = ruling === "skip" ? "" : renderCall(spec, use.args);
-          const askHeld = ruling === "hold" ||
-            (ruling === "judge" && await matchesAskRule(
-              (system, prompt) => backgroundCall(session.id, system, prompt, 120),
-              { rules: cleanAskWhen(session.askWhen), tool: spec.name, rendered },
-            ));
-          if (askHeld) {
-            const decision = await askPermission(session, {
-              tool: spec.name,
-              rendered,
-              /* Never saved as a standing agreement: a rule is about a class
-                 of work and outlives the chat, and this card is about this
-                 conversation's permissions, which end with it. */
-              remember: false,
-              reason: askReason(session.askWhen ?? ""),
-            });
-            if (!decision.approved) {
-              emitEvent(session, "tool.error", "agent", {
-                held: true, denied: true, mode: "ask",
-                error: `Held: this chat is set to ${PERMISSION_INFO.ask.label}.`,
-              }, span);
-              reply(
-                false,
-                "Not run: this chat is set to Ask and the person said no to this call. " +
-                  "Do not retry it. Either carry on without it or say what you needed it " +
-                  "for and why.",
-              );
-              return;
-            }
-          }
-
-          if (needsApproval(spec)) {
-            const decision = await askPermission(session, {
-              tool: spec.name,
-              rendered: renderCall(spec, use.args),
-              remember: true,
-              reason: turn.text.trim()
-                // The model's own words for why, when it gave any: far more
-                // use on the card than a fixed sentence about elevation.
-                ? turn.text.trim().slice(0, 300)
-                : `${spec.name} needs your approval before it runs.`,
-            });
-            if (!decision.approved) {
-              emitEvent(session, "tool.error", "agent", {
-                denied: true, reason: "The person declined this.",
-              }, span);
-              reply(
-                false,
-                "The person declined this. Do not retry it. Either find " +
-                  "another way, or tell them what you needed it for and why.",
-              );
-              return;
-            }
-            if (decision.response) {
-              emitEvent(session, "context.note", "user", {
-                text: `You answered the approval with: ${decision.response}`,
-              });
-            }
-
-            /* The person said "do not ask again". Written down as their own
-               standing agreement, so the next call of this shape goes straight
-               through -- and listed in Scheduled tasks, where it can be taken
-               back. Only ever offered on this tier. */
-            if (decision.remember) {
-              const made = addRule({
-                tool: spec.name,
-                match: matchText(spec.name, use.args) ?? "",
-                note: `allowed on the card: ${renderCall(spec, use.args).slice(0, 140)}`,
-                by: "person",
-              });
-              emitEvent(session, "context.note", "system", {
-                text: made.rule
-                  ? `Standing agreement saved: ${spec.name} calls like "${made.rule.match}" now run without asking. It is listed under Standing agreements in Settings, where it can be revoked.`
-                  : `That could not be saved as a standing agreement (${made.error ?? "unknown reason"}). This call still ran.`,
-              });
-            }
-          }
-
-          /* The one tier that needs no key, no model and no network. The
-             model's check below judges a much wider set of calls and says
-             something only when it is sure -- which, unreachable, is never.
-             This asks about the handful of commands nothing can undo,
-             whatever else is configured. */
-          const danger = irreversible(spec.name, use.args);
-          if (danger) {
-            const decision = await askPermission(session, {
-              tool: spec.name,
-              rendered: renderCall(spec, use.args),
-              /* Never remembered: nothing that cannot be undone is covered
-                 by a standing agreement. */
-              remember: false,
-              reason:
-                `This cannot be undone: it would ${danger.what}` +
-                `${danger.match && danger.match !== String(use.args?.command ?? "")
-                  ? ` (${danger.match})` : ""}. ` +
-                "Nothing else in this console waits for an answer; this does.",
-            });
-            if (!decision.approved) {
-              const said =
-                "The person declined this. Do not retry it. Nothing that cannot be " +
-                "undone runs here without their answer, so find another way, or say " +
-                "what you needed it for and why.";
-              emitEvent(session, "tool.error", "agent", {
-                guarded: true, denied: true, error: "Held: the person declined an irreversible command.",
-              }, span);
-              reply(false, said);
-              return;
-            }
-          }
-
-          const held = await modelGuard(session, spec, use.args, text, turn.text.trim());
-          if (held) {
-            emitEvent(session, "tool.error", "agent", {
-              guarded: true, denied: true, error: held,
-            }, span);
-            reply(
-              false,
-              `${held} It did not run. Ask the person with ask_user first -- say ` +
-                "exactly what it will do and what cannot be undone. If they agree, " +
-                "make the same call again and it will go through. If they decline, " +
-                "find another way or stop.",
-            );
-            return;
-          }
-
-          /* The same call, failed, with nothing changed since that could make it pass: not made again, and the agent
-             is told why and what would (server/failedcalls.ts). `retry` with a reason lets it through; it is the
-             loop's, so it is taken off before the tool (or a connected server) sees the arguments. */
-          const retryWhy = String(use.args?.retry ?? "").trim();
-          if (use.args && "retry" in use.args && spec.name !== "terminal") {
-            const { retry: _retry, ...rest } = use.args;
-            use.args = rest;
-          }
-          if (!retryWhy) {
-            const standing = standingFailure(session.events, spec.name, use.args ?? {});
-            if (standing) {
-              emitEvent(session, "tool.error", "agent", { repeat: true, error: "Not done again: it failed, and nothing has changed since." }, span);
-              reply(false, repeatRefusal(standing));
-              return;
-            }
-          }
-
-          const started = Date.now();
-          ranSomething = true;
-          const willWrite = (spec.name === "terminal" && !readOnlyCommand(String(use.args?.command ?? ""))) || spec.name === "edit_file";
-          // What the person changed before this runs is theirs, not this command's.
-          if (willWrite) await personEdits(null);
-          const outcome = await untilStopped(session.id, runTool(spec, use.args, contextFor(span)));
-          noteCall(spec.name, use.args);
-          if (outcome.ok) noteFlowsOf(session.id, spec.name, use.args);
-          /* A command that failed because a path was not there: say what is near
-             it, so the next call is right instead of another guess. */
-          if (spec.name === "terminal" && !outcome.ok && !outcome.held) {
-            const gone = missingPathIn(outcome.summary);
-            const near = gone ? pathHint(terminalDir(), gone) : "";
-            if (near) outcome.summary += `\n[Autora:${near}]`;
-          }
-          // Learned on the first failure: the same call will not be made again unchanged (server/failedcalls.ts).
-          /* Not for a refusal that is the person's own words being theirs: that is the rule working, and the agent is told what to do
-             instead, not that its call "failed" and will be barred. */
-          if (!outcome.ok && !outcome.held && holdsBack(spec.name) && !THEIRS_REFUSAL.test(outcome.summary)) outcome.summary += `\n${FAILED_NOTE}`;
-          const durationMs = Date.now() - started;
-          const wrote = willWrite;
-          if (spec.name === "edit_file" && outcome.ok) changedFiles.push(path.resolve(terminalDir(), String(use.args?.path ?? "")));
-          if (wrote) {
-            changedSinceCheck = true;
-            if (previews.get(session.id)?.opened) previewSince = Date.now();
-          }
-
-          if (spec.group === "terminal" && outcome.exitCode !== undefined) {
-            // The terminal cell reads its exit code from here, and the
-            // pipes are closed by the time this lands.
-            emitEvent(session, "pty.exit", "agent", {
-              exit_code: outcome.exitCode ?? null,
-              duration_ms: durationMs,
-            }, span);
-          }
-
-          if (outcome.ok) {
-            emitEvent(session, "tool.result", "agent", {
-              ok: true,
-              preview: outcome.preview ?? "",
-              duration_ms: durationMs,
-              ...(outcome.exitCode !== undefined
-                ? { display: { exit_code: outcome.exitCode } }
-                : {}),
-            }, span);
-          } else {
-            /* A command that exits non-zero is a result, not a broken
-               tool: the model needs to read it and decide. Only a tool
-               that could not run at all is an error. */
-            if (outcome.held) {
-              emitEvent(session, "tool.error", "agent", { held: true, error: outcome.summary.startsWith("Stopped by the person") ? "Stopped." : "Not done: the person is working on this." }, span);
-            } else if (outcome.exitCode !== undefined) {
-              emitEvent(session, "tool.result", "agent", {
-                ok: false,
-                preview: outcome.preview ?? "",
-                duration_ms: durationMs,
-                display: { exit_code: outcome.exitCode },
-              }, span);
-            } else {
-              /* The agent held back from the person's own words (a story's cards, a document that is theirs to write): the
-                 rule working, not a tool that broke. The thread says so plainly instead of showing a failure. */
-              const theirs = THEIRS_REFUSAL.test(outcome.summary);
-              emitEvent(session, "tool.error", "agent", {
-                // Playwright colours its call log; the thread is not a terminal.
-                error: stripAnsi(outcome.summary),
-                duration_ms: durationMs,
-                ...(theirs ? { held: true, theirs: true } : {}),
-              }, span);
-            }
-          }
-
-          // The code the command wrote, as cards after the command's own result.
-          if (wrote) await announceCode(span);
-
-          /* Ingestion filter: control codes and repeated lines out, and
-             anything still too long kept whole in the vault with its head
-             and tail left in the prompt. The thread already showed it
-             all, live; this is only what the model reads. */
-          // Not done because the person is using it: said, not counted as a failure.
-          if (outcome.held) reply(false, outcome.summary);
-          else {
-            const fitted = context.ingest(spec.name, outcome.summary, canReadVault);
-            /* Where a long result went, in the log: the next turn's recap names
-               the artifact, so it reads that part back instead of running the
-               call again. */
-            const stored = context.takeStored();
-            if (stored) emitEvent(session, "tool.stored", "agent", stored, span);
-            /* The window's manual, once per chat, with the result of the first call into it (server/handbook.ts): the agent
-               reads how the window works at the moment it starts to use it, not on every turn. Reading it with
-               tool_manual counts. */
-            const manual = spec.name === "tool_manual" ? (String(use.args?.window ?? "").trim().toLowerCase() as ManualId) : manualId(spec.name);
-            let shown = fitted;
-            if (manual && MANUAL_IDS.includes(manual) && !manualGiven(session.events, manual)) {
-              emitEvent(session, "tool.manual", "system", { id: manual }, span);
-              if (spec.name !== "tool_manual") shown = `${fitted}\n\n[Autora: the manual for this window, once -- read it before the next step]\n${manualText(manual)}`;
-            }
-            reply(outcome.ok, watched(spec.name, use.args, outcome.ok, outcome.summary, shown), outcome.images);
-            if (outcome.ok && spec.name === "skill" && use.args?.action === "use") skillsFollowed.add(String(use.args?.name ?? "").trim());
-          }
-        };
         /* Not with Ask on: its cards are answered one at a time, in the order the calls were made. */
         const batches = turn.calls.length > 1 && permissionsOf(session.permissions) === "yolo"
           ? planCalls(turn.calls.map((c) => ({ name: c.name, args: c.args as Record<string, any> })))
@@ -6026,7 +6097,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
               message: `${batch.length} calls checked for overlap and run at the same time: ${batch.map((i) => turn.calls[i].name).join(", ")}.`,
             });
           }
-          await Promise.all(batch.map((i) => handle(turn.calls[i], i)));
+          await Promise.all(batch.map((i) => handle(turn.calls[i], i, slots, turn.text)));
         }
         replies.push(...slots.filter((r): r is ToolReply => r !== undefined));
 
@@ -7050,6 +7121,7 @@ async function startServer() {
   healthRoutes(app, { sweep });
   taskRoutes(app, { version: VERSION });
 
+  bridgeRoutes(app);
   settingsRoutes(app, {
     captchaVisionLabel,
     webPush,

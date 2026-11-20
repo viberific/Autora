@@ -259,6 +259,8 @@ interface VendorRunOptions {
   id: VendorId;
   /** What to ask it. */
   prompt: string;
+  /** Variables for this run only, on top of vendorEnv(): the bridge to Autora's own tools (server/clibridge.ts). */
+  env?: Record<string, string>;
   /** Standing instructions, the same from turn to turn: handed over as a file (`--system-file`) so Claude Code puts them in
       its system prompt, where they are cached, rather than at the head of every new prompt. */
   system?: string;
@@ -578,7 +580,7 @@ async function runAttempt(opts: VendorRunOptions, form: PromptForm, jsonl = true
     try {
       child = spawn(ready.path, vendorArgs({ ...opts, prompt }, form, jsonl, systemFile), {
         cwd: opts.cwd,
-        env: vendorEnv(),
+        env: { ...vendorEnv(), ...opts.env },
         stdio: ["pipe", "pipe", "pipe"],
       });
     } catch (err: any) {

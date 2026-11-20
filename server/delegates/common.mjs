@@ -8,7 +8,9 @@
  */
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 /** One line of the stream. */
 export const emit = (object) => process.stdout.write(`${JSON.stringify(object)}\n`);
@@ -52,6 +54,35 @@ export function timeoutMs(text) {
   const n = Number(m[1]);
   const unit = (m[2] ?? "s").toLowerCase();
   return Math.round(unit === "ms" ? n : unit === "m" ? n * 60_000 : n * 1000);
+}
+
+/**
+ * The bridge to Autora's own tools, when the turn opened one (server/clibridge.ts): the MCP server to start (autora-mcp.mjs, beside
+ * this file) and the address and token it calls back with. Null otherwise. `privateFile` writes a file only this user can read,
+ * removed when the wrapper exits, so the token never sits on a command line where any process could read it.
+ */
+export function autoraBridge() {
+  const url = process.env.AUTORA_BRIDGE_URL || "";
+  const token = process.env.AUTORA_BRIDGE_TOKEN || "";
+  /* Only the bridge's own server is given them: the CLI, and every command its shell runs, is not. */
+  delete process.env.AUTORA_BRIDGE_URL;
+  delete process.env.AUTORA_BRIDGE_TOKEN;
+  if (!url || !token) return null;
+  const script = path.join(path.dirname(fileURLToPath(import.meta.url)), "autora-mcp.mjs");
+  if (!fs.existsSync(script)) return null;
+  return { command: process.execPath, args: [script], env: { AUTORA_BRIDGE_URL: url, AUTORA_BRIDGE_TOKEN: token } };
+}
+
+export function privateFile(name, text) {
+  /* Under the CLI's own home, not the system's temporary folder: Gemini will not read a settings file with a folder anyone can
+     write to above it (/tmp is one), and skipped it without saying so in a turn. */
+  const base = path.join(process.env.AUTORA_DELEGATE_HOME || os.homedir(), ".autora-run");
+  fs.mkdirSync(base, { recursive: true, mode: 0o700 });
+  const dir = fs.mkdtempSync(path.join(base, "run-"));
+  const file = path.join(dir, name);
+  fs.writeFileSync(file, text, { mode: 0o600 });
+  process.once("exit", () => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* gone */ } });
+  return file;
 }
 
 /** Where an executable is on PATH, or null. */

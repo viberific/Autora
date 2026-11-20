@@ -14,7 +14,7 @@
  * `--append-system-prompt-file`: instructions that stay the same from turn to turn sit in the system prompt, where the vendor
  * caches them, instead of at the head of a new message every turn.
  */
-import { brief, emit, fail, onPath, readOptions, reasonOf, runCli } from "./common.mjs";
+import { autoraBridge, brief, emit, fail, onPath, privateFile, readOptions, reasonOf, runCli } from "./common.mjs";
 
 const opts = await readOptions(process.argv.slice(2));
 const bin = onPath("claude");
@@ -24,8 +24,22 @@ const args = ["-p", "--output-format", "stream-json", "--verbose", "--include-pa
 if (opts.model) args.push("--model", opts.model);
 if (opts.effort) args.push("--effort", opts.effort);
 if (opts.systemFile) args.push("--append-system-prompt-file", opts.systemFile);
-if (opts.write) args.push("--permission-mode", "acceptEdits", "--add-dir", opts.cwd);
-else args.push("--allowedTools", "Read", "Glob", "Grep", "--add-dir", opts.cwd);
+const allowed = opts.write ? [] : ["Read", "Glob", "Grep"];
+if (opts.write) args.push("--permission-mode", "acceptEdits");
+/* Autora's own tools, when the turn offers them: an MCP server of their own ("autora"), every one of them allowed, since Autora
+   runs its own checks (and the person's Ask mode) on each call before it does anything. */
+const bridge = autoraBridge();
+if (bridge) {
+  args.push("--mcp-config", privateFile("mcp.json", JSON.stringify({ mcpServers: { autora: { type: "stdio", ...bridge } } })));
+  allowed.push("mcp__autora");
+  // A window's tool can take a while (a document opening, a page loading): not cut off at the CLI's default.
+  process.env.MCP_TOOL_TIMEOUT ||= "600000";
+  /* Autora's tools are loaded with the turn, not looked up first: the lookup cost a round trip each time it was needed, and
+     the instructions already say which tool does what. */
+  process.env.ENABLE_TOOL_SEARCH ||= "false";
+}
+if (allowed.length) args.push("--allowedTools", ...allowed);
+args.push("--add-dir", opts.cwd);
 
 let answer = "";
 /* Whether the message being written has streamed its text in pieces: then the finished message's text is the same words again. */

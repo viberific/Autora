@@ -132,6 +132,9 @@ export interface ChatCall {
   /** The folder a vendor that runs its own tools (a subscription CLI) works in: the chat's own, so what it makes is where the
       person's windows and Artifacts look. */
   cwd?: string;
+  /** Autora's own tools for a vendor that runs its own (a subscription CLI): the bridge the turn opened for it
+      (server/clibridge.ts), and the names it offers, for the line that tells the CLI they are there. */
+  bridge?: { url: string; token: string; tools: string[] };
 }
 
 export interface ChatUsage {

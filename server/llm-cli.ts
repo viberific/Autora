@@ -20,6 +20,7 @@
  */
 
 import path from "node:path";
+import { cliPath } from "./clibin";
 import { ProviderError, type ChatCall, type ChatTurn } from "./llm";
 import { stateDir } from "./state";
 import { runVendor, vendorReady } from "./vendor";
@@ -44,6 +45,20 @@ function promptOf(call: ChatCall): string {
     .join("\n\n---\n\n");
 }
 
+/** What the CLI is told about Autora's tools, which reach it under its own names for an MCP server's: the instructions above
+    name them as Autora calls them. Antigravity's agy is given no bridge, so it is told nothing. */
+function bridgeNote(id: "claude" | "gemini", tools: string[]): string {
+  const named = id === "claude" ? "mcp__autora__<name>" : "the autora server's <name>";
+  return [
+    "## Autora's own tools, in this chat",
+    `You are answering in Autora, and its own tools are yours as an MCP server named "autora" (called as ${named}): ${tools.join(", ")}.`,
+    "Use them for anything the person should see in Autora -- a document, a sheet, a deck, a PDF, a picture, music, a 3D model, a " +
+      "game, the board, the browser, the app preview -- exactly as the instructions above describe each tool. Your own tools " +
+      "(files, shell) are for the folder you are in. A tool these instructions name that is not in the list above is called " +
+      "through autora_tool, by its name, with its arguments.",
+  ].join("\n");
+}
+
 /** The status a CLI failure is raised with. The turn retries a null status (a network blip) and the transient ones, so a
     failure that would only fail again gets a status that is neither: a lapsed sign-in is 401, a missing CLI 501. Each retry
     is a whole CLI run, and five of them made a signed-out chat wait a minute to say so. */
@@ -62,13 +77,16 @@ export async function streamCli(call: ChatCall, onDelta: (text: string) => void)
   const id = call.provider === "claude-cli" ? "claude" : "gemini";
   const ready = vendorReady(id);
   if (!ready.ok) throw new ProviderError(ready.detail, statusOf("not_installed"));
+  /* Antigravity's agy, where it answers for Gemini, has no way to be handed an MCP server here: it keeps to its own tools. */
+  const bridged = Boolean(call.bridge) && !(id === "gemini" && cliPath("agy"));
   /* A turn is one answer, not a job: no file is edited under the person's feet by a chat message. The wrapper's own timeout
      is the backstop; the signal is the person pressing Stop. */
   const seconds = Math.round(Math.max(30_000, Number(process.env.AUTORA_CLI_TIMEOUT_MS) || 600_000) / 1000);
   const out = await runVendor({
     id,
     prompt: promptOf(call),
-    system: call.system,
+    system: bridged && call.bridge?.tools.length ? `${call.system}\n\n${bridgeNote(id, call.bridge.tools)}` : call.system,
+    ...(bridged && call.bridge ? { env: { AUTORA_BRIDGE_URL: call.bridge.url, AUTORA_BRIDGE_TOKEN: call.bridge.token } } : {}),
     /* The chat's own folder, the one its windows, code cards and Artifacts read: a CLI working in a scratch folder built
        things nobody could see. A scratch folder only when no chat names one (/data/work/agy-scratch in the container). */
     cwd: call.cwd || process.env.AUTORA_CLI_CWD || path.join(process.env.AUTORA_HOME || stateDir(), "work", "agy-scratch"),

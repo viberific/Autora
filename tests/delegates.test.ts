@@ -22,6 +22,8 @@ process.env.AUTORA_STATE_DIR = dir;
 const boxBin = path.join(dir, "boxbin");
 fs.mkdirSync(boxBin);
 process.env.AUTORA_BIN_DIR = boxBin;
+// The CLIs' own home, where a run's private files go.
+process.env.AUTORA_DELEGATE_HOME = path.join(dir, "home");
 // The wrappers this server carries, not any the machine has set up.
 delete process.env.AUTORA_CLAUDE_CLI;
 delete process.env.AUTORA_GEMINI_CLI;
@@ -39,6 +41,8 @@ const stdinLog = path.join(dir, "stdin.txt");
 stub("claude", `
 const fs = require("node:fs");
 fs.writeFileSync(${JSON.stringify(argvLog)}, JSON.stringify(process.argv.slice(2)));
+{ const a = process.argv.slice(2), at = a.indexOf("--mcp-config");
+  if (at >= 0) fs.writeFileSync(${JSON.stringify(argvLog + ".mcp")}, JSON.stringify({ file: a[at + 1], config: JSON.parse(fs.readFileSync(a[at + 1], "utf8")), timeout: process.env.MCP_TOOL_TIMEOUT, token: process.env.AUTORA_BRIDGE_TOKEN ?? null })); }
 let input = ""; process.stdin.on("data", (c) => input += c); process.stdin.on("end", () => {
   fs.writeFileSync(${JSON.stringify(stdinLog)}, input);
   const say = (o) => console.log(JSON.stringify(o));
@@ -64,6 +68,8 @@ let input = ""; process.stdin.on("data", (c) => input += c); process.stdin.on("e
 stub("gemini", `
 const fs = require("node:fs");
 fs.writeFileSync(${JSON.stringify(argvLog + ".g")}, JSON.stringify(process.argv.slice(2)));
+{ const file = process.env.GEMINI_CLI_SYSTEM_SETTINGS_PATH;
+  if (file) fs.writeFileSync(${JSON.stringify(argvLog + ".gs")}, JSON.stringify({ file, settings: JSON.parse(fs.readFileSync(file, "utf8")) })); }
 const say = (o) => console.log(JSON.stringify(o));
 const mode = process.env.GEMINI_STUB || "ok";
 if (mode === "plain") { console.log("an old CLI"); console.log("prints plain text"); process.exit(0); }
@@ -138,6 +144,42 @@ await test("Claude streams its words as they are written, once each, with its ef
   assert.deepEqual(argv.slice(argv.indexOf("--effort"), argv.indexOf("--effort") + 2), ["--effort", "low"]);
   assert.ok(argv.includes("--append-system-prompt-file"));
   assert.equal(fs.readFileSync(stdinLog, "utf8"), "check the code", "the instructions are not in the prompt");
+});
+
+await test("with a bridge open, Claude is handed Autora's tools as an MCP server, all allowed, in a file only it can read", async () => {
+  withCli();
+  const env = { AUTORA_BRIDGE_URL: "http://127.0.0.1:1/api/cli-bridge", AUTORA_BRIDGE_TOKEN: "tok" };
+  const { result } = await run("claude", { write: true, env });
+  assert.equal(result.ok, true, result.message);
+  const seen = JSON.parse(fs.readFileSync(argvLog + ".mcp", "utf8"));
+  const autora = seen.config.mcpServers.autora;
+  assert.equal(autora.type, "stdio");
+  assert.match(autora.args[0], /autora-mcp\.mjs$/);
+  assert.deepEqual(autora.env, env);
+  assert.ok(seen.file.startsWith(path.join(process.env.AUTORA_DELEGATE_HOME!, ".autora-run")), seen.file);
+  assert.ok(!fs.existsSync(seen.file), "gone once the run ends");
+  assert.equal(seen.timeout, "600000");
+  assert.equal(seen.token, null, "the CLI itself, and its shell, are not given the token");
+  const argv = JSON.parse(fs.readFileSync(argvLog, "utf8")) as string[];
+  assert.ok(argv.includes("mcp__autora"));
+  assert.ok(!argv.join(" ").includes("tok"), "the token is not on the command line");
+  fs.rmSync(argvLog + ".mcp");
+  await run("claude", { write: true });
+  assert.ok(!fs.existsSync(argvLog + ".mcp"), "no bridge, no server");
+});
+
+await test("with a bridge open, Gemini is handed Autora's tools in a trusted settings file outside the temporary folder", async () => {
+  withCli();
+  const env = { AUTORA_BRIDGE_URL: "http://127.0.0.1:1/api/cli-bridge", AUTORA_BRIDGE_TOKEN: "tok" };
+  const { result } = await run("gemini", { write: true, env });
+  assert.equal(result.ok, true, result.message);
+  const seen = JSON.parse(fs.readFileSync(argvLog + ".gs", "utf8"));
+  const autora = seen.settings.mcpServers.autora;
+  assert.equal(autora.trust, true);
+  assert.deepEqual(autora.env, env);
+  // Gemini skips a settings file with a world-writable folder above it, which /tmp is.
+  assert.ok(seen.file.startsWith(path.join(process.env.AUTORA_DELEGATE_HOME!, ".autora-run")), seen.file);
+  assert.ok(!fs.existsSync(seen.file));
 });
 
 await test("Claude without write may only read", async () => {
