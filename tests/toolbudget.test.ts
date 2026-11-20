@@ -81,7 +81,9 @@ for (const f of FAMILIES) {
 }
 const index = unloadedIndex(new Set()) ?? "";
 for (const id of familyIds()) assert.match(index, new RegExp(`^- ${id}: .`, "m"), `the ${id} set is not in the index`);
-assert.deepEqual(familyIds(), FAMILIES.map((f) => f.id));
+// Every set the agent can ask for; the person-only ones (generate3d) come in only on the person's words and are not offered.
+assert.deepEqual(familyIds(), FAMILIES.filter((f) => !f.personOnly).map((f) => f.id));
+for (const f of FAMILIES.filter((x) => x.personOnly)) assert.doesNotMatch(index, new RegExp(`^- ${f.id}:`, "m"), `the person-only ${f.id} set is not offered`);
 console.log(`  ok  ${FAMILIES.length} sets, none overlapping and every one named in the index`);
 
 const briefing = (await capabilityBriefing()).length;

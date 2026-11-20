@@ -24,6 +24,55 @@ export const cadSPECS: ToolSpec[] = [
     }
   },
   {
+    "name": "cad_scene_view",
+    "group": "files",
+    "description": "Look at the model: it is drawn as text from the front, the side and above (or the views you name), at one scale so the views compare, each cell shaded by how near it is (@ near, # + - farther) or lettered by shape, with heights down the left. It also says what a glance would catch: a shape that came apart into pieces, a part that floats with nothing touching it, a model that does not reach the ground, and how alike the left and right are. Look after every few changes to a form and fix what is wrong before going on: proportions (is the head the right size for the body?), silhouette, what is missing. from and to show only a slice of heights (the legs from above: top view, from 0 to the knees).",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "views": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "front",
+              "back",
+              "left",
+              "right",
+              "top"
+            ]
+          },
+          "description": "Default front, right, top."
+        },
+        "ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "description": "Only these shapes (default: every visible shape)."
+        },
+        "width": {
+          "type": "number",
+          "description": "Columns for the longest side, 24 to 100 (default 60). More shows finer detail and costs more to read."
+        },
+        "byShape": {
+          "type": "boolean",
+          "description": "Letter each cell by the shape nearest there instead of shading by depth."
+        },
+        "from": {
+          "type": "number",
+          "description": "Only what lies above this height, mm."
+        },
+        "to": {
+          "type": "number",
+          "description": "Only what lies below this height, mm."
+        }
+      },
+      "required": []
+    }
+  },
+  {
     "name": "cad_shape_get",
     "group": "files",
     "description": "Everything about one shape: its summary, raw outline, faces and edges.",
@@ -793,7 +842,7 @@ export const cadSPECS: ToolSpec[] = [
   {
     "name": "cad_sculpt_blend",
     "group": "files",
-    "description": "Make ONE smooth, organic shape by blending simple parts into a soft surface: the way to model a person, an animal, a creature, a hand, a bottle, a cloud. Give parts: spheres, tapered capsules (a limb, neck or finger: at, to, radius at each end), ellipsoids (a body or head: radii along x, y, z) and boxes (a palm, a foot, a chest: radii, round for soft corners). An ellipsoid or box can be turned ({x, y, z} degrees). A part with carve:true is taken OUT of the form instead (an eye socket, a mouth, nostrils, the gap under a jaw); parts apply in order, so a carve removes what came before it and a part listed after it fills back in (the eyeball in its socket). A part with a color paints the surface where it is the nearest part (a black mane, white socks, red lips); the rest is the shape's colour. Where parts overlap they melt together over `smooth` mm. Positions are in mm on the ground (x, y) and up (z); parts may overlap and may sit anywhere. Give half of a symmetric creature and set mirror ({axis, at}) to reflect it. Build the big masses first (body, chest, hips, head), then limbs overlapping into them; look with cad_scene_get / a view and adjust the numbers, or use cad_sculpt_smooth. Fine features need fine detail: detail is spread over the whole form, so make hands or a face as their own blend at high detail and join them to the body (cad_shapes_join). The result is a mesh shape: move, turn, resize, recolour and export work; it has no outline, faces or holes. A person can refine it by hand in the window.",
+    "description": "Make ONE smooth, organic shape by blending simple parts into a soft surface: the way to model a person, an animal, a creature, a hand, a bottle, a cloud. Give parts: spheres, tapered capsules (a limb, neck or finger: at, to, radius at each end), ellipsoids (a body or head: radii along x, y, z) and boxes (a palm, a foot, a chest: radii, round for soft corners). An ellipsoid or box can be turned ({x, y, z} degrees). A part with carve:true is taken OUT of the form instead (an eye socket, a mouth, nostrils, the gap under a jaw); parts apply in order, so a carve removes what came before it and a part listed after it fills back in (the eyeball in its socket). A part with a color paints the surface where it is the nearest part (a black mane, white socks, red lips); the rest is the shape's colour. Where parts overlap they melt together over `smooth` mm. Positions are in mm on the ground (x, y) and up (z); parts may overlap and may sit anywhere. Give half of a symmetric creature and set mirror ({axis, at}) to reflect it. Build the big masses first (body, chest, hips, head), then limbs overlapping into them; look with cad_scene_view (it also says what floats or came apart), adjust the numbers and make it again with replace, or use cad_sculpt_smooth. For a person, an animal, a bird or a fish, cad_sculpt_figure gives a well-proportioned start to change, if you have it. Fine features need fine detail: detail is spread over the whole form, so make hands or a face as their own blend at high detail and join them to the body (cad_shapes_join). The result is a mesh shape: move, turn, resize, recolour and export work; it has no outline, faces or holes. A person can refine it by hand in the window.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -915,6 +964,10 @@ export const cadSPECS: ToolSpec[] = [
               "smooth": {
                 "type": "number",
                 "description": "How softly THIS part joins (or carves) what came before it, mm, instead of the blend's smooth: small (1 to 3) for eyelids, lips and creases, large for cheeks and muscle."
+              },
+              "label": {
+                "type": "string",
+                "description": "A name for the part (\"left thigh\"), so a list can be read and changed; it does not change the form."
               }
             },
             "required": [
@@ -951,6 +1004,10 @@ export const cadSPECS: ToolSpec[] = [
             "axis"
           ]
         },
+        "replace": {
+          "type": "string",
+          "description": "The id of a mesh shape to make again from these parts, in place: it keeps its id, name, colour, finish and group, and the parts say where it is (hand sculpting on the old surface is lost). The way to refine a form step by step without piling up shapes."
+        },
         "name": {
           "type": "string"
         },
@@ -976,6 +1033,152 @@ export const cadSPECS: ToolSpec[] = [
       },
       "required": [
         "parts"
+      ]
+    }
+  },
+  {
+    "name": "cad_sculpt_figure",
+    "group": "files",
+    "description": "Block out a whole figure from a body plan, with real proportions, as ONE blend: biped (a person, an elf, a robot, a bear on two legs: measured in head heights), quadruped (a dog, a horse, a cat, a dragon on four legs), bird, or fish. It stands on the ground facing the front (-y), centred on x, its left side at +x. Set size and change proportions by multiplying them (head, neck, body, girth, legs, arms, tail, wings: 1 is the plan's; a horse is quadruped legs 1.5, neck 1.6, snout long, ears pointed, tailKind long; a chibi is style chibi). The reply gives the named parts it was made from and where its landmarks are: look with cad_scene_view, then edit parts by label (move, resize, add a mane, a crest, a hat, clothes, carve a mouth) and make it again with cad_sculpt_blend {parts, smooth, detail, replace: id}. Start every person, animal, bird and fish here rather than from scratch.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "plan": {
+          "type": "string",
+          "enum": [
+            "biped",
+            "quadruped",
+            "bird",
+            "fish"
+          ]
+        },
+        "size": {
+          "type": "number",
+          "description": "Standing height (biped, bird) or nose-to-rump length (quadruped, fish), mm. Defaults: 180, 300, 150, 300."
+        },
+        "style": {
+          "type": "string",
+          "enum": [
+            "realistic",
+            "stylized",
+            "chibi"
+          ],
+          "description": "realistic (a person 7.5 heads tall), stylized (5.5 heads, rounder) or chibi (3 heads, big head and eyes). Default realistic."
+        },
+        "head": {
+          "type": "number",
+          "description": "Head size, times the plan's (0.4 to 2.5)."
+        },
+        "neck": {
+          "type": "number",
+          "description": "Neck length, times the plan's."
+        },
+        "body": {
+          "type": "number",
+          "description": "Body length, times the plan's."
+        },
+        "girth": {
+          "type": "number",
+          "description": "How thick the body and limbs are, times the plan's (0.7 lean, 1.4 stocky)."
+        },
+        "legs": {
+          "type": "number",
+          "description": "Leg length, times the plan's."
+        },
+        "arms": {
+          "type": "number",
+          "description": "Arm length (biped), times the plan's."
+        },
+        "tail": {
+          "type": "number",
+          "description": "Tail length, times the plan's."
+        },
+        "wings": {
+          "type": "number",
+          "description": "Wing size (bird), times the plan's."
+        },
+        "ears": {
+          "type": "string",
+          "enum": [
+            "none",
+            "round",
+            "pointed",
+            "long"
+          ],
+          "description": "Default: round on a biped, pointed on a quadruped; birds and fish have none."
+        },
+        "snout": {
+          "type": "string",
+          "enum": [
+            "none",
+            "short",
+            "long"
+          ],
+          "description": "A muzzle or a beak. Default: none on a biped, short otherwise."
+        },
+        "tailKind": {
+          "type": "string",
+          "enum": [
+            "none",
+            "short",
+            "long",
+            "bushy"
+          ],
+          "description": "Default: long on a quadruped, none on a biped."
+        },
+        "horns": {
+          "type": "string",
+          "enum": [
+            "none",
+            "small",
+            "long"
+          ]
+        },
+        "eyes": {
+          "type": "boolean",
+          "description": "Dark eyes set into the head (default true)."
+        },
+        "x": {
+          "type": "number",
+          "description": "Where it stands, mm (default 0)."
+        },
+        "y": {
+          "type": "number",
+          "description": "Where it stands, mm (default 0)."
+        },
+        "detail": {
+          "type": "number",
+          "description": "Fineness, as cad_sculpt_blend (default 128)."
+        },
+        "replace": {
+          "type": "string",
+          "description": "A mesh shape to make again as this figure, in place."
+        },
+        "name": {
+          "type": "string"
+        },
+        "color": {
+          "type": "string",
+          "description": "Hex colour such as \"#3b82f6\"."
+        },
+        "material": {
+          "type": "string",
+          "enum": [
+            "matte",
+            "metal",
+            "glossy",
+            "glass",
+            "neon",
+            "frosted",
+            "velvet",
+            "skin",
+            "rubber"
+          ],
+          "description": "A finish to start from: matte, metal, glossy, glass, neon, frosted (frosted glass), velvet (cloth with a soft sheen), skin (soft, light glows through) or rubber. cad_surface_set fine-tunes it."
+        }
+      },
+      "required": [
+        "plan"
       ]
     }
   },

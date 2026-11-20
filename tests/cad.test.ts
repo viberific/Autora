@@ -50,7 +50,8 @@ await test("the tools describe each other by the names the agent knows", () => {
 });
 
 await test("the tools are in a family of their own, brought in by the person's words or by use", () => {
-  const specs = cadSPECS.map((s) => ({ name: s.name }));
+  // cad_sculpt_figure is in the generate3d set, which only an outright ask brings in (tests/sight-3d.test.ts).
+  const specs = cadSPECS.filter((s) => s.name !== "cad_sculpt_figure").map((s) => ({ name: s.name }));
   const none = loadedFamilies({ events: [], said: "what's the weather", lazy: true });
   assert.equal(withoutUnloaded(specs, none).length, 0);
   for (const said of ["model a phone stand for 3D printing", "open Autora 3D", "bevel the top edges", "export an STL"]) {
