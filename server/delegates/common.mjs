@@ -3,11 +3,14 @@
  * job to a subscription CLI; the stream it prints is that file's contract (JSON Lines: delta, status, result, error).
  *
  * Plain Node, no dependencies, so it runs from the image as it is. Each wrapper takes the options vendor.ts passes:
- *   [--jsonl] [--model m] [--effort e] [--cwd dir] [--write] [--timeout t]  ( - | -- prompt... )
+ *   [--jsonl] [--model m] [--effort e] [--cwd dir] [--write] [--timeout t] [--system-file f]  ( - | -- prompt... )
+ * A system file holds standing instructions; a wrapper with no place for them puts them ahead of the prompt.
  */
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 /** One line of the stream. */
 export const emit = (object) => process.stdout.write(`${JSON.stringify(object)}\n`);
@@ -20,7 +23,7 @@ export function fail(reason, message) {
 
 /** The options vendor.ts passes, and the prompt (from standard input for `-`, else the words after `--`). */
 export async function readOptions(argv) {
-  const out = { model: "", effort: "", cwd: process.cwd(), write: false, timeoutMs: 0, prompt: "" };
+  const out = { model: "", effort: "", cwd: process.cwd(), write: false, timeoutMs: 0, prompt: "", systemFile: "" };
   let fromStdin = false;
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
@@ -30,6 +33,7 @@ export async function readOptions(argv) {
     else if (a === "--cwd") out.cwd = argv[++i] ?? out.cwd;
     else if (a === "--write") out.write = true;
     else if (a === "--timeout") out.timeoutMs = timeoutMs(argv[++i] ?? "");
+    else if (a === "--system-file") out.systemFile = argv[++i] ?? "";
     else if (a === "-") fromStdin = true;
     else if (a === "--") { out.prompt = argv.slice(i + 1).join(" "); break; }
     else { process.stderr.write(`unknown option ${a}\n`); process.exit(2); }
@@ -52,11 +56,40 @@ export function timeoutMs(text) {
   return Math.round(unit === "ms" ? n : unit === "m" ? n * 60_000 : n * 1000);
 }
 
+/**
+ * The bridge to Autora's own tools, when the turn opened one (server/clibridge.ts): the MCP server to start (autora-mcp.mjs, beside
+ * this file) and the address and token it calls back with. Null otherwise. `privateFile` writes a file only this user can read,
+ * removed when the wrapper exits, so the token never sits on a command line where any process could read it.
+ */
+export function autoraBridge() {
+  const url = process.env.AUTORA_BRIDGE_URL || "";
+  const token = process.env.AUTORA_BRIDGE_TOKEN || "";
+  /* Only the bridge's own server is given them: the CLI, and every command its shell runs, is not. */
+  delete process.env.AUTORA_BRIDGE_URL;
+  delete process.env.AUTORA_BRIDGE_TOKEN;
+  if (!url || !token) return null;
+  const script = path.join(path.dirname(fileURLToPath(import.meta.url)), "autora-mcp.mjs");
+  if (!fs.existsSync(script)) return null;
+  return { command: process.execPath, args: [script], env: { AUTORA_BRIDGE_URL: url, AUTORA_BRIDGE_TOKEN: token } };
+}
+
+export function privateFile(name, text) {
+  /* Under the CLI's own home, not the system's temporary folder: Gemini will not read a settings file with a folder anyone can
+     write to above it (/tmp is one), and skipped it without saying so in a turn. */
+  const base = path.join(process.env.AUTORA_DELEGATE_HOME || os.homedir(), ".autora-run");
+  fs.mkdirSync(base, { recursive: true, mode: 0o700 });
+  const dir = fs.mkdtempSync(path.join(base, "run-"));
+  const file = path.join(dir, name);
+  fs.writeFileSync(file, text, { mode: 0o600 });
+  process.once("exit", () => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* gone */ } });
+  return file;
+}
+
 /** Where an executable is on PATH, or null. */
 export function onPath(name) {
-  /* /data/bin is where this box installs its own CLIs, and it outlives an
-     update; the image's PATH does not carry it, so a restart lost agy. */
-  const dirs = [...(process.env.PATH ?? "").split(path.delimiter), "/data/bin"];
+  /* /data/bin (AUTORA_BIN_DIR) is where a box installs its own CLIs, and it outlives an update; the image's PATH does not
+     carry it, so a restart lost agy. server/vendor.ts looks in the same places. */
+  const dirs = [...(process.env.PATH ?? "").split(path.delimiter), process.env.AUTORA_BIN_DIR || "/data/bin"];
   for (const dir of dirs) {
     if (!dir) continue;
     const file = path.join(dir, name);
@@ -67,7 +100,7 @@ export function onPath(name) {
 
 /** Which of the contract's reasons a CLI's own words amount to: a sign-in to make, a wait, or neither. */
 export function reasonOf(text) {
-  if (/not (?:logged|signed) in|please (?:run|use) \/?login|\/login\b|invalid api key|authenticat|unauthori[sz]ed|credentials|sign in|oauth|\b401\b|\bapi key\b.*(?:missing|required)/i.test(text)) return "auth";
+  if (/not (?:logged|signed) in|please (?:run|use) \/?login|\/login\b|invalid api key|authenticat|unauthori[sz]ed|credentials|sign in|oauth|auth method|manual authorization|\b401\b|\bapi key\b.*(?:missing|required)/i.test(text)) return "auth";
   if (/rate.?limit|usage limit|quota|too many requests|\b429\b|overloaded|resource.?exhausted|limit reached/i.test(text)) return "rate_limit";
   return "other";
 }

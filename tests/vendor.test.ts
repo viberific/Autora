@@ -138,9 +138,9 @@ test("a wrapper that predates the streaming contract is called without --jsonl",
   assert.deepEqual(args, ["--cwd", "/x", "--", "go"]);
 });
 
-test("the reasoning effort goes to Gemini, whose CLI has one, and not to Claude", () => {
+test("the reasoning effort goes to both wrappers: Claude Code takes one too now", () => {
   assert.ok(vendorArgs({ id: "gemini", prompt: "x", cwd: "/x", effort: "high" }).includes("--effort"));
-  assert.ok(!vendorArgs({ id: "claude", prompt: "x", cwd: "/x", effort: "high" }).includes("--effort"));
+  assert.ok(vendorArgs({ id: "claude", prompt: "x", cwd: "/x", effort: "high" }).includes("--effort"));
 });
 
 test("the option a wrapper did not know is read out of what it said", () => {
@@ -358,6 +358,32 @@ await testAsync("a wrapper written before --jsonl is still called, without it", 
   );
 });
 
+await testAsync("a wrapper of the person's own that refuses --effort or --system-file is asked again, with the instructions ahead of the prompt", async () => {
+  await withWrapper(`for a in "$@"; do case "$a" in --effort|--system-file) echo "unknown option: $a" >&2; exit 2;; esac; done; cat`, async (dir) => {
+    const out = await runVendor({ id: "claude", prompt: "the question", system: "the rules", effort: "low", cwd: dir });
+    assert.equal(out.ok, true, out.message);
+    assert.match(out.text, /the rules[\s\S]*the question/);
+  });
+});
+
+await testAsync("standing instructions go in a file of their own, gone once the run ends", async () => {
+  await withWrapper(`while [ $# -gt 0 ]; do if [ "$1" = --system-file ]; then echo "file: $(cat "$2")"; echo "at $2"; fi; shift; done; cat >/dev/null`, async (dir) => {
+    const out = await runVendor({ id: "claude", prompt: "the question", system: "the rules", cwd: dir });
+    assert.match(out.text, /file: the rules/);
+    assert.ok(!out.text.includes("the question"), "the prompt is not where the instructions are");
+    const at = /at (\S+)/.exec(out.text)?.[1] ?? "";
+    assert.ok(at && !fs.existsSync(at), at);
+  });
+});
+
+await testAsync("text held back for coalescing goes out before the tool step that followed it", async () => {
+  await withWrapper(`echo '{"type":"delta","text":"Hello wor"}'; echo '{"type":"tool","name":"Read","detail":"a.ts"}'; echo '{"type":"delta","text":"ld."}'; echo '{"type":"result","text":"Hello world."}'`, async (dir) => {
+    const order: string[] = [];
+    await runVendor({ id: "claude", prompt: "go", cwd: dir, onDelta: (t: string) => order.push(`text:${t}`), onStep: (t: string) => order.push(`step:${t}`) });
+    assert.deepEqual(order, ["text:Hello wor", "step:Read a.ts", "text:ld."]);
+  });
+});
+
 await testAsync("a wrapper that never finishes is stopped at the ceiling and says so", async () => {
   await withWrapper(`sleep 30`, async (dir) => {
     const out = await runVendor({ id: "claude", prompt: "go", cwd: dir, hardTimeoutMs: 400 });
@@ -376,11 +402,16 @@ await testAsync("a key printed by the wrapper does not survive into what is kept
 test("a delegate is not handed the server's own secrets", () => {
   const env = vendorEnv({
     PATH: "/usr/bin", HOME: "/root", DEEPGRAM_API_KEY: "dg-secret", OPENROUTER_API_KEY: "or-secret",
-    ANTHROPIC_API_KEY: "vendor-own", XDG_CONFIG_HOME: "/root/.config", AUTORA_PORT: "8817",
+    ANTHROPIC_API_KEY: "sk-ant-key", GEMINI_API_KEY: "g-key", CLAUDE_CODE_OAUTH_TOKEN: "sub-token", ANTHROPIC_MODEL: "opus",
+    XDG_CONFIG_HOME: "/root/.config", AUTORA_PORT: "8817",
   });
   assert.equal(env.PATH, "/usr/bin");
   assert.equal(env.HOME, "/root");
-  assert.equal(env.ANTHROPIC_API_KEY, "vendor-own", "the vendor's own variable goes through");
+  assert.equal(env.ANTHROPIC_MODEL, "opus", "the vendor's own variable goes through");
+  assert.equal(env.CLAUDE_CODE_OAUTH_TOKEN, "sub-token", "so does a subscription token");
+  // An API key would make the CLI answer on the key, billed per token, instead of on the subscription.
+  assert.equal(env.ANTHROPIC_API_KEY, undefined);
+  assert.equal(env.GEMINI_API_KEY, undefined);
   assert.equal(env.XDG_CONFIG_HOME, "/root/.config");
   assert.equal(env.DEEPGRAM_API_KEY, undefined, "another service's key does not");
   assert.equal(env.OPENROUTER_API_KEY, undefined);

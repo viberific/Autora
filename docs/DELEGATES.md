@@ -12,18 +12,40 @@ that would fail.
 
 ## Sign in once (the part only you can do)
 
-A subscription login is interactive, so it is done by you, once, in the running container. On Umbrel, open its terminal or use
-`docker exec`; the folder `/data/home` is where the sign-in is kept, and it survives updates:
+Open Settings, Providers and models, and the **Claude (subscription)** or **Gemini (subscription)** row, and press **Sign in**.
+Autora runs the CLI's own sign-in (`server/cli-signin.ts`): open the sign-in page it links to, approve it in your browser, and
+paste the code the page shows. The sign-in is kept in `/data/home` (`AUTORA_DELEGATE_HOME`), which survives updates, and it is the
+same sign-in the chat providers and the `claude_cli` / `gemini_cli` delegates use.
 
-```bash
-# Claude Code: opens a link, you approve it in a browser and paste the code back.
-docker exec -it <autora-container> sh -c 'HOME=/data/home claude'      # then type /login
+- Claude runs `claude auth login --claudeai`, which reads the code as it is.
+- Gemini runs the `gemini` CLI in a terminal of its own (python3's pty: it asks for its code only in one), after setting its auth
+  type to "Sign in with Google" in `/data/home/.gemini/settings.json`. Where a box has Antigravity's `agy` (on PATH or in
+  `/data/bin`, `AUTORA_BIN_DIR`), Gemini runs on that instead, with its own sign-in.
 
-# Gemini: choose "Login with Google" and follow the link.
-docker exec -it <autora-container> sh -c 'HOME=/data/home gemini'
-```
+The terminal way still works: `docker exec -it <autora-container> sh -c 'HOME=/data/home claude'` (then `/login`), or the same with
+`gemini`. Check it worked by chatting on the provider, or by asking the agent to "ask Claude to read README.md".
 
-Check it worked by asking the agent to "ask Claude to read README.md". If it says the sign-in lapsed, repeat the step.
+An API key in the environment (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`) is not passed to the CLIs: with one, they
+would answer on the key, billed per token, instead of on the subscription. `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`)
+is passed, since it is a subscription sign-in.
+
+## Chatting on a subscription
+
+Choosing Claude (subscription) or Gemini (subscription) as the provider has the CLI answer the chat (`server/llm-cli.ts`). It works
+in the chat's own folder (the one the terminal, the code cards and Artifacts use), and each file it writes is shown as a code card,
+as the agent's own edits are. Autora's instructions go to Claude Code as its system prompt (`--append-system-prompt-file`), where
+they are cached from turn to turn, and its words stream as they are written (`--include-partial-messages`).
+
+It has Autora's own tools as well as its own. For each turn the server opens a bridge (`server/clibridge.ts`): the wrapper registers
+`server/delegates/autora-mcp.mjs` as an MCP server called `autora` (Claude Code through `--mcp-config`, every tool allowed; Gemini
+through a trusted settings file named by `GEMINI_CLI_SYSTEM_SETTINGS_PATH`), and that script passes the tool list and each call to
+`POST /api/cli-bridge` with a token good for that turn only. The turn runs each call through the same executor as the agent's own
+(planning refusals, the person's holds, Ask mode, the tool cells, the windows), so the CLI opens documents, puts work on the board
+and drives the app preview the way the agent does. Not offered through the bridge: Autora's terminal, file and code-search tools
+(the CLI's own do that) and the delegates themselves; `autora_tool` calls any other tool by name, so a family not yet loaded is
+brought in when it is first called. The token goes to the bridge script only, not to the CLI or its shell, and the run's config
+files are kept under the CLI's home (`/data/home/.autora-run`), never `/tmp`, which Gemini refuses to read settings from.
+Antigravity's `agy` takes no MCP server here, so where it answers for Gemini it keeps to its own tools.
 
 ## Running outside Docker
 

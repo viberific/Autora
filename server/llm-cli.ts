@@ -19,8 +19,11 @@
  * trying again is worth it.
  */
 
+import path from "node:path";
+import { cliPath } from "./clibin";
 import { ProviderError, type ChatCall, type ChatTurn } from "./llm";
-import { onPath, runVendor } from "./vendor";
+import { stateDir } from "./state";
+import { runVendor, vendorReady } from "./vendor";
 
 /** One exchange as the CLI reads it. */
 function line(message: ChatCall["messages"][number]): string {
@@ -28,11 +31,12 @@ function line(message: ChatCall["messages"][number]): string {
   return `${who}: ${message.text ?? ""}`.trim();
 }
 
-/** The whole conversation as one prompt: the CLI has no memory of the last call. */
+/** The whole conversation as one prompt: the CLI has no memory of the last call. The system prompt goes separately (runVendor's
+    `system`), so the part that stays the same turn after turn is cached by the vendor rather than sent fresh at the head of a
+    new message every time. */
 function promptOf(call: ChatCall): string {
   const said = call.messages.filter((m) => (m.text ?? "").trim()).map(line);
   return [
-    call.system.trim(),
     said.length ? `The conversation so far:\n\n${said.join("\n\n")}` : "",
     "Answer the person's last message. You are the one writing in their chat now: reply with the answer only, in their " +
       "language, and do not restate the conversation or introduce yourself.",
@@ -41,41 +45,64 @@ function promptOf(call: ChatCall): string {
     .join("\n\n---\n\n");
 }
 
-/** The status a CLI failure is worth retrying at, or null for one that would fail again. */
-function statusOf(reason: string): number | null {
+/** What the CLI is told about Autora's tools, which reach it under its own names for an MCP server's: the instructions above
+    name them as Autora calls them. Antigravity's agy is given no bridge, so it is told nothing. */
+function bridgeNote(id: "claude" | "gemini", tools: string[]): string {
+  const named = id === "claude" ? "mcp__autora__<name>" : "the autora server's <name>";
+  return [
+    "## Autora's own tools, in this chat",
+    `You are answering in Autora, and its own tools are yours as an MCP server named "autora" (called as ${named}): ${tools.join(", ")}.`,
+    "Use them for anything the person should see in Autora -- a document, a sheet, a deck, a PDF, a picture, music, a 3D model, a " +
+      "game, the board, the browser, the app preview -- exactly as the instructions above describe each tool. Your own tools " +
+      "(files, shell) are for the folder you are in. A tool these instructions name that is not in the list above is called " +
+      "through autora_tool, by its name, with its arguments.",
+  ].join("\n");
+}
+
+/** The status a CLI failure is raised with. The turn retries a null status (a network blip) and the transient ones, so a
+    failure that would only fail again gets a status that is neither: a lapsed sign-in is 401, a missing CLI 501. Each retry
+    is a whole CLI run, and five of them made a signed-out chat wait a minute to say so. */
+function statusOf(reason: string): number {
   if (reason === "rate_limit") return 429;
   if (reason === "timeout") return 504;
-  if (reason === "auth" || reason === "not_installed") return null;
+  if (reason === "auth") return 401;
+  if (reason === "not_installed") return 501;
   return 500;
 }
 
 export async function streamCli(call: ChatCall, onDelta: (text: string) => void): Promise<ChatTurn> {
   /* The wrapper is the way to the CLI, not the CLI: with none behind it every turn would fail, so it is refused here rather
-     than four times over by the retry. */
-  const cli = call.provider === "claude-cli" ? "claude" : "agy";
-  if (!onPath(cli)) {
-    throw new ProviderError(
-      `The ${cli} CLI is not installed on this host, so ${call.provider} cannot answer. Install it and sign in once.`,
-      null,
-    );
-  }
+     than four times over by the retry. The same check the wrapper itself makes (vendorReady): Gemini runs on agy where the box
+     has it and on the image's gemini otherwise, and asking for agy alone refused every Gemini turn on a box without it. */
+  const id = call.provider === "claude-cli" ? "claude" : "gemini";
+  const ready = vendorReady(id);
+  if (!ready.ok) throw new ProviderError(ready.detail, statusOf("not_installed"));
+  /* Antigravity's agy, where it answers for Gemini, has no way to be handed an MCP server here: it keeps to its own tools. */
+  const bridged = Boolean(call.bridge) && !(id === "gemini" && cliPath("agy"));
   /* A turn is one answer, not a job: no file is edited under the person's feet by a chat message. The wrapper's own timeout
      is the backstop; the signal is the person pressing Stop. */
   const seconds = Math.round(Math.max(30_000, Number(process.env.AUTORA_CLI_TIMEOUT_MS) || 600_000) / 1000);
   const out = await runVendor({
-    id: call.provider === "claude-cli" ? "claude" : "gemini",
+    id,
     prompt: promptOf(call),
-    cwd: process.env.AUTORA_CLI_CWD || "/data/work/agy-scratch",
+    system: bridged && call.bridge?.tools.length ? `${call.system}\n\n${bridgeNote(id, call.bridge.tools)}` : call.system,
+    ...(bridged && call.bridge ? { env: { AUTORA_BRIDGE_URL: call.bridge.url, AUTORA_BRIDGE_TOKEN: call.bridge.token } } : {}),
+    /* The chat's own folder, the one its windows, code cards and Artifacts read: a CLI working in a scratch folder built
+       things nobody could see. A scratch folder only when no chat names one (/data/work/agy-scratch in the container). */
+    cwd: call.cwd || process.env.AUTORA_CLI_CWD || path.join(process.env.AUTORA_HOME || stateDir(), "work", "agy-scratch"),
     /* It works: a chat turn may read, write and run things, the same hands a delegate has. */
     write: true,
     timeoutArg: `${seconds}s`,
     hardTimeoutMs: seconds * 1000 + 15_000,
     model: call.model || undefined,
-    effort: call.effort || undefined,
+    /* A turn Autora answers without thinking (small talk, the voice) is asked for the least effort: the CLI thinks by default,
+       and that wait is most of what a short answer costs. */
+    effort: call.effort || (call.thinking === "off" ? "low" : undefined),
     // The wrapper's own streaming contract is what makes the answer arrive as it is written.
     onDelta,
-    onStatus: (text) => call.onStep?.(text),
-    onTool: (name, detail) => call.onStep?.(`${name}${detail ? ` ${detail}` : ""}`),
+    /* One step per tool call: the wrapper says each call twice (a status line and a tool line), and runVendor already turns
+       the tool line into a finished step, so the status is not repeated into the chat. */
+    onStep: (text) => call.onStep?.(text),
     signal: call.signal,
   });
   if (!out.ok || !out.text.trim()) {

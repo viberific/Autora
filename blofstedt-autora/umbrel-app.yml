@@ -214,13 +214,18 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Better 3D models from any model you chat with, including ones that
-  cannot see pictures. The agent can now look at its 3D model: it is drawn as
-  text from the front, the side and above, and the agent is told what is
-  wrong (a part floating, a form that came apart, one side unlike the other)
-  so it fixes its own mistakes. When you ask outright for a model to be made
-  ("generate a 3D dragon", "make me a horse in 3D"), it starts from a body
-  plan with real proportions (a person, a four-legged animal, a bird or a
-  fish), then looks, fixes and adds detail in rounds before handing it to you
-  to shape. Asked to help you make one instead, it still guides and leaves
-  the making to you. Nothing is sent to another service.
+  Chat on your Claude or Gemini subscription now works, with no API key.
+  Under Settings, Providers and models, open "Claude (subscription)" or
+  "Gemini (subscription)" and press Sign in: open the sign-in page, approve
+  it, and paste the code it shows. No terminal in the container is needed.
+  Gemini works with the Gemini CLI that ships with Autora, and still uses
+  Antigravity's agy where you have installed it. A chat that is not signed in
+  now says so at once instead of retrying for a minute, Automatic no longer
+  picks a subscription nobody has signed in, and an API key in the
+  environment no longer takes the place of your subscription. Claude's
+  replies now stream as they are written and start sooner, a reply no longer
+  breaks in two around a step, and what Claude or Gemini builds lands in the
+  chat's own folder and shows as file changes, as the agent's own work does.
+  Claude and Gemini can now use Autora's own tools too: they open documents,
+  put work on the Panacea board, drive the app preview and work in every
+  window the way the agent does, with the same checks and the same Ask mode.
