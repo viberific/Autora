@@ -32,6 +32,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { askOpen } from "../pdfdesk";
+import { runPdfTool } from "../pdf";
+import { deskHooks } from "../pdfdesk";
 import { EngineProblem, type SpectraEngine } from "./engine";
 
 /** Whether a path is the document the window is showing. */
@@ -304,6 +306,59 @@ function forward(ctx: SpectraContext, engine: SpectraEngine, which: "i" | "h", a
 const pending = new Map<string, { engine: SpectraEngine; engineId: number }>();
 
 /* ------------------------------------------------------------- commands -- */
+
+/* ------------------------------------------------------- edit text (Autora) -- */
+
+/**
+ * Right-click → Edit text: the words under the pointer, rewritten in the file.
+ *
+ * The work is done by Autora's own replace engine (server/pdftext.ts, the code
+ * behind pdf_replace_text), not by the pinned editor: it takes the old words out
+ * of the page's content stream and writes the new ones in their place, so the
+ * page stays vector, selectable and searchable and nothing is drawn over what is
+ * left. Going through the PDF desk is what puts the change where the window will
+ * see it: the desk's own change hands the window the new document, which is the
+ * same path an agent's edit takes.
+ *
+ * `page` is the page's own index in the file (the renderer sends the source page
+ * it is showing), so a reordered workspace still changes the page that was
+ * clicked. Words that are not in that page's own text are said, never guessed
+ * at: nothing is drawn over anything as a fallback.
+ */
+async function editTextInPlace(ctx: SpectraContext, args: Record<string, any>): Promise<unknown> {
+  const find = str(args, "find", "text");
+  const replacement = typeof args?.with === "string" ? args.with : "";
+  const page = Number(args?.page);
+  if (!find.trim()) throw new NotHere("There were no words under the pointer to change.");
+
+  const desk = deskHooks(ctx.session).current();
+  const file = desk?.working ?? desk?.source ?? ctx.documentPath();
+  if (!file) throw new NotHere("There is no PDF open in the window.");
+
+  const outcome = await runPdfTool(
+    "pdf_replace_text",
+    {
+      file,
+      replace: [{ find, with: replacement }],
+      /* The desk's own name, so the change replaces the document in place instead
+         of leaving an "-edited" copy beside it every time. */
+      ...(desk?.name ? { output: desk.name } : {}),
+      ...(Number.isInteger(page) && page > 0 ? { pages: String(page) } : {}),
+    },
+    {
+      session: ctx.session,
+      cwd: ctx.root,
+      room: 4000,
+      putBlob: () => "",
+      showImage: () => undefined,
+      cancelled: () => false,
+      onCancel: () => undefined,
+      desk: deskHooks(ctx.session),
+    },
+  );
+  if (!outcome.ok) throw new NotHere(outcome.summary);
+  return { ok: true, summary: outcome.summary };
+}
 
 export async function runCommand(
   ctx: SpectraContext,
@@ -698,6 +753,10 @@ export async function runCommand(
     case "close_window":
       ctx.emit("window:close", {});
       return undefined;
+
+    /* --- Autora: the words in the page, changed where they are ---------- */
+    case "autora_edit_text":
+      return await editTextInPlace(ctx, args);
 
     default:
       /* Nothing known by that name. Answered, not thrown: the renderer asks

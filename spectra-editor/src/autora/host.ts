@@ -5,6 +5,7 @@
  * window answers commands and relays the engine's events, and both are useless
  * if this is not listening by the time the first one is asked for.
  */
+import { installEditText } from "./edittext";
 import { receiveEvent, settle } from "./transport";
 
 let installed = false;
@@ -158,5 +159,6 @@ export function installHost(): void {
   window.addEventListener("error", (e) => complain(e.message || "an error"));
 
   window.addEventListener("pagehide", () => announce("closing"));
+  installEditText();
   announce("ready");
 }

@@ -622,3 +622,161 @@
   .autora-phone .canvas-status-bar { display: none !important; }
   .autora-phone .app-shell { padding-top: 0; padding-bottom: 0; }
 }
+
+/* The page's right-click menu, and the box Edit text opens (src/autora/edittext.ts).
+   Autora's own surfaces, one accent, one motion; nothing here is Spectra's. */
+.autora-menu,
+.autora-edit {
+  position: fixed;
+  z-index: 8500;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 13px;
+  color: var(--autora-text);
+  background: var(--autora-s2);
+  border: 1px solid var(--autora-border-strong);
+  animation: autora-pop 150ms var(--autora-ease) both;
+}
+
+.autora-menu {
+  min-width: 168px;
+  padding: 4px;
+  border-radius: 12px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.48);
+}
+
+.autora-menu-item {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.autora-menu-item:hover,
+.autora-menu-item:focus-visible {
+  background: var(--autora-s3);
+}
+
+.autora-menu-item:focus-visible {
+  outline: 2px solid var(--autora-accent-line);
+  outline-offset: -1px;
+}
+
+.autora-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  padding: 12px;
+  border-radius: 14px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.52);
+  transition: opacity 150ms var(--autora-ease);
+}
+
+.autora-edit.is-busy {
+  opacity: 0.72;
+}
+
+.autora-edit-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--autora-text-2);
+}
+
+.autora-edit-field {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--autora-border-strong);
+  border-radius: 9px;
+  background: var(--autora-sink);
+  color: var(--autora-text);
+  font: inherit;
+  line-height: 1.45;
+  resize: none;
+}
+
+.autora-edit-field:focus {
+  outline: none;
+  border-color: var(--autora-accent-line);
+  box-shadow: 0 0 0 3px var(--autora-accent-soft);
+}
+
+.autora-edit-said {
+  margin: 0;
+  font-size: 12px;
+  color: var(--autora-text-2);
+}
+
+.autora-edit-said:empty {
+  display: none;
+}
+
+.autora-edit.is-wrong .autora-edit-said {
+  color: #fb7185;
+}
+
+.autora-edit-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.autora-edit-go,
+.autora-edit-cancel {
+  border: 0;
+  border-radius: 9px;
+  padding: 7px 14px;
+  font: inherit;
+}
+
+.autora-edit-go {
+  background: var(--autora-accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.autora-edit-go:hover {
+  background: var(--autora-accent-deep);
+}
+
+.autora-edit-cancel {
+  background: transparent;
+  color: var(--autora-text-2);
+}
+
+.autora-edit-cancel:hover {
+  background: var(--autora-s3);
+  color: var(--autora-text);
+}
+
+.autora-edit-go:focus-visible,
+.autora-edit-cancel:focus-visible {
+  outline: 2px solid var(--autora-accent-line);
+  outline-offset: 2px;
+}
+
+@keyframes autora-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-3px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .autora-menu,
+  .autora-edit {
+    animation: none;
+  }
+}
