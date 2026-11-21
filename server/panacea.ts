@@ -580,7 +580,7 @@ async function applyAppValues(session: string, c: Canvas, args: Record<string, a
 const trackFirst = (a: [string, unknown], b: [string, unknown]) => Number(b[0] === MUSIC_TRACK) - Number(a[0] === MUSIC_TRACK);
 
 /** The pixel size of a PNG, JPEG, GIF or WebP from its first bytes; null when it cannot tell. */
-function imageSize(data: Buffer): { w: number; h: number } | null {
+export function imageSize(data: Buffer): { w: number; h: number } | null {
   if (data.length > 24 && data.readUInt32BE(0) === 0x89504e47) return { w: data.readUInt32BE(16), h: data.readUInt32BE(20) };
   if (data.length > 10 && data.toString("ascii", 0, 3) === "GIF") return { w: data.readUInt16LE(6), h: data.readUInt16LE(8) };
   if (data.length > 30 && data.toString("ascii", 0, 4) === "RIFF" && data.toString("ascii", 8, 12) === "WEBP") {

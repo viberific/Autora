@@ -215,14 +215,8 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Gemini (subscription) answers again with Antigravity installed. A model named
-  with its effort on the end, such as gemini-3.8-flash-high, no longer gets a
-  separate effort option beside it, which Antigravity refused with "conflicts
-  with --effort" and so never answered.
-  Claude (subscription) starts faster: each turn now loads only Autora's own
-  tools, not the MCP servers and skills set up in your terminal's Claude Code,
-  which each had to start before the first word could appear.
-  Thinking effort is now a choice in the chat header for Claude and Gemini: Low,
-  Medium or High, kept with the chat. Subscription chats default to Medium
-  instead of the CLI's own much slower default. For Gemini the level is carried
-  in the model's name, as Antigravity expects.
+  Pictures now show up in the chat. Ask Autora to find or fetch an image and it
+  appears as a card in the conversation, which you can open full size, instead
+  of a web address in a sentence. It checks that the file really is a picture
+  (PNG, JPEG, GIF or WebP) and says so in words when it is not. Images Autora
+  generates are shown there as before.

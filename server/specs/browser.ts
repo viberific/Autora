@@ -440,6 +440,23 @@ export const browserSPECS: ToolSpec[] = [
     },
     risky: true,
   },
+  {
+    name: "image_show",
+    group: "browser",
+    description:
+      "Show a picture from the web in the conversation: give the address of the image file itself (PNG, JPEG, GIF or " +
+      "WebP) and it appears as a card the person can open full size. Use it whenever the person asks you to find, fetch " +
+      "or show an image; do not paste the address in a sentence instead. For a page that merely has pictures on it, find " +
+      "the picture's own address first (http_request, browser_read).",
+    parameters: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "Full http:// or https:// address of the image file." },
+        caption: { type: "string", description: "Optional short caption shown under the picture." },
+      },
+      required: ["url"],
+    },
+  },
 
   // ----------------------------------------------------------- computer --
 ];
