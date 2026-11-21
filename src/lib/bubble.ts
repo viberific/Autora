@@ -11,7 +11,7 @@ export const BUBBLE_SIZE = 56;
 /** How far the bubble keeps from the screen's sides and its top and bottom. */
 export const BUBBLE_GAP = 10;
 /** How near the close target the bubble's centre must be let go for it to count. */
-export const CLOSE_REACH = 64;
+const CLOSE_REACH = 64;
 /** A finger must move this far before a press on the bubble is a drag rather than a tap. */
 export const BUBBLE_SLOP = 6;
 
