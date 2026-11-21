@@ -219,3 +219,6 @@ releaseNotes: >-
   with its effort on the end, such as gemini-3.8-flash-high, no longer gets a
   separate effort option beside it, which Antigravity refused with "conflicts
   with --effort" and so never answered.
+  Claude (subscription) starts faster: each turn now loads only Autora's own
+  tools, not the MCP servers and skills set up in your terminal's Claude Code,
+  which each had to start before the first word could appear.
