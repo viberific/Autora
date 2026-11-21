@@ -47,6 +47,8 @@ export interface Session {
   askWhen?: string;
   /** Learn mode (server/learn.ts): the agent teaches the tools by highlighting instead of driving them. Absent reads as off. */
   learn?: boolean;
+  /** How hard the model thinks in this chat (low, medium, high), for a model that takes it. Absent: the default for the model. */
+  effort?: "low" | "medium" | "high";
   /** What Agent mode is doing right now. Not kept: every turn starts in plan. */
   phase?: Phase;
   events: AutoraEvent[];

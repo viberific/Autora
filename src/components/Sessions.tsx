@@ -1,3 +1,4 @@
+import type { Effort } from "./EffortPill";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { sessionDot } from "../lib/derive";
 import { IconCheck, IconMask, IconPin, IconPlus, IconSearch, IconTrash, IconX } from "./Icons";
@@ -23,6 +24,8 @@ export type SessionRow = {
   ask_when?: string;
   /** Learn mode is on for this chat (server/learn.ts). */
   learn?: boolean;
+  /** How hard the model thinks in this chat; null is the default. */
+  effort?: Effort | null;
 };
 
 function when(ts: number | undefined): string {

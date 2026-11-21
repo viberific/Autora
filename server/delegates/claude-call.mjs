@@ -24,6 +24,9 @@ const args = ["-p", "--output-format", "stream-json", "--verbose", "--include-pa
 if (opts.model) args.push("--model", opts.model);
 if (opts.effort) args.push("--effort", opts.effort);
 if (opts.systemFile) args.push("--append-system-prompt-file", opts.systemFile);
+/* Only what Autora hands it: the person's own MCP servers and skills, set up for their terminal, would each start (or load) on every
+   turn before it could answer, which is most of a slow first word. */
+args.push("--strict-mcp-config", "--disable-slash-commands");
 const allowed = opts.write ? [] : ["Read", "Glob", "Grep"];
 if (opts.write) args.push("--permission-mode", "acceptEdits");
 /* Autora's own tools, when the turn offers them: an MCP server of their own ("autora"), every one of them allowed, since Autora

@@ -9483,3 +9483,26 @@ body::before {
   .pa-brd-card, .pa-brd-dot { touch-action: none; }
   .pa-brd-dot::before { content: ""; position: absolute; inset: -16px; }
 }
+
+/* ----------------------------------------------------------- Effort pill -- */
+/* The header's thinking-effort choice (EffortPill), beside Learn. Shown only for a model that takes one. */
+.effort-wrap { position: relative; flex: 0 0 auto; }
+.effort-pill {
+  display: inline-flex; align-items: center; height: 34px; padding: 0 11px;
+  border-radius: var(--r-pill); border: 1px solid var(--border-strong); background: var(--s2);
+  color: var(--text-2); font: inherit; font-size: var(--fs-sm); font-weight: 600; cursor: pointer;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+.effort-pill:hover, .effort-pill.open { background: var(--s3); color: var(--text); }
+.effort-menu {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: var(--z-float); width: 240px; padding: 6px;
+  display: flex; flex-direction: column; gap: 2px;
+  background: var(--s2); border: 1px solid var(--border-strong); border-radius: var(--r-lg);
+}
+.effort-option {
+  display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; text-align: left;
+  border: 0; border-radius: var(--r-md); background: transparent; color: var(--text); font: inherit; cursor: pointer;
+}
+.effort-option:hover, .effort-option.on { background: var(--s3); }
+.effort-option-top { display: flex; align-items: center; justify-content: space-between; font-size: var(--fs-sm); font-weight: 600; }
+.effort-option-blurb { font-size: var(--fs-xs); color: var(--text-2); }

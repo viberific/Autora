@@ -23,6 +23,7 @@
  */
 
 export type Effort = "low" | "medium" | "high";
+export const isEffort = (v: unknown): v is Effort => v === "low" || v === "medium" || v === "high";
 
 interface ModelProfile {
   /** How this model takes the effort hint, or null when it takes none. */
@@ -68,6 +69,8 @@ export function modelProfile(provider: string, model: string, baseUrl = ""): Mod
  * finds agentic coding holds its quality for fewer tokens. Undefined: send nothing, the model's default stands.
  */
 export function autoEffort(provider: string, model: string, turn: "chat" | "work", baseUrl = ""): Effort | undefined {
+  /* A subscription CLI thinks hard by default and is slow for it (a minute a reply): medium unless the person chose. */
+  if (provider === "claude-cli" || provider === "gemini-cli") return turn === "chat" ? "low" : "medium";
   if (!effectiveProfile(provider, model, baseUrl).effort) return undefined;
   if (turn === "chat") return "low";
   const claude = claudeVersion(model);

@@ -111,6 +111,7 @@ import { Notices } from "./components/Notices";
 import { InstallApp } from "./components/InstallApp";
 import { PermissionsPill } from "./components/PermissionsPill";
 import { LearnToggle } from "./components/LearnToggle";
+import { EffortPill, takesEffort, type Effort } from "./components/EffortPill";
 import { LearnGuide } from "./components/LearnGuide";
 import { lessonFrom } from "./lib/learn";
 import { ModeSelect } from "./components/ModeSelect";
@@ -319,6 +320,8 @@ export function App() {
   /** Whether a turn sent now would reach a model: null until asked. The empty
       chat offers setup until it is true, and starting tasks after. */
   const [modelReady, setModelReady] = useState<boolean | null>(null);
+  /* Which provider answers, so the effort control appears only where the model takes one. */
+  const [providerId, setProviderId] = useState<string | null>(null);
   /** A turn just failed: the presence shivers and the tab turns red briefly. */
   const [failing, setFailing] = useState(false);
 
@@ -404,6 +407,7 @@ export function App() {
       .then((r) => r.json())
       .then((d) => {
         if (typeof d?.active?.connected === "boolean") setModelReady(d.active.connected);
+        setProviderId(typeof d?.active?.provider_id === "string" ? d.active.provider_id : null);
         if (!d?.appearance) return;
         // Everything is validated on the way in: the server may be a release
         // behind, and an older payload has no sizes or corner widgets in it.
@@ -586,7 +590,9 @@ export function App() {
     fetch("/api/settings")
       .then((r) => r.json())
       .then((d) => {
-        if (alive && typeof d?.active?.connected === "boolean") setModelReady(d.active.connected);
+        if (!alive) return;
+        if (typeof d?.active?.connected === "boolean") setModelReady(d.active.connected);
+        setProviderId(typeof d?.active?.provider_id === "string" ? d.active.provider_id : null);
       })
       .catch(() => undefined);
     return () => { alive = false; };
@@ -1531,7 +1537,7 @@ export function App() {
      says wins, except for a chat that is not in the list at all (incognito)
      or a change that has not been answered yet: those live here, so a
      control never disagrees with what was just pressed. */
-  type ChatSettings = { mode: WorkMode; permissions: Permissions; ask_when: string; learn: boolean };
+  type ChatSettings = { mode: WorkMode; permissions: Permissions; ask_when: string; learn: boolean; effort: Effort | null };
   const [settingsOverride, setSettingsOverride] = useState<Record<string, Partial<ChatSettings>>>({});
   const [modeSaving, setModeSaving] = useState(false);
   const [modeError, setModeError] = useState<string | null>(null);
@@ -1542,6 +1548,7 @@ export function App() {
     own?.permissions ?? (listedSession?.permissions as Permissions | undefined) ?? DEFAULT_PERMISSIONS;
   const sessionAskWhen: string = own?.ask_when ?? listedSession?.ask_when ?? "";
   const sessionLearn: boolean = own?.learn ?? listedSession?.learn ?? false;
+  const sessionEffort: Effort | null = own?.effort !== undefined ? own.effort : listedSession?.effort ?? null;
 
   const changeSession = useCallback(
     async (change: Partial<ChatSettings>) => {
@@ -1580,6 +1587,7 @@ export function App() {
     (permissions: Permissions) => void changeSession({ permissions }),
     [changeSession],
   );
+  const setSessionEffort = useCallback((effort: Effort | null) => void changeSession({ effort }), [changeSession]);
   const setSessionLearn = useCallback((learn: boolean) => void changeSession({ learn }), [changeSession]);
   const lesson = useMemo(() => lessonFrom(events), [events]);
   /* "Do this one for me" in a lesson: an ordinary message, so it goes through the same turn as anything typed. */
@@ -2175,6 +2183,9 @@ export function App() {
               error={modeError}
               dot={tightHeader}
             />
+          )}
+          {page === "chat" && sessionId && takesEffort(providerId) && (
+            <EffortPill effort={sessionEffort} onChange={setSessionEffort} />
           )}
           {page === "chat" && sessionId && <LearnToggle on={sessionLearn} onChange={setSessionLearn} dot />}
 
