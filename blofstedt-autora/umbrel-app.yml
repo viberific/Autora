@@ -215,8 +215,9 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Pictures Autora shows you now appear in the chat. A picture it fetched,
-  generated or opened from your files was being tucked inside the collapsed
-  "steps" line above its reply, so the reply said "here it is" and nothing was
-  there. It now stays in the conversation, in place, where you can see it and
-  open it full size.
+  Pictures, videos and sounds you ask Autora to find on the web now land in
+  its reply. The agent fetches the file itself and shows it as a card in the
+  chat: a picture you can open full size, or a video or sound with a player
+  you can play, seek and download. None of it is tucked into the collapsed
+  "steps" line any more. While you are working on a project on the canvas,
+  what it fetches goes straight onto the canvas instead.

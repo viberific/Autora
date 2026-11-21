@@ -5889,6 +5889,23 @@ span.learned-open { cursor: default; }
 .out-file-save:hover { background: rgba(var(--accent-rgb), 0.12); color: var(--text); }
 .out-file-open:focus-visible, .out-file-save:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
+/* A video or a sound handed over: its player in the reply, its name and a download under it. */
+.cell.media-card .cell-top { border-bottom: 1px solid var(--border); }
+.media-list { display: grid; gap: 10px; padding: 10px; background: var(--sink); }
+.media-item { margin: 0; display: grid; gap: 6px; min-width: 0; }
+.media-item video {
+  display: block; width: 100%; max-height: 360px; background: var(--sink);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+}
+.media-item audio { display: block; width: 100%; }
+.media-item figcaption { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--fs-sm); }
+.media-save {
+  display: inline-flex; align-items: center; justify-content: center; margin-left: auto; flex: 0 0 auto;
+  width: 28px; height: 28px; border-radius: var(--r-sm); color: var(--text-2);
+}
+.media-save:hover { background: rgba(var(--accent-rgb), 0.12); color: var(--text); }
+.media-save:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
 /* ── the camera, over everything while it is open ── */
 .cam-sheet {
   position: fixed; inset: 0; z-index: var(--z-modal);

@@ -150,6 +150,14 @@ export function panaceaState(session: string): PanaceaState {
   };
 }
 
+/** Whether a project is being worked on the canvas: the window open with work (or a project plan) on it. What the agent
+    fetches for the person goes there then, rather than into the chat (media_show). */
+export function panaceaHasWork(session: string): boolean {
+  if (!validSession(session)) return false;
+  const e = entryFor(session);
+  return e.open && (e.canvas.surfaces.length > 0 || Boolean(e.canvas.project));
+}
+
 export function onPanaceaChange(fn: (session: string) => void) {
   listeners.add(fn);
 }
@@ -313,6 +321,7 @@ export function panaceaTurnNote(session: string): string | null {
     `The Panacea window is open. ${describeCanvas(e.canvas, { appValue: songValues(session, e.canvas) })}`,
     recent.length ? `What the person did on it lately: ${recent.join("; ")}.` : "",
     learnedWords ?? "",
+    "A picture, video or sound fetched from the web for this work goes on the canvas: media_show puts it there by itself while there is work on it.",
     "panacea_look shows the panels' trees and the library; the person changes it by hand too, so look before relying on an earlier look.",
   ].filter(Boolean).join("\n");
 }

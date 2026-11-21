@@ -2,7 +2,7 @@ import type { Cell } from "./derive";
 
 /** Commands belong to the conversation, never to a separate workspace application. */
 export const isWorkspaceCell = (cell: Cell): boolean =>
-  cell.kind === "screen" || cell.kind === "images" || cell.kind === "files"
+  cell.kind === "screen" || cell.kind === "images" || cell.kind === "media" || cell.kind === "files"
   || cell.kind === "widget" || cell.kind === "file" || cell.kind === "tool" || cell.kind === "app";
 
 export function conversationCells(cells: readonly Cell[]): Cell[] {

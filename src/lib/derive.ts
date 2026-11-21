@@ -278,6 +278,8 @@ export type Cell =
   | { kind: "images"; seq: number; pictures: Picture[] }
   /** Files a tool made, to open or download: shown where they were made. */
   | { kind: "files"; seq: number; files: Attachment[] }
+  /** A video or a sound handed over, with a player: part of the answer, like a picture, so it never folds into the steps. */
+  | { kind: "media"; seq: number; files: Attachment[] }
   | { kind: "widget"; seq: number; widget: Widget }
   | { kind: "file"; seq: number; file: FileChange }
   /** A word from the agent about what the person just did in a shared window. */
@@ -1084,6 +1086,16 @@ export function derive(events: AutoraEvent[]): Derived {
         if (!/^file_[0-9a-f]{16}$/.test(id) || !name) break;
         const file: Attachment = { id, name, mime: String(e.payload.mime ?? ""), size: Number(e.payload.size) || 0 };
         const cell = current();
+        if (/^(?:audio|video)\//.test(file.mime)) {
+          if (cell && cell.kind === "media") {
+            const at = cell.files.findIndex((f) => f.id === id);
+            if (at >= 0) cell.files[at] = file;
+            else cell.files.push(file);
+          } else {
+            push({ kind: "media", seq: e.seq, files: [file] });
+          }
+          break;
+        }
         if (cell && cell.kind === "files") {
           const at = cell.files.findIndex((f) => f.id === id);
           if (at >= 0) cell.files[at] = file;
@@ -1426,11 +1438,11 @@ type ScreenCell = Extract<Cell, { kind: "screen" }>;
 const COLOUR = /\u001b\[[0-?]*[ -/]*[@-~]/g;
 
 /** Stay in the conversation even while a page is being worked: things the
-    person has to answer or act on, and the pictures handed over. They sit
+    person has to answer or act on, and the pictures, videos and sounds handed over. They sit
     beside the card without ending it -- a sign-in is part of working the
     page. Everything else said or done meanwhile is shown inside the card -- the person's own words added mid-turn
     too: kept out, a message sat under the card while every reply to it streamed in above, inside the card. */
-const KEPT_OUT = new Set<Cell["kind"]>(["ask", "permission", "todo", "images", "widget", "app", "mode"]);
+const KEPT_OUT = new Set<Cell["kind"]>(["ask", "permission", "todo", "images", "media", "widget", "app", "mode"]);
 
 /** The screen card a still-running turn is working in, if it is in one. */
 const openBoxes = new WeakMap<Bucket, ScreenCell>();

@@ -52,6 +52,13 @@ await test("the browser manual says the card is the live page, with no earlier p
   assert.ok(manualText("browser").includes("no picture of an earlier page is kept"));
 });
 
+await test("the browser manual says fetched media is handed over in the reply, or on the canvas during a project", () => {
+  const browser = manualText("browser");
+  for (const needle of ["media_show", "a card in your reply itself", "never folded into the steps", "goes on the canvas instead"]) {
+    assert.ok(browser.includes(needle), `the browser manual lacks "${needle}"`);
+  }
+});
+
 await test("the browser manual says how the person sees the page: pictures, or the live copy", () => {
   const browser = manualText("browser");
   for (const needle of ["Live copy (preview)", "Picture mode", "falls back to pictures", "Pictures · try the live copy", "only a view"]) {
@@ -522,6 +529,7 @@ await test("the Photo manual says how a person runs a command, and that photo_ed
 await test("a tool finds its window's manual, and a tool with no window finds none", () => {
   assert.equal(manualId("browser_click"), "browser");
   assert.equal(manualId("web_search"), "browser");
+  assert.equal(manualId("media_show"), "browser");
   assert.equal(manualId("app_preview"), "creator");
   assert.equal(manualId("terminal"), "terminal");
   assert.equal(manualId("pdf_edit"), "pdf");

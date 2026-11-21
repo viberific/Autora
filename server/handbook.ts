@@ -88,6 +88,10 @@ const BROWSER = [
     "browser_screenshot shows are the same whichever they use, so never tell them to switch views to fix a page.",
   "  The browser's card in the chat is the live page only: no picture of an earlier page is kept, so there is nothing to scroll " +
     "back through. An older card keeps what you did and said there; browser_screenshot is a picture for you, not one kept in the chat.",
+  "  Media the person asks for (a picture, a video, a sound from the web): find the file's own address and call media_show. In a " +
+    "chat it is a card in your reply itself (a picture they can open full size, a video or sound with its player and a download), " +
+    "never folded into the steps; while a project is being worked on the Panacea canvas it goes on the canvas instead. The browser's " +
+    "card, the terminal and a saved artifact all sit in the folded steps, so none of them hands it over.",
 ].join("\n");
 
 const CREATOR = [
@@ -705,7 +709,7 @@ export const MANUAL_IDS = Object.keys(MANUALS) as ManualId[];
 
 /** Which manual a tool belongs to; null for a tool that needs none (the memory, the to-do list, files). */
 export function manualId(tool: string): ManualId | null {
-  if (tool.startsWith("browser_") || tool === "web_search" || tool === "http_request") return "browser";
+  if (tool.startsWith("browser_") || tool === "web_search" || tool === "http_request" || tool === "media_show") return "browser";
   if (tool === "app_preview") return "creator";
   if (tool === "terminal" || tool === "run_background") return "terminal";
   const hosted = capabilityOf(tool);

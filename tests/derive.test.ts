@@ -13,6 +13,7 @@
 import assert from "node:assert/strict";
 import { derive } from "../src/lib/derive";
 import { readActivity } from "../src/lib/activity";
+import { turnItems } from "../src/lib/steps";
 import { Kind, type AutoraEvent } from "../src/lib/types";
 
 let passed = 0;
@@ -347,6 +348,41 @@ test("a message taken back before the agent read it leaves the thread; one witho
   assert.deepEqual(cells(base).map((c: any) => [c.text, c.id, c.read]), [["also this", "amend-1", false], ["and that", "amend-2", false]]);
   assert.deepEqual(cells([...base, e(4, Kind.AmendWithdrawn, "user", { id: "amend-1" })]).map((c: any) => c.text), ["and that"]);
   assert.equal((cells([e(1, Kind.UserMessage, "user", { text: "go" }), e(2, Kind.Amend, "user", { text: "old" })])[0] as any).id, undefined);
+});
+
+test("a video or sound fetched from the web is its own card in the reply, not folded into the steps", () => {
+  const ev = (seq: number, kind: string, payload: Record<string, any>, span: string | null = null): AutoraEvent =>
+    ({ seq, ts: 1_700_000_000 + seq, kind, actor: "agent", span, payload, blob: null });
+  const view = derive([
+    ev(1, Kind.UserMessage, { text: "find me the trailer" }),
+    ev(2, Kind.ToolCall, { name: "web_search", args: { query: "trailer" } }, "s1"),
+    ev(3, Kind.ToolResult, { ok: true }, "s1"),
+    ev(4, Kind.ToolCall, { name: "media_show", args: { url: "https://example.com/trailer.mp4" } }, "s2"),
+    ev(5, Kind.MediaFile, { id: "file_0000000000000001", name: "trailer.mp4", mime: "video/mp4", size: 900 }, "s2"),
+    ev(6, Kind.MediaFile, { id: "file_0000000000000002", name: "theme.mp3", mime: "audio/mpeg", size: 300 }, "s2"),
+    ev(7, Kind.ToolResult, { ok: true }, "s2"),
+    ev(8, Kind.AgentText, { text: "Here it is." }),
+    ev(9, Kind.AgentDone, {}),
+  ]);
+  const cells = view.buckets[0].cells;
+  const media = cells.filter((c) => c.kind === "media");
+  assert.equal(media.length, 1, "one card for both");
+  assert.deepEqual(media[0].kind === "media" ? media[0].files.map((f) => f.name) : [], ["trailer.mp4", "theme.mp3"]);
+  assert.ok(!cells.some((c) => c.kind === "files"), "not a file card to click through");
+  const shown = turnItems(cells).map((item) => item.kind === "steps" ? "steps" : item.cell.kind);
+  assert.deepEqual(shown, ["steps", "media", "reply"], "the player sits in the reply, outside the folded steps");
+});
+
+test("media handed over while the agent works a page stays out of the page's card", () => {
+  const events: AutoraEvent[] = [];
+  const add = (seq: number, kind: string, payload: Record<string, any>) =>
+    events.push({ seq, ts: 1_700_000_000 + seq, kind, actor: "agent", span: null, payload, blob: null });
+  add(1, Kind.UserMessage, { text: "find a clip of rain" });
+  add(2, Kind.BrowserAction, { action: "open", url: "https://example.com" });
+  add(3, Kind.MediaFile, { id: "file_0000000000000003", name: "rain.ogg", mime: "audio/ogg", size: 10 });
+  add(4, Kind.AgentText, { text: "Found one." });
+  const cells = derive(events).buckets[0].cells;
+  assert.deepEqual(cells.map((c) => c.kind), ["screen", "media"], "the sound is beside the card, not inside it");
 });
 
 console.log(`\nderive: ${passed} passed`);

@@ -178,7 +178,7 @@ const LOOKS_ONLY = new Set([
   "artifact_read",
   "mcp_servers",
   "web_search",
-  "image_show",
+  "media_show",
   "camera_look",
   "computer_screenshot",
   "speak",
