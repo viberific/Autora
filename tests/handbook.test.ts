@@ -38,7 +38,9 @@ await test("the overview puts the conversation where it is: a window floating at
   assert.doesNotMatch(text, /panel on the right|Retract conversation|edge tab/);
   // Full screen is the board's Maximise, and what it does on a phone.
   assert.match(text, /Full screen button is its Maximise/);
-  assert.match(text, /on a phone it also drops the conversation to its strip and the jump dock steps aside/);
+  assert.match(text, /on a phone it instead takes the phone's whole screen/);
+  assert.match(text, /the conversation becomes Autora's bubble/);
+  assert.match(text, /onto the X at the foot of the screen/);
 });
 
 await test("the browser manual says who has the browser and how it comes back", () => {

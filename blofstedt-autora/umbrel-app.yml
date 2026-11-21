@@ -215,9 +215,11 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Pictures, videos and sounds you ask Autora to find on the web now land in
-  its reply. The agent fetches the file itself and shows it as a card in the
-  chat: a picture you can open full size, or a video or sound with a player
-  you can play, seek and download. None of it is tucked into the collapsed
-  "steps" line any more. While you are working on a project on the canvas,
-  what it fetches goes straight onto the canvas instead.
+  On a phone, Maximise now gives a tool the whole screen: the Creator, the
+  browser or any other tool fills the phone, with no top bar, board or chat
+  sheet in the way, and Autora shrinks to a little bubble you can drag
+  anywhere. Tap the bubble to open the conversation over the tool and tap it
+  again to get back to work; what Autora says shows beside it for a moment.
+  Drag the bubble onto the X at the bottom, or press Restore, to leave full
+  screen. The Creator also no longer flashes white while it shows a page as
+  pictures (a canvas, a video or a page that changes very fast).

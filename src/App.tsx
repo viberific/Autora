@@ -34,6 +34,7 @@ import { lastWorkedPane } from "./lib/followPane";
 import { setFollowing, useFollowing } from "./lib/follow";
 import { Thread, type Outgoing } from "./components/Thread";
 import { ConversationFlow } from "./components/panacea/ConversationFlow";
+import { ChatBubble } from "./components/ChatBubble";
 import { previewOf, useChatLayout } from "./components/panacea/chatLayout";
 import { hiddenStepCount } from "./lib/workspaceThread";
 import { Dock } from "./components/Dock";
@@ -1736,6 +1737,22 @@ export function App() {
      drops to its strip, so a message can still be typed; a tap on the strip brings the conversation back. */
   const [windowFull, setWindowFull] = useFullscreen();
   const fullPhone = phoneLayout && windowFull;
+  /* While a tool has the phone's whole screen the conversation is a bubble over it (ChatBubble): a tap opens the
+     conversation over the tool, and it starts put away each time a tool goes full screen. */
+  const [bubbleOpen, setBubbleOpen] = useState(false);
+  useEffect(() => { setBubbleOpen(false); }, [fullPhone]);
+  const toggleBubble = useCallback(() => setBubbleOpen((was) => !was), []);
+  const leaveFull = useCallback(() => setWindowFull(false), [setWindowFull]);
+  // A touch on the tool puts the conversation away again, as a tap on the bubble does.
+  useEffect(() => {
+    if (!fullPhone || !bubbleOpen) return;
+    const away = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest?.(".pw-engine.is-takeover")) setBubbleOpen(false);
+    };
+    document.addEventListener("pointerdown", away, true);
+    return () => document.removeEventListener("pointerdown", away, true);
+  }, [fullPhone, bubbleOpen]);
   const officeLooks = OFFICE_PANES.flatMap((o) => {
     const win = windowAt(o.kind);
     return win ? [{ pane: o.pane as "pages" | "sheets" | "slides", working: win.working, name: win.name }] : [];
@@ -1794,6 +1811,11 @@ export function App() {
     if (requiresInput) lines.push({ who: "Autora", text: "Waiting for your answer…" });
     return lines;
   }, [view.transcript, requiresInput]);
+  /** What the agent said last, for the bubble over a full-screen tool. */
+  const lastSaid = useMemo(() => {
+    for (let i = view.transcript.length - 1; i >= 0; i -= 1) if (view.transcript[i].role === "agent") return view.transcript[i].text;
+    return "";
+  }, [view.transcript]);
   const hiddenSteps = useMemo(() => hiddenStepCount(view.buckets[view.buckets.length - 1]?.cells ?? []), [view.buckets]);
   // Nothing said yet (and nothing waiting to be answered): the conversation is only its message box.
   const chatEmpty = !requiresInput && !view.busy && outbox.length === 0 && view.transcript.length === 0 && !view.buckets.some((bucket) => bucket.prompt || bucket.attachments.length > 0);
@@ -2316,10 +2338,14 @@ export function App() {
 
         {/* The conversation stays mounted under the other pages, so leaving
             it and coming back keeps your place in the thread. */}
-        <div className="chat-view pw-full-workspace" role="main" hidden={page !== "chat"}>
+        <div className={`chat-view pw-full-workspace${fullPhone ? " is-takeover" : ""}${fullPhone && bubbleOpen ? " is-bubble-open" : ""}`} role="main" hidden={page !== "chat"}>
+        {fullPhone && page === "chat" && (
+          <ChatBubble open={bubbleOpen} onToggle={toggleBubble} onExit={leaveFull}
+            busy={view.busy && !view.asking} waiting={requiresInput} say={lastSaid} />
+        )}
 
-        <ConversationFlow collapsed={phoneLayout && (chatCollapsed || quietPhone || fullPhone)}
-          onToggle={!phoneLayout ? undefined : fullPhone ? () => setWindowFull(false) : quietPhone ? () => setSheetAsked(true) : retractChat}
+        <ConversationFlow collapsed={phoneLayout && (fullPhone ? !bubbleOpen : chatCollapsed || quietPhone)}
+          onToggle={!phoneLayout ? undefined : fullPhone ? toggleBubble : quietPhone ? () => setSheetAsked(true) : retractChat}
           phone={phoneLayout} float={chatLayout.float} onFloat={chatLayout.setFloat} empty={chatEmpty}
           sheet={chatLayout.sheet} onSheet={chatLayout.setSheet} preview={chatPreview} hiddenSteps={hiddenSteps}
           conversation={<>

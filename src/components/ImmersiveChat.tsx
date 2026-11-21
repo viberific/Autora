@@ -10,7 +10,7 @@ import { IconArrow, IconX } from "./Icons";
  */
 
 /** The first sentence of a reply, without markdown, cut to a glance. */
-function glance(text: string, max = 110): string {
+export function glance(text: string, max = 110): string {
   const plain = text
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
