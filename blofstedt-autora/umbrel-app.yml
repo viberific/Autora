@@ -215,20 +215,7 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  Right-click on a PDF page for the actions that apply to what is under the
-  pointer. Over words, Edit text opens a small box holding them as they are:
-  what you type replaces them in the file itself, in the page's own typeface,
-  with the old words taken out of the page rather than covered over, so the
-  page stays selectable and searchable. Over a mark, Delete removes it. The
-  tool panels are where they were.
-  Opening a document no longer leaves a blank canvas. Autora Pages, Sheets,
-  Slides and the PDF window now tell the server they are really on screen, and
-  a tool may not report a document open until they have: a window that never
-  appears is reported as a failure, with what to do about it, instead of
-  "opened" repeated while nothing shows.
-  A tool that saves a different file from the one open in a window now says so
-  plainly, naming both files, so "this is fixed" can no longer be said while
-  the window is still showing the old document.
-  The PDF editor's own Open works: it opens Autora's file picker, because the
-  window has no desktop file dialog, so it used to do nothing at all. Load and
-  Save are unchanged.
+  Gemini (subscription) answers again with Antigravity installed. A model named
+  with its effort on the end, such as gemini-3.8-flash-high, no longer gets a
+  separate effort option beside it, which Antigravity refused with "conflicts
+  with --effort" and so never answered.
