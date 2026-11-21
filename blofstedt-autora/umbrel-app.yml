@@ -222,6 +222,10 @@ releaseNotes: >-
   window can: scrolling and swiping are instant and smooth, and only what you
   actually do (a tap, typing) goes to the real page. Select and Region work as
   before, and if a page cannot be copied it quietly falls back to pictures.
+  On a phone, pulling a window's corner no longer just makes it taller: once a
+  window is as wide as the screen, it stops there instead of growing in height
+  while its width and content stay put, and a pull always starts from the size
+  you can see.
   Pictures now show up in the chat too: ask Autora to find or fetch an image
   and it appears as a card in the conversation that you can open full size,
   instead of a web address in a sentence. Images Autora generates are shown

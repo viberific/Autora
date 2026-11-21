@@ -910,14 +910,21 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     };
   };
   const engineResize = (id: string) => (e: ReactPointerEvent<HTMLElement>) => {
-    const box = engineBoxesRef.current[id];
-    if (!box) return;
+    const stored = engineBoxesRef.current[id];
+    if (!stored) return;
     raiseIt(id);
+    /* What is drawn, not what is stored. A phone holds a window to its screen's width (maxWidth, above), while the stored box may
+       be one a larger screen made: pulling from the stored width grew a number nobody could see, and the height with it, so
+       the window only got taller. The pull starts from the width on screen and stops where the screen does. */
+    const shown = root.current?.querySelector<HTMLElement>(`[data-work="${CSS.escape(id)}"]`);
+    const cap = shown ? parseFloat(getComputedStyle(shown).maxWidth) : NaN;
+    const room = Number.isFinite(cap) ? cap : Infinity;
+    const box = shown && shown.offsetWidth > 0 ? { ...stored, w: Math.min(stored.w, shown.offsetWidth), h: Math.min(stored.h, shown.offsetHeight) } : stored;
     /* A page or an app is a picture of a fixed shape: the corner pull keeps it, so the window never has bars or a
        blank band beside or below it. Everything else around the picture (title bar, toolbar) keeps its own height. */
     const fit = pictureFit(id);
     const sized = (dx: number, dy: number) => {
-      const w = Math.max(320, box.w + dx);
+      const w = Math.min(room, Math.max(Math.min(320, room), box.w + dx));
       return { w, h: fit ? Math.max(240, Math.round(fit.chrome + (w - fit.side) / fit.ratio)) : Math.max(240, box.h + dy) };
     };
     gesture(e, (dx, dy) => setEngineBoxes((before) => ({ ...before, [id]: { ...box, ...sized(dx, dy) } })),
