@@ -4,6 +4,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useCollab } from "../lib/collab";
 import { TakeControl } from "./TakeControl";
 import { previewApi } from "../lib/appApi";
+import { VIEWER_ID, useMirrorStatus } from "../lib/liveMirror";
+import { MirrorView } from "./MirrorView";
 import { NAMED_KEYS, SENTINEL, inField } from "../lib/pageInput";
 import {
   usePreviewFrame, usePreviewState, type Device, type ElementInfo, type LightInfo, type Rect,
@@ -91,6 +93,14 @@ export function AppPreview({ sessionId, phone }: { sessionId: string; phone: boo
   const [address, setAddress] = useState<string | null>(null);
   const [consoleOpen, setConsoleOpen] = useState(false);
   const [side, setSide] = useState<"versions" | "templates" | null>(null);
+  /* The page as a live copy of its DOM (MirrorView, server/mirror.ts) instead of pictures: the same fix the browser got,
+     for the same reason. A picture of the page made every scroll, hover and tap wait on a round trip to the server
+     and back, then on the next frame. Pictures stay as the fallback, drawn whenever the copy is not. */
+  const mirror = useMirrorStatus(sessionId, state.open, "preview");
+  const [mirrorReady, setMirrorReady] = useState(false);
+  const mirrorLive = state.open && mirror?.status === "live";
+  const mirrorShown = mirrorLive && mirrorReady;
+  useEffect(() => { if (!mirrorLive) setMirrorReady(false); }, [mirrorLive]);
 
   const areaRef = useRef<HTMLDivElement>(null);
   const screenRef = useRef<HTMLDivElement>(null);
@@ -170,6 +180,35 @@ export function AppPreview({ sessionId, phone }: { sessionId: string; phone: boo
     if (pendingText.current) flushText();
     return queue(job);
   }, [flushText, queue]);
+
+  /* Said to the server when the window opens and every 15 seconds: while the copy is the view, its Chrome stops
+     encoding pictures. Ended when the window goes. */
+  useEffect(() => {
+    if (!state.open) return;
+    const say = (body: Record<string, unknown>) => fetch(`/api/sessions/${sessionId}/browser/view?target=preview`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ viewer: VIEWER_ID, ...body }),
+    }).catch(() => undefined);
+    void say({ mode: "mirror" });
+    const timer = window.setInterval(() => void say({ mode: "mirror" }), 15_000);
+    return () => { window.clearInterval(timer); void say({ mode: "none" }); };
+  }, [state.open, sessionId]);
+  /** A page the copy laid out wrong is shown as pictures; the next page tries the copy again. */
+  const onMirrorUnhealthy = useCallback((reason: string) => {
+    const say = (body: Record<string, unknown>) => fetch(`/api/sessions/${sessionId}/browser/view?target=preview`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ viewer: VIEWER_ID, ...body }),
+    });
+    void say({ mode: "picture", fallback: reason }).then(() => say({ mode: "mirror" })).catch(() => undefined);
+  }, [sessionId]);
+  /** What the copy sends to the page goes in order with the rest of this window's input. A dropdown answers with its
+      choices, which the app lists itself: the popup the real browser draws never reaches the copy. */
+  const mirrorSend = useCallback((path: string, body: unknown): Promise<any> => send(async () => {
+    const r = await api.raw(path, body);
+    const at = body as { x?: number; y?: number };
+    if (path === "click" && r?.select?.options?.length && typeof at.x === "number" && typeof at.y === "number") {
+      setPicker({ x: at.x, y: at.y, options: r.select.options });
+    }
+    return r;
+  }), [api, send]);
 
   const typeText = (text: string) => {
     pendingText.current += text;
@@ -678,11 +717,27 @@ export function AppPreview({ sessionId, phone }: { sessionId: string; phone: boo
             onPointerLeave={() => setHover(null)}
             onContextMenu={onContextMenu}
           >
-            {frame ? (
+            {/* The copy is built under the picture and swapped in once it is drawn, so the switch has no blank moment. */}
+            {!mirrorShown && (frame ? (
               <img className="app-frame" alt="The app, live" draggable={false} decoding="async"
                 src={`data:${frame.mime};base64,${frame.data}`} width={box.w} height={box.h} />
             ) : (
               <div className="app-loading"><span className="attach-spin" aria-hidden="true" /> Loading the preview…</div>
+            ))}
+            {mirrorLive && (
+              <MirrorView
+                sessionId={sessionId}
+                channel="preview"
+                /* Use works the copy itself; Select and Region draw on it, so the window's own handlers take the pointer. */
+                local={mode === "use"}
+                usable
+                driving={false}
+                readout={false}
+                hidden={!mirrorShown}
+                send={mirrorSend}
+                onReady={setMirrorReady}
+                onUnhealthy={onMirrorUnhealthy}
+              />
             )}
 
             <div className="app-overlay" aria-hidden="true">

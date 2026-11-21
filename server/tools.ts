@@ -75,7 +75,7 @@ import { officeHooks } from "./officedesk";
 import { runPdfTool } from "./pdf";
 import { runVideoTool } from "./opencut";
 import { loadSong, runStudioTool, studioBriefing, studioState } from "./studio";
-import { loadIntoPanacea, panaceaBriefing, runPanaceaTool } from "./panacea";
+import { imageSize, loadIntoPanacea, panaceaBriefing, runPanaceaTool } from "./panacea";
 import { PANACEA_ENGINE_FORMATS, panaceaFileRoute, type PanaceaFileRoute } from "./panacea-formats";
 import { readFileRef } from "./fileref";
 import {
@@ -551,6 +551,8 @@ export function renderCall(spec: ToolSpec, args: Record<string, any>): string {
       return `search web for "${args.query}"`;
     case "image_generate":
       return `generate image: "${args.prompt}"`;
+    case "image_show":
+      return `show the picture at ${args.url}`;
     case "artifact_save":
       return `save artifact ${args.name}${args.notebook ? ` into notebook "${args.notebook}"` : ""}`;
     case "notebook":
@@ -1105,6 +1107,101 @@ async function readCapped(res: Response, limit: number): Promise<{ text: string;
     size += value.byteLength;
   }
   return { text: Buffer.concat(chunks).toString("utf8"), truncated: false };
+}
+
+/** Up to `limit` bytes of a body, as they came; `truncated` when there was more. */
+async function readBytes(res: Response, limit: number): Promise<{ data: Buffer; truncated: boolean }> {
+  const reader = res.body?.getReader();
+  if (!reader) return { data: Buffer.alloc(0), truncated: false };
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (size + value.byteLength > limit) {
+      await reader.cancel().catch(() => undefined);
+      return { data: Buffer.concat(chunks), truncated: true };
+    }
+    chunks.push(Buffer.from(value));
+    size += value.byteLength;
+  }
+  return { data: Buffer.concat(chunks), truncated: false };
+}
+
+/**
+ * What kind of picture these bytes are, from their first few; null for
+ * anything else. The server's Content-Type is not asked: hotlink-protected
+ * hosts label pictures as HTML and error pages label themselves as pictures.
+ * SVG is left out on purpose -- it can carry script, and nothing that came off
+ * the web is drawn from the app's own origin as a document.
+ */
+function pictureMime(b: Buffer): string | null {
+  if (b.length > 8 && b.readUInt32BE(0) === 0x89504e47) return "image/png";
+  if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b.length > 6 && b.toString("ascii", 0, 4) === "GIF8") return "image/gif";
+  if (b.length > 12 && b.toString("ascii", 0, 4) === "RIFF" && b.toString("ascii", 8, 12) === "WEBP") return "image/webp";
+  return null;
+}
+
+/** Larger than any photograph worth looking at in a chat; the rest is not fetched. */
+const IMAGE_SHOW_LIMIT_BYTES = 12 * 1024 * 1024;
+
+/**
+ * Fetch a picture from the web and put it in the conversation.
+ *
+ * A plain GET with nothing of the person's in it (no saved sign-ins, no
+ * placeholders): a picture on the open web needs none, and a request that
+ * carried them would be one more place for them to leak.
+ */
+async function runImageShow(
+  args: { url?: unknown; caption?: unknown },
+  ctx: ToolContext,
+): Promise<ToolOutcome> {
+  const url = String(args.url ?? "").trim();
+  if (!/^https?:\/\//i.test(url)) {
+    return { ok: false, summary: "image_show needs a full http:// or https:// address of a picture." };
+  }
+  const caption = String(args.caption ?? "").trim() || null;
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "Autora/1.0", Accept: "image/*,*/*;q=0.5" },
+      redirect: "follow",
+      signal: requestSignal(ctx, REQUEST_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      await res.body?.cancel().catch(() => undefined);
+      return { ok: false, summary: redactForModel(`image_show: ${url} answered HTTP ${res.status} ${res.statusText}.`) };
+    }
+    const tooBig = `image_show: that picture is too big to show (over ${IMAGE_SHOW_LIMIT_BYTES / 1024 / 1024} MB).`;
+    if (Number(res.headers.get("content-length")) > IMAGE_SHOW_LIMIT_BYTES) {
+      await res.body?.cancel().catch(() => undefined);
+      return { ok: false, summary: tooBig };
+    }
+    const { data, truncated } = await readBytes(res, IMAGE_SHOW_LIMIT_BYTES);
+    if (truncated) return { ok: false, summary: tooBig };
+    const mime = pictureMime(data);
+    if (!mime) {
+      const type = res.headers.get("content-type") || "unknown type";
+      return {
+        ok: false,
+        summary: redactForModel(
+          `image_show: ${url} is not a picture it can show (${type}; PNG, JPEG, GIF and WebP only). ` +
+          "If it is a page, read it with http_request or browser_open and look for the picture's own address.",
+        ),
+      };
+    }
+    const blob = ctx.putBlob(data, mime);
+    const size = imageSize(data);
+    const alt = caption ?? (new URL(res.url || url).pathname.split("/").pop() || "image");
+    ctx.showImage(blob, alt, caption, size ?? undefined);
+    return {
+      ok: true,
+      summary: `Showed the picture from ${redactForModel(url)} in the conversation for the person to see (${mime.slice(6)}, ${Math.round(data.length / 1024)} KB).`,
+      preview: `image: ${alt.slice(0, 80)}`,
+    };
+  } catch (err: any) {
+    return { ok: false, summary: `image_show failed: ${redactForModel(fetchFailure(err, REQUEST_TIMEOUT_MS))}` };
+  }
 }
 
 /**
@@ -3318,6 +3415,9 @@ async function runToolUnredacted(
           preview: `search: ${query.slice(0, 60)}`,
         };
       }
+
+      case "image_show":
+        return await runImageShow({ url: args.url, caption: args.caption }, ctx);
 
       case "image_generate": {
         const prompt = String(args.prompt ?? "").trim();

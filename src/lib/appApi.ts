@@ -58,6 +58,8 @@ export function previewApi(sessionId: string) {
     reword: (id: string, text: string) => call("POST", `/comments/${id}`, { text }),
     remove: (id: string) => call("DELETE", `/comments/${id}`),
     send: (text: string) => call("POST", "/send", { text }),
+    /** Whatever the live copy asks of the page (click, drag, scroll, type, key, hover, mirror/scroll), as it sends it. */
+    raw: input,
     click: (x: number, y: number, button: "left" | "right" = "left") => input("click", { x, y, button }),
     drag: (phase: "start" | "move" | "end", x: number, y: number) => input("drag", { phase, x, y }),
     choose: (x: number, y: number, index: number) => input("choose", { x, y, index }),
