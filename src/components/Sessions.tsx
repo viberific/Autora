@@ -1,3 +1,4 @@
+import type { Effort } from "./EffortPill";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { sessionDot } from "../lib/derive";
 import { IconCheck, IconMask, IconPin, IconPlus, IconSearch, IconTrash, IconX } from "./Icons";
