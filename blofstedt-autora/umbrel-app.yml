@@ -215,18 +215,8 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  The Creator window no longer lags, flickers or fights your finger. It used to
-  show the app as a stream of pictures from the server, so every scroll, hover
-  and tap waited on a round trip and then on the next picture, and touch was
-  the worst of it. It now draws a live copy of the page itself, as the browser
-  window can: scrolling and swiping are instant and smooth, and only what you
-  actually do (a tap, typing) goes to the real page. Select and Region work as
-  before, and if a page cannot be copied it quietly falls back to pictures.
-  On a phone, pulling a window's corner no longer just makes it taller: once a
-  window is as wide as the screen, it stops there instead of growing in height
-  while its width and content stay put, and a pull always starts from the size
-  you can see.
-  Pictures now show up in the chat too: ask Autora to find or fetch an image
-  and it appears as a card in the conversation that you can open full size,
-  instead of a web address in a sentence. Images Autora generates are shown
-  there as before.
+  Pictures Autora shows you now appear in the chat. A picture it fetched,
+  generated or opened from your files was being tucked inside the collapsed
+  "steps" line above its reply, so the reply said "here it is" and nothing was
+  there. It now stays in the conversation, in place, where you can see it and
+  open it full size.

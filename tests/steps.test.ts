@@ -68,8 +68,14 @@ test("an empty turn folds to nothing", () => {
 });
 
 test("all work activity folds, but questions, permissions and conversation remain actionable", () => {
-  for (const kind of ["terminal", "tool", "screen", "file", "files", "images", "widget", "app", "memory", "learned", "chime"]) assert.ok(STEP_KINDS.has(kind));
+  for (const kind of ["terminal", "tool", "screen", "file", "files", "widget", "app", "memory", "learned", "chime"]) assert.ok(STEP_KINDS.has(kind));
   for (const kind of ["ask", "permission", "reply", "said", "todo", "vendor"]) assert.ok(!STEP_KINDS.has(kind));
+});
+
+test("a picture the agent shows stays in the thread instead of folding into the steps line", () => {
+  assert.ok(!STEP_KINDS.has("images"));
+  const cells = [cell("terminal", 1), cell("tool", 2), cell("images", 3), cell("terminal", 4)];
+  assert.deepEqual(kinds(cells), ["steps(terminal+tool)", "images", "steps(terminal)"]);
 });
 
 test("a delegate's own bubble breaks the activity line rather than hiding inside it", () => {
