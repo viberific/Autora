@@ -6,6 +6,34 @@ import { useEffect, useState, type ReactNode } from "react";
 const decoded = new Set<string>();
 
 /**
+ * The src to draw for a picture that keeps changing: the newest one that has finished decoding. The visible picture only
+ * ever changes from one drawable frame to the next, so there is no moment with nothing to show (the Creator's window
+ * flashed its white backdrop between pictures before it drew through this).
+ */
+export function useDecodedSrc(src: string): string {
+  const [shown, setShown] = useState(src);
+
+  useEffect(() => {
+    if (src === shown) return;
+    if (decoded.has(src)) { setShown(src); return; }
+    let gone = false;
+    const img = new Image();
+    img.src = src;
+    const swap = () => {
+      if (gone) return;
+      remember(src);
+      setShown(src);
+    };
+    // A frame that fails to decode is still the newest word on the page; show
+    // it rather than freezing on the one before.
+    img.decode().then(swap, swap);
+    return () => { gone = true; };
+  }, [src, shown]);
+
+  return shown;
+}
+
+/**
  * One screencast frame, swapped in only once it can be drawn.
  *
  * Each new frame used to be a fresh <img> that started transparent and faded
@@ -27,24 +55,7 @@ export function Frame({
   /** Overlays positioned against the frame, e.g. the click marker. */
   children?: ReactNode;
 }) {
-  const [shown, setShown] = useState(src);
-
-  useEffect(() => {
-    if (src === shown) return;
-    if (decoded.has(src)) { setShown(src); return; }
-    let gone = false;
-    const img = new Image();
-    img.src = src;
-    const swap = () => {
-      if (gone) return;
-      remember(src);
-      setShown(src);
-    };
-    // A frame that fails to decode is still the newest word on the page; show
-    // it rather than freezing on the one before.
-    img.decode().then(swap, swap);
-    return () => { gone = true; };
-  }, [src, shown]);
+  const shown = useDecodedSrc(src);
 
   return (
     <div className="frame-wrap">

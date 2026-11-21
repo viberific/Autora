@@ -7172,6 +7172,58 @@ button.app-url:hover { border-color: var(--border-strong); color: var(--text); }
 .immersive-close { background: rgba(255, 255, 255, 0.1); }
 @media (max-width: 680px) { .pdf-bar-note { display: none; } }
 
+/* A tool full screen on a phone (the takeover, panacea/Board.tsx): the window leaves the board and has the whole screen,
+   the board's pan and zoom let go of it, and the conversation waits in Autora's bubble (ChatBubble.tsx). */
+.pw-engine.is-takeover {
+  position: fixed !important; inset: 0 !important; width: auto !important; height: auto !important; max-width: none !important;
+  z-index: var(--z-over) !important; border-radius: 0; border: 0; box-shadow: none;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  animation: fade var(--dur-1) var(--ease) both;
+}
+.pa-world:has(.pw-engine.is-takeover) { transform: none !important; will-change: auto; transition: none; }
+/* The chat view is its own stack, under the app's header: the header steps aside instead, as nothing in it is for the tool. */
+.app:has(.pw-engine.is-takeover) header.top { visibility: hidden; pointer-events: none; }
+.pw-engine.is-takeover .pw-engine-head { cursor: default; }
+.chat-view.is-takeover .conversation-flow { visibility: hidden; pointer-events: none; }
+.chat-view.is-takeover.is-bubble-open .conversation-flow { visibility: visible; pointer-events: auto; z-index: var(--z-max); }
+.chat-view.is-takeover.is-bubble-open .pw-engine.is-takeover::after {
+  content: ""; position: absolute; inset: 0; background: rgba(var(--s1-rgb), 0.45); pointer-events: none;
+}
+
+.chat-bubble-layer {
+  position: fixed; inset: 0; pointer-events: none; z-index: var(--z-float);
+  padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px);
+}
+.chat-bubble {
+  position: absolute; width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; pointer-events: auto;
+  border: 1px solid rgba(var(--accent-rgb), 0.55); color: var(--text); cursor: grab; touch-action: none;
+  background: rgba(var(--s1-rgb), 0.82); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45); user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
+  transition: left var(--dur-2) var(--ease-spring), top var(--dur-2) var(--ease-spring), transform var(--dur-1) var(--ease);
+}
+.chat-bubble.is-dragging { transition: none; transform: scale(1.08); cursor: grabbing; }
+.chat-bubble:active:not(.is-dragging) { transform: scale(0.94); }
+.chat-bubble.is-open { background: rgba(var(--accent-rgb), 0.85); }
+.chat-bubble.is-busy { box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45), 0 0 0 3px rgba(var(--accent-rgb), 0.35); }
+.chat-bubble-dot {
+  position: absolute; top: 3px; right: 3px; width: 12px; height: 12px; border-radius: 50%;
+  background: var(--live); box-shadow: 0 0 0 2px var(--s1);
+}
+.chat-bubble-say {
+  position: absolute; max-width: min(260px, calc(100vw - 96px)); padding: 7px 11px; border-radius: var(--r-lg);
+  background: rgba(var(--s1-rgb), 0.9); color: var(--text); border: 1px solid rgba(var(--accent-rgb), 0.45);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); font: inherit; font-size: var(--fs-base); line-height: 1.35;
+  text-align: left; cursor: pointer; pointer-events: none; opacity: 0; transform: translateY(4px);
+  transition: opacity var(--dur-3) var(--ease), transform var(--dur-3) var(--ease);
+}
+.chat-bubble-say.is-on { opacity: 1; transform: none; pointer-events: auto; transition-duration: var(--dur-1); }
+.chat-bubble-close {
+  position: absolute; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%; display: grid; place-items: center;
+  color: var(--text); background: rgba(var(--s1-rgb), 0.75); border: 1px solid rgba(var(--accent-rgb), 0.3);
+  animation: fade var(--dur-1) var(--ease) both; transition: transform var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
+}
+.chat-bubble-close.is-over { transform: scale(1.25); background: rgba(var(--accent-rgb), 0.7); }
+
 /* Code written out in the thread: the card's header says so, and a small
    cursor with the agent's name rides the end of the line being typed. */
 @keyframes diff-pulse { 50% { opacity: .45; } }
@@ -9159,7 +9211,7 @@ header.top .badge.mode-pill.is-dot,
   content: ""; position: absolute; left: -10px; top: 0.62em;
   width: 4px; height: 4px; border-radius: 50%; background: currentColor; opacity: 0.5;
 }
-.vendor-steps li.is-now { color: var(--text-1); }
+.vendor-steps li.is-now { color: var(--text); }
 .vendor-steps li.is-now::before { opacity: 1; background: var(--accent, currentColor); }
 .vendor-files li {
   font-size: var(--fs-xs); color: var(--text-2); background: var(--s3);

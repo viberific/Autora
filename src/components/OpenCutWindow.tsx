@@ -4,7 +4,7 @@ import { useCollab } from "../lib/collab";
 import { TakeControl } from "./TakeControl";
 import { SaveButton } from "./SaveButton";
 import { LoadButton } from "./LoadButton";
-import { useFullscreen } from "../lib/fullscreen";
+import { useWindowFull } from "../lib/fullscreen";
 import { onVideoCommand, useVideoState, type VideoCommand } from "../lib/opencut";
 import { IconMaximize, IconMinimize, IconVideo } from "./Icons";
 
@@ -55,7 +55,7 @@ export function OpenCutWindow({ sessionId, phone }: { sessionId: string; phone: 
      after that: it moves between projects itself, and a new address would reload it in the middle of the agent's work. */
   const [opening] = useState(desk.projectId ?? null);
   const mine = useCollab().held.includes("video");
-  const [full, setFull] = useFullscreen();
+  const [full, setFull] = useWindowFull();
   const [trouble, setTrouble] = useState<string | null>(null);
 
   /** This window's frame has said it is up: until then a command sent to it would be lost, so it claims none. */

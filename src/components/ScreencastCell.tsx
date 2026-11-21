@@ -1,4 +1,4 @@
-import { useFullscreen } from "../lib/fullscreen";
+import { useWindowFull } from "../lib/fullscreen";
 import { holdSurface, useCollab } from "../lib/collab";
 import { usePhone } from "../lib/stage";
 import { TakeControl } from "./TakeControl";
@@ -89,7 +89,7 @@ export function ScreencastCell({
       either way the corner button overrides it. */
   const [bigChoice, setBigChoice] = useState<boolean | null>(null);
   const [localMax, setLocalMax] = useState(false);
-  const [sharedMax, setSharedMax] = useFullscreen();
+  const [sharedMax, setSharedMax] = useWindowFull();
   const onPhone = usePhone();
   const max = pinned ? sharedMax : localMax;
   const setMax = useCallback((v: boolean | ((m: boolean) => boolean)) => {

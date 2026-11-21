@@ -13,6 +13,7 @@ import {
 import { AppInspector } from "./AppInspector";
 import { AppReview } from "./AppReview";
 import { useWindowFull } from "../lib/fullscreen";
+import { useDecodedSrc } from "./Frame";
 import { IconAlert, IconArrowLeft, IconMaximize, IconMinimize, IconRotateCcw, IconX } from "./Icons";
 
 /**
@@ -55,6 +56,13 @@ const GLYPH = {
   select: "M12 3v4M12 17v4M3 12h4M17 12h4M12 12m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0",
   region: "M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3",
 };
+
+/** The page as a picture (the copy is not live: a canvas, a video, a page that changes too fast). Each picture is decoded
+    before it replaces the last, so the window never shows its white backdrop between two of them. */
+function AppPicture({ src, w, h }: { src: string; w: number; h: number }) {
+  const shown = useDecodedSrc(src);
+  return <img className="app-frame" alt="The app, live" draggable={false} src={shown} width={w} height={h} />;
+}
 
 function isLight(info: ElementInfo | LightInfo): info is LightInfo {
   return (info as LightInfo).label !== undefined;
@@ -719,8 +727,7 @@ export function AppPreview({ sessionId, phone }: { sessionId: string; phone: boo
           >
             {/* The copy is built under the picture and swapped in once it is drawn, so the switch has no blank moment. */}
             {!mirrorShown && (frame ? (
-              <img className="app-frame" alt="The app, live" draggable={false} decoding="async"
-                src={`data:${frame.mime};base64,${frame.data}`} width={box.w} height={box.h} />
+              <AppPicture src={`data:${frame.mime};base64,${frame.data}`} w={box.w} h={box.h} />
             ) : (
               <div className="app-loading"><span className="attach-spin" aria-hidden="true" /> Loading the preview…</div>
             ))}

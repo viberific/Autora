@@ -1055,29 +1055,32 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     return () => { el.removeEventListener("pointerdown", fold); window.clearTimeout(dockTimer.current); };
   }, [dockOpen]);
   const [, rerender] = useState(0);
-  const isMaxed = (id: string) => maxed.current.has(id) || Boolean(canvas.windows?.find((w) => w.id === id)?.was);
-  /* A window's own Full screen: the board's Maximise for it, and on a phone the conversation sheet drops to its strip
-     (the shared flag, which the chat view reads). Through a ref, so the frames' value stays put while the board pans. */
+  /* On a phone, a window made full screen leaves the board altogether: it takes the phone's whole screen (no header, no
+     board, no conversation sheet) and Autora waits in a bubble over it (components/ChatBubble.tsx). The board itself is
+     not changed, so leaving puts the window back exactly where it was. */
+  const [takeover, setTakeover] = useState<string | null>(null);
+  const isMaxed = (id: string) => takeover === id || maxed.current.has(id) || Boolean(canvas.windows?.find((w) => w.id === id)?.was);
+  /* A window's own Full screen: the board's Maximise for it on a desktop; on a phone, the takeover above, with the shared
+     flag set so the chat view becomes the bubble. Through a ref, so the frames' value stays put while the board pans. */
   const fullRef = useRef<(id: string, next: boolean) => void>(() => undefined);
   fullRef.current = (id, next) => {
-    const toggle = () => { if (next !== isMaxed(id)) { maximize(id, "engine"); rerender((n) => n + 1); } };
-    if (!phone) { toggle(); return; }
-    if (!next) { toggle(); setFullscreen(false); return; }
-    /* The sheet drops first and the board grows into the room it gives; the window is sized to that room once the board
-       has stopped growing (a few still frames, a second at most), not to the room it had a moment before. */
-    setFullscreen(true);
-    const el = root.current;
-    let last = -1, still = 0, frames = 0;
-    const settle = () => {
-      // The room above the sheet, not the board's own height: the sheet lies over the board and never resizes it.
-      const h = el ? Math.round(workViewport(el).height) : 0;
-      still = h === last ? still + 1 : 0;
-      last = h;
-      if (still >= 3 || ++frames > 60) toggle(); else requestAnimationFrame(settle);
-    };
-    requestAnimationFrame(settle);
+    if (!phone) { if (next !== isMaxed(id)) { maximize(id, "engine"); rerender((n) => n + 1); } return; }
+    if (next) { setTakeover(id); setFullscreen(true); return; }
+    // A window a desktop maximised on the board, shown now on a phone: Restore gives the board its box back too.
+    if (takeover !== id && isMaxed(id)) { maximize(id, "engine"); rerender((n) => n + 1); }
+    setTakeover(null);
+    setFullscreen(false);
   };
   const onWindowFull = useCallback((id: string, next: boolean) => fullRef.current(id, next), []);
+  /* The takeover ends with the shared flag (the bubble dragged onto its close target), with the window (closed), and with
+     the phone (the screen turned wide enough to be a desktop). */
+  useEffect(() => {
+    if (!takeover) return;
+    if (!phone || !windowFull || !hostedKey.split("|").includes(takeover)) {
+      setTakeover(null);
+      if (windowFull) setFullscreen(false);
+    }
+  }, [takeover, phone, windowFull, hostedKey]);
 
   const z = view.zoom;
 
@@ -1349,7 +1352,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
           const box = engineBoxes[work.id];
           if (!box) return null;
           const z = canvas.windows?.find((w) => w.id === work.id)?.z ?? 0;
-          return <section key={work.id} className={`pw-engine${enginePins.has(work.id) ? " is-pinned" : ""}${isMaxed(work.id) ? " is-max" : ""}${activeWin === work.id ? " is-active" : ""}`} data-engine={work.mode}
+          return <section key={work.id} className={`pw-engine${enginePins.has(work.id) ? " is-pinned" : ""}${isMaxed(work.id) ? " is-max" : ""}${takeover === work.id ? " is-takeover" : ""}${activeWin === work.id ? " is-active" : ""}`} data-engine={work.mode}
             data-link={!link || link.from === work.id ? undefined : link.over === work.id ? "over" : linkTakes?.has(work.mode) ? "takes" : "no"}
             data-join={!joinDrag ? undefined : joinDrag.from === work.id ? (joinDrag.over ? "dragging" : undefined)
               : !canJoin(joinDrag.from, work.id) ? undefined : joinDrag.over === work.id ? (joinDrag.armed ? "armed" : "near") : "takes"}
@@ -1365,10 +1368,10 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
               <button type="button" aria-label={isMaxed(work.id) ? `Restore ${work.title}` : `Maximise ${work.title}`} aria-pressed={isMaxed(work.id)}
                 title={isMaxed(work.id) ? "Restore" : "Maximise"}
                 onClick={() => { onWindowFull(work.id, !isMaxed(work.id)); onJumpWork?.(work.mode); }}>{isMaxed(work.id) ? <IconMinimize size={14} /> : <IconMaximize size={14} />}</button>
-              <button type="button" aria-pressed={enginePins.has(work.id)} aria-label={`${enginePins.has(work.id) ? "Unpin" : "Pin"} ${work.title} work`}
+              {takeover !== work.id && <button type="button" aria-pressed={enginePins.has(work.id)} aria-label={`${enginePins.has(work.id) ? "Unpin" : "Pin"} ${work.title} work`}
                 title={enginePins.has(work.id) ? "Unpin" : "Pin"} onClick={() => setEnginePins((before) => {
                 const next = new Set(before); if (next.has(work.id)) next.delete(work.id); else next.add(work.id); return next;
-              })}>{enginePins.has(work.id) ? "Unpin" : "Pin"}</button>
+              })}>{enginePins.has(work.id) ? "Unpin" : "Pin"}</button>}
               {onCloseWork && <button type="button" aria-label={`Close ${work.title} work`}
                 onClick={() => { void sure(`Close ${work.title}?`, "Close").then((yes) => { if (yes) onCloseWork(work.mode); }); }}><IconX size={14} /></button>}
             </header>
