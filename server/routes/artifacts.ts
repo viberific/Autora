@@ -116,6 +116,23 @@ export function artifactRoutes(app: Express, deps: {
       `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(meta.name)}`,
     );
     res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
+    res.setHeader("Accept-Ranges", "bytes");
+    /* A video or sound in the chat is played from here: the player asks for pieces to seek, and a file that refused
+       them could only be played from the start. One range is enough for every player. */
+    const range = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range ?? "").trim());
+    if (range && (range[1] || range[2])) {
+      const size = data.byteLength;
+      const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
+      const end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
+      if (start >= size || start > end) {
+        res.setHeader("Content-Range", `bytes */${size}`);
+        return res.status(416).end();
+      }
+      res.status(206);
+      res.setHeader("Content-Range", `bytes ${start}-${end}/${size}`);
+      res.setHeader("Content-Length", String(end - start + 1));
+      return res.end(data.subarray(start, end + 1));
+    }
     res.setHeader("Content-Length", String(data.byteLength));
     res.end(data);
   });

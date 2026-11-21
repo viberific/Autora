@@ -2,7 +2,7 @@ import { Suspense, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import type { Bucket, Cell, MemoryTouch, SpanState } from "../lib/derive";
 import { turnItems } from "../lib/steps";
 import { isPicture, sizeLabel, type Attachment } from "../lib/attachments";
-import { IconAlert, IconArrow, IconArrowDown, IconBrain, IconCheck, IconChevron, IconCopy, IconDownload, IconFile, IconNotebook, IconSpeaker, IconSpeakerOff, IconTerminal, IconThumbDown, IconThumbUp, IconTrash, IconUser, IconWrench } from "./Icons";
+import { IconAlert, IconArrow, IconArrowDown, IconBrain, IconCheck, IconChevron, IconCopy, IconDownload, IconFile, IconMusic, IconNotebook, IconSpeaker, IconSpeakerOff, IconTerminal, IconThumbDown, IconThumbUp, IconTrash, IconUser, IconVideo, IconWrench } from "./Icons";
 import { OPEN_NOTEBOOK } from "../lib/notebooks";
 import { copyText } from "../lib/clipboard";
 import { sameReply } from "../lib/voice";
@@ -718,6 +718,45 @@ const FilesCell = memo(function FilesCell({ files }: { files: Attachment[] }) {
 });
 
 /**
+ * A video or a sound the agent handed over -- one it fetched from the web, or a film or song it made -- with its player
+ * right in the reply. Like a picture, it is the answer, not a step: never folded away, never behind a link to click.
+ */
+const MediaCell = memo(function MediaCell({ files }: { files: Attachment[] }) {
+  if (files.length === 0) return null;
+  const video = files.every((f) => f.mime.startsWith("video/"));
+  return (
+    <section className="cell media-card">
+      <header className="cell-top">
+        {video ? <IconVideo size={13} /> : <IconMusic size={13} />}
+        <span className="shot-where">{files.length === 1 ? files[0].name : `${files.length} ${video ? "videos" : "files"}`}</span>
+      </header>
+      <div className="media-list">
+        {files.map((file) => (
+          <figure className="media-item" key={file.id}>
+            {file.mime.startsWith("video/")
+              ? <video src={`/api/artifacts/${file.id}`} controls preload="metadata" playsInline />
+              : <audio src={`/api/artifacts/${file.id}`} controls preload="metadata" />}
+            <figcaption>
+              <span className="out-file-name">{file.name}</span>
+              {file.size > 0 && <span className="out-file-size">{sizeLabel(file.size)}</span>}
+              <a
+                className="media-save"
+                href={`/api/artifacts/${file.id}?download`}
+                download={file.name}
+                title={`Download ${file.name}`}
+                aria-label={`Download ${file.name}`}
+              >
+                <IconDownload size={13} />
+              </a>
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+    </section>
+  );
+});
+
+/**
  * The agent looking at something or doing something: a command, a page, a picture, a file it made, a change to code,
  * a widget, any other tool. On a desktop these are shown in the work area beside the conversation (WorkFeed).
  */
@@ -895,6 +934,7 @@ const stepLine = (cell: Cell) =>
     : cell.kind === "file" ? cell.file.path
     : cell.kind === "files" ? `${cell.files.length} files`
     : cell.kind === "images" ? `${cell.pictures.length} images`
+    : cell.kind === "media" ? `${cell.files.length} media`
     : cell.kind === "widget" ? cell.widget.title
     : cell.kind === "app" ? "App preview"
     : cell.kind === "chime" ? cell.name : cell.kind;
@@ -1250,6 +1290,8 @@ const CellView = memo(function CellView({
       return <ImageCell sessionId={sessionId} pictures={cell.pictures} />;
     case "files":
       return <FilesCell files={cell.files} />;
+    case "media":
+      return <MediaCell files={cell.files} />;
     case "widget":
       if (held) {
         return (

@@ -352,6 +352,12 @@ async function main() {
       const raw = await fetch(`${app.base}/api/artifacts/${found.id}`);
       assert.equal(raw.status, 200);
       assert.match(await raw.text(), /remember the milk/);
+      // A player seeks by asking for a piece: "remember the milk" from byte 9 is "the milk".
+      const piece = await fetch(`${app.base}/api/artifacts/${found.id}`, { headers: { Range: "bytes=9-" } });
+      assert.equal(piece.status, 206);
+      assert.equal(piece.headers.get("content-range"), "bytes 9-16/17");
+      assert.equal(await piece.text(), "the milk");
+      assert.equal((await fetch(`${app.base}/api/artifacts/${found.id}`, { headers: { Range: "bytes=99-" } })).status, 416);
       app.decide = null;
     });
     await test("an HTTP request goes out, and a saved sign-in only goes to the site it belongs to", async () => {

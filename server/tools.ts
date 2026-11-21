@@ -75,7 +75,7 @@ import { officeHooks } from "./officedesk";
 import { runPdfTool } from "./pdf";
 import { runVideoTool } from "./opencut";
 import { loadSong, runStudioTool, studioBriefing, studioState } from "./studio";
-import { imageSize, loadIntoPanacea, panaceaBriefing, runPanaceaTool } from "./panacea";
+import { imageSize, loadIntoPanacea, panaceaBriefing, panaceaHasWork, runPanaceaTool } from "./panacea";
 import { PANACEA_ENGINE_FORMATS, panaceaFileRoute, type PanaceaFileRoute } from "./panacea-formats";
 import { readFileRef } from "./fileref";
 import {
@@ -551,8 +551,8 @@ export function renderCall(spec: ToolSpec, args: Record<string, any>): string {
       return `search web for "${args.query}"`;
     case "image_generate":
       return `generate image: "${args.prompt}"`;
-    case "image_show":
-      return `show the picture at ${args.url}`;
+    case "media_show":
+      return `show the media at ${args.url}`;
     case "artifact_save":
       return `save artifact ${args.name}${args.notebook ? ` into notebook "${args.notebook}"` : ""}`;
     case "notebook":
@@ -1147,60 +1147,138 @@ function pictureMime(b: Buffer): string | null {
 const IMAGE_SHOW_LIMIT_BYTES = 12 * 1024 * 1024;
 
 /**
- * Fetch a picture from the web and put it in the conversation.
- *
- * A plain GET with nothing of the person's in it (no saved sign-ins, no
- * placeholders): a picture on the open web needs none, and a request that
- * carried them would be one more place for them to leak.
+ * What kind of sound or film these bytes are, from their first few; null for anything else. Read from the bytes for the
+ * same reason as pictureMime: what a server calls a file is not what it is.
  */
-async function runImageShow(
-  args: { url?: unknown; caption?: unknown },
+function avMime(b: Buffer): { mime: string; ext: string } | null {
+  if (b.length < 12) return null;
+  const at = (start: number, end: number) => b.toString("latin1", start, end);
+  if (at(4, 8) === "ftyp") {
+    const brand = at(8, 12);
+    if (/^M4[AB] /.test(brand)) return { mime: "audio/mp4", ext: "m4a" };
+    if (brand === "qt  ") return { mime: "video/quicktime", ext: "mov" };
+    return { mime: "video/mp4", ext: "mp4" };
+  }
+  if (b.readUInt32BE(0) === 0x1a45dfa3) {
+    return b.subarray(0, 64).includes("webm") ? { mime: "video/webm", ext: "webm" } : { mime: "video/x-matroska", ext: "mkv" };
+  }
+  if (at(0, 4) === "RIFF" && at(8, 12) === "WAVE") return { mime: "audio/wav", ext: "wav" };
+  if (at(0, 4) === "OggS") return { mime: "audio/ogg", ext: "ogg" };
+  if (at(0, 4) === "fLaC") return { mime: "audio/flac", ext: "flac" };
+  if (at(0, 3) === "ID3" || (b[0] === 0xff && (b[1] & 0xe0) === 0xe0 && (b[1] & 0x06) !== 0)) return { mime: "audio/mpeg", ext: "mp3" };
+  if (b[0] === 0xff && (b[1] & 0xf6) === 0xf0) return { mime: "audio/aac", ext: "aac" };
+  return null;
+}
+
+const PICTURE_EXT: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp" };
+
+/** A file name for what came from `url`: its own name where it has one, with the extension its bytes call for. */
+function mediaName(url: string, caption: string | null, ext: string): string {
+  let base = "";
+  try { base = decodeURIComponent(new URL(url).pathname.split("/").pop() ?? ""); } catch { /* a name from the caption, then */ }
+  base = base.replace(/\.[A-Za-z0-9]{1,5}$/, "").replace(/[^\w.\- ]+/g, " ").trim();
+  if (!base && caption) base = caption.replace(/[^\w.\- ]+/g, " ").trim();
+  return `${(base || "media").slice(0, 80)}.${ext}`;
+}
+
+/**
+ * Fetch a picture, a film or a sound from the web and hand it to the person.
+ *
+ * Where it goes follows what they are doing: in a chat it is a card in the reply itself, never folded into the steps;
+ * while a project is being worked on the Panacea canvas it goes on that canvas instead (`to` overrides either way).
+ * A plain GET with nothing of the person's in it (no saved sign-ins, no placeholders): media on the open web needs none,
+ * and a request that carried them would be one more place for them to leak.
+ */
+async function runMediaShow(
+  args: { url?: unknown; caption?: unknown; to?: unknown },
   ctx: ToolContext,
 ): Promise<ToolOutcome> {
   const url = String(args.url ?? "").trim();
   if (!/^https?:\/\//i.test(url)) {
-    return { ok: false, summary: "image_show needs a full http:// or https:// address of a picture." };
+    return { ok: false, summary: "media_show needs a full http:// or https:// address of the picture, video or sound file." };
   }
   const caption = String(args.caption ?? "").trim() || null;
+  const asked = String(args.to ?? "").trim();
+  if (asked && asked !== "chat" && asked !== "board") return { ok: false, summary: 'media_show: `to` is "chat" or "board".' };
+  const board = asked ? asked === "board" : !ctx.memory?.incognito && panaceaHasWork(ctx.session);
+  const limit = MAX_ARTIFACT_BYTES;
+  const tooBig = (what: string, cap: number) => `media_show: that ${what} is too big to fetch (over ${cap / 1024 / 1024} MB).`;
   try {
     const res = await fetch(url, {
-      headers: { "User-Agent": "Autora/1.0", Accept: "image/*,*/*;q=0.5" },
+      headers: { "User-Agent": "Autora/1.0", Accept: "image/*,video/*,audio/*,*/*;q=0.5" },
       redirect: "follow",
-      signal: requestSignal(ctx, REQUEST_TIMEOUT_MS),
+      signal: requestSignal(ctx, MEDIA_TIMEOUT_MS),
     });
     if (!res.ok) {
       await res.body?.cancel().catch(() => undefined);
-      return { ok: false, summary: redactForModel(`image_show: ${url} answered HTTP ${res.status} ${res.statusText}.`) };
+      return { ok: false, summary: redactForModel(`media_show: ${url} answered HTTP ${res.status} ${res.statusText}.`) };
     }
-    const tooBig = `image_show: that picture is too big to show (over ${IMAGE_SHOW_LIMIT_BYTES / 1024 / 1024} MB).`;
-    if (Number(res.headers.get("content-length")) > IMAGE_SHOW_LIMIT_BYTES) {
+    if (Number(res.headers.get("content-length")) > limit) {
       await res.body?.cancel().catch(() => undefined);
-      return { ok: false, summary: tooBig };
+      return { ok: false, summary: tooBig("file", limit) };
     }
-    const { data, truncated } = await readBytes(res, IMAGE_SHOW_LIMIT_BYTES);
-    if (truncated) return { ok: false, summary: tooBig };
-    const mime = pictureMime(data);
-    if (!mime) {
+    const { data, truncated } = await readBytes(res, limit);
+    if (truncated) return { ok: false, summary: tooBig("file", limit) };
+    const picture = pictureMime(data);
+    const av = picture ? null : avMime(data);
+    if (!picture && !av) {
       const type = res.headers.get("content-type") || "unknown type";
       return {
         ok: false,
         summary: redactForModel(
-          `image_show: ${url} is not a picture it can show (${type}; PNG, JPEG, GIF and WebP only). ` +
-          "If it is a page, read it with http_request or browser_open and look for the picture's own address.",
+          `media_show: ${url} is not a picture, video or sound it can show (${type}; PNG, JPEG, GIF, WebP, MP4, MOV, WebM, ` +
+          "MP3, M4A, WAV, OGG, FLAC and AAC only). If it is a page, read it with http_request or browser_read and look for " +
+          "the file's own address; a streaming site's page (YouTube and the like) has none to fetch, so give the person the link.",
         ),
       };
     }
-    const blob = ctx.putBlob(data, mime);
-    const size = imageSize(data);
-    const alt = caption ?? (new URL(res.url || url).pathname.split("/").pop() || "image");
-    ctx.showImage(blob, alt, caption, size ?? undefined);
+    if (picture && data.length > IMAGE_SHOW_LIMIT_BYTES && !board) return { ok: false, summary: tooBig("picture", IMAGE_SHOW_LIMIT_BYTES) };
+    const mime = picture ?? av!.mime;
+    const what = picture ? "picture" : mime.startsWith("audio/") ? "sound" : "video";
+    const from = redactForModel(url);
+    const kb = `${mime.split("/")[1]}, ${Math.round(data.length / 1024)} KB`;
+
+    if (board) {
+      const art = saveArtifact({
+        origin: "agent", name: mediaName(res.url || url, caption, picture ? PICTURE_EXT[picture]! : av!.ext), data, mime,
+        session: ctx.session, note: caption ?? `From ${from}`,
+      });
+      const surface = findTool("panacea_surface");
+      const placed = surface ? await runTool(surface, { file: art.id, ...(caption ? { title: caption } : {}) }, ctx) : null;
+      if (placed?.ok) {
+        return {
+          ok: true,
+          summary: `Put the ${what} from ${from} on the Panacea canvas, where the project is (${kb}; artifact ${art.id}). ${placed.summary}`,
+          preview: `${what} on the canvas: ${art.name.slice(0, 80)}`,
+        };
+      }
+      if (asked === "board") return { ok: false, summary: `media_show: saved as artifact ${art.id}, but it could not go on the canvas: ${placed?.summary ?? "Panacea is not available."}` };
+      // The canvas would not take it: the person still gets it, in the reply.
+    }
+
+    if (picture) {
+      const blob = ctx.putBlob(data, mime);
+      const size = imageSize(data);
+      const alt = caption ?? (new URL(res.url || url).pathname.split("/").pop() || "image");
+      ctx.showImage(blob, alt, caption, size ?? undefined);
+      return {
+        ok: true,
+        summary: `Showed the picture from ${from} in your reply for the person to see (${kb}).`,
+        preview: `image: ${alt.slice(0, 80)}`,
+      };
+    }
+    const art = saveArtifact({
+      origin: "agent", name: mediaName(res.url || url, caption, av!.ext), data, mime,
+      session: ctx.session, note: caption ?? `From ${from}`,
+    });
+    ctx.showFile?.({ id: art.id, name: art.name, mime: art.mime, size: art.size });
     return {
       ok: true,
-      summary: `Showed the picture from ${redactForModel(url)} in the conversation for the person to see (${mime.slice(6)}, ${Math.round(data.length / 1024)} KB).`,
-      preview: `image: ${alt.slice(0, 80)}`,
+      summary: `Showed the ${what} from ${from} in your reply, with a player, for the person to play (${kb}; artifact ${art.id}).`,
+      preview: `${what}: ${art.name.slice(0, 80)}`,
     };
   } catch (err: any) {
-    return { ok: false, summary: `image_show failed: ${redactForModel(fetchFailure(err, REQUEST_TIMEOUT_MS))}` };
+    return { ok: false, summary: `media_show failed: ${redactForModel(fetchFailure(err, MEDIA_TIMEOUT_MS))}` };
   }
 }
 
@@ -1222,6 +1300,8 @@ export function isGitHubApi(url: string): boolean {
 
 const SEARCH_TIMEOUT_MS = 20_000;
 const REQUEST_TIMEOUT_MS = 60_000;
+/** A film is bigger than a page: room to fetch one, still cut off if the host stalls. */
+const MEDIA_TIMEOUT_MS = 180_000;
 /** More than any page or API answer the model can read; the rest is not fetched. */
 const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
 
@@ -3416,8 +3496,8 @@ async function runToolUnredacted(
         };
       }
 
-      case "image_show":
-        return await runImageShow({ url: args.url, caption: args.caption }, ctx);
+      case "media_show":
+        return await runMediaShow({ url: args.url, caption: args.caption, to: args.to }, ctx);
 
       case "image_generate": {
         const prompt = String(args.prompt ?? "").trim();

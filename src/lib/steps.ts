@@ -10,8 +10,8 @@ import type { Cell } from "./derive";
 /** The kinds that fold together: commands, and the smaller things the agent
     reached for. Everything else -- a page, a diff, a question, an answer --
     stays where it happened, so the shape of the turn still reads: you can
-    see it was asked, worked, and answered, in that order. A picture the agent
-    hands over is one of those: it is the answer, so it never folds. */
+    see it was asked, worked, and answered, in that order. A picture, video or
+    sound the agent hands over is one of those: it is the answer, so it never folds. */
 export const STEP_KINDS = new Set(["terminal", "tool", "screen", "file", "files", "widget", "app", "memory", "learned", "chime"]);
 
 /** A card is known by its kind and where it sits in the stream -- the same

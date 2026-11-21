@@ -441,18 +441,21 @@ export const browserSPECS: ToolSpec[] = [
     risky: true,
   },
   {
-    name: "image_show",
+    name: "media_show",
     group: "browser",
     description:
-      "Show a picture from the web in the conversation: give the address of the image file itself (PNG, JPEG, GIF or " +
-      "WebP) and it appears as a card the person can open full size. Use it whenever the person asks you to find, fetch " +
-      "or show an image; do not paste the address in a sentence instead. For a page that merely has pictures on it, find " +
-      "the picture's own address first (http_request, browser_read).",
+      "Hand the person a picture, video or sound from the web: give the address of the file itself (PNG, JPEG, GIF, WebP; MP4, " +
+      "MOV, WebM; MP3, M4A, WAV, OGG, FLAC) and it appears in your reply as a card they can open or play. Use it whenever the " +
+      "person asks you to find, fetch, get or show one; looking at it in the browser, downloading it in the terminal or pasting " +
+      "its address in a sentence does not give it to them. For a page that merely has one on it, find the file's own address " +
+      "first (http_request, browser_read). While a project is being worked on the Panacea canvas it goes on the canvas instead, " +
+      "by itself; `to` overrides that.",
     parameters: {
       type: "object",
       properties: {
-        url: { type: "string", description: "Full http:// or https:// address of the image file." },
-        caption: { type: "string", description: "Optional short caption shown under the picture." },
+        url: { type: "string", description: "Full http:// or https:// address of the picture, video or sound file." },
+        caption: { type: "string", description: "Optional short caption shown with it." },
+        to: { type: "string", enum: ["chat", "board"], description: "Where it goes: chat (the reply) or board (the Panacea canvas). Leave it out to follow the work: the canvas while a project is on it, else the chat." },
       },
       required: ["url"],
     },

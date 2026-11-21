@@ -179,7 +179,7 @@ function doing(name: string, args: Record<string, any>): string {
     case "http_request": return args.url ? `Fetching ${host(args.url)}` : "Fetching a page";
     case "web_search": return `Searching the web for${quoted(args.query)}`;
     case "image_generate": return "Drawing an image";
-    case "image_show": return args.url ? `Fetching an image from ${host(args.url)}` : "Fetching an image";
+    case "media_show": return args.url ? `Fetching media from ${host(args.url)}` : "Fetching media";
     case "widget_show": return args.title ? `Building “${brief(args.title, 6)}”` : "Building an explainer";
     case "ask_user": return "Waiting for your answer";
     case "speak": return "Speaking";
@@ -262,7 +262,8 @@ function looked(name: string, args: Record<string, any>): string {
   if (name.startsWith("studio_")) return "the song";
   if (name.startsWith("panacea_")) return "the canvas";
   if (name === "ask_user") return "your answer";
-  if (name === "image_generate" || name === "image_show") return "the image";
+  if (name === "image_generate") return "the image";
+  if (name === "media_show") return "the media";
   if (name === "speak") return "what to say next";
   if (name.startsWith("browser_")) return "the page";
   if (name.startsWith("computer_")) return "the desktop";
