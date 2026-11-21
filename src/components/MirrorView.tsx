@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { mirrorTraffic, subscribeMirror } from "../lib/liveMirror";
+import { mirrorTraffic, subscribeMirror, type MirrorChannel } from "../lib/liveMirror";
 import { MirrorDom, type MirrorRegion, type MirrorSnapshot } from "../lib/mirrorDom";
 import { NAMED_KEYS } from "../lib/pageInput";
 
@@ -33,9 +33,11 @@ const ECHO_KEYS = new Set(["Backspace", "Delete", "ArrowLeft", "ArrowRight", "Ho
  * and the stage's own handlers treat it like the picture (a phone in the thread, where a finger scrolls the chat).
  */
 export function MirrorView({
-  sessionId, local, usable, driving, readout, hidden, send, onReady, onUnhealthy, children,
+  sessionId, channel = "browser", local, usable, driving, readout, hidden, send, onReady, onUnhealthy, children,
 }: {
   sessionId: string;
+  /** Whose page: the live browser's (the default), or the app window's, which has its own Chromium and its own routes. */
+  channel?: MirrorChannel;
   local: boolean;
   usable: boolean;
   driving: boolean;
@@ -86,7 +88,7 @@ export function MirrorView({
   useEffect(() => {
     if (!doc) return;
     const own = live.current;
-    const dom = new MirrorDom(doc, `/api/sessions/${encodeURIComponent(sessionId)}/browser/mirror/r/`, {
+    const dom = new MirrorDom(doc, `/api/sessions/${encodeURIComponent(sessionId)}/${channel === "preview" ? "preview" : "browser"}/mirror/r/`, {
       holdValue: (el) => el === doc.activeElement && Date.now() - localAt.current.typed < 1500,
       holdScroll: (id) => Date.now() - (localAt.current.scrolled.get(id) ?? 0) < 400,
       onFocus: (el) => { if (doc.hasFocus() && el !== doc.activeElement) (el as HTMLElement).focus?.({ preventScroll: true }); },
@@ -146,14 +148,14 @@ export function MirrorView({
         if (st.clickAt) { st.latency = [...st.latency.slice(-19), Date.now() - st.clickAt]; st.clickAt = 0; }
         if (!dom.apply(msg.m) && Date.now() - resyncAt > 2000) {
           resyncAt = Date.now();
-          void fetch(`/api/sessions/${sessionId}/browser/mirror/resync`, { method: "POST" }).catch(() => undefined);
+          void fetch(`/api/sessions/${sessionId}/browser/mirror/resync${channel === "preview" ? "?target=preview" : ""}`, { method: "POST" }).catch(() => undefined);
         }
       } else if (msg.op === "region") {
         void dom.region(msg as unknown as MirrorRegion, decode);
       }
-    });
+    }, channel);
     return () => { off(); window.clearTimeout(checkTimer); if (domRef.current === dom) domRef.current = null; };
-  }, [doc, sessionId]);
+  }, [doc, sessionId, channel]);
 
   // The person's input on the copy, sent to the real page.
   useEffect(() => {

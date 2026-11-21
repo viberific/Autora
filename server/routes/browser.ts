@@ -137,12 +137,25 @@ export function browserRoutes(app: Express, deps: {
     res.end(found.body);
   });
 
+  // The same for the app window's copy: its own browser, so its own tokens.
+  app.get("/api/sessions/:id/preview/mirror/r/:token", async (req: Request, res: Response) => {
+    const live = previews.get(req.params.id)?.live;
+    if (!sessions.has(req.params.id) || !live) return res.status(404).end();
+    const found = await live.mirrorResource(String(req.params.token)).catch(() => null);
+    for (const [k, v] of Object.entries(RESOURCE_HEADERS)) res.setHeader(k, v);
+    if (!found) return res.status(404).end();
+    res.setHeader("Content-Type", found.type);
+    res.end(found.body);
+  });
+
   // Which view a window shows the live page in: the mirror, or pictures. Said when it opens and every 15 seconds.
   app.post("/api/sessions/:id/browser/view", async (req: Request, res: Response) => {
     const session = sessions.get(req.params.id);
     if (!session) return res.status(404).json({ error: "Session not found" });
     const viewer = String(req.body?.viewer ?? "").replace(/[^\w-]/g, "").slice(0, 64);
-    const live = browserFor(session);
+    // `?target=preview`: the app window's own browser, which is only there while the window is open.
+    const live = isPreview(req) ? previews.get(session.id)?.live : browserFor(session);
+    if (!live) return res.status(404).json({ error: "No page is open." });
     if (req.body?.mode === "none") { await live.dropView(viewer); return res.json({ ok: true }); }
     const mode = req.body?.mode === "mirror" ? "mirror" : "picture";
     // A window that saw the mirror's layout come out wrong: this page is shown as pictures.
@@ -152,7 +165,7 @@ export function browserRoutes(app: Express, deps: {
   });
 
   app.post("/api/sessions/:id/browser/mirror/resync", async (req: Request, res: Response) => {
-    const live = browsers.get(req.params.id);
+    const live = isPreview(req) ? previews.get(req.params.id)?.live : browsers.get(req.params.id);
     if (!sessions.has(req.params.id) || !live) return res.status(404).json({ error: "Session not found" });
     await live.mirrorResnapshot();
     res.json({ ok: true });
@@ -162,10 +175,10 @@ export function browserRoutes(app: Express, deps: {
   app.post("/api/sessions/:id/browser/mirror/scroll", async (req: Request, res: Response) => {
     const session = sessions.get(req.params.id);
     if (!session) return res.status(404).json({ error: "Session not found" });
-    if (agentDriving(session)) return res.status(409).json({ error: DRIVING });
-    const live = browsers.get(session.id);
+    if (!isPreview(req) && agentDriving(session)) return res.status(409).json({ error: DRIVING });
+    const live = targetBrowser(session, req);
     if (!live?.status().open) return res.status(400).json({ error: "No page is open." });
-    touchPresence(session.id, "browser", "*", "scroll", "scrolled the page", { tell: false });
+    touchPresence(session.id, isPreview(req) ? "app" : "browser", "*", "scroll", "scrolled the page", { tell: false });
     const ok = await live.mirrorScroll(Number(req.body?.node) || 0, Number(req.body?.x) || 0, Number(req.body?.y) || 0);
     res.json({ ok });
   });
@@ -174,8 +187,8 @@ export function browserRoutes(app: Express, deps: {
   app.post("/api/sessions/:id/browser/hover", async (req: Request, res: Response) => {
     const session = sessions.get(req.params.id);
     if (!session) return res.status(404).json({ error: "Session not found" });
-    if (agentDriving(session)) return res.status(409).json({ error: DRIVING });
-    const live = browsers.get(session.id);
+    if (!isPreview(req) && agentDriving(session)) return res.status(409).json({ error: DRIVING });
+    const live = targetBrowser(session, req);
     if (!live?.status().open) return res.status(400).json({ error: "No page is open." });
     await live.userHover(Number(req.body?.x) || 0, Number(req.body?.y) || 0);
     res.json({ ok: true });

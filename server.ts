@@ -1042,6 +1042,14 @@ function previewRunFor(session: Session, device: Device): PreviewRun {
       run.title = title;
       if (current()) broadcastPreview(session);
     },
+    /* The window's live copy of the page (server/mirror.ts), the same as the browser's and for the same reason: pictures
+       made scrolling and touch wait on a round trip to this machine and back. Tagged so the page keeps it apart from the
+       browser's copy; ephemeral like a frame, never in the log. */
+    onMirror: (message) => {
+      const raw = JSON.stringify({ type: "mirror", session: session.id, source: "preview", ...message });
+      sendEphemeralRaw(session.id, message.op === "region" ? raw : redactForPerson(raw));
+    },
+    mirrorPrefix: `/api/sessions/${encodeURIComponent(session.id)}/preview/mirror/r/`,
     // Where the page's fields are, so a phone can raise its keyboard inside the tap.
     onFields: () => { if (current()) broadcastPreview(session); },
     onConsole: () => {

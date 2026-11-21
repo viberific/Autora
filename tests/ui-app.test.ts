@@ -41,7 +41,7 @@ async function main() {
     page.on("pageerror", (e) => errors.push(e.message));
     page.on("console", (m) => { if (m.type() === "error" && !/WebSocket|Failed to load resource|net::ERR/.test(m.text())) errors.push(m.text()); });
     await page.goto(`${app.base}/?session=${s}`);
-    await page.waitForSelector(".app-frame", { timeout: 20_000 });
+    await page.waitForSelector(".app-screen .app-frame, .app-screen .mirror-frame", { timeout: 20_000 });
     await sleep(800);
 
     /** Where a point of the page is on screen. */
@@ -66,7 +66,13 @@ async function main() {
       assert.ok(canvas!.x >= area!.x - 1 && canvas!.x + canvas!.width <= area!.x + area!.width + 1, "inside it, side to side");
       assert.ok(canvas!.y >= area!.y - 1 && canvas!.y + canvas!.height <= area!.y + area!.height + 1, "and top to bottom");
       assert.match(await page.locator(".app-url").innerText(), /localhost:\d+/);
-      assert.ok(await page.locator(".app-frame").evaluate((i: any) => i.naturalWidth > 100), "video is arriving");
+      /* The page is drawn from its DOM (the live copy), not streamed as pictures: it is there, with the page's own text. */
+      await page.waitForSelector(".app-screen .mirror-frame", { timeout: 20_000 });
+      await page.waitForFunction(() => {
+        const f = document.querySelector(".app-screen .mirror-frame") as HTMLIFrameElement | null;
+        return (f?.contentDocument?.body?.innerText ?? "").trim().length > 20;
+      }, null, { timeout: 20_000 });
+      assert.equal(await page.locator(".app-screen .app-frame").count(), 0, "no picture stream under the copy");
     });
     await test("the message box stays usable beside it: the mode is a pill, and nothing overlaps", async () => {
       assert.equal(await page.locator(".mode-seg").count(), 0);
@@ -217,7 +223,11 @@ async function main() {
       await page.waitForFunction(() => { const c = document.querySelector(".app-canvas") as HTMLElement | null; return !!c && c.offsetWidth < c.offsetHeight; }, null, { timeout: 8000 });
       assert.deepEqual((await api("GET", "")).body.viewport, { width: 390, height: 844 });
       await sleep(800);
-      assert.ok(await page.locator(".app-frame").evaluate((i: any) => i.naturalWidth > 0));
+      // The copy is laid out at the phone's width: its frame is 390 wide and holds the page.
+      await page.waitForFunction(() => {
+        const f = document.querySelector(".app-screen .mirror-frame") as HTMLIFrameElement | null;
+        return !!f && parseFloat(f.style.width) === 390 && (f.contentDocument?.body?.innerText ?? "").trim().length > 20;
+      }, null, { timeout: 15_000 });
       await page.locator('.app-seg button[title="Desktop size"]').click();
       await page.waitForFunction(() => { const c = document.querySelector(".app-canvas") as HTMLElement | null; return !!c && c.offsetWidth > c.offsetHeight; }, null, { timeout: 8000 });
     });
@@ -239,7 +249,7 @@ async function main() {
     const p: Page = await phone.newPage();
     p.on("pageerror", (e) => errors.push(e.message));
     await p.goto(`${app.base}/?session=${s}`);
-    await p.waitForSelector(".app-frame", { timeout: 20_000 });
+    await p.waitForSelector(".app-screen .app-frame, .app-screen .mirror-frame", { timeout: 20_000 });
     await sleep(800);
     await test("the app is a tab in the pinned view, inside the screen, with thumb-sized tools", async () => {
       assert.equal(await p.getByRole("separator", { name: "Resize the conversation" }).count(), 0, "there is no left chat allocation");

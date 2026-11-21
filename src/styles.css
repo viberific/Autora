@@ -6807,6 +6807,11 @@ button.app-url:hover { border-color: var(--border-strong); color: var(--text); }
 .app-screen.is-inspect { cursor: crosshair; }
 .app-screen.is-region { cursor: crosshair; }
 .app-frame { display: block; width: 100%; height: 100%; object-fit: fill; pointer-events: none; }
+/* The live copy fills the device's screen, which already has its own edge and shadow. */
+.app-screen .mirror-wrap { width: 100%; height: 100%; max-width: none; max-height: none; }
+.app-screen .mirror-spacer { width: 100%; height: 100%; max-width: none; max-height: none; box-shadow: none; border-radius: 0; object-fit: fill; }
+.app-screen .mirror-layer { box-shadow: none; border-radius: 0; background: #fff; }
+.app-screen .mirror-frame { background: #fff; }
 .app-loading {
   position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 10px;
   background: var(--s1); color: var(--text-3); font-size: var(--fs-sm);

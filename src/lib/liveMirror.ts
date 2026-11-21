@@ -6,20 +6,32 @@ import type { MirrorRegion, MirrorSnapshot } from "./mirrorDom";
  * frame (lib/liveFrame.ts): a busy page sends dozens of batches a second, and only the window drawing the copy
  * listens to them. A window that mounts late starts from the last snapshot and the batches since.
  *
- * Which view the person wants (the mirror, or pictures) is theirs, kept per browser: the mirror is a preview until
- * it meets the targets in intent/2026-11-19-new-web-browser-architecture.md (R7), so pictures stay the default.
+ * Which view the person wants (the mirror, or pictures) is theirs for the live browser, kept per browser: the mirror is
+ * a preview there until it meets the targets in intent/2026-11-19-new-web-browser-architecture.md (R7), so pictures stay
+ * the default. The app window's page (the Creator) always tries the copy and falls back to pictures by itself, and has
+ * its own channel: two pages, two streams.
  */
 
 type Msg = Record<string, any> & { op: string };
 type MirrorState = { status: "off" | "starting" | "live" | "fallback"; reason: string | null; url: string };
 
-let session: string | null = null;
-let status: MirrorState | null = null;
-let snapshot: MirrorSnapshot | null = null;
-let batches: Msg[] = [];
-let regions = new Map<number, MirrorRegion>();
+/** Whose page the copy is: the live browser's, or the app window's (the Creator), each with its own Chromium. */
+export type MirrorChannel = "browser" | "preview";
+
+type Channel = {
+  session: string | null;
+  status: MirrorState | null;
+  snapshot: MirrorSnapshot | null;
+  batches: Msg[];
+  regions: Map<number, MirrorRegion>;
+};
+const fresh = (): Channel => ({ session: null, status: null, snapshot: null, batches: [], regions: new Map() });
+/* Two pages, two streams: one shared slot would have each snapshot throw the other page's copy away. */
+const channels: Record<MirrorChannel, Channel> = { browser: fresh(), preview: fresh() };
 const listeners = new Set<(msg: Msg) => void>();
 const statusListeners = new Set<() => void>();
+
+const channelOf = (msg: Msg): MirrorChannel => (msg.source === "preview" ? "preview" : "browser");
 
 /** What the readout shows: bytes and changes over the last few seconds, and the last snapshot's size. */
 const traffic: Array<{ at: number; bytes: number; ops: number }> = [];
@@ -29,54 +41,54 @@ export function mirrorTraffic() {
   while (traffic.length && traffic[0].at < now - 3000) traffic.shift();
   const bytes = traffic.reduce((s, t) => s + t.bytes, 0);
   const ops = traffic.reduce((s, t) => s + t.ops, 0);
-  return { bytesPerSecond: Math.round(bytes / 3), opsPerSecond: Math.round(ops / 3), snapshotBytes: snapshot?.size ?? 0 };
+  return { bytesPerSecond: Math.round(bytes / 3), opsPerSecond: Math.round(ops / 3), snapshotBytes: Math.max(channels.browser.snapshot?.size ?? 0, channels.preview.snapshot?.size ?? 0) };
 }
 
 /** One message from the socket. */
 export function pushMirror(msg: Msg, bytes: number) {
+  const name = channelOf(msg);
+  const ch = channels[name];
   const from = typeof msg.session === "string" ? msg.session : null;
-  if (from !== session) {
-    session = from;
-    status = null;
-    snapshot = null;
-    batches = [];
-    regions = new Map();
+  if (from !== ch.session) {
+    channels[name] = Object.assign(ch, fresh(), { session: from });
   }
+  const snapshot = ch.snapshot;
   traffic.push({ at: Date.now(), bytes, ops: Array.isArray(msg.m) ? msg.m.length : msg.op === "snapshot" ? 1 : 0 });
   if (msg.op === "state") {
-    status = { status: msg.status, reason: msg.reason ?? null, url: String(msg.url ?? "") };
+    ch.status = { status: msg.status, reason: msg.reason ?? null, url: String(msg.url ?? "") };
     for (const l of statusListeners) l();
   } else if (msg.op === "snapshot") {
-    snapshot = msg as unknown as MirrorSnapshot;
-    batches = [];
-    regions = new Map();
+    ch.snapshot = msg as unknown as MirrorSnapshot;
+    ch.batches = [];
+    ch.regions = new Map();
   } else if (msg.op === "batch") {
     if (!snapshot || msg.gen !== snapshot.gen) return;
-    batches.push(msg);
-    if (batches.length > 2000) batches = batches.slice(-2000);
+    ch.batches.push(msg);
+    if (ch.batches.length > 2000) ch.batches = ch.batches.slice(-2000);
   } else if (msg.op === "region") {
-    regions.set(Number(msg.i), msg as unknown as MirrorRegion);
+    ch.regions.set(Number(msg.i), msg as unknown as MirrorRegion);
   }
   for (const l of listeners) l(msg);
 }
 
 /** Every message for `sessionId` from now on, after the ones a newcomer needs (the snapshot, then what came since). */
-export function subscribeMirror(sessionId: string, fn: (msg: Msg) => void): () => void {
-  if (session === sessionId && snapshot) {
-    fn(snapshot as unknown as Msg);
-    for (const b of batches) fn(b);
-    for (const r of regions.values()) fn(r as unknown as Msg);
+export function subscribeMirror(sessionId: string, fn: (msg: Msg) => void, channel: MirrorChannel = "browser"): () => void {
+  const ch = channels[channel];
+  if (ch.session === sessionId && ch.snapshot) {
+    fn(ch.snapshot as unknown as Msg);
+    for (const b of ch.batches) fn(b);
+    for (const r of ch.regions.values()) fn(r as unknown as Msg);
   }
-  const l = (msg: Msg) => { if (msg.session === sessionId) fn(msg); };
+  const l = (msg: Msg) => { if (msg.session === sessionId && channelOf(msg) === channel) fn(msg); };
   listeners.add(l);
   return () => { listeners.delete(l); };
 }
 
 /** The mirror's state for this session (live, fallen back to pictures, off), or null before the server has said. */
-export function useMirrorStatus(sessionId: string, on: boolean): MirrorState | null {
+export function useMirrorStatus(sessionId: string, on: boolean, channel: MirrorChannel = "browser"): MirrorState | null {
   return useSyncExternalStore(
     (l) => { statusListeners.add(l); return () => { statusListeners.delete(l); }; },
-    () => (on && session === sessionId ? status : null),
+    () => (on && channels[channel].session === sessionId ? channels[channel].status : null),
   );
 }
 

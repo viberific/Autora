@@ -1128,6 +1128,19 @@ browser, pictures by default until R7 is measured on an Umbrel box and a phone).
   built app: the copy is drawn, scrolling asks for no pictures and moves the real page, a click and typing reach the real page,
   a canvas is a live picture, Picture mode brings pictures back).
 
+- **The app window (the Creator) uses the same copy** (`AppPreview.tsx`, `MirrorView` `channel="preview"`). Its own Chromium
+  (`previewRunFor`) streamed 12 fps JPEGs, so every scroll, hover and tap waited on a round trip and then on the next frame; touch
+  was worst, since a finger drag was batched into wheel events sent to the server. It now tells the server it shows the copy
+  (`POST /browser/view?target=preview`, the same lease) and draws it in place of the picture: Use works the copy itself
+  (scrolling and touch are local), Select and Region leave the pointer to the window's own handlers, which draw over the copy in
+  page pixels as they did over the picture. Pictures are the automatic fallback (the page is drawn as a picture until the copy is
+  ready, and again when the server falls back); there is no switch for the person. Messages carry `source: "preview"` and
+  `lib/liveMirror.ts` keeps one channel per page, so a Creator window beside a live browser card never shows the other's page;
+  resources come from `/api/sessions/:id/preview/mirror/r/:token`; view, resync, scroll and hover take `?target=preview`. A
+  `<select>` answers its click with the choices, which the window lists itself (`mirrorSend`). Tests: `ui-app-mirror.test.ts`
+  (no pictures once the copy is shown, wheel and finger swipe scroll the copy and the real page follows, a click reaches the
+  page), `livemirror.test.ts` (channels), `ui-app.test.ts`.
+
 - **Usability-trial fixes (2026-11-19, `docs/TRY-IT-2026-11-19-GAME.md`)**: `server/overlap.ts` gives `game_from_model` a footprint that reads `window:cad_` (it exports the 3D model), so it never
   runs beside the `cad_*` call that makes the model; `heldTitle` (`ToolCell.tsx`) says "Not run: ..." for steps the app held back; `lightScene` (`src/lib/gamephysics.ts`) gives the base layer an
   ambient light and a sun when a model is placed and the layer has none (unlit 3D is black); `checkInstruction` (`server/gamedesk.ts`) also flags an unquoted `keyboardKey` / `mouseButton`
