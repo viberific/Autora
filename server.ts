@@ -131,7 +131,7 @@ import { projectMap } from "./server/projectmap";
 import { FAILED_NOTE, failuresBriefing, holdsBack, repeatRefusal, standingFailure } from "./server/failedcalls";
 import { historyFor, pastToolCalls } from "./server/history";
 import { DataUrlSieve } from "./server/datasieve";
-import { autoEffort, type Effort } from "./server/modelprofile";
+import { autoEffort, isEffort, type Effort } from "./server/modelprofile";
 import { checkLine, failedNote, itemCheckNote, previewNote, previewProblems, projectCheck, type CheckResult, type ProjectCheck } from "./server/verify";
 import { buildTrace, traceText } from "./server/trace";
 import { keepBudget, loadBudget } from "./server/budgetstore";
@@ -362,6 +362,7 @@ const metaOf = (session: Session) => ({
   permissions: session.permissions,
   askWhen: session.askWhen,
   learn: session.learn,
+  effort: session.effort,
 });
 
 // Settings used to live here, in a module-level object that lasted exactly as
@@ -420,6 +421,7 @@ for (const stored of loadSessionIndex()) {
       : stored.mode === "ask" ? { permissions: legacyPermissions(stored.mode) } : {}),
     ...(stored.askWhen ? { askWhen: cleanAskWhen(stored.askWhen) } : {}),
     ...(stored.learn === true ? { learn: true } : {}),
+    ...(isEffort(stored.effort) ? { effort: stored.effort } : {}),
     events: [],
     seqCounter: counts.seq,
     counts,
@@ -4571,7 +4573,7 @@ async function runTurn(session: Session, text: string, opts: TurnOptions = {}): 
               thinkingBudget: THINKING_BUDGET,
               /* The person's setting, else the level picked for this model and this kind of turn (modelprofile.ts). */
               ...((): { effort?: Effort } => {
-                const effort = MAIN_EFFORT ?? autoEffort(answering.provider, answering.model, opts.quick ? "chat" : "work", answering.baseUrl);
+                const effort = (opts.quick ? undefined : session.effort) ?? MAIN_EFFORT ?? autoEffort(answering.provider, answering.model, opts.quick ? "chat" : "work", answering.baseUrl);
                 return effort ? { effort } : {};
               })(),
               /* No thinking while talk mode's fast model holds the turn --
@@ -6528,6 +6530,7 @@ async function startServer() {
         permissions: permissionsOf(s.permissions),
         ask_when: s.askWhen ?? "",
         learn: s.learn === true,
+        effort: s.effort ?? null,
         created_at: s.createdAt,
         updated_at: s.counts.lastTs || s.createdAt,
         events: s.counts.events,
@@ -6549,9 +6552,9 @@ async function startServer() {
   app.patch("/api/sessions/:id", (req: Request, res: Response) => {
     const session = sessions.get(req.params.id);
     if (!session) return res.status(404).json({ error: "Session not found" });
-    const { title: rawTitle, pinned, mode: rawMode, permissions: rawPerms, ask_when: rawWhen, learn: rawLearn } = req.body ?? {};
+    const { title: rawTitle, pinned, mode: rawMode, permissions: rawPerms, ask_when: rawWhen, learn: rawLearn, effort: rawEffort } = req.body ?? {};
     if (rawTitle === undefined && typeof pinned !== "boolean" && rawMode === undefined &&
-        rawPerms === undefined && rawWhen === undefined && typeof rawLearn !== "boolean") {
+        rawPerms === undefined && rawWhen === undefined && typeof rawLearn !== "boolean" && rawEffort === undefined) {
       return res.status(400).json({ error: "Nothing to change." });
     }
     if (rawMode !== undefined && !isWorkMode(rawMode)) {
@@ -6559,6 +6562,9 @@ async function startServer() {
     }
     if (rawPerms !== undefined && !isPermissions(rawPerms)) {
       return res.status(400).json({ error: "Permissions are one of: " + Object.keys(PERMISSION_INFO).join(", ") + "." });
+    }
+    if (rawEffort !== undefined && rawEffort !== null && !isEffort(rawEffort)) {
+      return res.status(400).json({ error: "Effort is one of: low, medium, high." });
     }
     if (rawWhen !== undefined && typeof rawWhen !== "string") {
       return res.status(400).json({ error: "ask_when is text: when you want to be asked." });
@@ -6587,6 +6593,14 @@ async function startServer() {
       log("info", "sessions", `"${session.title}" permissions: ${perms}`);
     }
     if (rawWhen !== undefined) session.askWhen = cleanAskWhen(rawWhen);
+    if (rawEffort !== undefined && (rawEffort ?? undefined) !== session.effort) {
+      session.effort = isEffort(rawEffort) ? rawEffort : undefined;
+      emitEvent(session, "context.note", "system", {
+        text: session.effort ? `Thinking effort is now ${session.effort}.` : "Thinking effort is back to the default.",
+        effort: session.effort ?? null,
+      });
+      log("info", "sessions", `"${session.title}" effort: ${session.effort ?? "default"}`);
+    }
     if (typeof rawLearn === "boolean" && rawLearn !== (session.learn === true)) {
       session.learn = rawLearn || undefined;
       const open = lessonFrom(session.events);
@@ -6610,6 +6624,7 @@ async function startServer() {
     res.json({
       ok: true, title: session.title, pinned: !!session.pinned, mode: workMode(session.mode),
       permissions: permissionsOf(session.permissions), ask_when: session.askWhen ?? "", learn: session.learn === true,
+      effort: session.effort ?? null,
     });
   });
 
@@ -7111,6 +7126,7 @@ async function startServer() {
     to.mode = from.mode;
     to.permissions = from.permissions;
     if (from.askWhen) to.askWhen = from.askWhen;
+    to.effort = from.effort;
     if (to.mode === "agent") to.phase = "plan";
     saveMeta(metaOf(to));
     const folder = folderOfChat(from.id);

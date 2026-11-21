@@ -103,6 +103,7 @@ interface StoredMeta {
   permissions?: "yolo" | "ask";
   askWhen?: string;
   learn?: boolean;
+  effort?: "low" | "medium" | "high";
 }
 
 /** What a session's log holds, without holding the log. */

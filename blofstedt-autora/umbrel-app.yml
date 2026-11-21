@@ -222,3 +222,7 @@ releaseNotes: >-
   Claude (subscription) starts faster: each turn now loads only Autora's own
   tools, not the MCP servers and skills set up in your terminal's Claude Code,
   which each had to start before the first word could appear.
+  Thinking effort is now a choice in the chat header for Claude and Gemini: Low,
+  Medium or High, kept with the chat. Subscription chats default to Medium
+  instead of the CLI's own much slower default. For Gemini the level is carried
+  in the model's name, as Antigravity expects.

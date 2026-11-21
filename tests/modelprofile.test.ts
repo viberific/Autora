@@ -102,6 +102,8 @@ await test("effort is picked per model when nobody set it: low for small talk, m
   assert.equal(autoEffort("anthropic", "claude-sonnet-5-5", "chat"), "low");
   assert.equal(autoEffort("anthropic", "claude-opus-5-5", "work"), undefined, "its default is already medium");
   assert.equal(autoEffort("openai", "gpt-6-luna", "chat"), "low");
+  assert.equal(autoEffort("claude-cli", "sonnet", "work"), "medium", "a subscription CLI is slow at its own default");
+  assert.equal(autoEffort("gemini-cli", "gemini-3.8-flash-high", "work"), "medium");
   assert.equal(autoEffort("openai", "gpt-6-luna", "work"), undefined);
   assert.equal(autoEffort("deepseek", "deepseek-flash", "chat"), undefined, "a model with no such knob is sent nothing");
   assert.equal(autoEffort("anthropic", "claude-haiku-4-5", "chat"), undefined);

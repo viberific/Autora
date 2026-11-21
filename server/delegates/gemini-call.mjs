@@ -33,9 +33,11 @@ const ask = long ? "Do what is asked above." : opts.prompt;
 const args = [];
 if (agy) {
   args.push("-p", ask, "--output-format", "stream-json");
-  if (opts.model) args.push("--model", opts.model);
-  /* A model named with its effort on the end (gemini-3.8-flash-high) already says it; agy refuses --effort beside one. */
-  if (opts.effort && !/-(?:high|medium|low)$/.test(opts.model ?? "")) args.push("--effort", opts.effort);
+  /* A model named with its effort on the end (gemini-3.8-flash-high) already says it, and agy refuses --effort beside one: the
+     effort asked for goes into the name instead. */
+  const named = /-(?:high|medium|low)$/.test(opts.model ?? "");
+  if (opts.model) args.push("--model", named && opts.effort ? opts.model.replace(/(?:high|medium|low)$/, opts.effort) : opts.model);
+  if (opts.effort && !named) args.push("--effort", opts.effort);
   // Nobody is there to approve an edit, so it approves its own; without this a write turn stalls on a prompt.
   if (opts.write) args.push("--dangerously-skip-permissions");
   if (opts.cwd) args.push("--add-dir", opts.cwd);
