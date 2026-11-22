@@ -43,6 +43,21 @@ Right-click menu
 - One menu: a flat list of the commands that apply, no groups, no pins. A shared component for host-side windows
   (Board, Music, 3D, Video, Games, App), the same markup/CSS shipped into each frame (PDF, Office, Photo).
 
+- Take control stays a visible header button, in the same place in every window that has it.
+- The header's buttons are always visible: the hover fade goes (it conflicts with "easy to find"; rail rule 3).
+- Order: headers first (PDF, then one window at a time), then the menu (Board and PDF first, then the rest).
+- The audit also covers buttons and icons, empty and loading states, panels and dialogs, spacing/type/colour.
+
+## Extra audit (counts from `src/`; screenshots still wanted)
+- Buttons: 216 use `.btn`, but windows add their own families (`pdf-pill`, `app-icon`, `app-control`, `app-errs`,
+  `shot-tool`, `st-tool`, `held-pill`). The same action (Take control, Full screen, Close) is drawn 4+ ways.
+- Empty/loading wording: "Loading…" x7, "Starting the engine…", "Opening…", "Opening the picture…", "Loading 3D…",
+  "Loading secret store…": no shared component or tone.
+- Dialogs: `.scrim` + `.modal` and `sure()` are the standard (9 and 28 uses); the editors in frames draw their own
+  dialogs and panes (PDF panes, Office, GDevelop, Photo/egui).
+- Tokens: `src/styles.css` still has 26 literal `font-size: Npx` and 97 hex colours (some allowed: photo tints,
+  Studio keys). Frames carry their own palettes: PDF `autora.css` 21 hex, Video `autora.css` 22.
+
 ## Constraints (CLAUDE.md)
 - Controls appear when the work needs them (hover-only fading is the opposite of a bar that is hard to find: decide).
 - Each window's handbook entry and its test change in the same commit (`server/handbook.ts`, `tests/handbook.test.ts`).
@@ -53,6 +68,4 @@ Right-click menu
 
 ## Open questions
 - Which windows should I screenshot first to confirm items 1-5? (I could not build the editors in this environment.)
-- Is Take control a header button, or should it live in the window's menu? It is the biggest item on every bar.
 - Pages/Slides/Sheets menus today have grouped entries; a flat list will be long. Which entries are the 6 to 8 that matter?
-- Should the hover fade of the bar's controls go (always visible) or stay?
