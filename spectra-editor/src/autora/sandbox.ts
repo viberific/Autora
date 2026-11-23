@@ -75,7 +75,12 @@ function installLocks(): void {
     const opts: LockOptions = typeof options === "function" ? {} : options;
     const run = (typeof options === "function" ? options : callback) as (lock: unknown) => Promise<T>;
     if (realWorks === true && real?.request) {
-      return (real.request as any).call(real, name, options as any, callback as any) as Promise<T>;
+      /* The real API takes (name, options, callback) — but `options` here is
+         the CALLBACK when the caller passed it positionally, and the browser
+         rejects a function in the options slot ("parameter 3 is not of type
+         'Function'"). Hand it the shape it wants, not the shape we were
+         called with. */
+      return (real.request as any).call(real, name, opts, run) as Promise<T>;
     }
     return queued(name, opts, run);
   };

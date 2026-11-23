@@ -1,8 +1,62 @@
+diff --git a/src/renderer/locales/en/chrome.json b/src/renderer/locales/en/chrome.json
+--- a/src/renderer/locales/en/chrome.json
++++ b/src/renderer/locales/en/chrome.json
+@@ -3594,6 +3594,7 @@
+   "pagemenu.deleteN_one": "Delete {{count}} page",
+   "pagemenu.deleteN_other": "Delete {{count}} pages",
+   "pagemenu.deletePage": "Delete page",
++  "pagemenu.editText": "Edit text",
+   "pagemenu.extractText": "Extract text…",
+   "pagemenu.open": "Open",
+   "pagemenu.rotateLeft": "Rotate left 90°",
+diff --git a/src/renderer/i18n-workbench.ts b/src/renderer/i18n-workbench.ts
+--- a/src/renderer/i18n-workbench.ts
++++ b/src/renderer/i18n-workbench.ts
+@@ -169,6 +169,7 @@
+   // one set of keys does too. The multi-select forms are plural pairs even
+   // though `multi` implies count > 1 in English: a locale with a `_few`
+   // category still needs the count to pick the form.
++  'pagemenu.editText': 'Edit text',
+   'pagemenu.open': 'Open',
+   'pagemenu.rotateRight': 'Rotate right 90°',
+   'pagemenu.rotateLeft': 'Rotate left 90°',
+diff --git a/src/renderer/index.tsx b/src/renderer/index.tsx
+--- a/src/renderer/index.tsx
++++ b/src/renderer/index.tsx
+@@ -1,3 +1,5 @@
++import { installHost } from '../autora/host';
++import { installSandbox } from '../autora/sandbox';
+ import { adoptStyleNonce } from './lib/style-nonce';
+ import React from 'react';
+ import { createRoot } from 'react-dom/client';
+@@ -9,6 +11,8 @@
+ import { stampInitialTheme } from './lib/theme-boot';
+ import './i18n'; // Initializes i18next before anything renders a string
+ import './styles.css';
++// Autora's palette and motion, over Spectra's. Last, so it wins. See the file.
++import './autora.css';
+ 
+ // The shell CSS keys on BOTH [data-theme] and [data-backdrop], so both are
+ // stamped before the first render. Theme resolves synchronously; the backdrop
+@@ -50,6 +54,14 @@
+ window.addEventListener('unhandledrejection', (event) => {
+   console.error('Unhandled promise rejection:', event.reason);
+ });
++
++// The browser APIs a frame without an origin does not have, before anything
++// reads them: storage, and the document pipeline's locks.
++installSandbox();
++
++// The window that holds this frame answers commands and relays the engine's
++// replies; nothing else works until this is listening, so it is first.
++installHost();
+ 
+ adoptStyleNonce();
+ stampInitialTheme();
 diff --git a/src/renderer/App.tsx b/src/renderer/App.tsx
-index bde70f5..641d123 100644
 --- a/src/renderer/App.tsx
 +++ b/src/renderer/App.tsx
-@@ -3495,6 +3495,23 @@ function AppContent(): React.ReactElement {
+@@ -3495,6 +3495,23 @@
      dispatch({ type: 'UI_FOCUS_TAB', tab: firstDoc ? { doc: firstDoc.path } : 'home' });
    }, [dispatch]);
  
@@ -26,7 +80,7 @@ index bde70f5..641d123 100644
    // Handle tray actions — land on the document board for Quick Merge, or use
    // the shared dirty-document and peer-acknowledged close flow for Quit.
    useEffect(() => {
-@@ -3601,11 +3618,14 @@ function AppContent(): React.ReactElement {
+@@ -3601,11 +3618,14 @@
            throw error;
          }
        }
@@ -43,10 +97,9 @@ index bde70f5..641d123 100644
    // A document coming back from a handover the receiving window died holding.
    // Ownership is already back here; what is left is where it should appear.
 diff --git a/src/renderer/i18n.ts b/src/renderer/i18n.ts
-index 75b61c6..9662953 100644
 --- a/src/renderer/i18n.ts
 +++ b/src/renderer/i18n.ts
-@@ -14,33 +14,7 @@ import i18next from 'i18next';
+@@ -14,33 +14,7 @@
  import { initReactI18next } from 'react-i18next';
  import { foldSentences } from './lib/sentence-join';
  import enChrome from './locales/en/chrome.json';
@@ -81,7 +134,7 @@ index 75b61c6..9662953 100644
  import { CHROME_STRINGS, type ChromeKey, type ChromePluralKey } from './i18n-chrome';
  import { PANEL_STRINGS, type PanelKey } from './i18n-panels';
  import { DIALOG_STRINGS, type DialogKey } from './i18n-dialogs';
-@@ -200,40 +174,15 @@ function pseudo(catalog: Record<string, string>): Record<string, string> {
+@@ -200,40 +174,15 @@
    );
  }
  
@@ -125,7 +178,7 @@ index 75b61c6..9662953 100644
      ...(import.meta.env.DEV || import.meta.env.VITE_E2E
        ? {
            qps: { chrome: pseudo(enChrome as Record<string, string>) },
-@@ -324,9 +273,28 @@ i18next.on('languageChanged', syncDocumentLanguage);
+@@ -324,9 +273,28 @@
  /** Switch the live UI language (the Settings panel persists the pref and
   * calls this; react-i18next re-renders every hooked component). */
  export function setAppLanguage(pref: string): void {
@@ -157,50 +210,25 @@ index 75b61c6..9662953 100644
  }
  
  export default i18next;
-diff --git a/src/renderer/index.tsx b/src/renderer/index.tsx
-index dfba040..64d073f 100644
---- a/src/renderer/index.tsx
-+++ b/src/renderer/index.tsx
-@@ -1,3 +1,5 @@
-+import { installHost } from '../autora/host';
-+import { installSandbox } from '../autora/sandbox';
- import { adoptStyleNonce } from './lib/style-nonce';
- import React from 'react';
- import { createRoot } from 'react-dom/client';
-@@ -9,6 +11,8 @@ import { signalFirstPaint } from './lib/first-paint';
- import { stampInitialTheme } from './lib/theme-boot';
- import './i18n'; // Initializes i18next before anything renders a string
- import './styles.css';
-+// Autora's palette and motion, over Spectra's. Last, so it wins. See the file.
-+import './autora.css';
- 
- // The shell CSS keys on BOTH [data-theme] and [data-backdrop], so both are
- // stamped before the first render. Theme resolves synchronously; the backdrop
-@@ -51,6 +55,14 @@ window.addEventListener('unhandledrejection', (event) => {
-   console.error('Unhandled promise rejection:', event.reason);
- });
- 
-+// The browser APIs a frame without an origin does not have, before anything
-+// reads them: storage, and the document pipeline's locks.
-+installSandbox();
-+
-+// The window that holds this frame answers commands and relays the engine's
-+// replies; nothing else works until this is listening, so it is first.
-+installHost();
-+
- adoptStyleNonce();
- stampInitialTheme();
- // The capability report is read before the first render: menus and commands
 diff --git a/src/renderer/components/canvas/PageCell.tsx b/src/renderer/components/canvas/PageCell.tsx
 --- a/src/renderer/components/canvas/PageCell.tsx
 +++ b/src/renderer/components/canvas/PageCell.tsx
 @@ -1,4 +1,6 @@
  import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 +import { getAutoraDetect, getAutoraWidth, isAutoraUi } from '../../autora-style';
-+import { textRectAt } from '../../autora-tap';
++import { editTextAt, textRectAt } from '../../autora-tap';
  import { showsFormWidgets } from '../../commands/tools';
  import type { PDFDocumentProxy } from 'pdfjs-dist';
  import type { PageAnnotation, PageRef } from '../../state/types';
+@@ -1086,7 +1088,7 @@
+   ) => void;
+   onSelectPage: (docId: string, pageId: string, e?: React.MouseEvent) => void;
+   onOpenPage: (docId: string, pageId: string) => void;
+-  onPageContextMenu: (docId: string, pageId: string, e: React.MouseEvent) => void;
++  onPageContextMenu: (docId: string, pageId: string, e: React.MouseEvent, onWord?: boolean) => void;
+   onPagePointerDown: (docId: string, pageId: string, e: React.PointerEvent<HTMLElement>) => void;
+   // Which figure the armed 'shape' mode draws (the secondary toolbar picker).
+   shapeType: ShapeType;
 @@ -1441,6 +1443,8 @@
    // same pattern as usePageDrag — rather than React synthetic move/up through
    // pointer capture, which proved unreliable in the WebView.
@@ -266,17 +294,19 @@ diff --git a/src/renderer/components/canvas/PageCell.tsx b/src/renderer/componen
            });
          } else if (tool === 'callout') {
            // The band is the TEXT BOX; the default leader lands to its left,
-@@ -3353,6 +3373,10 @@
-   return (
-     <div
-       data-page-id={page.id}
-+      // Autora: the page's own number in the file it came from, for the right-click menu's Edit text
-+      // (edittext.ts): a change made there names the page the file has, which a reorder in the workspace
-+      // cannot shift out from under it.
-+      data-source-page={page.sourcePageIndex}
-       // The page's natural DISPLAYED extents in PDF points (rotation-
-       // swapped) — the board camera's Actual Size / Fit Width solve their
-       // zoom from these against the cell's world-unit box.
+@@ -3406,7 +3426,11 @@
+       onContextMenu={(e) => {
+         e.preventDefault();
+         e.stopPropagation();
+-        onPageContextMenu(docId, page.id, e);
++        // Autora: the word under the pointer is worked out HERE, where the
++        // run overlays are, and handed to the menu as a yes/no. The menu is
++        // drawn outside this element, so it cannot look for itself.
++        const cell = e.currentTarget as HTMLElement;
++        onPageContextMenu(docId, page.id, e, editTextAt(cell, e.clientX, e.clientY) != null);
+       }}
+       onPointerDown={handlePointerDown}
+     >
 @@ -4207,7 +4231,8 @@
        {(redactionMarks ?? []).map((m) => {
          // Marks store the rect as drawn; a page rotated in memory since then
@@ -348,10 +378,9 @@ diff --git a/src/renderer/components/canvas/PageCell.tsx b/src/renderer/componen
                    strokeLinejoin: 'round' as const,
                  }
 diff --git a/src/renderer/components/canvas/WorkspaceCanvasView.tsx b/src/renderer/components/canvas/WorkspaceCanvasView.tsx
-index a4fd96f..20d96c9 100644
 --- a/src/renderer/components/canvas/WorkspaceCanvasView.tsx
 +++ b/src/renderer/components/canvas/WorkspaceCanvasView.tsx
-@@ -7,6 +7,7 @@ import React, {
+@@ -7,6 +7,7 @@
    useState,
    useSyncExternalStore,
  } from 'react';
@@ -359,7 +388,32 @@ index a4fd96f..20d96c9 100644
  import { PermissionRefusal, capabilityBlockText, signBlock } from '../../lib/document-permission-text';
  import { useAppState, useAppDispatch, useReadAppState, useReadLinkDrafts, useSubscribeAppState } from '../../state/AppStateProvider';
  import { usePdfProxyState } from '../../hooks/usePdfProxies';
-@@ -942,6 +943,15 @@ export function WorkspaceCanvasView({
+@@ -232,6 +233,7 @@
+ import { TEST_HARNESS_ENABLED, registerCanvasRedaction, registerCanvasSignature, registerCanvasCrop, registerCanvasSnapshot, registerCanvasOcr, registerCanvasSelection, registerCanvasForms, registerCanvasMerge, registerCanvasEditImages } from '../../testHarness';
+ import { invokeCommand, confirmPageEditNow, registerCanvasServices, pushEscapeInterceptor } from '../../commands/context';
+ import { buildPageContextMenu } from '../../lib/page-context-menu';
++import { editTextAt } from '../../autora-tap';
+ import { ContextMenu } from '../ContextMenu';
+ import type { MenuItem } from '../ContextMenu';
+ import { Canvas } from './Canvas';
+@@ -924,9 +926,13 @@
+   // The detail raster is sized in device pixels. A ratio change without a
+   // re-render leaves it at the old backing resolution until the next pan.
+   useEffect(() => watchDevicePixelRatio(window, () => setRenderVersion((v) => v + 1)), []);
+-  const [menu, setMenu] = useState<{ x: number; y: number; docId: string; pageId: string } | null>(
+-    null,
+-  );
++  const [menu, setMenu] = useState<{
++    x: number;
++    y: number;
++    docId: string;
++    pageId: string;
++    onWord?: boolean;
++  } | null>(null);
+   // The armed interaction tool — ui slice too (the keymap's Escape chain and
+   // the tools.* commands drive it).
+   const tool = state.ui.tool;
+@@ -942,6 +948,15 @@
    // (yellow highlight, dark freetext, blue ink); a pick applies to whichever
    // tool creates the next annotation, across tool switches.
    const [toolColor, setToolColor] = useState<string | null>(null);
@@ -375,3 +429,227 @@ index a4fd96f..20d96c9 100644
    const [stampPreset, setStampPreset] = useState<StampPreset | null>(null);
    // Shape mode's figure picker — the stamp-preset pattern.
    const [shapeType, setShapeType] = useState<ShapeType>('rect');
+@@ -3912,6 +3927,7 @@
+       setSelectedVector((prev) => (prev && !liveIds.has(prev.pageId) ? null : prev));
+       setEditingText((prev) => (prev && !liveIds.has(prev.pageId) ? null : prev));
+     }
++    (window as any).__editDbg4 = { tool, doc: !!focusedDoc, buf: !!editBuffer };
+     if (tool !== 'edit' || !focusedDoc || !editBuffer) {
+       setEditImagesByPage(NO_EDIT_IMAGES);
+       setEditVectorsByPage(NO_EDIT_VECTORS);
+@@ -3932,7 +3948,16 @@
+       }
+       if (editFetchTokenRef.current !== token) return;
+       const f = state.files.get(doc.path);
++      (window as any).__editDbg3 = { entered: true, hasFile: !!f, hasBuffer: !!f?.buffer };
+       if (!f?.buffer) return;
++      // Autora: the engine takes the WORKING COPY's path, not the tab's own
++      // path — they differ (the tab names the document, the working copy is
++      // the file the engine edits). The tab path is what `list_text_paragraphs`
++      // was being handed, so every page came back with no runs and the Edit
++      // text mode had nothing to open.
++      const workingPath = f.workingPath;
++      // TEMP DEBUG
++      (window as any).__editDbg = { docPath: doc.path, workingPath, pages: doc.pages.length, tool };
+       const proxy = await getDocumentProxy(doc.path, f.buffer);
+       // Seed from the CURRENT listings when the context did NOT change:
+       // rebuilding from empty published a gap window per page (two engine
+@@ -3974,13 +3999,26 @@
+             box: { x: vx0, y: vy0, width: vx1 - vx0, height: vy1 - vy0 },
+             bakedRotate: p.rotate,
+           };
++          /* Autora: the listing pass runs INSIDE the commit gate's own
++             `runCommitGate()` (above), and `engineCall` runs the gate again —
++             which waits on the gate it is already inside, so every call made
++             here hangs and the pass never publishes a single overlay. The RAW
++             call skips the gate and the file lock; the pass already holds both
++             the gate and the page's bytes, so it is the right one here. */
+           const call = (m: string, params: Record<string, unknown>): Promise<unknown> =>
+-            engineCall(m, params);
+-          const placements = await fetchEditPlacements(call, f.workingPath, pageNumber, geometry);
++            engineCallRaw(m, params);
++          const placements = await fetchEditPlacements(call, workingPath, pageNumber, geometry);
+           if (editFetchTokenRef.current !== token) return;
+-          const vectors = await fetchEditVectors(call, f.workingPath, pageNumber, geometry);
++          const vectors = await fetchEditVectors(call, workingPath, pageNumber, geometry);
+           if (editFetchTokenRef.current !== token) return;
+-          const listing = await fetchEditTextListing(call, f.workingPath, pageNumber, geometry);
++          let listing;
++      try {
++        listing = await fetchEditTextListing(call, workingPath, pageNumber, geometry);
++        (window as any).__editDbg2 = { ok: true, runs: listing?.runBoxes?.length, paras: listing?.paragraphs?.length, first: listing?.runBoxes?.[0]?.rect };
++      } catch (e) {
++        (window as any).__editDbg2 = { err: String((e as Error)?.message).slice(0, 200) };
++        throw e;
++      }
+           if (editFetchTokenRef.current !== token) return;
+           if (placements.length > 0) {
+             nextImages.set(page.id, placements);
+@@ -4059,7 +4097,7 @@
+     void runListingPass().finally(() => {
+       if (editListingPendingRef.current === token) editListingPendingRef.current = 0;
+     });
+-  }, [tool, focusedDoc, editBuffer, docs, state.files, engineCall]);
++  }, [tool, focusedDoc, editBuffer, docs, state.files, engineCallRaw]);
+ 
+   // A mutation's status line (neutral notice or red error) + in-flight flag.
+   // Renderer-side failures (decode, IO) would otherwise vanish as unhandled
+@@ -4250,6 +4288,33 @@
+     [editTextByPage, editBusy],
+   );
+ 
++  /** The paragraph opener, held by ref: it is declared below this point. */
++  const openParagraphRef = useRef<(pageId: string, index: number) => void>(() => {});
++
++  /**
++   * Autora: open the text editor on the word at a client point — what the
++   * page menu's "Edit text" runs. The run is found from the overlays, the way
++   * a click on one would; the point is in client coordinates, so the page's
++   * own box turns it into a position inside the page.
++   */
++  const editTextAtPoint = useCallback(
++    (pageId: string, clientX: number, clientY: number) => {
++      // `data-page-id` is also on the filmstrip's thumb rows, which carry no
++      // overlays: the canvas page is the one with the `page` class.
++      const el = document.querySelector<HTMLElement>(`[data-page-id="${CSS.escape(pageId)}"].page`);
++      const hit = el ? editTextAt(el, clientX, clientY) : null;
++      const testid = hit?.getAttribute('data-testid') ?? '';
++      (window as any).__editDbg5 = { pageId, testid, found: !!hit };
++      if (testid.startsWith('edit-para-')) {
++        openParagraphRef.current(pageId, Number(testid.slice('edit-para-'.length)));
++        return;
++      }
++      const index = testid.replace('edit-text-', '');
++      if (index !== '') handleOpenTextEditor(pageId, Number(index));
++    },
++    [handleOpenTextEditor, openParagraphRef],
++  );
++
+   const handleSelectEditParagraph = useCallback((pageId: string, index: number) => {
+     imageReselectRef.current = null; // a user pick owns selection now
+     setEditNotice(null);
+@@ -4277,6 +4342,11 @@
+     [editTextByPage, editBusy],
+   );
+ 
++  // Hand the paragraph opener to the ref the point-based opener reads.
++  useEffect(() => {
++    openParagraphRef.current = handleOpenParagraphEditor;
++  }, [handleOpenParagraphEditor]);
++
+   const handleCancelTextEdit = useCallback(() => setEditingText(null), []);
+ 
+   // Split view: per-pane page reporting + activation. Each pane always
+@@ -5457,7 +5527,10 @@
+     return true;
+   };
+   useEffect(() => {
+-    if (!TEST_HARNESS_ENABLED) return;
++    // Autora: NOT gated on the test harness. The window's own "Edit text" reads
++    // this bridge, so without it a release build lists no text runs at all and
++    // the tool has nothing to open. Registering it costs nothing: it is a bag
++    // of callbacks over refs.
+     registerCanvasEditImages({
+       pageIds: () => [...editImagesRef.current.keys()],
+       snapGeometryPageIds: () => [...snapGeomRef.current.keys()],
+@@ -6855,13 +6928,17 @@
+   );
+ 
+   const onPageContextMenu = useCallback(
+-    (docId: string, pageId: string, e: React.MouseEvent) => {
++    (docId: string, pageId: string, e: React.MouseEvent, onWord = false) => {
+       // Right-clicking a page already in the selection keeps the whole
+       // selection (menu actions then apply to all); otherwise select just it.
+       dispatch({ type: 'UI_SELECT_PAGE', pageId, mode: 'context' });
+-      setMenu({ x: e.clientX, y: e.clientY, docId, pageId });
++      // Autora: the right-click that lands on a word arms the edit mode, so
++      // "Edit text" is there to choose. It is the same mode the toolbar's Edit
++      // text tile arms; nothing else about the right-click changes.
++      if (onWord && tool !== 'edit') dispatch({ type: 'UI_SET_TOOL', tool: 'edit' });
++      setMenu({ x: e.clientX, y: e.clientY, docId, pageId, onWord });
+     },
+-    [dispatch],
++    [dispatch, tool],
+   );
+ 
+   const menuItems = useMemo((): MenuItem[] => {
+@@ -6876,8 +6953,12 @@
+       confirmPageEdit: confirmPageEditNow,
+       onOpen: onOpenPage,
+       onExtractText,
++      // Autora: Edit text, only when the right-click landed on a word.
++      onEditTextAt: menu.onWord ? editTextAtPoint : undefined,
++      at: menu.onWord ? { x: menu.x, y: menu.y } : undefined,
++      canEditTextAt: menu.onWord,
+     });
+-  }, [menu, docs, selectedPageIds, dispatch, onOpenPage, onExtractText]);
++  }, [menu, docs, selectedPageIds, dispatch, onOpenPage, onExtractText, editTextAtPoint]);
+ 
+   const onMoveDoc = useCallback(
+     (docId: string, direction: -1 | 1) => dispatch({ type: 'REORDER_DOCS', docId, direction }),
+diff --git a/src/renderer/hooks/useOperationQueue.tsx b/src/renderer/hooks/useOperationQueue.tsx
+--- a/src/renderer/hooks/useOperationQueue.tsx
++++ b/src/renderer/hooks/useOperationQueue.tsx
+@@ -296,6 +296,18 @@
+   // stays GATED: it must see the edits the user can see, and it is a
+   // deliberate action, not a background read.
+   'list_dictionaries',
++  // The Edit text listing: the canvas's own listing pass runs it for every page
++  // of the open document, and it runs INSIDE the commit gate already (the pass
++  // awaits runCommitGate first). Gated, each call waited on the gate it was
++  // inside, so the pass never finished and the edit overlays never appeared
++  // (Autora, 0.9.379). The pass is the gate's caller, so the raw call is right
++  // for it; the method stays out of the queue for the same reason.
++  'list_text_paragraphs',
++  // Same reason for the other two the pass reads: the Edit mode's listing runs
++  // all three for every page, inside the gate. Left trackable, the pass hung on
++  // the first one and no overlay ever appeared — text or image.
++  'list_page_images',
++  'list_page_vectors',
+   'check_text',
+   'spelling_suggestions',
+   'add_user_dictionary',
+diff --git a/src/renderer/lib/page-context-menu.ts b/src/renderer/lib/page-context-menu.ts
+--- a/src/renderer/lib/page-context-menu.ts
++++ b/src/renderer/lib/page-context-menu.ts
+@@ -29,11 +29,21 @@
+   onOpen: (docId: string, pageId: string) => void;
+   /** Jump to Extract Text with the page pre-selected — 1-based workspace page. */
+   onExtractText: (path: string, pageNumber: number) => void;
++  /** Autora: open the text editor on the word nearest this point, in client
++   * coordinates. Only offered when the canvas has the edit mode armed and the
++   * point is over a run that can be edited. */
++  onEditTextAt?: (pageId: string, clientX: number, clientY: number) => void;
++  /** The client point the menu was opened at, for onEditTextAt. */
++  at?: { x: number; y: number };
++  /** Whether an editable run sits under `at` (decided by the canvas, which is
++   * the only side that knows where the words are). */
++  canEditTextAt?: boolean;
+ }
+ 
+ export function buildPageContextMenu(deps: PageMenuDeps): MenuItem[] {
+   const { docs, docId, pageId, selectedPageIds, dispatch, confirmPageEdit, onOpen, onExtractText } =
+     deps;
++  const { onEditTextAt, at, canEditTextAt } = deps;
+   const doc = docs.find((d) => d.id === docId);
+   if (!doc) return [];
+ 
+@@ -94,6 +104,18 @@
+       label: tChrome('pagemenu.open'),
+       onClick: () => onOpen(docId, pageId),
+     },
++    // Autora: Edit text, at the word under the pointer. Offered only when the
++    // edit mode is armed and there is a run there — a word is what a person
++    // right-clicks, and the editor opens on it rather than on the page.
++    ...(onEditTextAt && at
++      ? [
++          {
++            label: tChrome('pagemenu.editText'),
++            disabled: !canEditTextAt,
++            onClick: () => onEditTextAt(pageId, at.x, at.y),
++          },
++        ]
++      : []),
+     { label: '', onClick: () => {}, separator: true },
+     {
+       label: multi

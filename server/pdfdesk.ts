@@ -323,6 +323,10 @@ export function deskBase(session: string): Buffer | null {
 export async function deskDocument(session: string, cwd: string): Promise<Buffer | null> {
   const desk = load(session);
   if (!desk) return null;
+  /* Nothing placed on it: the pages ARE the document. Handing back the base
+     unchanged is the whole answer, and it is also the only answer that keeps
+     the pages' own text runs -- the flatten below is a redraw, and a redraw
+     of an untouched page loses them (0.9.379). */
   if (!desk.items.length) return desk.base;
   try {
     return (await flattenDesk(desk.base, desk.items, cwd)).data;
