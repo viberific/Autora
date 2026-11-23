@@ -215,18 +215,15 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
+  On a phone, a press and hold now selects, everywhere: the board, its cards,
+  Artifacts, the document and PDF windows and the video timeline. The menu
+  comes from a small ... button on what is selected, so a long press no longer
+  fights the browser's own menu. A right-click still opens the menu with a
+  mouse, and a double tap still does what it did before.
   PDFs can be edited in the PDF window: right-click a word or a line, choose
   Edit text, and type over it. The change is real text in the file, in the
   same face and size, and it saves with the document.
   A subscription turn's tool calls show under that vendor's own mark, so a
   Gemini step reads as Gemini's and a Claude step as Claude's, not the
-  agent's. The tool lines now name the tool and what it acted on instead of
-  repeating a bare "tool". The CLI is found on the PATH after a restart,
-  which it was not before.
-  Gemini and Claude can be picked as the model, on your own subscription
-  instead of a key. Choose "Gemini (subscription)" or "Claude (subscription)"
-  in Settings: each turn runs the signed-in command-line tool and streams the
-  answer into the chat, and everything it reads, writes or runs appears as a
-  step you can watch, the same as the agent's own calls. Nothing is billed
-  per token. The two can also be called as tools while another model answers.
-  Gemini's sign-in had lapsed and is signed in again.
+  agent's. Gemini and Claude can be picked as the model, on your own
+  subscription instead of a key.

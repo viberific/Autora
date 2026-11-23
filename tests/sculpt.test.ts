@@ -56,6 +56,37 @@ await test("an ellipsoid has its three half-sizes", () => {
   assert.ok(Math.abs(size[0] - 80) < 4 && Math.abs(size[1] - 20) < 2 && Math.abs(size[2] - 40) < 3, size.join(", "));
 });
 
+await test("a loft's caps face out of the tube, not into it", () => {
+  // The whole-mesh volume check cannot catch this: one cap inverted still leaves the volume
+  // positive, so the tube renders with a hole-like end. Check each cap face's own direction.
+  const m = loftMesh([
+    { at: { x: 0, y: 0, z: 0 }, radius: 20 },
+    { at: { x: 0, y: 0, z: 60 }, radius: 20 },
+  ], { sides: 12, steps: 2 });
+  const idx = m.indices;
+  const p = m.positions;
+  const bottom = p.length / 3 - 2;
+  const top = p.length / 3 - 1;
+  let ok = 0;
+  let bad = 0;
+  for (let t = 0; t < idx.length; t += 3) {
+    const tri = [idx[t], idx[t + 1], idx[t + 2]];
+    const a = tri[0] * 3;
+    const b = tri[1] * 3;
+    const c = tri[2] * 3;
+    const nz = (p[b] - p[a]) * (p[c + 1] - p[a + 1]) - (p[b + 1] - p[a + 1]) * (p[c] - p[a]);
+    if (tri.includes(bottom)) {
+      if (nz < 0) ok++;
+      else bad++;
+    }
+    if (tri.includes(top)) {
+      if (nz > 0) ok++;
+      else bad++;
+    }
+  }
+  assert.equal(bad, 0, `${bad} of ${ok + bad} cap faces point into the tube`);
+});
+
 await test("a loft is a closed tube that follows its sections", () => {
   const m = loftMesh([
     { at: { x: 0, y: 0, z: 0 }, radius: 10 },

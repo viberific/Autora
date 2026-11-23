@@ -1,7 +1,8 @@
 import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { Surface } from "../../lib/panacea/canvas";
 import { addCard, boardBounds, boardPoint, cardHeight, cardShape, connectorPoints, DIRECTIONS, editCard, editLink, freeSpot, linkCards, linkDirection, linkLabelPoint, moveCard, removeCard, SHAPES, shapePath, unlink, type BoardState, type Card } from "../../lib/panacea/board";
-import { IconX } from "../Icons";
+import { IconMoreH, IconX } from "../Icons";
+import { useHoldToSelect } from "../../lib/touchSelect";
 import { usePanacea } from "./context";
 import "./BoardView.css";
 
@@ -24,7 +25,41 @@ export function BoardView({ surface }: { surface: Surface }) {
   const [editing, setEditing] = useState<{ id: string; text: string; fresh: boolean } | null>(null);
   const [heights, setHeights] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
-
+  /** The card a finger has picked: only it has a "⋯" for the menu. */
+  const [picked, setPicked] = useState<string | null>(null);
+  /** The card's menu: which card, and where (in the board's own scrolled space) it is drawn, clear of the card. */
+  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const menuBox = useRef<HTMLDivElement>(null);
+  const openMenu = (el: HTMLElement) => {
+    const host = root.current;
+    const id = el.closest<HTMLElement>("[data-card]")?.dataset.card;
+    if (!host || !id) return;
+    const r = host.getBoundingClientRect();
+    const box = el.getBoundingClientRect();
+    setMenu({ id, x: box.left - r.left + host.scrollLeft + box.width / 2 - 88, y: box.bottom - r.top + host.scrollTop + 6 });
+  };
+  // Kept inside the board once it is drawn, and gone on a click elsewhere, a wheel or the board scrolling.
+  useLayoutEffect(() => {
+    const el = menuBox.current;
+    const host = root.current;
+    if (!menu || !el || !host) return;
+    const x = Math.max(8, Math.min(menu.x, host.clientWidth - el.offsetWidth - 8));
+    const y = Math.max(8, Math.min(menu.y, host.clientHeight - el.offsetHeight - 8));
+    if (x !== menu.x || y !== menu.y) setMenu({ ...menu, x, y });
+  }, [menu]);
+  useLayoutEffect(() => {
+    if (!menu) return;
+    menuBox.current?.querySelector<HTMLElement>("button")?.focus({ preventScroll: true });
+    const away = (e: Event) => { if (!menuBox.current?.contains(e.target as Node)) setMenu(null); };
+    document.addEventListener("pointerdown", away, true);
+    document.addEventListener("wheel", away, { capture: true, passive: true });
+    document.addEventListener("scroll", away, { capture: true, passive: true });
+    return () => {
+      document.removeEventListener("pointerdown", away, true);
+      document.removeEventListener("wheel", away, true);
+      document.removeEventListener("scroll", away, true);
+    };
+  }, [menu]);
   // Cards are as tall as their words: measured after each draw, so links meet them in the middle.
   useLayoutEffect(() => {
     const el = root.current;
@@ -33,6 +68,19 @@ export function BoardView({ surface }: { surface: Surface }) {
     el.querySelectorAll<HTMLElement>("[data-card]").forEach((c) => { next[c.dataset.card!] = c.offsetHeight; });
     setHeights((was) => (JSON.stringify(was) === JSON.stringify(next) ? was : next));
   }, [board, editing]);
+
+  /** A finger held on a card: it is picked, and the "⋯" on it offers the menu (lib/touchSelect.ts). */
+  const cardHold = useHoldToSelect({
+    suppressMenu: true,
+    onHold: (e) => {
+      const id = (e.currentTarget as HTMLElement).dataset.card;
+      if (!id) return;
+      setPicked(id);
+      select(id);
+      const more = (e.currentTarget as HTMLElement).querySelector<HTMLElement>(".pa-brd-more");
+      if (more) requestAnimationFrame(() => openMenu(more));
+    },
+  });
 
   if (!board) return <div className="pa-chart-empty">This board's cards are gone.</div>;
   const link = board.selLink;
@@ -45,12 +93,13 @@ export function BoardView({ surface }: { surface: Surface }) {
   };
   const select = (id: string | undefined) => {
     setError(null);
-    if (board.sel === id) return;
+    if (board.sel === id) { root.current?.focus({ preventScroll: true }); return; }
     const next: BoardState = { ...board };
     delete next.sel;
     delete next.selLink;
     if (id) next.sel = id;
     write(next, null);
+    root.current?.focus({ preventScroll: true });
   };
   const selectLink = (id: string) => {
     setError(null);
@@ -84,6 +133,8 @@ export function BoardView({ surface }: { surface: Surface }) {
   const grab = (card: Card, e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.button !== 0 || editing?.id === card.id || (e.target as HTMLElement).closest("button, textarea, .pa-brd-dot")) return;
     e.stopPropagation();
+    // A finger held on a card picks it, and the "⋯" on it offers the menu (lib/touchSelect.ts).
+    cardHold.props.onPointerDown(e);
     const el = e.currentTarget;
     el.setPointerCapture?.(e.pointerId);
     const start = at(e);
@@ -92,6 +143,7 @@ export function BoardView({ surface }: { surface: Surface }) {
     let moved = false;
     api.hold(true);
     const move = (ev: PointerEvent) => {
+      cardHold.props.onPointerMove(ev as unknown as ReactPointerEvent<HTMLDivElement>);
       const point = at(ev);
       if (!point) return;
       const dx = point.x - start.x;
@@ -103,6 +155,7 @@ export function BoardView({ surface }: { surface: Surface }) {
       el.removeEventListener("pointermove", move);
       el.removeEventListener("pointerup", up);
       el.removeEventListener("pointercancel", up);
+      cardHold.props.onPointerUp(ev as unknown as ReactPointerEvent<HTMLDivElement>);
       api.hold(false);
       setDrag(null);
       if (ev.type === "pointercancel") return;
@@ -192,7 +245,7 @@ export function BoardView({ surface }: { surface: Surface }) {
         role="application"
         aria-label={`${surface.title}: a board of ${board.cards.length} cards`}
         onKeyDown={key}
-        onPointerDown={(e) => { if (e.target === e.currentTarget || (e.target as HTMLElement).classList.contains("pa-brd-space")) select(undefined); }}
+        onPointerDown={(e) => { if (e.target === e.currentTarget || (e.target as HTMLElement).classList.contains("pa-brd-space")) { select(undefined); setPicked(null); setMenu(null); } }}
         onDoubleClick={(e) => {
           e.stopPropagation();
           if ((e.target as HTMLElement).closest("[data-card]")) return;
@@ -230,13 +283,16 @@ export function BoardView({ surface }: { surface: Surface }) {
               <div
                 key={c.id}
                 data-card={c.id}
-                className={`pa-brd-card is-${c.tone}${flow ? ` pa-flow-node shape-${cardShape(board, c)}` : ""}${c.ask ? " is-ask" : ""}${board.sel === c.id ? " is-selected" : ""}${drag?.id === c.id ? " is-moving" : ""}`}
+                className={`pa-brd-card is-${c.tone}${flow ? ` pa-flow-node shape-${cardShape(board, c)}` : ""}${c.ask ? " is-ask" : ""}${board.sel === c.id ? " is-selected" : ""}${picked === c.id ? " is-picked" : ""}${drag?.id === c.id ? " is-moving" : ""}`}
                 style={{ left: c.x - room.x, top: c.y - room.y, width: c.w, ...(flow ? { minHeight: h(c) } : {}) }}
                 tabIndex={0}
                 aria-label={`${flow ? cardShape(board, c) : "Card"}: ${c.text || "Empty"}`}
                 onFocus={() => { if (!editing) select(c.id); }}
                 onKeyDown={(e) => { if (e.key === "Enter" && !editing && !c.ask) { e.preventDefault(); setEditing({ id: c.id, text: c.text, fresh: false }); } }}
                 onPointerDown={(e) => grab(raw, e)}
+                onPointerUp={(e) => cardHold.props.onPointerUp(e)}
+                onPointerCancel={(e) => cardHold.props.onPointerCancel(e)}
+                onClickCapture={cardHold.props.onClickCapture}
                 onDoubleClick={(e) => { e.stopPropagation(); if (!c.ask) setEditing({ id: c.id, text: c.text, fresh: false }); }}
               >
                 {flow && <svg className="pa-flow-shape" viewBox={`0 0 ${c.w} ${h(c)}`} aria-hidden="true"><path d={shapePath(cardShape(board, c), c.w, h(c))} /></svg>}
@@ -260,6 +316,9 @@ export function BoardView({ surface }: { surface: Surface }) {
                 ) : (
                   <p>{c.text || <i>Empty</i>}</p>
                 )}
+                {picked === c.id && (
+                  <button type="button" className="pa-brd-more" aria-label={`Menu for ${c.text || "this card"}`} aria-haspopup="menu" onClick={(e) => openMenu(e.currentTarget)}><IconMoreH size={13} /></button>
+                )}
                 {c.ask && (
                   <span className="pa-brd-acts">
                     <button type="button" onClick={() => newCard({ x: c.x + c.w + 24, y: c.y }, c.id)}>Answer</button>
@@ -269,9 +328,28 @@ export function BoardView({ surface }: { surface: Surface }) {
                 {!open && <i className="pa-brd-dot" role="button" aria-label="Drag onto another card to link them" onPointerDown={(e) => pull(raw, e)} />}
               </div>
             );
-          })}
+            })}
+          </div>
+          {/* The picked card's menu, at its "⋯" and clear of the card (a finger's way to what a right-click does). */}
+          {menu && board.cards.some((c) => c.id === menu.id) && (
+            <div
+            ref={menuBox} className="pa-brd-menu" role="menu" aria-label="Card" style={{ left: menu.x, top: menu.y }}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setMenu(null); root.current?.focus({ preventScroll: true }); }
+              else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                e.preventDefault();
+                const rows = [...(menuBox.current?.querySelectorAll("button") ?? [])];
+                const i = rows.indexOf(document.activeElement as HTMLButtonElement);
+                rows[(i + (e.key === "ArrowDown" ? 1 : -1) + rows.length) % rows.length]?.focus();
+              }
+            }}
+            >
+            <button type="button" role="menuitem" onClick={() => { setMenu(null); setEditing({ id: menu.id, text: board.cards.find((c) => c.id === menu.id)?.text ?? "", fresh: false }); }}>Write in it</button>
+            <button type="button" role="menuitem" onClick={() => { setMenu(null); const by = board.cards.find((c) => c.id === menu.id); newCard(freeSpot(board, by ? { x: by.x, y: by.y } : null)); }}>{flow ? "Add a node" : "Add a card"}</button>
+            <button type="button" role="menuitem" onClick={() => { setMenu(null); take(removeCard(board, menu.id), "Took away a card"); }}>Take it away</button>
+            </div>
+          )}
         </div>
       </div>
-    </div>
-  );
-}
+    );
+  }

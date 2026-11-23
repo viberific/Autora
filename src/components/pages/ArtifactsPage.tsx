@@ -1,6 +1,6 @@
 import {
   useCallback, useEffect, useMemo, useRef, useState,
-  type MouseEvent, type PointerEvent, type ReactNode,
+  type ReactNode,
 } from "react";
 import type { SessionRow } from "../Sessions";
 import { LibraryPicker } from "../LibraryPicker";
@@ -12,6 +12,7 @@ import {
   IconUpload, IconUser, IconX,
 } from "../Icons";
 import { every } from "../../lib/poll";
+import { useHoldToSelect } from "../../lib/touchSelect";
 import { sure } from "../../lib/sure";
 
 const size = (bytes: number) =>
@@ -63,10 +64,6 @@ const KIND_WORD: Record<Kind, string> = {
 
 /** How many cards a group shows before it offers the rest. */
 const PREVIEW = 24;
-/** How long a press has to last to start selecting. */
-const HOLD_MS = 450;
-/** A press that moves further than this is a scroll, not a hold. */
-const HOLD_SLOP = 10;
 
 const order = (list: Artifact[], by: Order): Artifact[] => {
   const out = [...list];
@@ -139,10 +136,6 @@ export function ArtifactsPage({
   const [closed, setClosed] = useState<string[]>([]);
   const [opened, setOpened] = useState<string[]>([]);
   const picker = useRef<HTMLInputElement>(null);
-  /** The press being timed, and whether the last one became a hold (so the
-      click that ends it does not also open the file). */
-  const hold = useRef<{ timer: number; x: number; y: number } | null>(null);
-  const held = useRef(false);
 
   const load = useCallback(() => {
     fetch("/api/artifacts").then((r) => r.json()).then((d) => {
@@ -233,44 +226,16 @@ export function ArtifactsPage({
   const toggle = (id: string) =>
     setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
 
-  const cancelHold = () => {
-    if (hold.current) window.clearTimeout(hold.current.timer);
-    hold.current = null;
-  };
-  useEffect(() => cancelHold, []);
-
-  /** Press and hold a card: selecting starts, with that card picked. */
-  const holdProps = (id: string) => ({
-    onPointerDown: (e: PointerEvent) => {
-      // A new press starts clean: after a hold a phone often sends no click
-      // at all, and the flag left set would swallow the next tap.
-      held.current = false;
-      if (selecting || e.button !== 0) return;
-      cancelHold();
-      hold.current = {
-        x: e.clientX, y: e.clientY,
-        timer: window.setTimeout(() => {
-          hold.current = null;
-          held.current = true;
-          setSelecting(true);
-          setPicked([id]);
-          navigator.vibrate?.(10);
-        }, HOLD_MS),
-      };
+  /** Press and hold a card: selecting starts, with that card picked (lib/touchSelect.ts, the rule every surface shares). */
+  const hold = useHoldToSelect({
+    enabled: !selecting,
+    suppressMenu: true,
+    onHold: (e) => {
+      const id = (e.currentTarget as HTMLElement).dataset.artifact;
+      if (!id) return;
+      setSelecting(true);
+      setPicked([id]);
     },
-    onPointerMove: (e: PointerEvent) => {
-      const h = hold.current;
-      if (h && Math.hypot(e.clientX - h.x, e.clientY - h.y) > HOLD_SLOP) cancelHold();
-    },
-    onPointerUp: cancelHold,
-    onPointerCancel: cancelHold,
-    onPointerLeave: cancelHold,
-    // The click that ends a hold must not open the file or press a button.
-    onClickCapture: (e: MouseEvent) => {
-      if (held.current) { held.current = false; e.preventDefault(); e.stopPropagation(); }
-    },
-    // A long press on a phone also asks for the browser's own menu.
-    onContextMenu: (e: MouseEvent) => { if (hold.current || held.current || selecting) e.preventDefault(); },
   });
 
   const file = async (books: Notebook[]) => {
@@ -439,7 +404,8 @@ export function ArtifactsPage({
         return (
           <article
             key={a.id}
-            {...holdProps(a.id)}
+            {...hold.props}
+            data-artifact={a.id}
             className={`art-card${selecting ? " art-pickable" : ""}${on ? " is-picked" : ""}`}
             role={selecting ? "checkbox" : undefined}
             aria-checked={selecting ? on : undefined}

@@ -780,3 +780,25 @@
     animation: none;
   }
 }
+
+/* The "⋯" on what a finger picked (autora-more.tsx): the way to the menu now a long press selects. */
+#autora-more {
+  position: fixed;
+  z-index: 45;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: #151824;
+  color: #edeff5;
+  box-shadow: 0 10px 24px -8px rgba(0, 0, 0, 0.7);
+  cursor: pointer;
+  transition: transform 120ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+#autora-more:active { transform: scale(0.94); }
+#autora-more:focus-visible { outline: 2px solid #6e5bff; outline-offset: 2px; }
+#autora-more svg { width: 17px; height: 17px; }
+@media (prefers-reduced-motion: reduce) { #autora-more { transition: none; } }

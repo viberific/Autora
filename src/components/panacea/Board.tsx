@@ -16,6 +16,7 @@ import type { HostedWork } from "../../lib/workspaceScene";
 import { WORKSPACE_MODES, type WorkspaceMode } from "../../lib/workspace";
 import { usePhone } from "../../lib/stage";
 import { sure } from "../../lib/sure";
+import { useHoldToSelect } from "../../lib/touchSelect";
 import { jumpTo, zoomAt } from "../../lib/panacea/workspace-camera";
 import { engineSends, surfaceSends, takersOf, type SentFile } from "../../lib/panacea/flows";
 import { addJoin, canJoin, joinOffer, removeJoin } from "../../lib/panacea/joins";
@@ -175,7 +176,9 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
   const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const [summon, setSummon] = useState<{ sx: number; sy: number; at: { x: number; y: number } } | null>(null);
   /** The right-click menu on the empty board, where it was asked for (on the screen and in the world). */
-  const [boardMenu, setBoardMenu] = useState<{ sx: number; sy: number; at: { x: number; y: number } } | null>(null);
+  /** The board's menu, where it was asked for on the board (sx, sy) and where it is drawn (x, y): a right-click opens it
+   *  at the pointer, a finger at the "⋯" on what is selected, clear of it (lib/touchSelect.ts). */
+  const [boardMenu, setBoardMenu] = useState<{ sx: number; sy: number; x: number; y: number; at: { x: number; y: number } } | null>(null);
   const closeBoardMenu = useCallback(() => setBoardMenu(null), []);
   const fitted = useRef(false);
   const interacted = useRef(false);
@@ -622,6 +625,8 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     if ((e.target as HTMLElement).closest(".pa-panel, .pa-surface, .pa-summon, .pa-chrome, .pw-engine")) return;
     // A second finger is the pinch's, never a second pan.
     if (fingers.current.size > 1) return;
+    // A finger held here selects what is under it (the hold); a press that travels is a pan, not a hold.
+    boardPress(e);
     interacted.current = true;
     setActiveWin(null);
     if (e.isTrusted) onJumpWork?.(followTarget ?? "panacea");
@@ -632,7 +637,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     if (e.shiftKey) {
       const a = toWorld(e.clientX, e.clientY);
       setMarquee({ x0: a.x, y0: a.y, x1: a.x, y1: a.y });
-      const move = (ev: PointerEvent) => { const b = toWorld(ev.clientX, ev.clientY); setMarquee({ x0: a.x, y0: a.y, x1: b.x, y1: b.y }); };
+      const move = (ev: PointerEvent) => { boardTravel(ev as unknown as ReactPointerEvent<HTMLDivElement>); const b = toWorld(ev.clientX, ev.clientY); setMarquee({ x0: a.x, y0: a.y, x1: b.x, y1: b.y }); };
       const up = (ev: PointerEvent) => {
         el.removeEventListener("pointermove", move);
         el.removeEventListener("pointerup", up);
@@ -652,6 +657,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
     let last = { x: e.clientX, y: e.clientY };
     const move = (ev: PointerEvent) => {
       if (ev.pointerId !== id) return;
+      boardTravel(ev as unknown as ReactPointerEvent<HTMLDivElement>);
       const dx = ev.clientX - last.x, dy = ev.clientY - last.y;
       last = { x: ev.clientX, y: ev.clientY };
       if (fingers.current.size > 1) return;
@@ -742,13 +748,72 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
   }, [setView, onJumpWork, followTarget]);
 
   /* A right-click on the empty board: its own menu (New, Open file, Add piece, View). On a piece of work, a window or the
-     board's own controls the browser's menu (or theirs) is left alone. */
+     board's own controls the browser's menu (or theirs) is left alone. A finger's long press does not open it -- that
+     selects (the hold below), and the menu comes from the "⋯" on what is selected. */
   const onBoardMenu = (e: React.MouseEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest(".pa-panel, .pa-surface, .pa-summon, .pa-chrome, .pw-engine, input, textarea, [contenteditable]")) return;
     e.preventDefault();
+    if (boardHold.isHolding()) return;
     const r = root.current!.getBoundingClientRect();
+    const sx = e.clientX - r.left, sy = e.clientY - r.top;
     setSummon(null);
-    setBoardMenu({ sx: e.clientX - r.left, sy: e.clientY - r.top, at: toWorld(e.clientX, e.clientY) });
+    setBoardMenu({ sx, sy, x: sx, y: sy, at: toWorld(e.clientX, e.clientY) });
+  };
+
+  /** The "⋯" on what is selected: the menu, clear of the thing it is about rather than over it. */
+  const openMenuAt = (el: HTMLElement) => {
+    const host = root.current;
+    if (!host) return;
+    const r = host.getBoundingClientRect();
+    const box = el.getBoundingClientRect();
+    const left = box.left - r.left, top = box.top - r.top;
+    // A finger's menu is read at the screen's size however far out the board is, so it is placed in the room there is.
+    const z = viewRef.current.zoom;
+    const x = Math.max(8, Math.min(left + box.width / 2 - 88, r.width - 184));
+    const y = Math.max(8, Math.min(top + box.height + 8 / z, r.height - 200));
+    setSummon(null);
+    setBoardMenu({ sx: left + box.width / 2, sy: top + box.height / 2, x, y, at: toWorld(box.left + box.width / 2, box.top + box.height / 2) });
+  };
+
+  /** A finger held on the empty board: the pieces there are picked, and the menu is offered on them by the "⋯". */
+  const boardHold = useHoldToSelect({
+    suppressMenu: true,
+    onHold: (e) => {
+      const r = root.current?.getBoundingClientRect();
+      if (!r) return;
+      const a = toWorld(e.clientX, e.clientY);
+      const under = canvasRef.current.panels.filter((p) => p.x < a.x && p.x + p.w > a.x && p.y < a.y && p.y + (p.h || 200) > a.y).map((p) => p.id);
+      setSelected(new Set(under));
+      const sx = e.clientX - r.left, sy = e.clientY - r.top;
+      setSummon(null);
+      setBoardMenu({ sx, sy, x: Math.max(8, Math.min(sx, r.width - 184)), y: Math.min(sy, r.height - 200), at: a });
+    },
+  });
+  /** The hold's press: the pan still gets it, and a press that travels is not a hold. */
+  const boardPress = boardHold.props.onPointerDown;
+  const boardTravel = boardHold.props.onPointerMove;
+
+  /** What a finger has picked on the board (a piece of work or a panel): only what is picked has a "⋯". */
+  const [picked, setPicked] = useState<string[]>([]);
+  const pickedOf = (e: { clientX: number; clientY: number; currentTarget: EventTarget | null }) => {
+    const a = toWorld(e.clientX, e.clientY);
+    const on = canvasRef.current.panels.filter((p) => p.x < a.x && p.x + p.w > a.x && p.y < a.y && p.y + (p.h || 200) > a.y).map((p) => p.id);
+    const tile = (e.currentTarget as HTMLElement).closest<HTMLElement>("[data-surface]");
+    return tile?.dataset.surface && !on.includes(tile.dataset.surface) ? [...on, tile.dataset.surface] : on;
+  };
+  /** A finger held on a piece of work: it is picked, and the "⋯" on it offers the menu. */
+  const surfaceHold = useHoldToSelect({
+    suppressMenu: true,
+    onHold: (e) => {
+      const ids = pickedOf(e);
+      setPicked(ids);
+      if (ids.length) openMenuAt(e.currentTarget as HTMLElement);
+    },
+  });
+  /** One press for a piece of work and for a panel: the menu button is pressed, not held. */
+  const press = (e: ReactPointerEvent<HTMLElement>) => {
+    if ((e.target as HTMLElement).closest("button")) return;
+    surfaceHold.props.onPointerDown(e);
   };
 
   const onDouble = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -1302,8 +1367,12 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
       style={bg}
       tabIndex={-1}
       onPointerDown={onGridDown}
+      onPointerUp={boardHold.props.onPointerUp}
+      onPointerCancel={boardHold.props.onPointerCancel}
       onDoubleClick={onDouble}
       onContextMenu={onBoardMenu}
+      // The click that ends a hold must not also start a marquee or open anything.
+      onClickCapture={boardHold.props.onClickCapture}
       // The canvas pans by its view, never by scrolling: a focus or scrollIntoView inside it must not shift it.
       onScroll={(e) => { e.currentTarget.scrollTop = 0; e.currentTarget.scrollLeft = 0; }}
       onDragOver={(e) => { if ([...e.dataTransfer.types].includes("Files")) e.preventDefault(); }}
@@ -1389,7 +1458,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
           return (
           <section
             key={s.id}
-            className={`pa-surface is-${s.kind}${canvas.focus === s.id ? " is-focus" : ""}${d ? " is-moving" : ""}${isMaxed(s.id) ? " is-max" : ""}`}
+            className={`pa-surface is-${s.kind}${canvas.focus === s.id ? " is-focus" : ""}${picked.includes(s.id) ? " is-picked" : ""}${d ? " is-moving" : ""}${isMaxed(s.id) ? " is-max" : ""}`}
             data-surface={s.id}
             style={{ left: s.x + (d?.dx ?? 0), top: s.y + (d?.dy ?? 0), width: s.w + (d?.dw ?? 0), height: s.h + (d?.dh ?? 0) }}
             onPointerDown={(e) => {
@@ -1397,11 +1466,18 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
                 if (e.isTrusted) onJumpWork?.("panacea");
                 if (canvas.focus !== s.id) onFocus(s.id);
               }
+              // A finger held on the piece picks it, and the "⋯" on it offers the menu.
+              if (!(e.target as HTMLElement).closest("button")) surfaceHold.props.onPointerDown(e);
             }}
+            onPointerMove={surfaceHold.props.onPointerMove}
+            onPointerUp={surfaceHold.props.onPointerUp}
+            onPointerCancel={surfaceHold.props.onPointerCancel}
+            onClickCapture={surfaceHold.props.onClickCapture}
             aria-label={`${s.title}, ${KINDS[s.kind].noun}`}
-          >
+            >
             <header className="pa-surface-head" onPointerDown={surfaceGesture(s, "move")}>
               <span className="pa-title">{s.title}</span>
+              {picked.includes(s.id) && <button type="button" className="pa-more" aria-label={`Menu for ${s.title}`} aria-haspopup="menu" onClick={(e) => openMenuAt(e.currentTarget)}><IconMoreH size={13} /></button>}
               <span className="pa-surface-meta">{KINDS[s.kind].meta(s)}</span>
               {linkDot(s.id, s.title)}
               <button type="button" className="pa-surface-max" aria-label={isMaxed(s.id) ? `Restore ${s.title}` : `Maximise ${s.title}`} aria-pressed={isMaxed(s.id)}
@@ -1425,6 +1501,13 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
             offset={drag?.ids.has(p.id) ? { dx: drag.dx, dy: drag.dy } : null}
             width={widen?.id === p.id ? widen.w : null}
             actions={panelActions}
+            picked={picked.includes(p.id)}
+            onMenu={(el) => openMenuAt(el)}
+            onPress={(e) => press(e)}
+            onTravel={surfaceHold.props.onPointerMove}
+            onRelease={surfaceHold.props.onPointerUp}
+            onCancel={surfaceHold.props.onPointerCancel}
+            onClickCapture={surfaceHold.props.onClickCapture}
           />
         ))}
         {marquee && (
@@ -1456,7 +1539,7 @@ export function Board({ canvas, fresh, edit, quiet, loaded = true, hold, recipes
             { label: "Zoom out", act: () => handle.current?.zoomOut() },
           ] }] : []),
         ];
-        return <BoardMenu x={boardMenu.sx} y={boardMenu.sy} items={items} onClose={closeBoardMenu} />;
+        return <BoardMenu x={boardMenu.x} y={boardMenu.y} at={{ x: boardMenu.sx, y: boardMenu.sy }} items={items} onClose={closeBoardMenu} />;
       })()}
       {summon && (
         <Summon

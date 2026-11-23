@@ -6,14 +6,15 @@ export type BoardMenuItem =
   | { label: string; icon?: ReactNode; items: { label: string; icon?: ReactNode; act: () => void }[] };
 
 /**
- * A right-click on the empty board: one short vertical list at the pointer (New, Open file, Add piece, View), a group
- * opening beside it, the same shape as the right-click menu in the Office windows (docs/TOOL-RAIL.md, M1). The keys
- * work it: up and down, right into a group, left out of it, Enter, Escape. It goes on a click elsewhere or a wheel.
+ * The board's menu: one short vertical list (New, Open file, Add piece, View), a group opening beside it, the same shape
+ * as the right-click menu in the Office windows (docs/TOOL-RAIL.md, M1). A right-click puts it at the pointer; a finger
+ * gets it from the "⋯" on what is picked, placed clear of it by the caller. The keys work it: up and down, right into a
+ * group, left out of it, Enter, Escape. It goes on a click elsewhere, a wheel, or the board moving under it.
  */
-export function BoardMenu({ x, y, items, onClose }: { x: number; y: number; items: BoardMenuItem[]; onClose: () => void }) {
+export function BoardMenu({ x, y, at, items, onClose }: { x: number; y: number; at?: { x: number; y: number }; items: BoardMenuItem[]; onClose: () => void }) {
   const box = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState<number | null>(null);
-  const [at, setAt] = useState({ x, y });
+  const [where, setWhere] = useState({ x, y });
   const [subSide, setSubSide] = useState<"right" | "left">("right");
   const [subTop, setSubTop] = useState(0);
   // The open group's entries start level with its row.
@@ -28,7 +29,7 @@ export function BoardMenu({ x, y, items, onClose }: { x: number; y: number; item
     const host = el?.offsetParent;
     if (!el || !(host instanceof HTMLElement)) return;
     const w = el.offsetWidth, h = el.offsetHeight, hw = host.clientWidth, hh = host.clientHeight;
-    setAt({ x: Math.max(8, Math.min(x, hw - w - 8)), y: Math.max(8, Math.min(y, hh - h - 8)) });
+    setWhere({ x: Math.max(8, Math.min(x, hw - w - 8)), y: Math.max(8, Math.min(y, hh - h - 8)) });
     setSubSide(x + w * 2 + 16 > hw ? "left" : "right");
   }, [x, y]);
   useEffect(() => {
@@ -36,10 +37,13 @@ export function BoardMenu({ x, y, items, onClose }: { x: number; y: number; item
     const away = (e: Event) => { if (!box.current?.contains(e.target as Node)) onClose(); };
     document.addEventListener("pointerdown", away, true);
     document.addEventListener("wheel", away, { capture: true, passive: true });
+    // The board itself can move under it (a pan, the camera): it is never left behind pointing at nothing.
+    document.addEventListener("scroll", away, { capture: true, passive: true });
     window.addEventListener("blur", onClose);
     return () => {
       document.removeEventListener("pointerdown", away, true);
       document.removeEventListener("wheel", away, true);
+      document.removeEventListener("scroll", away, true);
       window.removeEventListener("blur", onClose);
     };
   }, [onClose]);
@@ -69,7 +73,9 @@ export function BoardMenu({ x, y, items, onClose }: { x: number; y: number; item
   const sub = open !== null ? items[open] : null;
 
   return (
-    <div ref={box} className="pa-board-menu pa-chrome" style={{ left: at.x, top: at.y }} onKeyDown={key} onContextMenu={(e) => e.preventDefault()}>
+    <div ref={box} className="pa-board-menu pa-chrome" style={{ left: where.x, top: where.y }} onKeyDown={key} onContextMenu={(e) => e.preventDefault()}>
+      {/* Where it is about: a dot at the point a right-click fell on, moved back inside the board from an edge. */}
+      {at && <i className="pa-board-menu-at" style={{ left: Math.max(8, Math.min(at.x, x)), top: Math.max(8, Math.min(at.y, y)) }} aria-hidden="true" />}
       <div className="pa-board-menu-list" role="menu" aria-label="Board">
         {items.map((it, i) => "items" in it ? (
           <button

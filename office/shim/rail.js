@@ -128,6 +128,11 @@
     html.autora-card #autora-ask-btn { height: 26px; font-size: 11px; }
     #autora-ask-btn svg { width: 14px; height: 14px; fill: none; stroke: none; }
     #autora-ask-btn:hover { opacity: .9; }
+    /* A finger's way to the menu: the "⋯" on the selection (a hold selects, so the menu is never the hold's). */
+    #autora-more { position: fixed; z-index: 94; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.16); background: #151824; color: #edeff5; box-shadow: 0 10px 24px -8px rgba(0,0,0,.7); cursor: pointer; }
+    #autora-more:active { transform: scale(.94); }
+    #autora-more svg { width: 17px; height: 17px; }
     /* The context menu (M1): a short vertical list of groups at the pointer, a group's entries beside it. */
     #autora-menu { position: fixed; z-index: 95; left: 0; top: 0; font-family: inherit; }
     #autora-menu .am-list { display: flex; flex-direction: column; min-width: 168px; padding: 4px; box-sizing: border-box; border-radius: 10px;
@@ -929,7 +934,7 @@
   })();
   const saveMenuPins = () => { try { localStorage.setItem(MENU_PINS, JSON.stringify(menuPins)); } catch { /* this session only */ } };
   let menu = null;
-  function closeMenu() { menu?.remove(); menu = null; }
+  function closeMenu() { menu?.remove(); menu = null; more?.remove(); more = null; }
   function openMenu(x, y) {
     closeMenu();
     if (!MENU) return;
@@ -1083,6 +1088,68 @@
     menu.style.left = `${Math.round(left)}px`;
     menu.style.top = `${Math.round(top)}px`;
     list.querySelector("button[data-group]")?.focus({ preventScroll: true });
+  }
+  /* A finger's long press selects (Brian's rule), so it never opens the menu: the menu comes from the "⋯" on the
+     selection. A mouse's right-click still opens it at the pointer. */
+  const HOLD_MS = 450, HOLD_SLOP = 10;
+  let holding = null, held = false, more = null, lastTouch = 0;
+  const closeMore = () => { more?.remove(); more = null; };
+  function openMore(spot) {
+    closeMore();
+    more = document.createElement("button");
+    more.type = "button";
+    more.id = "autora-more";
+    more.className = "am-more";
+    more.setAttribute("aria-label", "Menu for what is selected");
+    more.setAttribute("aria-haspopup", "menu");
+    more.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.9" fill="currentColor"/><circle cx="12" cy="12" r="1.9" fill="currentColor"/><circle cx="19" cy="12" r="1.9" fill="currentColor"/></svg>';
+    // Under the selection, or above it when there is no room below, and never off the side.
+    const size = 34, margin = 8;
+    const left = Math.max(margin, Math.min(spot.right != null ? spot.right - size : spot.left, window.innerWidth - size - margin));
+    const below = (spot.bottom != null ? spot.bottom : spot.top) + 6;
+    const top = below + size <= window.innerHeight - margin ? below : Math.max(margin, (spot.top || 0) - size - 6);
+    more.style.left = `${Math.round(left)}px`;
+    more.style.top = `${Math.round(top)}px`;
+    more.addEventListener("pointerdown", (e) => e.stopPropagation());
+    more.addEventListener("click", () => {
+      const at = more.getBoundingClientRect();
+      openMenu(at.left, at.bottom + 4);
+    });
+    document.body.appendChild(more);
+  }
+  if (MENU && phone) {
+    document.addEventListener("pointerdown", (e) => {
+      if (!(e.target instanceof Element) || mine(e.target) || !e.target.closest(MENU_WORK)) return;
+      if (e.pointerType === "touch") lastTouch = Date.now();
+      // A press begins: the last selection's "⋯" goes, and a hold of it selects.
+      closeMore();
+      held = false;
+      if (e.pointerType !== "touch") return;
+      clearTimeout(holding);
+      const at = { x: e.clientX, y: e.clientY };
+      holding = setTimeout(() => {
+        holding = null;
+        held = true;
+        navigator.vibrate?.(10);
+        const spot = cardSpot();
+        if (spot) openMore(spot);
+      }, HOLD_MS);
+      const move = (ev) => {
+        if (holding && Math.hypot(ev.clientX - at.x, ev.clientY - at.y) > HOLD_SLOP) { clearTimeout(holding); holding = null; }
+      };
+      const lift = () => { clearTimeout(holding); holding = null; document.removeEventListener("pointermove", move, true); document.removeEventListener("pointerup", lift, true); document.removeEventListener("pointercancel", lift, true); };
+      document.addEventListener("pointermove", move, true);
+      document.addEventListener("pointerup", lift, true);
+      document.addEventListener("pointercancel", lift, true);
+    }, true);
+    // The browser's own menu is not the one here, on a hold or on the events a touch leaves behind.
+    window.addEventListener("contextmenu", (e) => {
+      if (!(e.target instanceof Element) || mine(e.target) || !e.target.closest(MENU_WORK)) return;
+      if (holding || held || Date.now() - lastTouch < 700) e.preventDefault();
+    }, true);
+    // Anything else that happens puts the "⋯" away.
+    document.addEventListener("scroll", () => closeMore(), { capture: true, passive: true });
+    window.addEventListener("resize", () => closeMore());
   }
   if (MENU && !phone) {
     window.addEventListener("contextmenu", (e) => {

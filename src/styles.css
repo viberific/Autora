@@ -8026,6 +8026,8 @@ body.is-resizing iframe { pointer-events: none; }
 .pa-surface.is-focus { border-color: var(--accent-line); box-shadow: var(--shadow), 0 0 0 3px rgba(var(--accent-rgb), 0.12); }
 .pa-surface-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 14px; border-bottom: 1px solid var(--border); }
 .pa-surface-meta { font-size: var(--fs-xs); color: var(--text-3); margin-left: auto; }
+.pa-surface.is-picked .pa-surface-meta { margin-left: 0; }
+.pa-surface.is-picked .pa-surface-x, .pa-surface.is-picked .pa-surface-max { opacity: 1; }
 .pa-surface-x { display: grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: var(--r-xs); background: transparent; color: var(--text-3); cursor: pointer; opacity: 0; transition: opacity var(--dur-1) var(--ease); }
 .pa-surface:hover .pa-surface-x, .pa-surface-x:focus-visible { opacity: 1; }
 .pa-surface-x:hover { background: var(--s3); color: var(--text); }
@@ -8086,8 +8088,10 @@ body.is-resizing iframe { pointer-events: none; }
 .pa-link-menu button > svg { flex: 0 0 auto; color: var(--text-3); }
 /* The board's right-click menu (BoardMenu.tsx): the same glass as Send to, a short list with groups that open beside it. */
 .pa-board-menu { position: absolute; z-index: var(--z-menu); }
+/* The point it is about, when it came from a right-click: a small ring, never over the menu's own list. */
+.pa-board-menu-at { position: absolute; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: var(--accent); opacity: 0.7; pointer-events: none; }
 .pa-board-menu-list {
-  min-width: 176px; padding: 4px; display: flex; flex-direction: column;
+  min-width: 176px; max-width: 232px; padding: 4px; display: flex; flex-direction: column;
   border: 1px solid var(--glass-line-strong); border-radius: var(--r); background: var(--glass-sheen), var(--glass-veil), var(--glass);
   box-shadow: var(--glass-shadow), var(--glass-shine); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
   animation: paArrive var(--dur-2) var(--ease) both;
@@ -8201,6 +8205,27 @@ body.is-resizing iframe { pointer-events: none; }
 .pa-brd-acts button:hover { color: var(--text); border-color: var(--accent-line); }
 .pa-brd-dot { position: absolute; right: -6px; top: 50%; width: 10px; height: 10px; margin-top: -5px; border-radius: 50%; background: var(--s1); border: 2px solid var(--accent-line); cursor: crosshair; opacity: 0; transition: opacity var(--dur-1) var(--ease); }
 .pa-brd-card:hover .pa-brd-dot, .pa-brd-card.is-selected .pa-brd-dot { opacity: 1; }
+/* A finger has picked a card: the ring says so, and the "⋯" on it opens its menu (lib/touchSelect.ts). */
+.pa-brd-card.is-picked { border-color: var(--accent); box-shadow: var(--shadow), 0 0 0 2px rgba(var(--accent-rgb), 0.3); }
+.pa-brd-more {
+  position: absolute; right: -6px; bottom: -8px; display: grid; place-items: center; width: 32px; height: 32px;
+  border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: var(--s1); color: var(--text-2); cursor: pointer;
+  box-shadow: var(--shadow-sm); transition: color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+.pa-brd-more:hover { color: var(--text); border-color: var(--accent-line); }
+.pa-brd-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* The card's menu, the board's glass and rows at the card's own size: it is read in the board, not at the page's zoom. */
+.pa-brd-menu {
+  position: absolute; z-index: var(--z-menu); display: flex; flex-direction: column; min-width: 176px; padding: 4px;
+  border: 1px solid var(--glass-line-strong); border-radius: var(--r); background: var(--glass-sheen), var(--glass-veil), var(--glass);
+  box-shadow: var(--glass-shadow), var(--glass-shine); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+  animation: paArrive var(--dur-2) var(--ease) both;
+}
+.pa-brd-menu button {
+  display: flex; align-items: center; padding: 8px 10px; border: 0; border-radius: var(--r-xs); background: transparent;
+  color: var(--text); font: inherit; font-size: var(--fs-sm); text-align: left; cursor: pointer; white-space: nowrap;
+}
+.pa-brd-menu button:hover, .pa-brd-menu button:focus-visible { background: var(--accent-soft); color: var(--accent-light); outline: none; }
 .pa-doc-scroll { flex: 1; min-height: 0; overflow: auto; padding: 18px 26px 32px; }
 .pa-doc-page .ProseMirror { outline: none; min-height: 100%; color: var(--text); overflow-wrap: anywhere; }
 .pa-doc-page .ProseMirror > * + * { margin-top: 0.7em; }
@@ -8227,6 +8252,17 @@ body.is-resizing iframe { pointer-events: none; }
 }
 .pa-panel:hover { box-shadow: var(--shadow); }
 .pa-panel.is-selected { border-color: var(--accent-line); box-shadow: var(--shadow), 0 0 0 2px rgba(var(--accent-rgb), 0.25); }
+/* A finger has picked it (lib/touchSelect.ts): the ring says so, and the "⋯" on it opens its menu. */
+.pa-panel.is-picked, .pa-surface.is-picked { border-color: var(--accent-line); box-shadow: var(--shadow), 0 0 0 2px rgba(var(--accent-rgb), 0.3); }
+/* The "⋯" on what is picked: a finger's way to the menu, a 32px target so it is not a miss. */
+.pa-more {
+  flex: none; display: grid; place-items: center; width: 32px; height: 32px; margin: -4px 0; border: 0; border-radius: var(--r-sm);
+  background: transparent; color: var(--text-2); cursor: pointer;
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.pa-more:hover { background: var(--s3); color: var(--text); }
+.pa-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pa-surface .pa-more { width: 28px; height: 28px; margin: -6px 0; }
 .pa-panel.is-moving { transition: none; box-shadow: var(--shadow-lg); z-index: 3; }
 .pa-panel.is-fresh { animation: paArrive var(--dur-3) var(--ease-spring) both, paGlow 2s var(--ease) both; }
 .pa-panel.is-pinned .pa-head-acts [data-act="pin"] { opacity: 1; color: var(--accent); }

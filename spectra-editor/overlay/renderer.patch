@@ -216,23 +216,32 @@ diff --git a/src/renderer/components/canvas/PageCell.tsx b/src/renderer/componen
 @@ -1,4 +1,6 @@
  import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 +import { getAutoraDetect, getAutoraWidth, isAutoraUi } from '../../autora-style';
-+import { editTextAt, textRectAt } from '../../autora-tap';
++import { beginHold, editTextAt, swallowTouchMenu, textRectAt } from '../../autora-tap';
  import { showsFormWidgets } from '../../commands/tools';
  import type { PDFDocumentProxy } from 'pdfjs-dist';
  import type { PageAnnotation, PageRef } from '../../state/types';
-@@ -1086,7 +1088,7 @@
+@@ -1086,7 +1088,10 @@
    ) => void;
    onSelectPage: (docId: string, pageId: string, e?: React.MouseEvent) => void;
    onOpenPage: (docId: string, pageId: string) => void;
 -  onPageContextMenu: (docId: string, pageId: string, e: React.MouseEvent) => void;
 +  onPageContextMenu: (docId: string, pageId: string, e: React.MouseEvent, onWord?: boolean) => void;
++  // Autora: a finger held on the page selects it and offers the "⋯" at this point.
++  onPageHold?: (docId: string, pageId: string, at: { x: number; y: number }) => void;
++  onPageTap?: () => void;
    onPagePointerDown: (docId: string, pageId: string, e: React.PointerEvent<HTMLElement>) => void;
    // Which figure the armed 'shape' mode draws (the secondary toolbar picker).
    shapeType: ShapeType;
-@@ -1441,6 +1443,8 @@
+@@ -1441,6 +1443,14 @@
    // same pattern as usePageDrag — rather than React synthetic move/up through
    // pointer capture, which proved unreliable in the WebView.
    const [band, setBand] = useState<AnnotationRect | null>(null);
++  // Autora: the press being timed for a hold, whether the last one held, and
++  // when it ended (the click and menu that follow a hold are its echo).
++  const endHold = useRef<(() => void) | null>(null);
++  const held = useRef(false);
++  const holdEnd = useRef(0);
++  useEffect(() => () => endHold.current?.(), []);
 +  // Autora (phone): a redaction mark being resized by its handles (the rect shown until release).
 +  const [redactEdit, setRedactEdit] = useState<{ id: string; rect: AnnotationRect } | null>(null);
    const bandActive = useRef(false);
@@ -294,18 +303,33 @@ diff --git a/src/renderer/components/canvas/PageCell.tsx b/src/renderer/componen
            });
          } else if (tool === 'callout') {
            // The band is the TEXT BOX; the default leader lands to its left,
-@@ -3406,7 +3426,11 @@
+@@ -3406,4 +3426,12 @@
        onContextMenu={(e) => {
          e.preventDefault();
          e.stopPropagation();
--        onPageContextMenu(docId, page.id, e);
++        // Autora: a long press on a phone selects and never opens the menu
++        // (it comes from the "⋯"); the phone's own menu is not wanted either.
++        if (swallowTouchMenu(e, held.current || holdEnd.current > Date.now())) return;
 +        // Autora: the word under the pointer is worked out HERE, where the
 +        // run overlays are, and handed to the menu as a yes/no. The menu is
 +        // drawn outside this element, so it cannot look for itself.
 +        const cell = e.currentTarget as HTMLElement;
 +        onPageContextMenu(docId, page.id, e, editTextAt(cell, e.clientX, e.clientY) != null);
        }}
-       onPointerDown={handlePointerDown}
+@@ -3411,0 +3431,14 @@
++      onPointerDown={(e) => {
++        // A finger held here selects the page and offers the "⋯" at the
++        // finger: the page's own gesture goes on underneath, unchanged.
++        if (e.pointerType === 'touch' && e.button === 0) {
++          held.current = false;
++          endHold.current?.();
++          endHold.current = beginHold(e, {
++            onHold: (at) => { held.current = true; holdEnd.current = Date.now() + 700; onPageHold?.(docId, page.id, at); },
++            onTap: () => onPageTap?.(),
++          });
++        }
++        handlePointerDown(e);
++      }}
      >
 @@ -4207,7 +4231,8 @@
        {(redactionMarks ?? []).map((m) => {
@@ -573,7 +597,7 @@ diff --git a/src/renderer/components/canvas/WorkspaceCanvasView.tsx b/src/render
    );
  
    const menuItems = useMemo((): MenuItem[] => {
-@@ -6876,8 +6953,12 @@
+@@ -6876,8 +6953,33 @@
        confirmPageEdit: confirmPageEditNow,
        onOpen: onOpenPage,
        onExtractText,
@@ -584,6 +608,27 @@ diff --git a/src/renderer/components/canvas/WorkspaceCanvasView.tsx b/src/render
      });
 -  }, [menu, docs, selectedPageIds, dispatch, onOpenPage, onExtractText]);
 +  }, [menu, docs, selectedPageIds, dispatch, onOpenPage, onExtractText, editTextAtPoint]);
++
++@@ -7683,6 +7760,27 @@
++       )}
++ 
++       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />}
+++
+++      {/* Autora: the finger's way to that menu, on what it picked. */}
+++      {more && (
+++        <AutoraMore
+++          x={more.x}
+++          y={more.y}
+++          onOpen={(at) => {
+++            const picked = more;
+++            setMore(null);
+++            const cell = document.querySelector<HTMLElement>(`[data-page-id="${picked.pageId}"]`);
+++            onPageContextMenu(picked.docId, picked.pageId, { clientX: at.x, clientY: at.y } as React.MouseEvent, cell ? editTextAt(cell, at.x, at.y) != null : false);
+++          }}
+++        />
+++      )}
++ 
++       {/* Floating controls. The tool pill and its mode OPTIONS (stamp presets,
  
    const onMoveDoc = useCallback(
      (docId: string, direction: -1 | 1) => dispatch({ type: 'REORDER_DOCS', docId, direction }),

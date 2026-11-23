@@ -1,7 +1,7 @@
-import { memo, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { treeLive } from "../../lib/panacea/wiring";
 import { holdsWords, type Panel } from "../../lib/panacea/canvas";
-import { IconPin, IconX } from "../Icons";
+import { IconMoreH, IconPin, IconX } from "../Icons";
 import { Atom } from "./Atoms";
 
 export interface PanelActions {
@@ -22,6 +22,7 @@ export interface PanelActions {
   writes: (panel: Panel) => void;
 }
 
+
 const WHO: Record<Panel["by"], string> = { agent: "Autora placed it", person: "You placed it", rule: "It came with the work" };
 
 /**
@@ -30,10 +31,17 @@ const WHO: Record<Panel["by"], string> = { agent: "Autora placed it", person: "Y
  * worked out) offers Keep in library and Discard; a dim one (the work moved on) wakes with a click. One with text or list fields
  * says whose words they are ("You write", the default, or "Autora writes"), and a press switches it.
  */
-export const PanelCard = memo(function PanelCard({ panel, selected, fresh, offset, width, actions }: {
+export const PanelCard = memo(function PanelCard({ panel, selected, fresh, offset, width, actions, picked, onMenu, onPress, onTravel, onRelease, onCancel, onClickCapture }: {
   panel: Panel;
   selected: boolean;
   fresh: boolean;
+  picked: boolean;
+  onMenu: (el: HTMLElement) => void;
+  onPress: (e: ReactPointerEvent<HTMLElement>) => void;
+  onTravel: (e: ReactPointerEvent<HTMLElement>) => void;
+  onRelease: (e: ReactPointerEvent<HTMLElement>) => void;
+  onCancel: (e: ReactPointerEvent<HTMLElement>) => void;
+  onClickCapture: (e: ReactMouseEvent<HTMLElement>) => void;
   /** While being dragged: how far it has moved, in canvas pixels. */
   offset: { dx: number; dy: number } | null;
   /** While being widened. */
@@ -53,15 +61,21 @@ export const PanelCard = memo(function PanelCard({ panel, selected, fresh, offse
   };
   return (
     <div
-      className={`pa-panel is-${panel.state}${selected ? " is-selected" : ""}${fresh ? " is-fresh" : ""}${offset ? " is-moving" : ""}${panel.pinned ? " is-pinned" : ""}`}
+      className={`pa-panel is-${panel.state}${selected ? " is-selected" : ""}${picked ? " is-picked" : ""}${fresh ? " is-fresh" : ""}${offset ? " is-moving" : ""}${panel.pinned ? " is-pinned" : ""}`}
       data-panel={panel.id}
       style={style}
-      onPointerDown={dim ? (e) => { e.stopPropagation(); actions.wake(panel); } : undefined}
+      // A finger held picks it, and the "⋯" on it offers the menu (lib/touchSelect.ts).
+      onPointerDown={(e) => { if (dim) { e.stopPropagation(); actions.wake(panel); return; } onPress(e); }}
+      onPointerMove={onTravel}
+      onPointerUp={onRelease}
+      onPointerCancel={onCancel}
+      onClickCapture={onClickCapture}
       aria-label={`${panel.title}${ghost ? " (suggested)" : draft ? " (draft)" : dim ? " (faded)" : ""}`}
       role="group"
     >
       <header className="pa-head" onPointerDown={(e) => { if ((e.target as HTMLElement).closest("button")) return; actions.grab(panel, e); }}>
         <span className="pa-title">{panel.title}</span>
+        {picked && <button type="button" className="pa-more" aria-label={`Menu for ${panel.title}`} aria-haspopup="menu" onClick={(e) => onMenu(e.currentTarget)}><IconMoreH size={13} /></button>}
         {draft && <span className="pa-draft-tag">Draft</span>}
         {!ghost && holdsWords(panel.tree) && (
           <button

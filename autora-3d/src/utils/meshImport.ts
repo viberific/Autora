@@ -297,7 +297,7 @@ function readGltf(data: Uint8Array): RawMesh {
       if (!image) image = pictureOf(prim.material);
       const order = prim.indices !== undefined ? read(prim.indices).values : Array.from({ length: values.length / 3 }, (_, i) => i);
       const tri: number[] = [];
-      if (mode === 4) tri.push(...order);
+      if (mode === 4) for (let i = 0; i < order.length; i++) tri.push(order[i]);
       else if (mode === 5) for (let i = 0; i + 2 < order.length; i++) tri.push(...(i % 2 ? [order[i + 1], order[i], order[i + 2]] : [order[i], order[i + 1], order[i + 2]]));
       else for (let i = 1; i + 1 < order.length; i++) tri.push(order[0], order[i], order[i + 1]);
       for (let i = 0; i + 2 < tri.length; i += 3) {
@@ -455,8 +455,17 @@ export function placeMesh(raw: RawMesh, format: MeshFormat, at: MeshPlacement = 
     y[i] = up === 'y' ? -c : b;
     z[i] = up === 'y' ? b : c;
   }
-  const lo = [Math.min(...x), Math.min(...y), Math.min(...z)];
-  const hi = [Math.max(...x), Math.max(...y), Math.max(...z)];
+  // Math.min(...x) overflows the stack on a big mesh: walk the arrays instead.
+  const lo = [Infinity, Infinity, Infinity];
+  const hi = [-Infinity, -Infinity, -Infinity];
+  for (const axis of [x, y, z]) {
+    const k = lo.indexOf(Infinity);
+    for (let i = 0; i < axis.length; i++) {
+      const v = axis[i];
+      if (v < lo[k]) lo[k] = v;
+      if (v > hi[k]) hi[k] = v;
+    }
+  }
   const longest = Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
   if (!(longest > 0) || !Number.isFinite(longest)) bad('That mesh has no size (all its points are the same).');
 

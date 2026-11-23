@@ -356,6 +356,22 @@ export const PROVIDERS: ProviderSpec[] = [
     ],
   },
   {
+    id: "zro",
+    label: "Zro",
+    kind: "openai",
+    note: "One key for a catalogue of open-weight models through Zro's gateway, at Zro's own prices.",
+    envKeys: ["ZRO_API_KEY"],
+    keyHint: "sk-...",
+    keysUrl: "https://zro.moonmath.ai",
+    baseUrl: "https://zro.moonmath.ai/v1",
+    defaultModel: "deepseek-v4.1-flash",
+    listable: true,
+    openEnded: true,
+    models: [
+      { id: "deepseek-v4.1-flash", label: "DeepSeek V4.1 Flash", input: 0, output: 0, priced: false, note: "Free plan; unpriced, not free" },
+    ],
+  },
+  {
     id: "local",
     label: "Local server",
     kind: "openai",

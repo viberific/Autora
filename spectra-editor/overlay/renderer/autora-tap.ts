@@ -42,3 +42,54 @@ export function textRectAt(page: HTMLElement, cx: number, cy: number, mode: 'wor
   }
   return best ?? hitBox;
 }
+
+// ---------------------------------------------------------------------------
+// A finger's long press selects, and the menu comes from a "⋯" on the page
+// (Brian's rule: a hold never opens the menu itself; a mouse's right-click
+// still does). The page cell calls these; the canvas draws the "⋯".
+// ---------------------------------------------------------------------------
+
+const HOLD_MS = 450;
+const HOLD_SLOP = 10;
+/** A touch happened this recently: the mouse events arriving now are the phone's own echo. */
+let lastTouch = 0;
+const echo = () => Date.now() - lastTouch < 700;
+
+export interface HoldHooks {
+  /** The finger has held long enough: select what is under it and offer the "⋯" at this point. */
+  onHold: (at: { x: number; y: number }) => void;
+  /** A press ended without becoming a hold: the "⋯" of the last one goes. */
+  onTap: () => void;
+}
+
+/** The press a page cell starts on a finger. Returns a function that ends it. */
+export function beginHold(e: React.PointerEvent, hooks: HoldHooks): () => void {
+  if (e.pointerType === 'touch') lastTouch = Date.now();
+  const at = { x: e.clientX, y: e.clientY };
+  let timer: number | null = window.setTimeout(() => {
+    timer = null;
+    navigator.vibrate?.(10);
+    hooks.onHold(at);
+  }, HOLD_MS);
+  const stop = () => {
+    if (timer !== null) { window.clearTimeout(timer); timer = null; }
+    document.removeEventListener('pointermove', move, true);
+    document.removeEventListener('pointerup', lift, true);
+    document.removeEventListener('pointercancel', lift, true);
+  };
+  const move = (ev: PointerEvent) => {
+    if (timer !== null && Math.hypot(ev.clientX - at.x, ev.clientY - at.y) > HOLD_SLOP) { window.clearTimeout(timer); timer = null; }
+  };
+  const lift = () => { const wasHolding = timer === null; stop(); if (!wasHolding) hooks.onTap(); };
+  document.addEventListener('pointermove', move, true);
+  document.addEventListener('pointerup', lift, true);
+  document.addEventListener('pointercancel', lift, true);
+  return stop;
+}
+
+/** A long press on a phone also asks for the browser's own menu: it is not the menu here. */
+export function swallowTouchMenu(e: React.MouseEvent, holding: boolean): boolean {
+  if (!holding && !echo()) return false;
+  e.preventDefault();
+  return true;
+}

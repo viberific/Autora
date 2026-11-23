@@ -363,16 +363,24 @@ export function loftMesh(sections: Section[], opts: { sides: number; steps: numb
     for (let a = 0; a < sides; a++) {
       const p = i * sides + a;
       const q = i * sides + ((a + 1) % sides);
-      indices.push(p, q, p + sides, q, q + sides, p + sides);
+      // Wound so the quad faces outward: the ring runs one way round and the next ring is
+      // further along the path, so p -> p+sides -> q is the outward triangle.
+      indices.push(p, p + sides, q, q, p + sides, q + sides);
     }
   }
-  const capAt = (ring: number) => {
+  const capAt = (ring: number, outward: boolean) => {
     const centre = positions.length / 3;
     positions.push(rings[ring].c.x, rings[ring].c.y, rings[ring].c.z);
-    for (let a = 0; a < sides; a++) indices.push(centre, ring * sides + a, ring * sides + ((a + 1) % sides));
+    for (let a = 0; a < sides; a++) {
+      const p = ring * sides + a;
+      const q = ring * sides + ((a + 1) % sides);
+      // The start cap faces back down the path and the end cap forward, so they wind opposite ways.
+      if (outward) indices.push(centre, q, p);
+      else indices.push(centre, p, q);
+    }
   };
-  capAt(0);
-  capAt(rings.length - 1);
+  capAt(0, false);
+  capAt(rings.length - 1, true);
   return facingOut({ positions, indices });
 }
 
