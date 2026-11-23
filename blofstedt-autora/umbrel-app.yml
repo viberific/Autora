@@ -215,6 +215,8 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
+  Fixes the release that did not install. 0.9.394 built nothing, so the app
+  stayed on the old version; this is the same work, shipping properly.
   On a phone, a press and hold now selects, everywhere: the board, its cards,
   Artifacts, the document and PDF windows and the video timeline. The menu
   comes from a small ... button on what is selected, so a long press no longer

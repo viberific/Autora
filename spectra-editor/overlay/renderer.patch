@@ -226,9 +226,9 @@ diff --git a/src/renderer/components/canvas/PageCell.tsx b/src/renderer/componen
    onOpenPage: (docId: string, pageId: string) => void;
 -  onPageContextMenu: (docId: string, pageId: string, e: React.MouseEvent) => void;
 +  onPageContextMenu: (docId: string, pageId: string, e: React.MouseEvent, onWord?: boolean) => void;
-+  // Autora: a finger held on the page selects it and offers the "⋯" at this point.
 +  onPageHold?: (docId: string, pageId: string, at: { x: number; y: number }) => void;
 +  onPageTap?: () => void;
++  // Autora: a finger held on the page selects it and offers the "⋯" at this point.
    onPagePointerDown: (docId: string, pageId: string, e: React.PointerEvent<HTMLElement>) => void;
    // Which figure the armed 'shape' mode draws (the secondary toolbar picker).
    shapeType: ShapeType;
@@ -303,7 +303,14 @@ diff --git a/src/renderer/components/canvas/PageCell.tsx b/src/renderer/componen
            });
          } else if (tool === 'callout') {
            // The band is the TEXT BOX; the default leader lands to its left,
-@@ -3406,4 +3426,12 @@
+@@ -1383,4 +1383,6 @@
+   onClearNewFieldPlacement,
+   onSelectPage,
+   onOpenPage,
++  onPageHold,
++  onPageTap,
+   onPageContextMenu,
+@@ -3406,7 +3426,28 @@
        onContextMenu={(e) => {
          e.preventDefault();
          e.stopPropagation();
@@ -315,9 +322,10 @@ diff --git a/src/renderer/components/canvas/PageCell.tsx b/src/renderer/componen
 +        // drawn outside this element, so it cannot look for itself.
 +        const cell = e.currentTarget as HTMLElement;
 +        onPageContextMenu(docId, page.id, e, editTextAt(cell, e.clientX, e.clientY) != null);
+         onPageContextMenu(docId, page.id, e);
        }}
-@@ -3411,0 +3431,14 @@
 +      onPointerDown={(e) => {
++
 +        // A finger held here selects the page and offers the "⋯" at the
 +        // finger: the page's own gesture goes on underneath, unchanged.
 +        if (e.pointerType === 'touch' && e.button === 0) {
@@ -330,6 +338,7 @@ diff --git a/src/renderer/components/canvas/PageCell.tsx b/src/renderer/componen
 +        }
 +        handlePointerDown(e);
 +      }}
+-      onPointerDown={handlePointerDown}
      >
 @@ -4207,7 +4231,8 @@
        {(redactionMarks ?? []).map((m) => {
@@ -412,11 +421,12 @@ diff --git a/src/renderer/components/canvas/WorkspaceCanvasView.tsx b/src/render
  import { PermissionRefusal, capabilityBlockText, signBlock } from '../../lib/document-permission-text';
  import { useAppState, useAppDispatch, useReadAppState, useReadLinkDrafts, useSubscribeAppState } from '../../state/AppStateProvider';
  import { usePdfProxyState } from '../../hooks/usePdfProxies';
-@@ -232,6 +233,7 @@
+@@ -232,6 +233,8 @@
  import { TEST_HARNESS_ENABLED, registerCanvasRedaction, registerCanvasSignature, registerCanvasCrop, registerCanvasSnapshot, registerCanvasOcr, registerCanvasSelection, registerCanvasForms, registerCanvasMerge, registerCanvasEditImages } from '../../testHarness';
  import { invokeCommand, confirmPageEditNow, registerCanvasServices, pushEscapeInterceptor } from '../../commands/context';
  import { buildPageContextMenu } from '../../lib/page-context-menu';
 +import { editTextAt } from '../../autora-tap';
++import { AutoraMore } from '../../autora-more';
  import { ContextMenu } from '../ContextMenu';
  import type { MenuItem } from '../ContextMenu';
  import { Canvas } from './Canvas';
@@ -437,10 +447,12 @@ diff --git a/src/renderer/components/canvas/WorkspaceCanvasView.tsx b/src/render
    // The armed interaction tool — ui slice too (the keymap's Escape chain and
    // the tools.* commands drive it).
    const tool = state.ui.tool;
-@@ -942,6 +948,15 @@
+@@ -942,6 +948,17 @@
    // (yellow highlight, dark freetext, blue ink); a pick applies to whichever
    // tool creates the next annotation, across tool switches.
    const [toolColor, setToolColor] = useState<string | null>(null);
++  // Autora (phone): the finger's "⋯" on the page it picked, and where.
++  const [more, setMore] = useState<{ x: number; y: number; docId: string; pageId: string } | null>(null);
 +  // Autora (phone): the option tray picks the colour from outside this tree.
 +  useEffect(
 +    () =>
@@ -597,7 +609,7 @@ diff --git a/src/renderer/components/canvas/WorkspaceCanvasView.tsx b/src/render
    );
  
    const menuItems = useMemo((): MenuItem[] => {
-@@ -6876,8 +6953,33 @@
+@@ -6876,6 +6953,10 @@
        confirmPageEdit: confirmPageEditNow,
        onOpen: onOpenPage,
        onExtractText,
@@ -608,30 +620,31 @@ diff --git a/src/renderer/components/canvas/WorkspaceCanvasView.tsx b/src/render
      });
 -  }, [menu, docs, selectedPageIds, dispatch, onOpenPage, onExtractText]);
 +  }, [menu, docs, selectedPageIds, dispatch, onOpenPage, onExtractText, editTextAtPoint]);
-+
-+@@ -7683,6 +7760,27 @@
-+       )}
-+ 
-+       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />}
-++
-++      {/* Autora: the finger's way to that menu, on what it picked. */}
-++      {more && (
-++        <AutoraMore
-++          x={more.x}
-++          y={more.y}
-++          onOpen={(at) => {
-++            const picked = more;
-++            setMore(null);
-++            const cell = document.querySelector<HTMLElement>(`[data-page-id="${picked.pageId}"]`);
-++            onPageContextMenu(picked.docId, picked.pageId, { clientX: at.x, clientY: at.y } as React.MouseEvent, cell ? editTextAt(cell, at.x, at.y) != null : false);
-++          }}
-++        />
-++      )}
-+ 
-+       {/* Floating controls. The tool pill and its mode OPTIONS (stamp presets,
  
-   const onMoveDoc = useCallback(
-     (docId: string, direction: -1 | 1) => dispatch({ type: 'REORDER_DOCS', docId, direction }),
+@@ -7603,9 +7603,23 @@
+       )}
+ 
+       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />}
+ 
++
++      {/* Autora: the finger's way to that menu, on what it picked. */}
++      {more && (
++        <AutoraMore
++          x={more.x}
++          y={more.y}
++          onOpen={(at) => {
++            const picked = more;
++            setMore(null);
++            const cell = document.querySelector<HTMLElement>(`[data-page-id="${picked.pageId}"]`);
++            onPageContextMenu(picked.docId, picked.pageId, { clientX: at.x, clientY: at.y } as React.MouseEvent, cell ? editTextAt(cell, at.x, at.y) != null : false);
++          }}
++        />
++      )}
+       {/* Floating controls. The tool pill and its mode OPTIONS (stamp presets,
+           annotation colour) moved to the secondary toolbar — they belong to the
+           tool. What's left is deliberately NOT tool-scoped: the view toggles,
+           and the PENDING-STATE buttons (Fill N / Redact N / Apply changes),
+           which report queued work. The canvas invariant is that pending state is
 diff --git a/src/renderer/hooks/useOperationQueue.tsx b/src/renderer/hooks/useOperationQueue.tsx
 --- a/src/renderer/hooks/useOperationQueue.tsx
 +++ b/src/renderer/hooks/useOperationQueue.tsx

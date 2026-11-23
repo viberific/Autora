@@ -93,3 +93,13 @@ export function swallowTouchMenu(e: React.MouseEvent, holding: boolean): boolean
   e.preventDefault();
   return true;
 }
+
+/**
+ * Autora: the editable run under a client point, if any — the overlay the Edit
+ * text menu item opens on. Null when the point is over nothing editable.
+ */
+export function editTextAt(page: HTMLElement, cx: number, cy: number): HTMLElement | null {
+  const el = document.elementFromPoint(cx, cy) as HTMLElement | null;
+  if (!el || !page.contains(el)) return null;
+  return el.closest<HTMLElement>('[data-testid^="edit-para-"],[data-testid^="edit-text-"]');
+}
