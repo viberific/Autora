@@ -215,6 +215,11 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
+  Lebrel works with thinking on. Its attested endpoint takes the switch as a
+  bare boolean and answers the object DeepSeek wants with a 400, so every
+  Lebrel turn that asked for thinking failed; it is sent the boolean now and
+  the thinking comes back in its own reasoning field. DeepSeek direct, and
+  every other provider, are sent exactly what they were before.
   Fixes the release that did not install. 0.9.394 built nothing, so the app
   stayed on the old version; this is the same work, shipping properly.
   On a phone, a press and hold now selects, everywhere: the board, its cards,

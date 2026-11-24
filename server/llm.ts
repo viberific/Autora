@@ -571,6 +571,12 @@ async function streamOpenAi(call: ChatCall, onDelta: (text: string) => void): Pr
      body it always did. */
   const pin = (call.endpoint ?? "").trim();
   const openrouter = Boolean(providerSpec(call.provider)?.pinnable) || /(^|\.)openrouter\.ai/.test(call.baseUrl ?? "");
+  /* Lebrel's attested router takes the switch as a bare boolean -- the object
+     DeepSeek wants is a 400 there ("thinking must be boolean") -- and answers
+     with the thinking in a separate `reasoning` field, which the stream below
+     already keeps. Only its own endpoint is named, so a DeepSeek model routed
+     through it is not sent the block. */
+  const lebrel = call.provider === "lebrel" || /attested\.lebrel\.ai/.test(call.baseUrl ?? "");
   const forcedKey = `${call.provider ?? ""}|${call.baseUrl ?? ""}|${call.model}`;
   /* What this model takes beyond the common fields, read per request so a refusal learned below holds from the next. */
   const profileNow = () => effectiveProfile(call.provider ?? "", call.model, call.baseUrl ?? "");
@@ -590,7 +596,9 @@ async function streamOpenAi(call: ChatCall, onDelta: (text: string) => void): Pr
       ...(call.effort && profile.effort === "openai" ? { reasoning_effort: call.effort } : {}),
       // Only DeepSeek takes this, and only when the caller asked either way:
       // left alone, its own default stands.
-      ...(deepseek && call.thinking ? { thinking: { type: call.thinking === "off" ? "disabled" : "enabled" } } : {}),
+      ...(deepseek && !lebrel && call.thinking ? { thinking: { type: call.thinking === "off" ? "disabled" : "enabled" } } : {}),
+      // Lebrel, the same switch as a boolean, either way the caller asked.
+      ...(lebrel && call.thinking ? { thinking: call.thinking !== "off" } : {}),
       /* GLM thinks first too, and Z.ai (and gateways that pass the field on)
          switch it off with the same `thinking` block. OpenRouter has its own
          `reasoning` switch, honoured per model and ignored where a model cannot
