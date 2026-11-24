@@ -12,27 +12,27 @@ import { useCallback, useEffect, useRef, type MouseEvent as ReactMouseEvent, typ
  */
 
 /** How long a press has to last to select. */
-export const HOLD_MS = 450;
+const HOLD_MS = 450;
 /** How far a press may travel before it is a drag and not a hold. */
-export const HOLD_SLOP = 10;
+const HOLD_SLOP = 10;
 
 /** The last event a finger produced was a touch, not a mouse. The emulated mouse events a phone sends after a touch
  *  (pointerdown/up with pointerType "mouse", the click, the contextmenu) are then ignored, so one tap does not select
  *  twice and a long press does not open the menu after the hold has already selected. */
 let lastTouch = 0;
 /** A touch happened this recently: the mouse events arriving now are the phone's own echo. */
-export const touchEcho = (within = 700) => Date.now() - lastTouch < within;
+const touchEcho = (within = 700) => Date.now() - lastTouch < within;
 /** Note a real touch, so the mouse events that follow it are known for what they are. */
-export const sawTouch = () => { lastTouch = Date.now(); };
+const sawTouch = () => { lastTouch = Date.now(); };
 
 /** The emulated mouse events a touch leaves behind: worth ignoring in a handler that also serves a mouse. */
-export const isEcho = (e: { pointerType?: string; sourceCapabilities?: { firesTouchEvents?: boolean } | null }) =>
+const isEcho = (e: { pointerType?: string; sourceCapabilities?: { firesTouchEvents?: boolean } | null }) =>
   e.pointerType === "mouse" && (touchEcho() || e.sourceCapabilities?.firesTouchEvents === true);
 
 /** A press with a mouse selects at once, as it always has; a hold is only for a finger. */
 const pressSelects = (e: { pointerType?: string }) => e.pointerType === "mouse";
 
-export interface HoldOptions {
+interface HoldOptions {
   /** A hold started: select. */
   onHold: (e: ReactPointerEvent<HTMLElement>) => void;
   /** A finger went down or up. */
@@ -46,7 +46,7 @@ export interface HoldOptions {
   enabled?: boolean;
 }
 
-export interface HoldHandlers {
+interface HoldHandlers {
   onPointerDown: (e: ReactPointerEvent<HTMLElement>) => void;
   onPointerMove: (e: ReactPointerEvent<HTMLElement>) => void;
   onPointerUp: (e: ReactPointerEvent<HTMLElement>) => void;
@@ -56,7 +56,7 @@ export interface HoldHandlers {
   onContextMenu: (e: ReactMouseEvent<HTMLElement>) => void;
 }
 
-export interface Hold {
+interface Hold {
   /** Spread on the element a press selects. */
   props: HoldHandlers;
   /** A hold is running or has just ended: the click on its way must not also act. */

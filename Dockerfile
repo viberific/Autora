@@ -264,7 +264,10 @@ COPY --from=photo /build/dist/photo dist/photo/
 ARG TARGETARCH
 COPY spectra/PIN.json spectra/PIN.json
 COPY scripts/build-spectra.mjs scripts/spectra-checkout.mjs scripts/
-RUN apk add --no-cache py3-pip \
+# python3-ndbm comes first: Alpine's python split moved _dbm.cpython-*.so out of
+# python3 into its own package, and py3-pip pulls it in, so apk refuses the
+# file clash unless the owner is installed up front.
+RUN apk add --no-cache python3-ndbm py3-pip \
  && node scripts/build-spectra.mjs --deps-only --arch "${TARGETARCH}" \
  && apk del py3-pip
 # The server reads its own version out of this to stamp the page and answer

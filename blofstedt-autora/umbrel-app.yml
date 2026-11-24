@@ -215,6 +215,11 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
+  The image builds again. Alpine moved a Python file into its own package and
+  pip pulls it in, so apk refused the clash and 0.9.396 built nothing on
+  either arch; the owner package is installed first now. Also clears the
+  unused exports knip was failing the Check on, and lands the version bump
+  that never reached main.
   Lebrel works with thinking on. Its attested endpoint takes the switch as a
   bare boolean and answers the object DeepSeek wants with a 400, so every
   Lebrel turn that asked for thinking failed; it is sent the boolean now and

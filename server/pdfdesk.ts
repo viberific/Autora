@@ -303,7 +303,7 @@ export function askOpen(session: string): void {
 }
 
 /** The page has shown the picker: nothing is left to ask. */
-export function clearAsk(session: string): void {
+function clearAsk(session: string): void {
   const desk = load(session);
   if (!desk || !desk.ask) return;
   desk.ask = 0;

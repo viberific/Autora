@@ -12,10 +12,10 @@
 const seenAt = new Map<string, number>();
 
 /** How long a tool waits for the page to confirm a window before it says it could not. */
-export const WINDOW_WAIT_MS = 2500;
+const WINDOW_WAIT_MS = 2500;
 
 /** A window's name on the page: its app and the chat it is beside. */
-export const windowKey = (kind: string, session: string) => `${kind}|${session}`;
+const windowKey = (kind: string, session: string) => `${kind}|${session}`;
 
 /** The page has this window up, as of now. */
 export function markSeen(kind: string, session: string): void {
