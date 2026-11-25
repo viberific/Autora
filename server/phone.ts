@@ -29,7 +29,7 @@ let busy = false;
 /** How long one command may take before it is given up on. A settle waits for the screen; a launch can be slow. */
 const TIMEOUT_MS = 60_000;
 
-export interface PhoneState {
+interface PhoneState {
   open: boolean;
   since?: number;
   /** Goes up on every command, by anyone: the window takes a new screen when it moves. */
@@ -324,6 +324,6 @@ export function phoneRoutes(app: Express, opts: { exists: (session: string) => b
 }
 
 /** The path the window's picture is fetched from, for the briefing. */
-export const PHONE_SCREEN_PATH = (session: string) => `/api/phone/${encodeURIComponent(session)}/screen`;
+const _PHONE_SCREEN_PATH = (session: string) => `/api/phone/${encodeURIComponent(session)}/screen`;
 
-export { path as phonePath };
+const _phonePath = path;

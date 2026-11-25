@@ -215,6 +215,10 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
+  0.9.402: the video editor builds in CI again. Its patch anchored on a
+  line that only exists in a hand-patched copy, so a fresh checkout failed
+  it; the patch now accepts either shape. Also silences five unused
+  exports. Carries 0.9.401's clipboard test fix, which never published.
   0.9.400: the phone window builds again. An unused variable and a
   video-editor patch that had drifted from the code it patches both failed
   the image build; both are fixed. Also adds clipboard_copy and

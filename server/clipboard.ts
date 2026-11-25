@@ -14,10 +14,10 @@ import { dirname } from "node:path";
 const HOST_CLIP = process.env.AUTORA_CLIPBOARD_FILE || "/data/settings/clipboard.txt";
 const MAX = 200_000;
 
-export type ClipPlace = "page" | "host";
+type ClipPlace = "page" | "host";
 
 /** What a copy or paste reads back: the text, where it came from, and how much of it there was. */
-export interface ClipResult {
+interface ClipResult {
   text: string;
   place: ClipPlace;
   chars: number;

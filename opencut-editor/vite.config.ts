@@ -39,13 +39,23 @@ const publicBeside = (): Plugin => ({
  * moves them the build stops here, rather than the cursor quietly pointing
  * nowhere or an effect layer quietly failing.
  */
-const MARKS: Array<{ file: string; from: string; to: string }> = [
+const MARKS: Array<{
+  file: string;
+  from: string;
+  to: string;
+  insertBefore?: string;
+  insertText?: string;
+}> = [
   {
     file: "/src/web/timeline/components/timeline-element.tsx",
-    // The click handler grew a hold guard (a click a long press ended with is the hold's), so the one-line form is
-    // gone; the attribute the wasm side reads is added before the handler instead.
-    from: "\t\t\t\t\t\tonClick={(event) => {\n\t\t\t\t\t\t\t// A click a hold ended with is the hold's, not a second pick.",
-    to: "\t\t\t\t\t\tdata-element-id={element.id}\n\t\t\t\t\t\tonClick={(event) => {\n\t\t\t\t\t\t\t// A click a hold ended with is the hold's, not a second pick.",
+    // The attribute the wasm side reads is added on the line before the click handler. Anchor on the handler's body
+    // (onElementClick), not on its opening line: src/web is gitignored, so CI reads a pristine upstream copy where the
+    // handler is the original one-line arrow, while a working copy may have grown the hold guard. Anchoring on the body
+    // keeps the mark working for both, and the attribute still lands inside the opening tag.
+    from: "onElementClick({ event, element })",
+    to: "onElementClick({ event, element })",
+    insertBefore: "onClick={(event)",
+    insertText: "\t\t\t\t\t\tdata-element-id={element.id}\n",
   },
   {
     file: "/src/web/timeline/components/timeline-track.tsx",
@@ -70,6 +80,16 @@ const markSources = (): Plugin => ({
     let out = code.replace(/\r\n/g, "\n");
     for (const m of marks) {
       if (!out.includes(m.from)) throw new Error(`autora-patch-sources: ${m.file} no longer has ${m.from}`);
+      if (m.insertBefore && m.insertText) {
+        // Put the attribute on its own line before the click handler, keeping that line's indentation. Skipped if it is
+        // already there, so a working copy that was patched by hand builds the same as a pristine one.
+        if (!out.includes(m.insertText.trim())) {
+          const at = out.indexOf(m.insertBefore);
+          if (at < 0) throw new Error(`autora-patch-sources: ${m.file} has no ${m.insertBefore}`);
+          const lineStart = out.lastIndexOf("\n", at) + 1;
+          out = out.slice(0, lineStart) + m.insertText + out.slice(lineStart);
+        }
+      }
       out = out.replace(m.from, m.to);
     }
     return { code: out, map: null };
