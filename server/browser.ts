@@ -2042,7 +2042,8 @@ export class LiveBrowser {
       a desktop (see resize). */
   private vp: { width: number; height: number } = { ...VIEWPORT };
   private context: BrowserContext | null = null;
-  private page: Page | null = null;
+  /** The page being driven, or null before one is open. Read-only to callers: the clipboard tools ask whether a page is there. */
+  page: Page | null = null;
   private cdp: CDPSession | null = null;
   private streaming = false;
   /** Whether Chrome is encoding pictures right now. Off while every viewer is on a live mirror. */
@@ -3496,6 +3497,52 @@ export class LiveBrowser {
       await this.mapFields();
       return read;
     });
+  }
+
+  /**
+   * Put text on the page's clipboard, so the page's own Ctrl+V -- and a paste
+   * into one of its fields -- sees it. Written through a hidden textarea and
+   * execCommand first, because navigator.clipboard needs a secure context and
+   * a permission, and most pages are neither.
+   */
+  async writeClipboard(text: string): Promise<boolean> {
+    if (!this.page) return false;
+    const body = JSON.stringify(text);
+    return (await this.page.evaluate(`(() => {
+      const put = (el) => {
+        el.value = ${body};
+        el.setAttribute("readonly", "");
+        el.style.cssText = "position:fixed;top:0;left:0;opacity:0;pointer-events:none";
+        document.body.appendChild(el);
+        el.select();
+        el.setSelectionRange(0, el.value.length);
+        let done = false;
+        try { done = document.execCommand("copy"); } catch { done = false; }
+        el.remove();
+        return done;
+      };
+      if (put(document.createElement("textarea"))) return true;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(${body}).catch(() => undefined);
+        return true;
+      }
+      return false;
+    })()`).catch(() => false)) === true;
+  }
+
+  /** What is on the page's clipboard, by reading it back through a paste. */
+  async readClipboard(): Promise<string> {
+    if (!this.page) return "";
+    return (await this.page.evaluate(`(() => {
+      const el = document.createElement("textarea");
+      el.style.cssText = "position:fixed;top:0;left:0;opacity:0;pointer-events:none";
+      document.body.appendChild(el);
+      el.focus();
+      let text = "";
+      try { document.execCommand("paste"); text = el.value; } catch { text = ""; }
+      el.remove();
+      return text;
+    })()`).catch(() => "")) ?? "";
   }
 
   private async checkedState(ref: number): Promise<boolean | null> {

@@ -60,6 +60,7 @@ import { frameImage, latestFrame } from "./liveview";
 import { htmlToText, textParts } from "./pages";
 import { probeBrowser, VIEWPORT, type LiveBrowser, type PageRead, type UploadFile } from "./browser";
 import { describeCaptchas } from "./pagedescribe";
+import { copyText, describeClip, hostClipboard } from "./clipboard";
 import { parseCookieExport, sitesOf } from "./cookies";
 import { recordSignIn, signInBriefing } from "./signins";
 import { relayAction, relayConnected, relayStatus } from "./desktop";
@@ -196,6 +197,7 @@ import { panaceaSPECS } from "./specs/panacea";
 import { cadSPECS } from "./specs/cad";
 import { gameSPECS } from "./specs/game";
 import { PHONE_TOOLS } from "./specs/phone";
+import { CLIPBOARD_TOOLS } from "./specs/clipboard";
 import { DESKS } from "./desks";
 import { capabilityOf, type Capability } from "./capabilities";
 import { gameAvailable, gameState, loadGame, runGameTool } from "./gamedesk";
@@ -271,6 +273,7 @@ const TOOLS: ToolSpec[] = [
   ...cadSPECS,
   ...gameSPECS,
   ...PHONE_TOOLS,
+  ...CLIPBOARD_TOOLS,
   ...photoSPECS,
   ...memorySPECS,
   ...skillsSPECS,
@@ -4169,6 +4172,31 @@ async function runToolUnredacted(
           cancelled: ctx.cancelled,
           onCancel: ctx.onCancel,
         });
+
+      case "clipboard_copy":
+      case "clipboard_paste": {
+        const place = args.place === "page" || args.place === "host" ? args.place : undefined;
+        if (spec.name === "clipboard_copy") {
+          const text = String(args.text ?? "");
+          if (!text) return { ok: false, summary: "There was nothing to copy." };
+          const done = copyText(text, place ?? (ctx.browser().page ? "page" : "host"));
+          if (done.place === "page") {
+            const wrote = await ctx.browser().writeClipboard(done.text).catch(() => false);
+            if (!wrote) {
+              const fallback = copyText(text, "host");
+              return { ok: true, summary: `${describeClip(fallback, "copied")} No page could take it, so it went to the host instead.` };
+            }
+          }
+          return { ok: true, summary: describeClip(done, "copied") };
+        }
+        const wanted = place ?? "page";
+        if (wanted === "page") {
+          const fromPage = await ctx.browser().readClipboard().catch(() => "") ?? "";
+          if (fromPage) return { ok: true, summary: describeClip({ text: fromPage, place: "page", chars: fromPage.length, truncated: false }, "pasted") };
+          if (place === "page") return { ok: false, summary: "Nothing on the page's clipboard. The host one is a paste with place `host`." };
+        }
+        return { ok: true, summary: describeClip(hostClipboard(), "pasted") };
+      }
 
       case "phone_screen":
       case "phone_look":
