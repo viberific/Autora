@@ -198,6 +198,8 @@ interface ToolSettings {
   game: { enabled: boolean };
   /** Autora Photo: the photo editing window (PhotoCraft's editor) and the agent's photo_* tools. */
   photo: { enabled: boolean };
+  /** Autora Phone: the phone window and the agent's phone_* tools. */
+  phone: { enabled: boolean };
 }
 
 export interface UsageEntry {
@@ -413,6 +415,7 @@ export function defaultTools(): ToolSettings {
     cad: { enabled: true },
     game: { enabled: true },
     photo: { enabled: true },
+    phone: { enabled: true },
   };
 }
 

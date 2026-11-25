@@ -218,6 +218,28 @@ RUN apk add --no-cache \
 # Intel's Vulkan driver, for the graphics chip route that uses Vulkan (server/browsergpu.ts): x86 only, so it is installed where the
 # package exists and skipped where it does not (an ARM image has none), and a failure to install never fails the build.
 RUN (apk add --no-cache mesa-vulkan-intel) || echo "mesa-vulkan-intel is not available here; the browser will use the OpenGL routes to the chip"
+# The phone window (server/phone.ts): phonedriver, which drives a real Android
+# phone -- reads its screen as text, taps and types -- instead of raw adb. Its
+# releases are glibc binaries and this image is musl, so gcompat carries it, and
+# a four-line shim supplies the one symbol gcompat lacks (__res_init; musl has
+# res_init under its own name). The binary is fetched here rather than by its
+# npm launcher, whose cache lives in HOME and would be downloaded again on every
+# update. Optional, like the other engines: a failed download never fails the
+# build and the window simply says the tool is missing. Pinned, so an image is
+# the same image twice. The shim is compiled here and gcc is removed again.
+ARG PHONEDRIVER_VERSION=0.1.7
+RUN apk add --no-cache gcompat libgcc libstdc++ gcc musl-dev \
+ && printf '#include <resolv.h>\nint __res_init(void){ return res_init(); }\n' > /tmp/resinit.c \
+ && gcc -shared -fPIC -o /usr/local/lib/libresinit.so /tmp/resinit.c \
+ && ( case "${TARGETARCH}" in arm64) pd=aarch64-unknown-linux-gnu ;; *) pd=x86_64-unknown-linux-gnu ;; esac \
+      && curl -fsSL "https://github.com/hridaya423/phonedriver/releases/download/v${PHONEDRIVER_VERSION}/phonedriver-${pd}.tar.gz" \
+         | tar xz -C /usr/local/bin --strip-components=1 --wildcards '*/phonedriver' \
+      && chmod 755 /usr/local/bin/phonedriver \
+      && LD_PRELOAD=/usr/local/lib/libresinit.so /usr/local/bin/phonedriver version ) \
+   || echo "phonedriver could not be installed; the phone window will say it is missing"
+# gcc is only needed for the shim above.
+RUN apk del gcc musl-dev 2>/dev/null || true
+
 
 # The two subscription CLIs Autora can hand a job to (server/vendor.ts, server/delegates/): Claude Code and the Gemini CLI. Optional,
 # like the other engines: if they cannot be installed the image still builds, and the agent is simply not offered them. libgcc,

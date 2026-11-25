@@ -1,5 +1,5 @@
 /** Panacea's modes share one workspace; engine names and routes stay internal. */
-export type WorkspaceMode = "panacea" | "pages" | "sheets" | "slides" | "pdf" | "photo" | "video" | "studio" | "cad" | "game" | "app" | "browser" | "widget";
+export type WorkspaceMode = "panacea" | "pages" | "sheets" | "slides" | "pdf" | "photo" | "video" | "studio" | "cad" | "game" | "app" | "browser" | "widget" | "phone";
 export type NativeWorkspaceActions = { createFlowchart: () => Promise<void> };
 
 export const WORKSPACE_MODES: Record<WorkspaceMode, { name: string; context: string }> = {
@@ -15,6 +15,7 @@ export const WORKSPACE_MODES: Record<WorkspaceMode, { name: string; context: str
   game: { name: "Games", context: "Make scenes, objects and abilities, and play your game. The agent handles wiring; the world and story stay yours." },
   app: { name: "Apps & code", context: "Try the running app, select elements and leave review comments. The agent works on code and connections in the background." },
   browser: { name: "Web", context: "Use the live web page or let the agent drive. Take control for sign-ins and hand it back when you are done." },
+  phone: { name: "Phone", context: "Use the phone or let the agent drive. Tap the screen yourself; Take control while you do." },
   widget: { name: "Explainers", context: "Explore an interactive explanation. Its controls run inside a sandbox, separate from the app." },
 };
 

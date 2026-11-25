@@ -25,7 +25,7 @@ const { loadable, LOAD_APPS } = await import("../src/lib/loadable");
 const { WORKSPACE_MODES } = await import("../src/lib/workspace");
 const specs = [
   ...(await import("../server/specs/files")).filesSPECS, ...(await import("../server/specs/video")).videoSPECS, ...(await import("../server/specs/studio")).studioSPECS,
-  ...(await import("../server/specs/cad")).cadSPECS, ...(await import("../server/specs/game")).gameSPECS, ...(await import("../server/specs/photo")).photoSPECS,
+  ...(await import("../server/specs/cad")).cadSPECS, ...(await import("../server/specs/game")).gameSPECS, ...(await import("../server/specs/photo")).photoSPECS, ...(await import("../server/specs/phone")).PHONE_TOOLS,
 ];
 const TOOLS = specs;
 
@@ -80,7 +80,7 @@ await test("the Tools page switch turns an editor's tools off when all of its sw
 });
 
 await test("what a window opens agrees with what Load accepts", () => {
-  const apps: Record<string, string[]> = { pdf: ["pdf"], video: ["video"], studio: ["studio"], office: ["pages", "sheets", "slides"], cad: ["cad"], game: ["game"], photo: ["photo"] };
+  const apps: Record<string, string[]> = { pdf: ["pdf"], video: ["video"], studio: ["studio"], office: ["pages", "sheets", "slides"], cad: ["cad"], game: ["game"], photo: ["photo"], phone: [] };
   for (const c of CAPABILITIES) {
     for (const app of apps[c.id]!) assert.ok((LOAD_APPS as string[]).includes(app), `${app} is not a Load app`);
     for (const ext of c.opens) {

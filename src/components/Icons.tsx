@@ -603,6 +603,13 @@ export const IconCube = ({ size = 16, className }: Props) => (
   </svg>
 );
 
+/** A phone handset (Lucide's "smartphone"): the phone window. */
+export const IconPhone = ({ size = 16, className }: Props) => (
+  <svg {...base(size)} className={className}>
+    <rect width="14" height="20" x="5" y="2" rx="2" ry="2" />
+    <path d="M12 18h.01" />
+  </svg>
+);
 /** A game controller (Lucide's "gamepad-2"): Autora Games. */
 export const IconGame = ({ size = 16, className }: Props) => (
   <svg {...base(size)} className={className}>

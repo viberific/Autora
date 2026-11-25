@@ -125,40 +125,30 @@ await test("a call that wants no thinking switches GLM's off, and a chat turn le
   assert.equal("thinking" in (await send("openai", "gpt-5", "off")), false, "a vendor that does not know the field is not sent it");
 });
 
-
 await test("Lebrel is sent the thinking switch as a boolean, DeepSeek as its own block, everyone else not at all", async () => {
   /* Lebrel's attested router answers the object DeepSeek wants with a 400
      ("thinking must be boolean"); it takes the bare boolean and returns the
      thinking in a separate `reasoning` field. */
-  /* The vendor sees the shape, not who we called it: every case goes to the
-     local server, and the provider and baseUrl are what decide the body. */
-  const send = async (provider: string, baseUrl: string, thinking?: "on" | "off", model = "deepseek-v4.1") => {
+  const send = async (provider: string, baseUrl: string, thinking?: "on" | "off") => {
     bodies.length = 0;
-    await streamChat({ provider, model, key: "k", baseUrl, system: "", messages: [{ role: "user", text: "hi" }], thinking }, () => undefined);
+    await streamChat({ provider, model: "deepseek-v4.1", key: "k", baseUrl, system: "", messages: [{ role: "user", text: "hi" }], thinking }, () => undefined);
     return bodies[0];
   };
-  const lebrelBase = base;
-  const deepseekBase = base;
+  const lebrelBase = "https://attested.lebrel.ai/v1";
+  const deepseekBase = "https://api.deepseek.com/v1";
 
   assert.equal((await send("lebrel", lebrelBase, "on")).thinking, true);
-
   assert.equal((await send("lebrel", lebrelBase, "off")).thinking, false);
   assert.equal("thinking" in (await send("lebrel", lebrelBase)), false, "a turn that said nothing either way is left to the model");
 
-
   assert.deepEqual((await send("deepseek", deepseekBase, "on")).thinking, { type: "enabled" });
-
   assert.deepEqual((await send("deepseek", deepseekBase, "off")).thinking, { type: "disabled" });
 
   /* A DeepSeek model routed through Lebrel is Lebrel's endpoint, so it takes
      Lebrel's shape rather than the one its vendor names. */
+  assert.equal((await send("deepseek", lebrelBase, "on")).thinking, true);
 
-
-
-
-
-  assert.equal("thinking" in (await send("openai", base, "off", "gpt-5")), false);
-
+  assert.equal("thinking" in (await send("openai", "https://api.openai.com/v1", "off")), false);
 });
 
 // ------------------------------------------------------------- the state --

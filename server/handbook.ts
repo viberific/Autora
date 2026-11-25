@@ -663,6 +663,11 @@ const PANACEA = [
     "Exports (panacea_export, or a panel's Export) go to the project's folder: a photo as PNG with every adjustment, a table as CSV as filtered, a chart as SVG, a document or a board as Markdown.",
 ].join("\n");
 
+const PHONE = [
+  "- Autora Phone (the phone_* tools): a real Android phone beside the chat, driven by phonedriver. The person sees the screen and can tap it; you read it with phone_screen (the screen as text, each element with a @ref a tap can name) and phone_look (a picture, for what text does not show), and act with phone_tap, phone_type, phone_scroll and phone_press. Read before you tap and again after: the screen moves under you. One thing at a time, and say what you are doing. " +
+    "Unlocking the phone, approving USB debugging and passing a fingerprint stay the person's: when one blocks you, ask them. A payment prompt is phonedriver's own guard -- let it wait for them rather than working around it. The phone must be reachable (Wireless debugging on, paired): a box that cannot see it says so in the window.",
+].join(" ");
+
 const PHOTO = [
   "- Autora Photo (the photo_* tools): PhotoCraft, an image editor with layers, masks, adjustment layers, layer styles, type, brushes, " +
     "filters and real PSD files. The chat has one picture, kept layered. photo_open puts a file in the window (or `new` makes a canvas), " +
@@ -701,10 +706,10 @@ const WIDGETS = [
     "seeing it move helps; not for plain facts.",
 ].join("\n");
 
-export type ManualId = "browser" | "creator" | "terminal" | "pdf" | "video" | "studio" | "panacea" | "office" | "cad" | "game" | "photo" | "widgets";
+export type ManualId = "browser" | "creator" | "terminal" | "pdf" | "video" | "studio" | "panacea" | "office" | "cad" | "game" | "photo" | "phone" | "widgets";
 
 const MANUALS: Record<ManualId, string> = {
-  browser: BROWSER, creator: CREATOR, terminal: TERMINAL, pdf: PDF, video: VIDEO, studio: STUDIO, panacea: PANACEA, office: OFFICE, cad: CAD, game: GAME, photo: PHOTO, widgets: WIDGETS,
+  browser: BROWSER, creator: CREATOR, terminal: TERMINAL, pdf: PDF, video: VIDEO, studio: STUDIO, panacea: PANACEA, office: OFFICE, cad: CAD, game: GAME, photo: PHOTO, phone: PHONE, widgets: WIDGETS,
 };
 
 export const MANUAL_IDS = Object.keys(MANUALS) as ManualId[];

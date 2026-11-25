@@ -14,4 +14,5 @@ export const CadWindow = lazy(() => import("./CadWindow").then((m) => ({ default
 export const PhotoWindow = lazy(() => import("./PhotoWindow").then((m) => ({ default: m.PhotoWindow })));
 export const GameWindow = lazy(() => import("./GameWindow").then((m) => ({ default: m.GameWindow })));
 export const StudioWindow = lazy(() => import("./StudioWindow").then((m) => ({ default: m.StudioWindow })));
+export const PhoneWindow = lazy(() => import("./PhoneWindow").then((m) => ({ default: m.PhoneWindow })));
 export const PanaceaWindow = lazy(() => import("./PanaceaWindow").then((m) => ({ default: m.PanaceaWindow })));

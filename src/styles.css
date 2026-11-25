@@ -9616,3 +9616,10 @@ body::before {
 .effort-option:hover, .effort-option.on { background: var(--s3); }
 .effort-option-top { display: flex; align-items: center; justify-content: space-between; font-size: var(--fs-sm); font-weight: 600; }
 .effort-option-blurb { font-size: var(--fs-xs); color: var(--text-2); }
+
+/* The phone window: the screen, the same screen as text, and its keys. */
+.phone-stage { flex: 1; min-height: 0; display: flex; gap: 10px; padding: 10px; overflow: auto; }
+.phone-shot { max-height: 100%; max-width: 58%; object-fit: contain; border-radius: 10px; border: 1px solid var(--s4); cursor: crosshair; user-select: none; }
+.phone-text { flex: 1; min-width: 0; margin: 0; overflow: auto; font-size: 11px; line-height: 1.45; color: var(--text-2); white-space: pre-wrap; }
+.phone-empty { margin: auto; color: var(--text-3); font-size: 12px; }
+.phone-keys { display: flex; gap: 6px; padding: 0 10px 10px; }

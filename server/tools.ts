@@ -137,6 +137,7 @@ interface ToolSettings {
   cad: { enabled: boolean };
   game: { enabled: boolean };
   photo: { enabled: boolean };
+  phone: { enabled: boolean };
 }
 
 export function toolSettings(): ToolSettings {
@@ -194,9 +195,11 @@ import { studioSPECS } from "./specs/studio";
 import { panaceaSPECS } from "./specs/panacea";
 import { cadSPECS } from "./specs/cad";
 import { gameSPECS } from "./specs/game";
+import { PHONE_TOOLS } from "./specs/phone";
 import { DESKS } from "./desks";
 import { capabilityOf, type Capability } from "./capabilities";
 import { gameAvailable, gameState, loadGame, runGameTool } from "./gamedesk";
+import { phoneAvailable, phoneLook, phonePress, phoneScreen, phoneScroll, phoneTap, phoneType } from "./phone";
 import { cadAvailable, cadState, loadModel, runCadTool } from "./caddesk";
 import { photoSPECS } from "./specs/photo";
 import { photoAvailable, runPhotoTool } from "./photodesk";
@@ -267,6 +270,7 @@ const TOOLS: ToolSpec[] = [
   ...filesSPECS,
   ...cadSPECS,
   ...gameSPECS,
+  ...PHONE_TOOLS,
   ...photoSPECS,
   ...memorySPECS,
   ...skillsSPECS,
@@ -399,7 +403,7 @@ export function installedWindows(): Record<string, boolean> {
   // PDF and Video are fetched editors (docs/MAP.md): a server that never built them opens a white "Not Found" frame.
   const built = (editor: string) => fs.existsSync(path.join(process.cwd(), "dist", editor, "index.html"));
   // The PDF window needs its page and its engine: the page alone opens on tools that cannot open a file.
-  return { pdf: built("spectra-editor") && spectraAvailable().ok, video: built("opencut-editor"), studio: true, pages: office, sheets: office, slides: office, cad: builtFor("cad"), game: builtFor("game"), photo: builtFor("photo") };
+  return { pdf: built("spectra-editor") && spectraAvailable().ok, video: built("opencut-editor"), studio: true, pages: office, sheets: office, slides: office, cad: builtFor("cad"), game: builtFor("game"), photo: builtFor("photo"), phone: phoneAvailable() };
 }
 
 export function windowOff(name: string, settings: ToolSettings = toolSettings()): boolean {
@@ -4165,6 +4169,26 @@ async function runToolUnredacted(
           cancelled: ctx.cancelled,
           onCancel: ctx.onCancel,
         });
+
+      case "phone_screen":
+      case "phone_look":
+      case "phone_tap":
+      case "phone_type":
+      case "phone_scroll":
+      case "phone_press": {
+        if (!phoneAvailable()) return { ok: false, summary: "The phone tool is not installed in this server." };
+        const session = ctx.session;
+        const opened = await fetch(`http://127.0.0.1:${Number(process.env.AUTORA_PORT || process.env.PORT || 3000)}/api/phone/${encodeURIComponent(session)}/open`, { method: "POST" }).catch(() => null);
+        if (opened && opened.status === 403) return { ok: false, summary: "The phone window is switched off on the Tools page." };
+        const said =
+          spec.name === "phone_screen" ? await phoneScreen(session)
+            : spec.name === "phone_look" ? await phoneLook(session)
+              : spec.name === "phone_tap" ? await phoneTap(session, String(args.target ?? ""))
+                : spec.name === "phone_type" ? await phoneType(session, String(args.text ?? ""), args.into ? String(args.into) : undefined)
+                  : spec.name === "phone_scroll" ? await phoneScroll(session, String(args.direction ?? "down"), args.until ? String(args.until) : undefined)
+                    : await phonePress(session, String(args.key ?? "back"));
+        return { ok: true, summary: said };
+      }
 
       case "photo_open":
       case "photo_look":

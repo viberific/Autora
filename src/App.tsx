@@ -11,12 +11,13 @@ import { setLiveFields, setLiveFrame, setLivePaneOwns, setLiveTabs } from "./lib
 import { resetPreview, setPreviewFrame, setPreviewState, usePreviewState, type PreviewState } from "./lib/preview";
 import { ScreencastCell } from "./components/ScreencastCell";
 import { WidgetCell } from "./components/WidgetCell";
-import { AppPreview, CadWindow, GameWindow, OfficeWindow, OpenCutWindow, PhotoWindow, SpectraWindow, StudioWindow } from "./components/lazyWindows";
+import { AppPreview, CadWindow, GameWindow, OfficeWindow, OpenCutWindow, PhoneWindow, PhotoWindow, SpectraWindow, StudioWindow } from "./components/lazyWindows";
 import { PanaceaWorkspace } from "./components/PanaceaWorkspace";
 import { CANVAS_BAR_SLOT, type NativeWorkspaceActions, type WorkspaceMode } from "./lib/workspace";
 import { useWorkspaceFocus, workspaceToolKey } from "./lib/workspaceFocus";
 import { resetCad, setCadState, useCadState } from "./lib/caddesk";
 import { emitGamePlay, resetGame, setGameState, useGameState } from "./lib/gamedesk";
+import { resetPhone, setPhoneState, usePhoneState } from "./lib/phonedesk";
 import { resetPhoto, setPhotoState, usePhotoState } from "./lib/photodesk";
 import { emitStudioCommand, resetStudio, setStudioState, useStudioState } from "./lib/studio";
 import { emitPanaceaCommand, resetPanacea, setPanaceaState, usePanaceaState } from "./lib/panacea";
@@ -502,6 +503,7 @@ export function App() {
     resetVideo();
     resetCad();
     resetGame();
+    resetPhone();
     resetPhoto();
     resetStudio();
     resetPanacea();
@@ -537,6 +539,7 @@ export function App() {
       onPdfDesk: setDeskState,
       onCadDesk: setCadState,
       onGameDesk: setGameState,
+      onPhoneDesk: setPhoneState,
       onGamePlay: emitGamePlay,
       onPhotoDesk: setPhotoState,
       onStudioDesk: setStudioState,
@@ -1629,6 +1632,7 @@ export function App() {
   const video = useVideoState();
   const cad = useCadState();
   const game = useGameState();
+  const phoneDesk = usePhoneState();
   const photo = usePhotoState();
   const studio = useStudioState();
   const panacea = usePanaceaState();
@@ -1719,6 +1723,7 @@ export function App() {
     ...(video.open ? [{ pane: "video" as const, since: video.since ?? 0 }] : []),
     ...(cad.open ? [{ pane: "cad" as const, since: cad.since ?? 0 }] : []),
     ...(game.open ? [{ pane: "game" as const, since: game.since ?? 0 }] : []),
+    ...(phoneDesk.open ? [{ pane: "phone" as const, since: phoneDesk.since ?? 0 }] : []),
     ...(photo.open ? [{ pane: "photo" as const, since: photo.since ?? 0 }] : []),
     ...(studio.open ? [{ pane: "studio" as const, since: studio.since ?? 0 }] : []),
     ...(panacea.open ? [{ pane: "panacea" as const, since: panacea.since ?? 0 }] : []),
@@ -1784,6 +1789,7 @@ export function App() {
     ...(video.open ? [{ pane: "video" as const, label: "Video" }] : []),
     ...(cad.open ? [{ pane: "cad" as const, label: "3D" }] : []),
     ...(game.open ? [{ pane: "game" as const, label: "Game" }] : []),
+    ...(phoneDesk.open ? [{ pane: "phone" as const, label: "Phone" }] : []),
     ...(photo.open ? [{ pane: "photo" as const, label: "Photo" }] : []),
     ...(studio.open ? [{ pane: "studio" as const, label: "Music" }] : []),
     ...(panacea.open ? [{ pane: "panacea" as const, label: "Panacea" }] : []),
@@ -2968,6 +2974,12 @@ export function App() {
             {game.open && sessionId && (
               <aside className="app-pane" data-pane="game" aria-label="Panacea Games, the game being made">
                 <Suspense fallback={null}><GameWindow sessionId={sessionId} phone={phoneLayout} /></Suspense>
+              </aside>
+            )}
+            {/* The phone: a real Android phone the agent and the person both use. */}
+            {phoneDesk.open && sessionId && (
+              <aside className="app-pane" data-pane="phone" aria-label="The phone">
+                <Suspense fallback={null}><PhoneWindow sessionId={sessionId} phone={phoneLayout} /></Suspense>
               </aside>
             )}
             {/* Autora Photo: the picture the agent and the person are both working on, in PhotoCraft's editor. */}

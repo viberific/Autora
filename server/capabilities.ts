@@ -9,14 +9,15 @@
 
 export interface Capability {
   /** The tool family, the manual and the prefix of its tools (`pdf_*`). */
-  id: "pdf" | "video" | "studio" | "office" | "cad" | "game" | "photo";
+  id: "pdf" | "video" | "studio" | "office" | "cad" | "game" | "photo" | "phone";
   name: string;
   /** The editor Autora carries as its own fork (docs/MODULES.md). */
   engine: string;
   /** The Panacea work modes it serves (src/lib/workspace.ts). */
   modes: string[];
   /** The Tools page switches that turn it on: it is on when any of them is. */
-  windows: Array<"pdf" | "video" | "studio" | "cad" | "game" | "photo" | "pages" | "sheets" | "slides">;
+  windows: Array<"pdf" | "video" | "studio" | "cad" | "game" | "photo" | "pages" | "sheets" | "slides" | "phone">;
+  /** The Tools page switch that turns it on, where it has one of its own. */
   /** How the manual's header names the work mode. */
   workMode: string;
   /** File extensions it can open and save (the window's Load and Save); `tests/capabilities.test.ts` holds them to `loadable()` and the manual. */
@@ -31,6 +32,7 @@ export const CAPABILITIES: Capability[] = [
   { id: "office", name: "Autora Pages, Sheets and Slides", engine: "GenOffice", modes: ["pages", "sheets", "slides"], windows: ["pages", "sheets", "slides"], workMode: "Documents, Spreadsheets or Presentations", opens: ["docx", "xlsx", "pptx"], saves: ["docx", "xlsx", "pptx"] },
   { id: "cad", name: "Autora 3D", engine: "Autora 3D", modes: ["cad"], windows: ["cad"], workMode: "3D", opens: ["json", "glb", "gltf", "obj", "stl"], saves: ["stl", "glb", "obj"] },
   { id: "game", name: "Autora Games", engine: "GDevelop", modes: ["game"], windows: ["game"], workMode: "Games", opens: ["json", "png", "mp3", "wav", "ttf"], saves: ["json"] },
+  { id: "phone", name: "Autora Phone", engine: "phonedriver", modes: ["phone"], windows: ["phone"], workMode: "Phone", opens: [], saves: [] },
   { id: "photo", name: "Autora Photo", engine: "PhotoCraft", modes: ["photo"], windows: ["photo"], workMode: "Images", opens: ["png", "jpg", "webp", "psd"], saves: ["png", "psd"] },
 ];
 

@@ -170,6 +170,7 @@ import { dropSpectra, serveSpectra, spectraDocumentChanged, spectraRoutes, spect
 import { newFileRoutes } from "./server/newfile";
 import { loadFileRoutes, loadPanaceaFile, type FileLoadGuards } from "./server/loadfile";
 import { DESKS } from "./server/desks";
+import { phoneRoutes } from "./server/phone";
 import { cadRoutes, cadState, onCadCommand, serveCad } from "./server/caddesk";
 import { gameRoutes, gameState, onGamePlayRequest, serveGame } from "./server/gamedesk";
 import { onPhotoCommand, photoPickNote, photoRoutes, photoState, servePhoto } from "./server/photodesk";
@@ -6677,6 +6678,8 @@ async function startServer() {
     incognito: (id: string) => Boolean(sessions.get(id)?.incognito),
     off: () => windowOff("game_look"),
   });
+  // The phone window: a real Android phone, the screen beside the chat, and the person's own taps on it.
+  phoneRoutes(app, { exists: (id: string) => sessions.has(id), off: () => windowOff("phone_screen") });
   // Autora Music: the music window's song, the commands to it, and opening and putting it away.
   studioRoutes(app, {
     exists: (id: string) => sessions.has(id),
@@ -7448,6 +7451,8 @@ async function startServer() {
       // Someone to see the page now: the browser and the app preview send pictures again.
       void browsers.get(sessionId)?.watchersChanged();
       void previews.get(sessionId)?.live?.watchersChanged();
+      /* The windows that follow this chat say where they are now: a socket is new, so it missed every change before it. */
+      for (const desk of DESKS) if (desk.available()) ws.send(JSON.stringify({ type: desk.message, session: sessionId, state: desk.state(sessionId) }));
 
       // Replay backlog
       const fromSeq = parseInt(url.searchParams.get("from_seq") || "0", 10) || 0;

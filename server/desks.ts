@@ -10,10 +10,11 @@
 import { cadAvailable, cadBriefing, cadState, dropCad, onCadChange } from "./caddesk";
 import { dropGame, gameAvailable, gameBriefing, gameState, onGameChange } from "./gamedesk";
 import { dropPhoto, onPhotoChange, photoAvailable, photoBriefing, photoState } from "./photodesk";
+import { dropPhone, onPhoneChange, phoneAvailable, phoneBriefing, phoneState } from "./phone";
 import { dropStudio, onStudioChange, studioBriefing, studioState } from "./studio";
 
 interface Desk {
-  id: "cad" | "game" | "photo" | "studio";
+  id: "cad" | "game" | "photo" | "studio" | "phone";
   /** The websocket message type that carries this window's state to the page. */
   message: string;
   /** Whether this server has the editor built in (a server without it says nothing about it). */
@@ -30,4 +31,5 @@ export const DESKS: Desk[] = [
   { id: "cad", message: "caddesk", available: cadAvailable, state: cadState, onChange: onCadChange, drop: dropCad, briefing: cadBriefing },
   { id: "game", message: "gamedesk", available: gameAvailable, state: gameState, onChange: onGameChange, drop: dropGame, briefing: gameBriefing },
   { id: "photo", message: "photodesk", available: photoAvailable, state: photoState, onChange: onPhotoChange, drop: dropPhoto, briefing: photoBriefing },
+  { id: "phone", message: "phonedesk", available: phoneAvailable, state: phoneState, onChange: onPhoneChange, drop: dropPhone, briefing: phoneBriefing },
 ];

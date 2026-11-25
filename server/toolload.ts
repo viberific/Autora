@@ -72,6 +72,12 @@ export const FAMILIES: Family[] = [
     words: /\bautora studio\b|\bmusic\b|\bsongs?\b|\bbeats?\b|\bdaw\b|\bchord progression|\bchords?\b|\bmelod(?:y|ies)\b|\bbassline\b|\bbass line\b|\bdrum (?:loop|pattern|track|beat|kit)|\bsynth(?:esizer)?\b|\bpiano roll\b|\bbpm\b|\btempo\b|\bmix(?:ing)? (?:the |a |my )?(?:song|track|tracks)\b|\bjingle\b|\bsoundtrack\b|\bproduce (?:a |some )?(?:track|tune|song)/i,
   },
   {
+    id: "phone",
+    about: "Autora Phone: a real Android phone beside the chat -- read its screen, tap, type, scroll",
+    match: (n) => n.startsWith("phone_"),
+    words: /\bmy phone\b|\bthe phone\b|\bandroid\b|\bphonedriver\b|\btap (?:on |the )?(?:phone|screen)\b|\bwireless debugging\b|\bon my phone\b/i,
+  },
+  {
     id: "panacea",
     about: "Panacea: the shared adaptive workspace, where controls for the work appear and go -- native photos, tables, documents and boards, panels from the library or composed from atoms, values set, bespoke pieces; integrated specialist engines preserve advanced file and editing abilities",
     match: (n) => n.startsWith("panacea_"),
