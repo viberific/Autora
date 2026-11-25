@@ -215,6 +215,12 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
+  0.9.400: the phone window builds again. An unused variable and a
+  video-editor patch that had drifted from the code it patches both failed
+  the image build; both are fixed. Also adds clipboard_copy and
+  clipboard_paste, so text moves between the page and the host without
+  retyping.
+
   The phone window. Autora can drive a real Android phone from its own window:
   the screen as a picture and as text, Back, Home and Recents, and the agent
   can tap and type in it. It reaches the phone over Tailscale, so it works

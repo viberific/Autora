@@ -42,8 +42,10 @@ const publicBeside = (): Plugin => ({
 const MARKS: Array<{ file: string; from: string; to: string }> = [
   {
     file: "/src/web/timeline/components/timeline-element.tsx",
-    from: "onClick={(event) => onElementClick({ event, element })}",
-    to: "data-element-id={element.id} onClick={(event) => onElementClick({ event, element })}",
+    // The click handler grew a hold guard (a click a long press ended with is the hold's), so the one-line form is
+    // gone; the attribute the wasm side reads is added before the handler instead.
+    from: "\t\t\t\t\t\tonClick={(event) => {\n\t\t\t\t\t\t\t// A click a hold ended with is the hold's, not a second pick.",
+    to: "\t\t\t\t\t\tdata-element-id={element.id}\n\t\t\t\t\t\tonClick={(event) => {\n\t\t\t\t\t\t\t// A click a hold ended with is the hold's, not a second pick.",
   },
   {
     file: "/src/web/timeline/components/timeline-track.tsx",

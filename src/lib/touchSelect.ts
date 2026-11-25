@@ -25,10 +25,6 @@ const touchEcho = (within = 700) => Date.now() - lastTouch < within;
 /** Note a real touch, so the mouse events that follow it are known for what they are. */
 const sawTouch = () => { lastTouch = Date.now(); };
 
-/** The emulated mouse events a touch leaves behind: worth ignoring in a handler that also serves a mouse. */
-const isEcho = (e: { pointerType?: string; sourceCapabilities?: { firesTouchEvents?: boolean } | null }) =>
-  e.pointerType === "mouse" && (touchEcho() || e.sourceCapabilities?.firesTouchEvents === true);
-
 /** A press with a mouse selects at once, as it always has; a hold is only for a finger. */
 const pressSelects = (e: { pointerType?: string }) => e.pointerType === "mouse";
 
