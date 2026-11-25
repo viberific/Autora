@@ -238,7 +238,7 @@ export function phoneRoutes(app: Express, opts: { exists: (session: string) => b
     if (id) res.json({ ...phoneState(id), available: true });
   });
 
-  app.post("/api/phone/:session/open", (req, res) => {
+  app.post("/api/phone/:session/open", async (req, res) => {
     const id = known(req, res);
     if (!id) return;
     if (opts.off()) return res.status(403).json({ error: "The phone window is switched off on the Tools page." });
@@ -248,6 +248,16 @@ export function phoneRoutes(app: Express, opts: { exists: (session: string) => b
       entry.since = Date.now();
       changed(id);
     }
+    /* Look for the phone now, so the header says which one it is (or that none is connected) instead of guessing. */
+    const dev = await device();
+    if (dev) {
+      entry.device = dev;
+      delete entry.trouble;
+    } else {
+      entry.trouble = "No phone is connected. Turn on Wireless debugging on the phone, then pair it in Settings.";
+      delete entry.device;
+    }
+    changed(id);
     res.json(phoneState(id));
   });
 
@@ -282,6 +292,7 @@ export function phoneRoutes(app: Express, opts: { exists: (session: string) => b
     const id = known(req, res);
     if (!id) return;
     const r = await serial(async () => {
+      /* device() already retries the paired address, so a phone that slept comes back on its own. */
       const dev = await device();
       if (!dev) return { code: 1, out: "", err: "no phone" };
       return run(["--device", dev, "screenshot", "--json", "--timeout", "15000"], 30_000);
@@ -295,6 +306,12 @@ export function phoneRoutes(app: Express, opts: { exists: (session: string) => b
       file = r.out.trim().split(/\s+/)[0] ?? "";
     }
     if (!file || !fs.existsSync(file)) return res.status(502).json({ error: "no picture" });
+    /* A picture means the phone answered, so the header should stop saying it is missing. */
+    const entry = entryFor(id);
+    if (entry.trouble) {
+      delete entry.trouble;
+      changed(id);
+    }
     res.setHeader("Content-Type", "image/png");
     res.setHeader("Cache-Control", "no-store");
     fs.createReadStream(file).pipe(res);
