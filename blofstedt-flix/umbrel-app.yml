@@ -4,7 +4,7 @@ name: Flix
 tagline: Your own streaming service, sourced straight from BTN
 icon: https://raw.githubusercontent.com/viberific/Autora/main/blofstedt-flix/icon.svg
 category: media
-version: "0.3.128"
+version: "0.3.129"
 port: 8096
 # umbrelOS only hands a container the GPU when the manifest says so: with this
 # permission it adds /dev/dri plus the render/video groups those nodes belong
@@ -60,6 +60,7 @@ repo: https://github.com/viberific/Flix
 support: https://github.com/viberific/Flix/issues
 gallery: []
 releaseNotes: >-
-  The TV app's remote reaches the episode pills, and Up next counts down only at the end of the file.
-  AC-3 / E-AC-3 audio plays through ExoPlayer under the web app's controls.
-  A cold 5.1 episode gets the drive for its first pieces and a live build is no longer restarted.
+  Chromecast is gone: the TV app and the browser are the ways to watch.
+  The dim overlay no longer sticks over a playing video.
+  Remove watched counts only what it can actually take, and leaves a show alone while someone is part way through it.
+  The Remove and Delete buttons no longer show a spinner on an unfilled button in the light theme.
