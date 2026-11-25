@@ -215,27 +215,8 @@ repo: https://github.com/viberific/Autora
 support: https://github.com/viberific/Autora/issues
 gallery: []
 releaseNotes: >-
-  The image builds again. Alpine moved a Python file into its own package and
-  pip pulls it in, so apk refused the clash and 0.9.396 built nothing on
-  either arch; the owner package is installed first now. Also clears the
-  unused exports knip was failing the Check on, and lands the version bump
-  that never reached main.
-  Lebrel works with thinking on. Its attested endpoint takes the switch as a
-  bare boolean and answers the object DeepSeek wants with a 400, so every
-  Lebrel turn that asked for thinking failed; it is sent the boolean now and
-  the thinking comes back in its own reasoning field. DeepSeek direct, and
-  every other provider, are sent exactly what they were before.
-  Fixes the release that did not install. 0.9.394 built nothing, so the app
-  stayed on the old version; this is the same work, shipping properly.
-  On a phone, a press and hold now selects, everywhere: the board, its cards,
-  Artifacts, the document and PDF windows and the video timeline. The menu
-  comes from a small ... button on what is selected, so a long press no longer
-  fights the browser's own menu. A right-click still opens the menu with a
-  mouse, and a double tap still does what it did before.
-  PDFs can be edited in the PDF window: right-click a word or a line, choose
-  Edit text, and type over it. The change is real text in the file, in the
-  same face and size, and it saves with the document.
-  A subscription turn's tool calls show under that vendor's own mark, so a
-  Gemini step reads as Gemini's and a Claude step as Claude's, not the
-  agent's. Gemini and Claude can be picked as the model, on your own
+  The phone window. Autora can drive a real Android phone from its own window:
+  the screen as a picture and as text, Back, Home and Recents, and the agent
+  can tap and type in it. It reaches the phone over Tailscale, so it works
+  away from the house as well as at home. Replaces the raw ADB commands.
   subscription instead of a key.
