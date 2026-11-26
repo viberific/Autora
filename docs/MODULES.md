@@ -1120,6 +1120,12 @@ browser, pictures by default until R7 is measured on an Umbrel box and a phone).
   waiting 1.5 s behind the person's typing; hover rests send `POST /browser/hover` (the copy's own `:hover` needs nothing). Every
   input uses the existing routes, so `agentDriving` and Take control hold unchanged. On a phone in the thread the copy takes no
   pointer and the stage's handlers act as on the picture (a finger scrolls the chat).
+- **Scrolling the picture** (`lib/scrollAhead.ts`, `ScreencastCell`): a finger or wheel moves the picture on the screen at
+  once by what the server has not shown yet, one `POST /browser/scroll` is on its way at a time (carrying everything asked for
+  meanwhile), and the server answers when the scroll is painted (`PAINTED_SCRIPT`, with `at` on the frames' clock), mapping the
+  page's fields once scrolling stops. A part is taken back when a picture sent after it is on the screen (`Frame` `onShown`), or
+  after `LANDED_MS` when none comes (past the page's end). It used to wait 150 ms for the page to go quiet on every step and queue
+  each step behind the last: 210-310 ms a step, a few moves a second. Test: `scrollahead.test.ts`, `ui-browser-phone.test.ts`.
 - **Not yet** (each is a phase in the intent): the server's viewport still is the agent's 1280x800 (R1.5: the copy is scaled
   like the picture, not reflowed to the pane); every iframe is a picture region (R5.1, R5.2); R7's figures are not measured yet,
   the readout (Show the copy's readout) is there to measure them; the copy is not the default (phase 5).

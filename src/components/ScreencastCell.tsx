@@ -10,6 +10,7 @@ import type { Shot } from "../lib/derive";
 import { onField, useLiveFrame, useLiveTabs, useOwnsLive } from "../lib/liveFrame";
 import { VIEWER_ID, setBrowserView, setMirrorReadout, useBrowserView, useMirrorStatus } from "../lib/liveMirror";
 import { NAMED_KEYS, SENTINEL } from "../lib/pageInput";
+import { LANDED_MS, ScrollAhead } from "../lib/scrollAhead";
 import { BrowserPanel, setBookmark, useBrowserData, type BrowserPanelKind } from "./BrowserPanel";
 import { DevtoolsPanel } from "./DevtoolsPanel";
 import { Frame } from "./Frame";
@@ -135,7 +136,7 @@ export function ScreencastCell({
     /** The finger's last place across, when it last moved, and how fast (page pixels a millisecond), for the glide. */
     lastX?: number; lastT?: number; vx?: number; vy?: number;
   } | null>(null);
-  const scrollAccum = useRef({ dx: 0, dy: 0, timer: 0 });
+  const scrollAccum = useRef({ timer: 0 });
 
   useEffect(() => {
     if (!nudge) return;
@@ -279,22 +280,58 @@ export function ScreencastCell({
     return { x: Math.round(x), y: Math.round(y), scale: VIEWPORT.w / b.width };
   };
 
+  /* Scrolling the picture. The page is scrolled on the server and only a new picture shows it, a round trip and a frame
+     later; drawn from the pictures alone a finger's drag moved the page a few times a second. So the picture itself is
+     moved under the finger at once by what it does not show yet (lib/scrollAhead.ts), and one scroll is on its way at a
+     time, carrying everything asked for since the last one, so none waits in a queue behind another. */
+  const ahead = useRef(new ScrollAhead());
+  const painting = useRef(0);
+  const moveFrame = useCallback(() => {
+    const img = stageRef.current?.querySelector("img.frame:not(.mirror-spacer)") as HTMLImageElement | null;
+    if (!img) return;
+    const width = img.offsetWidth;
+    const { dx, dy } = ahead.current.offset(VIEWPORT.w, VIEWPORT.h);
+    const scale = width > 0 ? VIEWPORT.w / width : 1;
+    img.style.transform = dx || dy ? `translate3d(${-dx / scale}px, ${-dy / scale}px, 0)` : "";
+  }, []);
+  const paintAhead = useCallback(() => {
+    if (painting.current) return;
+    painting.current = requestAnimationFrame(() => {
+      painting.current = 0;
+      moveFrame();
+    });
+  }, [moveFrame]);
+  useEffect(() => () => cancelAnimationFrame(painting.current), []);
+
   const flushScroll = useCallback(() => {
-    const { dx, dy } = scrollAccum.current;
-    scrollAccum.current.dx = 0;
-    scrollAccum.current.dy = 0;
     scrollAccum.current.timer = 0;
-    if (Math.abs(dx) + Math.abs(dy) >= 1) void send("scroll", { dx, dy });
-  }, [send]);
+    const sending = ahead.current.take();
+    if (!sending) return;
+    void send("scroll", sending).then((result: any) => {
+      ahead.current.landed(typeof result?.at === "number" ? result.at : null);
+      paintAhead();
+      // No picture comes when the page did not move (past its end): the picture goes back to where the page is.
+      window.setTimeout(paintAhead, LANDED_MS + 20);
+      // What was asked for while that one was on its way goes now.
+      if (ahead.current.waiting()) flushScroll();
+    });
+  }, [send, paintAhead]);
 
   const queueScroll = useCallback((dx: number, dy: number) => {
-    scrollAccum.current.dx += dx;
-    scrollAccum.current.dy += dy;
-    if (!scrollAccum.current.timer) {
-      // Often enough that the page follows the finger, not so often that the requests queue up behind it.
-      scrollAccum.current.timer = window.setTimeout(flushScroll, 35);
+    ahead.current.ask(dx, dy);
+    paintAhead();
+    if (!scrollAccum.current.timer && !ahead.current.flying()) {
+      // Often enough that the page follows the finger, and never more than one on its way.
+      scrollAccum.current.timer = window.setTimeout(flushScroll, 16);
     }
-  }, [flushScroll]);
+  }, [flushScroll, paintAhead]);
+
+  // A picture from after a scroll landed shows it: once it is on the screen, the picture stops being moved by that much.
+  const frameTimes = useRef(new Map<string, number>());
+  const onFrameShown = useCallback((src: string) => {
+    const ts = frameTimes.current.get(src);
+    if (ts !== undefined && ahead.current.frame(ts)) moveFrame();
+  }, [moveFrame]);
 
   // The wheel has to be a native listener: React's is passive, and a wheel
   // over the page that also scrolls the conversation behind it is useless.
@@ -500,7 +537,7 @@ export function ScreencastCell({
   const shot = shots.at(-1);
   const Icon = source === "browser" ? IconGlobe : IconMonitor;
   const stageSrc = watching && feed
-    ? `data:${feed.mime};base64,${feed.data}`
+    ? feedSrc(feed, frameTimes.current)
     : shot
       ? `/api/sessions/${sessionId}/blobs/${shot.blob}`
       : null;
@@ -845,6 +882,7 @@ export function ScreencastCell({
         >
           {stageSrc && !mirrorShown && (
           <Frame
+            onShown={onFrameShown}
             src={stageSrc}
             alt={watching ? "the page, live" : source === "browser" ? "page the agent saw" : "desktop the agent saw"}
           >
@@ -992,4 +1030,14 @@ export function ScreencastCell({
       )}
     </section>
   );
+}
+
+/** A live frame's src, remembering when the server sent it, so the picture knows which scrolls it shows. The last few. */
+function feedSrc(feed: { mime: string; data: string; ts: number }, times: Map<string, number>): string {
+  const src = `data:${feed.mime};base64,${feed.data}`;
+  if (!times.has(src)) {
+    times.set(src, feed.ts);
+    if (times.size > 8) times.delete(times.keys().next().value as string);
+  }
+  return src;
 }

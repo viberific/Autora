@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
 
 /** The last frame each card finished decoding, by src. A card that remounts
     (the thread regrouping its cells, a page coming back into view) starts
@@ -48,14 +48,17 @@ export function useDecodedSrc(src: string): string {
  * scrubbing back and forth costs no network traffic after the first pass.
  */
 export function Frame({
-  src, alt, children,
+  src, alt, children, onShown,
 }: {
   src: string;
   alt: string;
   /** Overlays positioned against the frame, e.g. the click marker. */
   children?: ReactNode;
+  /** The src now on the screen, told before it is painted (the browser moves the picture by the scroll it does not show). */
+  onShown?: (src: string) => void;
 }) {
   const shown = useDecodedSrc(src);
+  useLayoutEffect(() => { onShown?.(shown); }, [shown, onShown]);
 
   return (
     <div className="frame-wrap">

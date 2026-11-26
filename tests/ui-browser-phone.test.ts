@@ -64,6 +64,42 @@ async function main() {
       await page.locator(".cell.shot.is-max .shot-corner").click();
       await page.waitForSelector(".cell.shot.is-max", { state: "detached", timeout: 10_000 });
     });
+
+    await test("a finger's drag moves the picture at once, and each scroll step is answered without waiting for the page to settle", async () => {
+      await page.locator('.pw-engine[data-engine="browser"] .cell.shot .shot-corner').click();
+      await page.waitForSelector(".cell.shot.is-max .shot-stage.is-dragging-page img.frame", { timeout: 10_000 });
+      const took: number[] = [];
+      const began = new Map<object, number>();
+      page.on("request", (r) => { if (r.url().endsWith("/browser/scroll")) began.set(r, Date.now()); });
+      page.on("requestfinished", (r) => { const t = began.get(r); if (t) took.push(Date.now() - t); });
+      const box = (await page.locator(".cell.shot.is-max img.frame").boundingBox())!;
+      const x = Math.round(box.x + box.width / 2);
+      const y0 = Math.round(box.y + box.height * 0.7);
+      const cdp = await ctx.newCDPSession(page);
+      const touch = (type: string, y: number) => cdp.send("Input.dispatchTouchEvent", {
+        type, touchPoints: type === "touchEnd" ? [] : [{ x, y, id: 1 }],
+      });
+      await touch("touchStart", y0);
+      let moved = false;
+      for (let i = 1; i <= 12; i++) {
+        await touch("touchMove", y0 - i * 12);
+        await page.waitForTimeout(16);
+        if (i === 3) {
+          // Three moves in, about 50 ms: no picture of the scroll can be back yet, and the one on screen is already moved.
+          moved = await page.evaluate(() => /translate3d\(0px, -[1-9]/.test(
+            (document.querySelector(".cell.shot.is-max img.frame") as HTMLElement).style.transform));
+        }
+      }
+      await touch("touchEnd", y0 - 144);
+      await page.waitForTimeout(1500);
+      assert.ok(moved, "the picture did not move under the finger before the server answered");
+      assert.ok(took.length >= 2, `scroll steps sent: ${took.length}`);
+      // Each step used to wait up to 150 ms for the page to go quiet and then map its fields: 210-310 ms a step here.
+      const median = [...took].sort((a, b) => a - b)[Math.floor(took.length / 2)];
+      assert.ok(median < 160, `a scroll step takes ${median} ms (each one waits for the page to settle): ${took.join(" ")}`);
+      await page.locator(".cell.shot.is-max .shot-corner").click();
+      await page.waitForSelector(".cell.shot.is-max", { state: "detached", timeout: 10_000 });
+    });
   } finally {
     await browser.close();
     await app.stop();
