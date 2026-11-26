@@ -4032,15 +4032,37 @@ export class LiveBrowser {
     this.typed.timer.unref?.();
   }
 
-  /** Direct mouse wheel scrolling from user */
+  /**
+   * The mouse wheel. A person's scroll is a finger dragging the page, many steps a second: each one waited up to 150 ms
+   * for the page to go quiet and then mapped its fields, so the page moved a few times a second behind the finger. It now
+   * waits only until the scroll is painted (so the next picture shows it) and maps the fields once the scrolling stops.
+   */
   mouseWheel(deltaX: number, deltaY: number, person = true): Promise<void> {
     return this.run(async () => {
       const page = await this.ensure();
-      if (person) await this.personHand();
+      if (!person) {
+        await page.mouse.wheel(deltaX, deltaY);
+        await this.settle(150);
+        await this.mapFields();
+        return;
+      }
+      await this.personHand();
+      this.touched();
       await page.mouse.wheel(deltaX, deltaY);
-      await this.settle(150);
-      await this.mapFields();
+      await page.evaluate(PAINTED_SCRIPT).catch(() => undefined);
+      this.mapFieldsSoon();
     });
+  }
+
+  /** Fields mapped once scrolling has stopped for a moment, not after every step of it. */
+  private fieldsTimer: NodeJS.Timeout | null = null;
+  private mapFieldsSoon() {
+    if (this.fieldsTimer) clearTimeout(this.fieldsTimer);
+    this.fieldsTimer = setTimeout(() => {
+      this.fieldsTimer = null;
+      void this.run(() => this.mapFields()).catch(() => undefined);
+    }, SCROLL_FIELDS_MS);
+    this.fieldsTimer.unref?.();
   }
 
   /** Reload current page */
@@ -4766,6 +4788,11 @@ const LONG_REQUEST_MS = 3000;
  * Resolves true once the document has gone `quiet` ms without a DOM change or a scroll, or once `cap` ms have passed.
  * Autora's own cursor lives in a closed shadow root, so its movement is not the page changing; its host is skipped.
  */
+/** After a scroll is painted: two animation frames, capped so a page that never paints (hidden, hung) costs 100 ms. */
+const PAINTED_SCRIPT = `new Promise((done) => { setTimeout(done, 100); requestAnimationFrame(() => requestAnimationFrame(done)); })`;
+/** How long scrolling must stop before the page's fields are mapped again. */
+const SCROLL_FIELDS_MS = 250;
+
 const QUIET_SCRIPT = (quiet: number, cap: number) => `new Promise((done) => {
   const start = performance.now();
   let last = start;

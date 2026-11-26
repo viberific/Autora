@@ -3753,6 +3753,9 @@ input.shot-where[readonly] { cursor: default; }
 .shot-stage.is-usable { cursor: default; }
 .shot-stage.is-usable .frame { outline: 1px solid rgba(var(--live-rgb), 0.35); }
 .shot-stage.is-dragging-page { touch-action: none; }
+/* The picture is moved under the finger ahead of the server's next one (lib/scrollAhead.ts): kept inside its own box. */
+.shot-stage.is-dragging-page .frame-wrap { overflow: hidden; }
+.shot-stage.is-dragging-page .frame { will-change: transform; }
 
 /* Magnified on request: the picture is drawn wider than the card and the card
    scrolls to it. Clicks still land where they look, because where a click

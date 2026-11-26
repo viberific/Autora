@@ -56,7 +56,9 @@ export function browserRoutes(app: Express, deps: {
     try {
       touchPresence(session.id, isPreview(req) ? "app" : "browser", "*", "scroll", "scrolled the page", { tell: false });
       await live.mouseWheel(dx, dy);
-      res.json({ ok: true });
+      // When it was painted, on the clock the frames carry: the page moves the picture ahead of the finger until a frame
+      // from after this arrives.
+      res.json({ ok: true, at: Date.now() });
     } catch (err: any) {
       res.status(500).json({ error: err?.message ?? "Scroll failed" });
     }
